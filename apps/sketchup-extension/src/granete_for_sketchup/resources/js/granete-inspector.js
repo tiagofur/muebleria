@@ -347,10 +347,9 @@
 
   if (btnConfigureDesignOpening) {
     btnConfigureDesignOpening.addEventListener("click", function () {
-      if (deps.sketchup && typeof deps.sketchup.clear_selection === "function") {
-        deps.sketchup.clear_selection();
-      } else if (typeof deps.clearSelection === "function") {
-        deps.clearSelection();
+      var openingMod = window.GraneteUI && window.GraneteUI.opening;
+      if (openingMod && typeof openingMod.toggleInlineEditor === "function") {
+        openingMod.toggleInlineEditor();
       }
     });
   }
@@ -364,6 +363,9 @@
     }
     var openingMod = window.GraneteUI && window.GraneteUI.opening;
     var summary = openingMod && typeof openingMod.getSummary === "function" && openingMod.getSummary();
+    if (btnConfigureDesignOpening && openingMod && typeof openingMod.isInlineActive === "function") {
+      btnConfigureDesignOpening.textContent = openingMod.isInlineActive() ? "Cerrar" : "Configurar";
+    }
     if (!summary) {
       var designId = bindingIdentity.split("|")[0];
       if (designId && openingMod && typeof openingMod.ensureLoaded === "function") {
