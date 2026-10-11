@@ -2,7 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -108,51 +107,137 @@ type OpeningMembers struct {
 // centered on the span, ceil(span/spacing)+1 supports spread evenly, one
 // cap per exposed end. Honest absences: no constrained front or no profile
 // member places nothing.
-func attachOpeningMembers(boards []layoutBoard, members OpeningMembers, constrained map[int]bool, bottomBoundary bool) {
+// appendOpeningMemberLayoutHardware emits the derived opening hardware directly
+// in furniture space (#1274 / #1276): the profile spans the full furniture width
+// [0, dims.WidthMm], aligned at the top-front of the carcass [0, DepthMm, HeightMm],
+// the left support mounts at X = 0, and the right support mounts at X = WidthMm with
+// its X axis inverted (mirrored into the cabinet).
+func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims, bottomBoundary bool) {
 	if members.ProfileHardwareID == "" {
 		return
 	}
-	hostIdx := -1
-	for i := range boards {
-		if constrained[i] {
-			hostIdx = i
-			break
-		}
-	}
-	if hostIdx < 0 {
-		return
-	}
+	totalW := float64(dims.WidthMm)
+	totalH := float64(dims.HeightMm)
+	totalD := float64(dims.DepthMm)
 
-	span := boards[hostIdx].widthMm
-	if span <= 0 {
-		return
-	}
-	face := "top"
+	zPos := totalH
 	if bottomBoundary {
-		face = "bottom"
+		zPos = 0
 	}
-	at := func(hardwareID string, xMm float64) domain.HardwarePlacement {
-		return domain.HardwarePlacement{
-			HardwareID:       hardwareID,
-			AnchorFace:       face,
-			RelativePosition: domain.HardwareRelPosition{XMm: xMm},
+	yPos := totalD
+
+	// 1. Profile: spanning the entire furniture width from X = 0 to X = totalW,
+	// aligned at the top-front of carcass (Y = totalD, Z = zPos).
+	if hw, ok := findHardware(catalog, members.ProfileHardwareID); ok && hw.Active {
+		layout.Hardware = append(layout.Hardware, buildDerivedHardware(
+			hw,
+			fmt.Sprintf("opening-profile-%s", hw.ID),
+			[3]float64{0, yPos, zPos},
+			LayoutBasis{
+				X: [3]float64{1, 0, 0},
+				Y: [3]float64{0, 1, 0},
+				Z: [3]float64{0, 0, 1},
+			},
+			[3]float64{totalW, 56.5, 27.2},
+		))
+	}
+
+	// 2. Supports:
+	if members.SupportHardwareID != "" {
+		if hw, ok := findHardware(catalog, members.SupportHardwareID); ok && hw.Active {
+			// Left support: at X = 0, Y = totalD, Z = zPos, normal orientation
+			layout.Hardware = append(layout.Hardware, buildDerivedHardware(
+				hw,
+				fmt.Sprintf("opening-support-left-%s", hw.ID),
+				[3]float64{0, yPos, zPos},
+				LayoutBasis{
+					X: [3]float64{1, 0, 0},
+					Y: [3]float64{0, 1, 0},
+					Z: [3]float64{0, 0, 1},
+				},
+				[3]float64{20, 40, 20},
+			))
+			// Intermediate supports if width exceeds spacing:
+			if members.SupportSpacingMm > 0 && totalW > float64(members.SupportSpacingMm) {
+				count := int(totalW / float64(members.SupportSpacingMm))
+				for i := 1; i <= count; i++ {
+					stepX := (totalW / float64(count+1)) * float64(i)
+					layout.Hardware = append(layout.Hardware, buildDerivedHardware(
+						hw,
+						fmt.Sprintf("opening-support-mid-%d-%s", i, hw.ID),
+						[3]float64{stepX, yPos, zPos},
+						LayoutBasis{
+							X: [3]float64{1, 0, 0},
+							Y: [3]float64{0, 1, 0},
+							Z: [3]float64{0, 0, 1},
+						},
+						[3]float64{20, 40, 20},
+					))
+				}
+			}
+			// Right support: at X = totalW, Y = totalD, Z = zPos, inverted in X!
+			layout.Hardware = append(layout.Hardware, buildDerivedHardware(
+				hw,
+				fmt.Sprintf("opening-support-right-%s", hw.ID),
+				[3]float64{totalW, yPos, zPos},
+				LayoutBasis{
+					X: [3]float64{-1, 0, 0},
+					Y: [3]float64{0, 1, 0},
+					Z: [3]float64{0, 0, 1},
+				},
+				[3]float64{20, 40, 20},
+			))
 		}
 	}
 
-	derived := []domain.HardwarePlacement{at(members.ProfileHardwareID, span/2)}
-	if members.SupportHardwareID != "" && members.SupportSpacingMm > 0 {
-		count := int(math.Ceil(span/float64(members.SupportSpacingMm))) + 1
-		if count < 2 {
-			count = 2
-		}
-		for i := 0; i < count; i++ {
-			derived = append(derived, at(members.SupportHardwareID, span*float64(i)/float64(count-1)))
-		}
-	}
+	// 3. End Caps:
 	if members.CapHardwareID != "" {
-		derived = append(derived, at(members.CapHardwareID, 0), at(members.CapHardwareID, span))
+		if hw, ok := findHardware(catalog, members.CapHardwareID); ok && hw.Active {
+			layout.Hardware = append(layout.Hardware,
+				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-left-%s", hw.ID), [3]float64{0, yPos, zPos}, LayoutBasis{X: [3]float64{1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, [3]float64{3, 58, 29}),
+				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-right-%s", hw.ID), [3]float64{totalW, yPos, zPos}, LayoutBasis{X: [3]float64{-1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, [3]float64{3, 58, 29}),
+			)
+		}
 	}
-	boards[hostIdx].derivedHardware = append(boards[hostIdx].derivedHardware, derived...)
+}
+
+func buildDerivedHardware(hw domain.Hardware, placementID string, translation [3]float64, basis LayoutBasis, dims [3]float64) LayoutHardware {
+	shape := "custom"
+	if hw.PreviewShape != nil && *hw.PreviewShape != "" {
+		shape = *hw.PreviewShape
+	}
+	var assetID, assetRevisionID, sha256, rep, valState, prepState string
+	var expectedBytes int64
+	var mountFrame *domain.HardwareMountFrame
+	if hw.VisualAsset != nil {
+		assetID = hw.VisualAsset.AssetID
+		assetRevisionID = hw.VisualAsset.AssetRevisionID
+		sha256 = hw.VisualAsset.SHA256
+		rep = string(hw.VisualAsset.Representation)
+		valState = string(hw.VisualAsset.ValidationState)
+		expectedBytes = hw.VisualAsset.SizeBytes
+		prepState = string(hw.VisualAsset.PreparationState)
+		mountFrame = hw.VisualAsset.MountFrame
+	}
+
+	return LayoutHardware{
+		PlacementID:      placementID,
+		HardwareID:       hw.ID,
+		Name:             hw.Name,
+		Shape:            shape,
+		PlacementKind:    HardwarePlacementKindDerived,
+		Transform:        LayoutTransform{TranslationMm: translation},
+		DimensionsMm:     dims,
+		LocalTransform:   LayoutLocalTransform{TranslationMm: translation, Basis: basis},
+		AssetID:          assetID,
+		AssetRevisionID:  assetRevisionID,
+		SHA256:           sha256,
+		ExpectedBytes:    expectedBytes,
+		Representation:   rep,
+		ValidationState:  valState,
+		PreparationState: prepState,
+		MountFrame:       mountFrame,
+	}
 }
 
 // openingFrontsBottomBoundary reports the zone edge the member hardware

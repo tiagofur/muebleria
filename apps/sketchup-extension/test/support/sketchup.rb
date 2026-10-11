@@ -93,11 +93,24 @@ module Geom
       t
     end
 
-    def self.scaling(scalar)
+    def self.scaling(*args)
       t = new
-      t.matrix[0] = scalar.to_f
-      t.matrix[5] = scalar.to_f
-      t.matrix[10] = scalar.to_f
+      sx = sy = sz = 1.0
+      case args.length
+      when 1
+        sx = sy = sz = args[0].to_f
+      when 3
+        sx = args[0].to_f
+        sy = args[1].to_f
+        sz = args[2].to_f
+      when 4
+        sx = args[1].to_f
+        sy = args[2].to_f
+        sz = args[3].to_f
+      end
+      t.matrix[0] = sx
+      t.matrix[5] = sy
+      t.matrix[10] = sz
       t
     end
 

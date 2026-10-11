@@ -515,7 +515,10 @@ module Granete
           pos = placement_transform || placement.local_translation || placement.translation || [0.0, 0.0, 0.0]
 
           instance = try_load_hardware_asset(model, parent_definition, placement, pos)
-          return attach_hardware_metadata(instance, placement, name, furniture_instance_id, exact: true) if instance
+          if instance
+            scale_linear_hardware(instance, placement)
+            return attach_hardware_metadata(instance, placement, name, furniture_instance_id, exact: true)
+          end
           return nil if invalid_hardware_preparation?(placement.placement_id)
 
           fallback = build_fallback_hardware(model, parent_definition, name, placement, pos)
@@ -538,6 +541,33 @@ module Granete
             preparation_state: placement.respond_to?(:preparation_state) ? placement.preparation_state : nil,
             placement_id: placement.placement_id
           )
+        end
+
+        # #1276: linear extruded hardware runs (gola profile) stretch
+        # across the target cabinet width. The component's extrusion axis (X)
+        # scales to match placement.dimensions[0], leaving Y and Z unscaled
+        # so the profile's cross section is never distorted.
+        def scale_linear_hardware(instance, placement)
+          return unless placement.respond_to?(:placement_kind) && placement.placement_kind == 'derived'
+          return unless placement.respond_to?(:dimensions) && placement.dimensions.is_a?(Array)
+
+          target_length_mm = placement.dimensions[0].to_f
+          return unless target_length_mm.positive?
+          return unless placement.placement_id.to_s.include?('profile')
+
+          bounds = instance.definition.respond_to?(:bounds) ? instance.definition.bounds : nil
+          return unless bounds.respond_to?(:width)
+
+          current_length_mm = bounds.width.to_f * 25.4
+          return if current_length_mm <= 0 || (current_length_mm - target_length_mm).abs < 1.0
+
+          scale_x = target_length_mm / current_length_mm
+          return unless defined?(::Geom::Transformation.scaling)
+
+          scaling = ::Geom::Transformation.scaling(scale_x, 1.0, 1.0)
+          instance.transformation = instance.transformation * scaling
+        rescue StandardError
+          nil
         end
 
         def invalid_hardware_preparation?(placement_id)
