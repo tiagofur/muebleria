@@ -175,7 +175,89 @@ func TestAuthoringResolveDesignOpeningFailsClosedWhenBlocked(t *testing.T) {
 
 // The opening belongs to the design's FIRST module: resolving any other
 // furniture of the same design never borrows it.
-func TestAuthoringResolveDesignOpeningScopedToFirstModule(t *testing.T) {
+// #1274: the pinned BOM members materialize as DERIVED hardware placements
+// on the top panel — profile run centered on the useful span, supports
+// spread by the ficha spacing, one cap per end — with the hardware SKP
+// asset fields riding the placements.
+func TestAuthoringResolveDesignOpeningPlacesPinnedMembers(t *testing.T) {
+	server, token, store := openingAuthoringServer(t)
+	const designID = "d1264000-0000-0000-0000-000000000004"
+	spacing := 400
+	wc := openingDesignWC(designID, true)
+	wc.AuthoringDefaults.Opening.ProfilePin.BOM = &domain.DesignOpeningProfilePinBOM{
+		ProfileVersion: 1,
+		Members: map[string]domain.OpeningBOMMember{
+			"profile":  {HardwareID: "hw-gola-profile", Rule: "interior_width", Unit: "meter"},
+			"supports": {HardwareID: "hw-gola-support", Rule: "per_length", SpacingMm: &spacing},
+			"endCaps":  {HardwareID: "hw-gola-cap", Rule: "per_exposed_end"},
+		},
+	}
+	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{designID: wc}
+	if store.catalogOverride != nil {
+		shape := func(s string) *string { return &s }
+		store.catalogOverride.Hardware = append(store.catalogOverride.Hardware,
+			domain.Hardware{ID: "hw-gola-profile", Code: "8006", Name: "Perfil GOLA L", Active: true,
+				PreviewShape: shape("rail"), VisualAsset: &domain.HardwareVisualAssetBinding{
+					AssetID: "asset-profile", AssetRevisionID: "rev-profile",
+				}},
+			domain.Hardware{ID: "hw-gola-support", Code: "SU116", Name: "Soporte GOLA", Active: true, PreviewShape: shape("leg")},
+			domain.Hardware{ID: "hw-gola-cap", Code: "CF8006TP", Name: "Tapas GOLA", Active: true, PreviewShape: shape("knob")},
+		)
+	}
+
+	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
+		FurnitureDefinitionID: authoringFixtureModuleID,
+		DesignID:              designID,
+		Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0},
+	}))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("members resolve status = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var response struct {
+		Resolved *struct {
+			Layout struct {
+				Hardware []struct {
+					HardwareID    string `json:"hardwareId"`
+					PlacementKind string `json:"placementKind"`
+					AssetID       string `json:"assetId"`
+					Transform     struct {
+						TranslationMm [3]float64 `json:"translationMm"`
+					} `json:"transform"`
+				} `json:"hardware"`
+			} `json:"layout"`
+		} `json:"resolved"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if response.Resolved == nil {
+		t.Fatalf("no resolved payload: %s", rec.Body.String())
+	}
+	counts := map[string]int{}
+	derivedAssets := 0
+	for _, hw := range response.Resolved.Layout.Hardware {
+		if hw.PlacementKind != "derived" {
+			continue
+		}
+		counts[hw.HardwareID]++
+		if hw.AssetID != "" {
+			derivedAssets++
+		}
+	}
+	// 600 interior: span 564 → supports ceil(564/400)+1 = 3; caps 2; run 1.
+	if counts["hw-gola-profile"] != 1 || counts["hw-gola-support"] != 3 || counts["hw-gola-cap"] != 2 {
+		t.Fatalf("derived member counts = %v", counts)
+	}
+	if derivedAssets == 0 {
+		t.Fatalf("derived placements must carry the catalog asset fields")
+	}
+}
+
+// is NOT the pilot item's still constrains its fronts at its own
+// dimensions. The pilot-module scope of #1261 died on real multi-module
+// designs (the constrained mueble depended on arbitrary item order).
+func TestAuthoringResolveDesignOpeningAppliesToEveryDesignFurniture(t *testing.T) {
 	server, token, store := openingAuthoringServer(t)
 	const designID = "d1264000-0000-0000-0000-000000000003"
 	wc := openingDesignWC(designID, true)
@@ -190,7 +272,26 @@ func TestAuthoringResolveDesignOpeningScopedToFirstModule(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("scoped resolve status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	if length, _ := openingResolvedDoor(t, rec); length != 716 {
-		t.Fatalf("another module's furniture must keep the baseline door, got %d", length)
+	length, translation := openingResolvedDoor(t, rec)
+	if length != 676 {
+		t.Fatalf("a non-pilot module of the design must constrain its door (716 − 40), got %d", length)
+	}
+	if translation[2] != 2 {
+		t.Fatalf("constrained door bottom edge must stay at z=2, got %v", translation)
+	}
+
+	// The same furniture resolved at DIFFERENT dimensions constrains at its
+	// own size (600→640 tall: door 636 − 40 = 596) — the front region is
+	// never borrowed from another module's dims.
+	rec = postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
+		FurnitureDefinitionID: authoringFixtureModuleID,
+		DesignID:              designID,
+		Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 640.0, "depthMm": 560.0},
+	}))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("short resolve status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if length, _ := openingResolvedDoor(t, rec); length != 596 {
+		t.Fatalf("short door must constrain at its own dims (636 − 40), got %d", length)
 	}
 }
