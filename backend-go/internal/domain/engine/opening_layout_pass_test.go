@@ -57,6 +57,13 @@ func TestOpeningFrontsConstrainDoorBoards(t *testing.T) {
 		t.Fatalf("body boards must stay untouched: %+v", lateral)
 	}
 
+	// Gola fronts are handle-free: any handle hardware (JALADERA) is pruned.
+	for _, hw := range layout.Hardware {
+		if strings.Contains(hw.PlacementID, "hw-handle") {
+			t.Fatalf("gola fronts must not mount handle hardware: %+v", hw)
+		}
+	}
+
 	// Bottom grip: the door shrinks from the BOTTOM — its bottom edge lifts.
 	layout, _, err = resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{fronts: openingPassFront("bottom", 70)})
 	if err != nil {

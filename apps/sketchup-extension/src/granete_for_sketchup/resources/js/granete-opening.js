@@ -275,7 +275,9 @@
       body.appendChild(profileField);
 
       var placements = placementsFor(draftProfileId());
-      if (placements.length > 0) {
+      // #1261: Si el perfil solo tiene una posición (ej. Gola L es fija Superior),
+      // no se muestra selector porque no es elegible: se auto-asigna sin confundir al usuario.
+      if (placements.length > 1) {
         var placementField = document.createElement("div");
         placementField.className = "catalog-form__field";
         var placementLabel = document.createElement("label");
@@ -436,10 +438,12 @@
   }
 
   function draftPlacement() {
-    if (!state.draft || !state.draft.placements || state.draft.placements.length === 0) {
-      return "";
+    if (state.draft && state.draft.placements && state.draft.placements.length > 0) {
+      return state.draft.placements[0];
     }
-    return state.draft.placements[0];
+    var placements = placementsFor(draftProfileId());
+    if (placements.length === 1) return placements[0];
+    return "";
   }
 
   function ensureDraft() {
@@ -468,7 +472,8 @@
   function setDraftProfile(profileId) {
     var draft = ensureDraft();
     draft.profileId = profileId;
-    draft.placements = [];
+    var placements = placementsFor(profileId);
+    draft.placements = placements.length === 1 ? [placements[0]] : [];
     state.draftError = null;
     render();
   }
@@ -482,6 +487,11 @@
 
   function applyDraft() {
     if (!deps.sketchup || !state.draft || state.saving) return;
+    var placements = state.draft.placements;
+    if ((!placements || placements.length === 0) && draftProfileId()) {
+      var autoPlacements = placementsFor(draftProfileId());
+      if (autoPlacements.length === 1) placements = [autoPlacements[0]];
+    }
     state.saving = true;
     state.requestId += 1;
     var requestId = state.requestId;
@@ -492,7 +502,7 @@
       selection: {
         system: state.draft.system,
         profileId: state.draft.profileId,
-        placements: state.draft.placements
+        placements: placements || []
       },
       expectedWorkingVersion: state.workingVersion || ""
     }));
@@ -599,7 +609,10 @@
     }
     var placementLabel = "";
     if (opening && opening.placements && opening.placements.length > 0) {
-      placementLabel = labelFor(PLACEMENT_LABELS, opening.placements[0]) || opening.placements[0];
+      var pl = placementsFor(opening.profileId);
+      if (pl.length > 1) {
+        placementLabel = labelFor(PLACEMENT_LABELS, opening.placements[0]) || opening.placements[0];
+      }
     }
     var resolution = state.persisted && state.persisted.resolution;
     var resolvedText = "";

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -58,6 +59,20 @@ func applyOpeningFrontsToBoards(boards []layoutBoard, fronts []OpeningResolvedFr
 			board.z += float64(lift)
 		}
 		constrained[i] = true
+
+		// Gola / integrated grips are handle-free: prune any handle hardware
+		// (JALADERA) from this front so the 3D layout does not mount a pull bar
+		// on a gola front.
+		if len(front.Grips) > 0 && len(board.hardware) > 0 {
+			filtered := make([]domain.HardwarePlacement, 0, len(board.hardware))
+			for _, hp := range board.hardware {
+				if strings.EqualFold(hp.OptionRole, "JALADERA") || strings.EqualFold(hp.OptionRole, "JALADERAS") {
+					continue
+				}
+				filtered = append(filtered, hp)
+			}
+			board.hardware = filtered
+		}
 	}
 	return constrained, nil
 }
