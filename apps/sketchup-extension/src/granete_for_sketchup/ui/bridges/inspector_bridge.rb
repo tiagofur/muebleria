@@ -33,6 +33,17 @@ module Granete
           @logger.error('inspector_select_furniture_failed', error: e)
         end
 
+        # #1261 — clears the host selection so the Inspector transitions to
+        # the Design Inspector (handleNoSelection lane) where opening/defaults
+        # can be configured directly from the furniture view.
+        def handle_clear_selection(_dialog = nil)
+          model = active_model
+          model.selection.clear if model.respond_to?(:selection)
+          @logger.info('inspector_clear_selection')
+        rescue StandardError => e
+          @logger.error('inspector_clear_selection_failed', error: e)
+        end
+
         def handle_toggle_door_motion(dialog, raw_payload = nil)
           payload = parse_payload(raw_payload)
           slot_index = (payload['doorSlotIndex'] || 0).to_i

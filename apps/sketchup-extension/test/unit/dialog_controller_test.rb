@@ -1206,6 +1206,22 @@ class DialogControllerTest < Minitest::Test
     end, 'selecting the furniture must publish its context')
   end
 
+  # #1261: clear_selection clears the active model's selection so the
+  # Inspector transitions to the Design Inspector where opening is editable.
+  def test_clear_selection_callback_clears_the_model_selection
+    definition = @controller.instance_variable_get(:@catalog_provider).find_definition('kitchen-base-standard')
+    Granete::SketchUpExtension::Model::FurnitureBuilder.new(metadata_store: @store)
+                                                       .insert_furniture(@model, definition, { 'widthMm' => 600 })
+    furniture = @model.active_entities.instances.first
+    @model.selection.clear
+    @model.selection.add(furniture)
+    refute_empty @model.selection
+
+    dialog = @controller.show
+    dialog.callbacks.fetch('clear_selection').call(nil)
+    assert_empty @model.selection
+  end
+
   def test_select_furniture_rejects_a_part_instance_id
     definition = @controller.instance_variable_get(:@catalog_provider).find_definition('kitchen-base-standard')
     Granete::SketchUpExtension::Model::FurnitureBuilder.new(metadata_store: @store)

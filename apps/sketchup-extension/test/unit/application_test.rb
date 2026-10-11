@@ -186,7 +186,8 @@ class ApplicationTest < Minitest::Test
     expected_callbacks = %w[
       adopt_binding_base apply_design_defaults apply_design_opening authoring_mutation
       begin_catalog_placement_preview begin_placement_preview
-      bootstrap_project_design cancel_placement_instance close_all_doors close_dialog component_viewport_move
+      bootstrap_project_design cancel_placement_instance clear_selection
+      close_all_doors close_dialog component_viewport_move
       confirm_placement_instance
       connect_model connect_with_code create_project_furniture delete_selected_furniture dialog_ready
       emit_initial_quote enroll

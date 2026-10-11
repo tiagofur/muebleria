@@ -139,6 +139,10 @@
   var inspectorHardwareGroupsCard = document.getElementById("inspector-hardware-groups-card");
   var inspectorHardwareGroupsContainer = document.getElementById("inspector-hardware-groups-container");
   var inspectorMaterialsContainer = document.getElementById("inspector-materials-container");
+  // #1261: card Apertura del diseño (resumen visible al seleccionar mueble).
+  var inspectorOpeningSummaryCard = document.getElementById("inspector-opening-summary-card");
+  var inspectorOpeningSummaryText = document.getElementById("inspector-opening-summary-text");
+  var btnConfigureDesignOpening = document.getElementById("btn-configure-design-opening");
   // #529: card Apertura y Accesorios (solo definiciones con doorSwing).
   var inspectorOpeningAccessoriesCard = document.getElementById("inspector-opening-accessories-card");
   var inspectorOpeningAccessoriesContainer = document.getElementById("inspector-opening-accessories-container");
@@ -330,6 +334,59 @@
         renderOpeningAccessoriesCard(selectedContext, inspectorParams);
       }
     };
+  }
+
+  // ------------------------------------------------------------------
+  // #1261 — Apertura del diseño (resumen en el Inspector de mueble).
+  //
+  // Muestra el sistema y perfil de apertura configurados en el diseño
+  // cuando un mueble está seleccionado, haciendo descubrible la gola y
+  // ofreciendo un botón para deseleccionar y configurar la apertura en
+  // el diseño conectado.
+  // ------------------------------------------------------------------
+
+  if (btnConfigureDesignOpening) {
+    btnConfigureDesignOpening.addEventListener("click", function () {
+      if (deps.sketchup && typeof deps.sketchup.clear_selection === "function") {
+        deps.sketchup.clear_selection();
+      } else if (typeof deps.clearSelection === "function") {
+        deps.clearSelection();
+      }
+    });
+  }
+
+  function renderOpeningSummaryCard() {
+    if (!inspectorOpeningSummaryCard || !inspectorOpeningSummaryText) return;
+    var bound = bindingIdentity && bindingIdentity !== "unbound";
+    if (!bound) {
+      inspectorOpeningSummaryCard.style.display = "none";
+      return;
+    }
+    var openingMod = window.GraneteUI && window.GraneteUI.opening;
+    var summary = openingMod && typeof openingMod.getSummary === "function" && openingMod.getSummary();
+    if (!summary) {
+      var designId = bindingIdentity.split("|")[0];
+      if (designId && openingMod && typeof openingMod.ensureLoaded === "function") {
+        openingMod.ensureLoaded(designId);
+      }
+      inspectorOpeningSummaryCard.style.display = "none";
+      return;
+    }
+    inspectorOpeningSummaryCard.style.display = "block";
+    var parts = [];
+    if (summary.isGola && summary.profileName) {
+      var golaDesc = summary.systemLabel + ": " + summary.profileName;
+      if (summary.placementLabel) golaDesc += " (" + summary.placementLabel + ")";
+      parts.push(golaDesc);
+    } else if (summary.system === "handle") {
+      parts.push("Sistema: Jaladera (predeterminado)");
+    } else {
+      parts.push("Sistema: " + summary.systemLabel);
+    }
+    if (summary.resolvedText) {
+      parts.push("Frente: " + summary.resolvedText);
+    }
+    inspectorOpeningSummaryText.textContent = parts.join(" · ");
   }
 
   // ------------------------------------------------------------------
@@ -1462,6 +1519,8 @@
     }
     // #1046 S3: card Herrajes del mueble (sólo grupos consumidos).
     renderInspectorHardwareGroups();
+    // #1261: card Apertura del diseño (resumen visible al seleccionar mueble).
+    renderOpeningSummaryCard();
     // #529: card Apertura y Accesorios (nivel mueble, después de params/materiales).
     renderOpeningAccessoriesCard(context, inspectorParams);
 
@@ -1608,8 +1667,14 @@
     var binding = (status && status.binding) || {};
     var connected = !!(status && status.state === "connected" && binding.designId);
     var identity = connected ? binding.designId + "|" + (binding.projectId || "") : "unbound";
+    if (connected && window.GraneteUI && window.GraneteUI.opening && binding.designId) {
+      window.GraneteUI.opening.ensureLoaded(binding.designId);
+    }
     if (identity === bindingIdentity) return;
     bindingIdentity = identity;
+    if (selectedContext && selectedContext.kind === "furniture") {
+      renderOpeningSummaryCard();
+    }
     if (!draft) return;
     draft = null;
     repaintConfirmedSnapshots();
@@ -1808,6 +1873,7 @@
     // #1046 S2: inventario de herrajes del proyecto (respuesta del escaneo).
     getDefinition: function () { return inspectorDef; },
     getMaterialsCard: function () { return inspectorMaterialsCard; },
+    updateOpeningSummary: renderOpeningSummaryCard,
     setHardwareCatalog: setHardwareCatalog,
     setOptionGroups: function (groups) { catalogOptionGroups = groups || []; },
     getOptionGroups: function () { return catalogOptionGroups; },
