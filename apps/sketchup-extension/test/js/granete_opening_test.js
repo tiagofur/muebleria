@@ -423,4 +423,26 @@ test('#1261: getSummary reporta el resumen de apertura y ensureLoaded consulta e
   assert.strictEqual(summary.isGola, true);
 });
 
+test('#1261: toggleInlineEditor alterna el editor inline de apertura en el contenedor del mueble', () => {
+  const bridgeCalls = [];
+  const { opening, sandbox } = initModule(bridgeCalls);
+  opening.refresh('d-1261', 'v1');
+  opening.onDesignOpening(READY_ANSWER);
+
+  assert.strictEqual(opening.isInlineActive(), false);
+  const inlineContainer = sandbox.document.getElementById('inspector-opening-inline-editor');
+  const btn = sandbox.document.getElementById('btn-configure-design-opening');
+
+  opening.toggleInlineEditor();
+  assert.strictEqual(opening.isInlineActive(), true);
+  assert.strictEqual(inlineContainer.style.display, 'block');
+  assert.strictEqual(btn.textContent, 'Cerrar');
+  assert.ok(findDeep(inlineContainer, (c) => c.attributes['data-testid'] === 'opening-system-select'), 'debe renderizar el selector de sistema');
+
+  opening.toggleInlineEditor();
+  assert.strictEqual(opening.isInlineActive(), false);
+  assert.strictEqual(inlineContainer.style.display, 'none');
+  assert.strictEqual(btn.textContent, 'Configurar');
+});
+
 console.log(JSON.stringify({ success: true, testsPassed }));

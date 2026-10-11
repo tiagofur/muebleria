@@ -45,7 +45,8 @@
     draft: null, // { system, profileId, placements[] } — local, unsaved
     draftError: null, // { reason, message } — the last refused apply
     saving: false,
-    laneActive: false
+    laneActive: false,
+    inlineActive: false
   };
 
   var deps = { sketchup: null };
@@ -214,14 +215,7 @@
     }
   }
 
-  function render() {
-    if (!initialized || !state.laneActive) return;
-    var card = el("design-inspector-opening-card");
-    var body = el("design-inspector-opening-body");
-    if (!card || !body) return;
-
-    card.style.display = state.status === "ready" ? "block" : "none";
-    if (state.status !== "ready") return;
+  function buildOpeningForm(body, isInline) {
     clearChildren(body);
 
     var offered = availableSystems();
@@ -230,9 +224,10 @@
     systemField.className = "catalog-form__field";
     var systemLabel = document.createElement("label");
     systemLabel.textContent = "Sistema de apertura";
-    systemLabel.setAttribute("for", "opening-system-select");
+    var sysId = isInline ? "inline-opening-system-select" : "opening-system-select";
+    systemLabel.setAttribute("for", sysId);
     var systemSelect = document.createElement("select");
-    systemSelect.id = "opening-system-select";
+    systemSelect.id = sysId;
     systemSelect.setAttribute("data-testid", "opening-system-select");
     systemSelect.disabled = state.saving;
     systemSelect.appendChild(makeOption("", "—", !draftSystem()));
@@ -252,9 +247,10 @@
       profileField.className = "catalog-form__field";
       var profileLabel = document.createElement("label");
       profileLabel.textContent = "Perfil";
-      profileLabel.setAttribute("for", "opening-profile-select");
+      var profId = isInline ? "inline-opening-profile-select" : "opening-profile-select";
+      profileLabel.setAttribute("for", profId);
       var profileSelect = document.createElement("select");
-      profileSelect.id = "opening-profile-select";
+      profileSelect.id = profId;
       profileSelect.setAttribute("data-testid", "opening-profile-select");
       profileSelect.disabled = state.saving;
       profileSelect.appendChild(makeOption("", profiles.length ? "—" : "sin perfiles verificados", !draftProfileId()));
@@ -274,9 +270,10 @@
         placementField.className = "catalog-form__field";
         var placementLabel = document.createElement("label");
         placementLabel.textContent = "Posición";
-        placementLabel.setAttribute("for", "opening-placement-select");
+        var placeId = isInline ? "inline-opening-placement-select" : "opening-placement-select";
+        placementLabel.setAttribute("for", placeId);
         var placementSelect = document.createElement("select");
-        placementSelect.id = "opening-placement-select";
+        placementSelect.id = placeId;
         placementSelect.setAttribute("data-testid", "opening-placement-select");
         placementSelect.disabled = state.saving;
         placementSelect.appendChild(makeOption("", "—", !draftPlacement()));
@@ -343,6 +340,54 @@
       actions.appendChild(apply);
       body.appendChild(actions);
     }
+  }
+
+  function render() {
+    if (!initialized) return;
+
+    if (state.laneActive) {
+      var card = el("design-inspector-opening-card");
+      var body = el("design-inspector-opening-body");
+      if (card && body) {
+        card.style.display = state.status === "ready" ? "block" : "none";
+        if (state.status === "ready") {
+          buildOpeningForm(body, false);
+        }
+      }
+    }
+
+    var inlineContainer = el("inspector-opening-inline-editor");
+    if (inlineContainer) {
+      if (state.inlineActive && state.status === "ready") {
+        inlineContainer.style.display = "block";
+        buildOpeningForm(inlineContainer, true);
+      } else if (state.inlineActive && state.status === "loading") {
+        inlineContainer.style.display = "block";
+        clearChildren(inlineContainer);
+        var loading = document.createElement("p");
+        loading.className = "subhead";
+        loading.style.cssText = "font-size: var(--text-xs); margin: var(--space-1) 0;";
+        loading.textContent = "Cargando opciones de apertura…";
+        inlineContainer.appendChild(loading);
+      } else if (!state.inlineActive) {
+        inlineContainer.style.display = "none";
+      }
+    }
+  }
+
+  function toggleInlineEditor() {
+    state.inlineActive = !state.inlineActive;
+    var container = el("inspector-opening-inline-editor");
+    var btn = el("btn-configure-design-opening");
+    if (state.inlineActive) {
+      if (btn) btn.textContent = "Cerrar";
+      if (state.designId && state.status !== "ready") {
+        ensureLoaded(state.designId);
+      }
+    } else {
+      if (btn) btn.textContent = "Configurar";
+    }
+    render();
   }
 
   function draftSystem() {
@@ -581,6 +626,10 @@
     },
     ensureLoaded: ensureLoaded,
     getSummary: getSummary,
+    toggleInlineEditor: toggleInlineEditor,
+    isInlineActive: function () {
+      return state.inlineActive;
+    },
     hide: function () {
       state.laneActive = false;
       if (!initialized) return;

@@ -1817,8 +1817,8 @@ test('hardware groups: no consumed groups means no card, and groups catalog abse
   assert.strictEqual(previewBtn.title, 'Catálogo sin grupos');
 });
 
-test('#1261: opening summary card surfaces design opening when bound, and configure button clears selection', () => {
-  const clearSelectionCalls = [];
+test('#1261: opening summary card surfaces design opening when bound, and configure button toggles inline editor', () => {
+  const toggleCalls = [];
   const sandbox = buildModuleSandbox({
     GraneteUI: {
       opening: {
@@ -1831,17 +1831,14 @@ test('#1261: opening summary card surfaces design opening when bound, and config
           resolvedText: '600 × 676 mm',
           isGola: true
         }),
-        ensureLoaded: () => {}
+        ensureLoaded: () => {},
+        toggleInlineEditor: () => toggleCalls.push(1),
+        isInlineActive: () => toggleCalls.length % 2 === 1
       }
     }
   });
   runModule(sandbox);
-  initDeps(sandbox, {
-    clearSelection: () => clearSelectionCalls.push(1),
-    sketchup: {
-      clear_selection: () => clearSelectionCalls.push(1)
-    }
-  });
+  initDeps(sandbox);
   const api = sandbox.window.GraneteUI.inspector;
 
   // 1. Unbound: card remains hidden
@@ -1857,10 +1854,10 @@ test('#1261: opening summary card surfaces design opening when bound, and config
   assert.ok(text.includes('Gola L Cymisa 8006 (Superior)'), 'must include profile and placement');
   assert.ok(text.includes('600 × 676 mm'), 'must include resolved front size');
 
-  // 3. Click configure: calls clear_selection
+  // 3. Click configure: toggles the inline editor
   const configureBtn = el(sandbox, 'btn-configure-design-opening');
   configureBtn.click();
-  assert.strictEqual(clearSelectionCalls.length, 1, 'clicking configure must clear selection');
+  assert.strictEqual(toggleCalls.length, 1, 'clicking configure must toggle inline opening editor');
 });
 
 console.log(JSON.stringify({ success: true, testsPassed: testsPassed, module: 'granete-inspector.js' }));
