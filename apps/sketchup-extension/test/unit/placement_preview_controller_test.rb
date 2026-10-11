@@ -225,7 +225,7 @@ class PlacementPreviewControllerTest < Minitest::Test
         ] }
     end
 
-    def resolved_native_layout(_definition_id, _params = {}, choices = {})
+    def resolved_native_layout(_definition_id, _params = {}, choices = {}, _design_id = nil)
       @layout_resolves << choices.dup
       return unusable_layout_object if @unusable_layout
 

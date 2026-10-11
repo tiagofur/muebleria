@@ -773,7 +773,7 @@ module Granete
                                'defaultValue' => 600, 'unit' => 'mm' }] }
         end
 
-        def resolved_native_layout(_definition_id, _params = {}, _choices = {})
+        def resolved_native_layout(_definition_id, _params = {}, _choices = {}, _design_id = nil)
           Library::LayoutContract.parse!(
             'furnitureDefinitionId' => 'def-smoke', 'definitionName' => 'Base 600',
             'transformContract' => 'granete.local-basis.v1', 'dimensionsMm' => [600, 720, 560],
@@ -873,7 +873,7 @@ module Granete
             ] }
         end
 
-        def resolved_native_layout(_definition_id, _params = {}, _choices = {})
+        def resolved_native_layout(_definition_id, _params = {}, _choices = {}, _design_id = nil)
           nil
         end
       end

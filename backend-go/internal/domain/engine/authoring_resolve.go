@@ -156,6 +156,12 @@ type AuthoringResolveInput struct {
 	// means inherit everywhere: authored intent first, then the definition's
 	// own defaults.
 	FactoryConstructionPolicy *FactoryConstructionPolicy
+	// Fronts (#1264 / V2 OPEN-FRONT): the server-resolved opening front
+	// region for the design this furniture belongs to — synthesized by the
+	// api layer from the design's persisted opening selection (pin-first,
+	// fail-closed on blocked states BEFORE the resolve). nil = no opening:
+	// the layout stays byte-identical to the pre-opening semantics.
+	Fronts []OpeningResolvedFront
 }
 
 // AuthoringResolveResult carries the accepted resolve. StructuralIssues
@@ -265,7 +271,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	// snapshot must map onto (structure/module/agregado walk, same code path
 	// as the real resolve).
 	templateIndex := &authoringTemplateIndex{}
-	_, defaultBoards, err := resolveFurnitureLayoutOpts(input.Module, input.Catalog, input.Dims, input.OptionChoices, resolveOptions{templateCollector: templateIndex})
+	_, defaultBoards, err := resolveFurnitureLayoutOpts(input.Module, input.Catalog, input.Dims, input.OptionChoices, resolveOptions{templateCollector: templateIndex, fronts: input.Fronts})
 	if err != nil {
 		return nil, err
 	}
@@ -296,6 +302,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	if input.ManualPlacementsPresent {
 		opts.manualPlacements = &input.ManualPlacements
 	}
+	opts.fronts = input.Fronts
 	layout, boards, err := resolveFurnitureLayoutOpts(input.Module, input.Catalog, input.Dims, input.OptionChoices, opts)
 	if err != nil {
 		return nil, err

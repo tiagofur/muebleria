@@ -154,7 +154,7 @@ class LocalCatalogPlacementPreviewTest < Minitest::Test
         ] }
     end
 
-    def resolved_native_layout(_definition_id, _params = {}, _choices = {})
+    def resolved_native_layout(_definition_id, _params = {}, _choices = {}, _design_id = nil)
       return nil unless @layout_mode == :online
 
       body = {

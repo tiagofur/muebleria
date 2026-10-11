@@ -358,3 +358,80 @@ func derefInt(value *int) int {
 	}
 	return *value
 }
+
+// designOpeningResolveFailure is a fail-closed opening failure for the
+// authoring resolve (#1264): the code surfaces verbatim (the opening
+// family's contract codes), the message is workshop-facing.
+type designOpeningResolveFailure struct {
+	code    string
+	message string
+}
+
+// designOpeningFrontsForResolve resolves the design's persisted opening over
+// the resolve request's dimensions (#1264 / V2 OPEN-FRONT). Returns nil
+// fronts with nil failure when there is nothing to constrain: no designId,
+// no selection, the handle baseline, or a furniture other than the design's
+// FIRST module (the pilot's one-opening scope). A BLOCKED opening fails
+// closed — a design that declares an opening never resolves a degraded
+// layout, exactly like its quote never under-prices it (#1263).
+func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringResolveRequest, module *domain.Module, dims *engine.LayoutDims) ([]engine.OpeningResolvedFront, *designOpeningResolveFailure) {
+	designID := strings.TrimSpace(req.Furniture.DesignID)
+	if designID == "" {
+		return nil, nil
+	}
+	if !isValidUUID(designID) {
+		return nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el designId no es un identificador válido"}
+	}
+	wc, err := s.Store.GetDesignWorkingCopy(r.Context(), designID)
+	if err != nil {
+		return nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el diseño no existe o no es accesible"}
+	}
+	selection := wc.AuthoringDefaults.Opening
+	if selection == nil || selection.System == domain.OpeningGripSystemHandle {
+		return nil, nil
+	}
+	// Pilot scope: the opening belongs to the design's first module —
+	// resolving any other furniture of the same design never borrows it.
+	if len(wc.Items) == 0 || wc.Items[0].FurnitureDefinitionID != module.ID {
+		return nil, nil
+	}
+	widthMm, heightMm := module.WidthMm, module.HeightMm
+	if dims != nil {
+		widthMm, heightMm = dims.WidthMm, dims.HeightMm
+	}
+	var profileData []engine.OpeningProfileData
+	if pin := selection.ProfilePin; pin != nil {
+		profileData = []engine.OpeningProfileData{{
+			ProfileID:        selection.ProfileID,
+			DatasheetStatus:  pin.DatasheetStatus,
+			FrontReductionMm: pin.FrontReductionMm,
+			GripClearanceMm:  pin.GripClearanceMm,
+		}}
+	} else {
+		profiles, listErr := s.Store.ListOpeningProfiles(r.Context())
+		if listErr != nil {
+			return nil, &designOpeningResolveFailure{code: "OPENING_PROFILE_UNKNOWN", message: "el catálogo de perfiles de apertura no está disponible"}
+		}
+		profileData = make([]engine.OpeningProfileData, 0, len(profiles))
+		for _, profile := range profiles {
+			profileData = append(profileData, engine.OpeningProfileData{
+				ProfileID:        profile.ID,
+				DatasheetStatus:  profile.DatasheetStatus,
+				FrontReductionMm: derefInt(profile.FrontReductionMm),
+				GripClearanceMm:  derefInt(profile.GripClearanceMm),
+			})
+		}
+	}
+	rule, ruleErr := s.Store.GetOpeningOverhangRule(r.Context())
+	if ruleErr != nil {
+		return nil, &designOpeningResolveFailure{code: "OPENING_OVERHANG_RULE_UNAVAILABLE", message: ruleErr.Error()}
+	}
+	resolution, resErr := engine.ResolveDesignOpening(widthMm, heightMm, selection, profileData, engine.OpeningOverhangRuleMm(rule), nil)
+	if resErr != nil {
+		return nil, &designOpeningResolveFailure{code: resErr.Code, message: resErr.Message}
+	}
+	if resolution.State != engine.DesignOpeningStateResolved {
+		return nil, &designOpeningResolveFailure{code: resolution.Reason, message: "la apertura del diseño está bloqueada"}
+	}
+	return resolution.Fronts, nil
+}

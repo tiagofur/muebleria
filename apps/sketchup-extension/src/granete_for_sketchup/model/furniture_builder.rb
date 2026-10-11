@@ -817,7 +817,7 @@ module Granete
         # persistent_ids may change; Granete contract IDs are the durable link.
         def update_furniture(model, furniture, definition, raw_parameters = {}, resolved_layout: nil,
                              material_choices: nil, material_choice_modes: nil, transaction: true,
-                             relationships: nil)
+                             relationships: nil, authoring_dirty: true)
           # Host-accurate native check: in SketchUp a Group ALSO responds to
           # #definition, so entity type — not duck typing — is the only safe
           # discriminator. Legacy Group representations fail closed: use the
@@ -856,7 +856,7 @@ module Granete
               @metadata_store, furniture, instance_id, definition, parameters,
               material_choices: merged_material_choices, existing_metadata: existing_meta,
               material_choice_modes: material_choice_modes,
-              relationships: relationships, authoring_dirty: true,
+              relationships: relationships, authoring_dirty: authoring_dirty,
               placement_envelope: placement_envelope(resolved_layout)
             )
             model.commit_operation if transaction

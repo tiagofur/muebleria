@@ -599,7 +599,8 @@ module Granete
             return resolved unless resolved.is_a?(Array)
 
             definition, params, choices, = resolved
-            layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
+            layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices,
+                                                      context['binding']&.design_id)
             { 'ok' => true, 'code' => 'preview_ready', 'instanceId' => unit['unit'].id,
               'definition' => definition, 'parameters' => params,
               'material_choices' => choices, 'layout' => layout,
@@ -938,7 +939,8 @@ module Granete
             return inputs unless inputs.is_a?(Array)
 
             params, choices, modes = inputs
-            layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
+            layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices,
+                                                      binding.design_id)
             signature_mismatch = composition_mismatch(expected_layout_signature, layout)
             return signature_mismatch if signature_mismatch
 

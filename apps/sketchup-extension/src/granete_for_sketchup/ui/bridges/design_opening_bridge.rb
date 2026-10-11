@@ -42,8 +42,10 @@ module Granete
 
         # Payload {requestId, designId, selection, expectedWorkingVersion} →
         # onDesignOpeningApplied {status: ok|invalid|conflict|error,
-        # state?/reason?/message?}. 'invalid' carries the server's stable
-        # reason; 'state' rides on ok with the fresh authoritative state.
+        # state?/reason?/message?, geometry?}. 'invalid' carries the server's
+        # stable reason; 'state' rides on ok with the fresh authoritative
+        # state and 'geometry' reports the model convergence (#1264):
+        # converged|unchanged|skipped|failed — never a local guess.
         def handle_apply_design_opening(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
           request_id = payload['requestId']
@@ -55,11 +57,17 @@ module Granete
           state = design_opening_placer.service.put_design_opening(
             stored.design_id, selection, expected_working_version: payload['expectedWorkingVersion'].to_s
           )
+          # #1264: a valid selection converges the PLACED geometry to the
+          # fresh opening truth (one coordinated batch, one undo). The
+          # selection is already persisted server-side — a convergence
+          # failure is honest feedback, never a rollback of the intent.
+          geometry = design_opening_converge_geometry(stored, state)
           execute_bridge(dialog, 'onDesignOpeningApplied', {
                            'requestId' => request_id,
                            'status' => 'ok',
                            'designId' => stored.design_id,
-                           'state' => state
+                           'state' => state,
+                           'geometry' => geometry
                          })
         rescue ::Granete::SketchUpExtension::Connection::ProjectFurniture::Service::Error => e
           answer = design_opening_apply_error_answer(e, request_id)

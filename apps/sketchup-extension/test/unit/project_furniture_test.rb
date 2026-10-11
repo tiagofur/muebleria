@@ -184,7 +184,7 @@ class ProjectFurnitureTest < Minitest::Test
     # NativeLayout (#821): per-role board materials + photographic textures
     # when the choice maps to a catalog material, palette fallback otherwise —
     # the exact server semantics of the material-aware resolve boundary.
-    def resolved_native_layout(definition_id, parameters = {}, choices = {})
+    def resolved_native_layout(definition_id, parameters = {}, choices = {}, _design_id = nil)
       @layout_resolves << { 'definition_id' => definition_id,
                             'parameters' => parameters.dup, 'choices' => choices.dup }
       LIB::LayoutContract.parse!(layout_body(choices))

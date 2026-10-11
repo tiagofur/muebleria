@@ -79,7 +79,9 @@ module Granete
         # server publishes a missing or unknown transform contract; there is
         # deliberately no AABB/slot fallback. nil = this provider cannot
         # resolve layouts (generic authoring path).
-        def resolved_native_layout(definition_id, parameters = {}, choices = {})
+        def resolved_native_layout(definition_id, parameters = {}, choices = {}, _design_id = nil)
+          # _design_id: the design context exists only on the authoring
+          # channel (#1264); this static/GET channel stays definition-scoped.
           body = resolved_layout(definition_id, parameters, choices)
           body && LayoutContract.parse!(body)
         end
@@ -243,8 +245,18 @@ module Granete
       # author right now (unpinned/offline); callers keep the legacy GET
       # channel.
       module PlacementAuthoringResolve
-        def resolved_native_layout(definition_id, parameters = {}, choices = {})
-          authoring_resolved_layout(definition_id, parameters, choices) || super
+        # design_id (#1264): the design-bound resolve. Present → the server
+        # resolves the design's persisted opening and the front region
+        # constrains the door boards; absent → the definition-scoped resolve,
+        # byte-identical to the historical semantics. The GET fallback cannot
+        # carry a design context — when the authoring channel is unavailable
+        # the fallback renders the no-opening baseline (the documented
+        # offline degradation, never a local guess).
+        def resolved_native_layout(definition_id, parameters = {}, choices = {}, design_id = nil)
+          # super stays definition-scoped (3 args): the GET channel carries no
+          # design context — the documented offline degradation.
+          authoring_resolved_layout(definition_id, parameters, choices, design_id) ||
+            super(definition_id, parameters, choices)
         end
 
         private
@@ -252,25 +264,27 @@ module Granete
         # A CATALOG_REVISION_STALE rejection refetches the workshop catalog
         # once and retries against the fresh pin — the second stale answer
         # propagates, never an implicit latest.
-        def authoring_resolved_layout(definition_id, parameters = {}, choices = {})
+        def authoring_resolved_layout(definition_id, parameters = {}, choices = {}, design_id = nil)
           return nil unless @transport&.configured? && @auth_provider&.configured?
 
           revision = catalog_revision
           return nil if revision.nil?
 
-          submit_minimal_authoring_resolve(definition_id, parameters, choices, revision)&.layout
+          submit_minimal_authoring_resolve(definition_id, parameters, choices, revision, design_id)&.layout
         end
 
-        def submit_minimal_authoring_resolve(definition_id, parameters, choices, revision)
+        def submit_minimal_authoring_resolve(definition_id, parameters, choices, revision, design_id = nil)
+          furniture = {
+            'furnitureDefinitionId' => definition_id,
+            'catalogRevision' => revision,
+            'parameters' => parameters || {},
+            'materialChoices' => choices || {}
+          }
+          furniture['designId'] = design_id if design_id && !design_id.to_s.strip.empty?
           request = AuthoringResolveRequest.build_request(
             message_id: "resolve-#{SecureRandom.hex(8)}",
             idempotency_key: "resolve-#{SecureRandom.hex(8)}",
-            furniture: {
-              'furnitureDefinitionId' => definition_id,
-              'catalogRevision' => revision,
-              'parameters' => parameters || {},
-              'materialChoices' => choices || {}
-            }
+            furniture: furniture
           )
           resolve_authoring(request)
         rescue AuthoringResolveError => e

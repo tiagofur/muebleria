@@ -329,6 +329,22 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		}})
 		return
 	}
+	// #1264 / V2 OPEN-FRONT: with a designId the server resolves the
+	// design's persisted opening over THIS resolve's dimensions and the
+	// front region constrains the door boards. A blocked opening (pending
+	// datasheet, pending overhang evidence) is a structured rejection — a
+	// design that DECLARES an opening never resolves a degraded layout.
+	fronts, designOpeningErr := s.designOpeningFrontsForResolve(r, req, module, dims)
+	if designOpeningErr != nil {
+		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
+			Code:     designOpeningErr.code,
+			Message:  "la apertura del diseño no puede resolverse: " + designOpeningErr.message,
+			Severity: domain.IssueSeverityError, Path: "furniture.designId",
+			Remediation: "Revisá la tarjeta de Apertura del Inspector (perfil con ficha verificada) y volvé a aplicar.",
+		}})
+		return
+	}
+
 	result, err := engine.ResolveAuthoringLayout(engine.AuthoringResolveInput{
 		Module:                    *module,
 		Catalog:                   catalog,
@@ -342,6 +358,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		EvaluatedParameters:       normalizedParameters,
 		ResolvedSideRecipes:       serverInputs.SideRecipes,
 		FactoryConstructionPolicy: serverInputs.Policy,
+		Fronts:                    fronts,
 	})
 	if err != nil {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
@@ -409,7 +426,14 @@ type authoringResolveFurniture struct {
 	// release. Present → the manufacturing inputs resolve from THAT release's
 	// frozen blobs (fail-closed on unpublished/unknown); absent → the current
 	// published release, exactly as before this field existed.
-	LibraryReleaseID   string                         `json:"libraryReleaseId,omitempty"`
+	LibraryReleaseID string `json:"libraryReleaseId,omitempty"`
+	// DesignID (#1264 / V2 OPEN-FRONT): the design this furniture belongs
+	// to. Present → the server resolves the design's persisted opening
+	// selection (pin-first, fail-closed on blocked states) and the front
+	// region constrains the door/drawer-front boards. Absent → byte-identical
+	// to the pre-opening resolve. The opening belongs to the design's FIRST
+	// module: resolving any other furniture never borrows it.
+	DesignID           string                         `json:"designId,omitempty"`
 	Parameters         map[string]any                 `json:"parameters,omitempty"`
 	MaterialChoices    map[string]string              `json:"materialChoices,omitempty"`
 	Components         []authoringOccurrenceWire      `json:"components,omitempty"`

@@ -224,7 +224,7 @@ module Granete
             'name' => 'Gabinete Authoring 600' }
         end
 
-        def resolved_native_layout(_definition_id, _parameters = {}, _choices = {})
+        def resolved_native_layout(_definition_id, _parameters = {}, _choices = {}, _design_id = nil)
           Library::LayoutContract.parse!(
             JSON.parse(JSON.generate(@scenario_body['resolved']['layout']))
           )

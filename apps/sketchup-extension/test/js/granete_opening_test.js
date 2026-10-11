@@ -331,4 +331,64 @@ test('hide desactiva el card (el lane le pertenece al Design Inspector)', () => 
   assert.strictEqual(opening._state().laneActive, false);
 });
 
-console.log(`granete-opening: ${testsPassed} tests passed`);
+test('#1264: el outcome de geometría del apply se muestra honesto (converged y failed)', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening(READY_ANSWER);
+
+  const body = elementsById['design-inspector-opening-body'];
+  void body;
+  const systemSelect = findDeep(body, (child) => child.id === 'opening-system-select');
+  const golaOption = systemSelect.children.find((option) => option.value === 'gola');
+  golaOption.selected = true;
+  systemSelect.value = 'gola';
+  systemSelect.onchange();
+  const applyButton = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-apply');
+  applyButton.onclick();
+  const applyCall = bridgeCalls[1];
+
+  const freshState = {
+    opening: { system: 'gola', profileId: 'profile.gola-l.alu', placements: [] },
+    resolution: { state: 'resolved', fronts: [{ zoneId: 'z1', widthMm: 600, heightMm: 650, offsetMm: 0, grips: [], rules: {} }] },
+    dimsKnown: true
+  };
+
+  opening.onDesignOpeningApplied({
+    requestId: applyCall.payload.requestId, status: 'ok', state: freshState,
+    geometry: { status: 'converged', units: 1 }
+  });
+  let outcome = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-geometry-outcome');
+  assert.ok(outcome, 'the converged outcome must render');
+  assert.ok(outcome.textContent.includes('Geometría actualizada (1)'), outcome.textContent);
+
+  // A convergence failure stays honest: the selection is persisted, the
+  // model converges later — never a local guess. A LATE answer (stale
+  // requestId) is dropped verbatim — the card keeps the first outcome.
+  opening.onDesignOpeningApplied({
+    requestId: applyCall.payload.requestId + 1000, status: 'ok', state: freshState,
+    geometry: { status: 'failed', reason: 'canal no disponible' }
+  });
+  const staleOutcome = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-geometry-outcome');
+  assert.ok(staleOutcome.textContent.includes('Geometría actualizada (1)'), staleOutcome.textContent);
+
+  // A fresh apply whose convergence fails reports the honest failure.
+  const rebody = elementsById['design-inspector-opening-body'];
+  void rebody;
+  const systemSelect2 = findDeep(rebody, (child) => child.id === 'opening-system-select');
+  const golaOption2 = systemSelect2.children.find((option) => option.value === 'gola');
+  golaOption2.selected = true;
+  systemSelect2.value = 'gola';
+  systemSelect2.onchange();
+  const applyButton2 = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-apply');
+  applyButton2.onclick();
+  opening.onDesignOpeningApplied({
+    requestId: bridgeCalls[bridgeCalls.length - 1].payload.requestId, status: 'ok', state: freshState,
+    geometry: { status: 'failed', reason: 'canal no disponible' }
+  });
+  const failedOutcome = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-geometry-outcome');
+  assert.ok(failedOutcome.textContent.includes('no se pudo actualizar'), failedOutcome.textContent);
+  assert.ok(failedOutcome.textContent.includes('canal no disponible'), failedOutcome.textContent);
+});
+
+console.log(JSON.stringify({ success: true, testsPassed }));
