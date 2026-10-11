@@ -374,14 +374,12 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			}
 			layout.Hardware = append(layout.Hardware, resolved)
 		}
-		for hi, hp := range board.derivedHardware {
-			resolved, ok := resolveHardwareToWorld(board, hp, catalog,
-				fmt.Sprintf("%s-opening-%d", board.id, hi), HardwarePlacementKindDerived)
-			if !ok {
-				continue
-			}
-			layout.Hardware = append(layout.Hardware, resolved)
-		}
+	}
+
+	// #1274 / #1276: opening hardware members placed in furniture space:
+	// profile across full cabinet width [0, dims.WidthMm], supports at sides with right inverted.
+	if len(opts.fronts) > 0 && opts.openingMembers != nil {
+		appendOpeningMemberLayoutHardware(&layout, catalog, *opts.openingMembers, dims, openingFrontsBottomBoundary(opts.fronts))
 	}
 
 	if opts.manualPlacements != nil {
@@ -492,12 +490,7 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 			return nil, passErr
 		}
 		// #1274: a furniture the opening constrained materializes the
-		// selection's member hardware (gola run + supports + caps) anchored
-		// to the freed edge of its first constrained front.
-		if len(openingConstrained) > 0 && opts.openingMembers != nil {
-			attachOpeningMembers(boards, *opts.openingMembers, openingConstrained,
-				openingFrontsBottomBoundary(opts.fronts))
-		}
+		// selection's member hardware in furniture space (applied downstream).
 	}
 
 	// #477 final pass: authored translations are furniture-frame intent, so
