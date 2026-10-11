@@ -160,8 +160,12 @@
   function normalizeGeometryOutcome(geometry) {
     if (!geometry || typeof geometry !== "object") return null;
     var status = geometry.status;
-    if (status !== "converged" && status !== "failed") return null;
-    return { status: status, units: geometry.units || 0, reason: geometry.reason || "" };
+    if (status !== "converged" && status !== "failed" && status !== "skipped" && status !== "unchanged") return null;
+    return {
+      status: status,
+      units: geometry.units || 0,
+      reason: geometry.reason || ""
+    };
   }
 
   function renderGeometryOutcome(body) {
@@ -174,9 +178,14 @@
     if (outcome.status === "converged") {
       var unitCount = outcome.units > 0 ? " (" + outcome.units + ")" : "";
       row.textContent = "Geometría actualizada" + unitCount + ".";
-    } else {
+    } else if (outcome.status === "failed") {
       row.textContent = "La geometría no se pudo actualizar (" + (outcome.reason || "sin razón") +
         "); convergerá en la próxima edición o sincronización.";
+    } else {
+      // #1261: skipped/unchanged are NEVER silent — the honest reason is
+      // exactly what the host smoke needs to see.
+      var prefix = outcome.status === "skipped" ? "Sin cambios en la geometría" : "Ningún mueble colocado para actualizar";
+      row.textContent = prefix + (outcome.reason ? " (" + outcome.reason + ")." : ".");
     }
     body.appendChild(row);
   }

@@ -1,20 +1,15 @@
 # frozen_string_literal: true
 
 # #1264 — Design opening geometry convergence: after a valid apply, the
-# design's PLACED furniture rebuilds to the fresh opening truth through the
-# #498 mutation coordinator (ONE batch: N design-pinned resolves + ONE
-# operation, single undo). Server-born rebuild (no authoring_dirty, no
-# working-copy write); failures keep the previous geometry with an honest
-# outcome. Contract: métodos de instancia incluidos en DialogController.
+# design's PLACED furniture rebuilds to the fresh opening truth (ONE batch,
+# single undo); failures keep the previous geometry with an honest outcome.
+# Contract: métodos de instancia incluidos en DialogController.
 module Granete
   module SketchUpExtension
     module UserInterface
       module DesignOpeningGeometryBridge
-        # Converges the design's placed furniture to the fresh opening
-        # truth (server-born: no authoring_dirty, no working-copy write; a
-        # failure leaves the geometry untouched and the model converges on
-        # the next edit/sync). Only the design's FIRST module carries the
-        # opening (pilot scope): exactly its placed units rebuild.
+        # Converges the design's placed furniture to the fresh opening truth
+        # (server-born rebuild; pilot scope = the first module's units).
         def design_opening_converge_geometry(stored, state)
           target = design_opening_convergence_target(stored, state)
           return target if target.is_a?(Hash)
@@ -38,13 +33,11 @@ module Granete
 
         # Preconditions + target discovery: a Hash return is the honest
         # outcome (skipped/unchanged/failed reason); [definition, roots] is
-        # the converge target. Only the design's FIRST module carries the
-        # opening (pilot scope): exactly its placed units rebuild.
+        # the converge target (the pilot module's placed units, #1261).
         def design_opening_convergence_target(stored, state)
-          return { 'status' => 'skipped' } unless state.is_a?(Hash) && state['dimsKnown']
-
-          resolution = state['resolution']
-          return { 'status' => 'skipped' } unless resolution.is_a?(Hash) && resolution['state'] == 'resolved'
+          resolved = state.is_a?(Hash) && state['dimsKnown'] &&
+                     state['resolution'].is_a?(Hash) && state['resolution']['state'] == 'resolved'
+          return { 'status' => 'skipped' } unless resolved
 
           model = active_model
           return { 'status' => 'skipped' } unless model.respond_to?(:entities)
@@ -66,21 +59,18 @@ module Granete
           [definition, roots]
         end
 
-        # The design's first working item (the opening's pilot scope), or the
-        # honest skipped outcome when there is nothing to converge.
+        # The opening's pilot unit (#1261): first item with a definition.
         def design_opening_first_working_item(stored, _model)
-          working_copy = design_opening_placer.service.get_working_copy(stored.design_id)
-          first = Array(working_copy.items).first
-          return { 'status' => 'skipped' } if first.nil?
+          items = Array(design_opening_placer.service.get_working_copy(stored.design_id)&.items)
+          return { 'status' => 'skipped', 'reason' => 'diseño sin muebles' } if items.empty?
 
-          first
+          items.find { |i| !i.furniture_definition_id.to_s.strip.empty? } ||
+            { 'status' => 'skipped', 'reason' => 'ninguna unidad del diseño tiene definición de mueble' }
         end
 
-        # One coordinated rebuild command for a placed unit: the resolve is
-        # pinned to the design (the opening constrains the fronts), the apply
-        # re-renders through the native builder WITHOUT authoring_dirty (the
-        # change was born on the server), and the context guard keeps the
-        # freshest-identity rule (#498).
+        # One coordinated rebuild command for a placed unit: design-pinned
+        # resolve, server-born rebuild (no authoring_dirty), freshest-identity
+        # context guard (#498).
         def design_opening_rebuild_command(root, definition, design_id)
           metadata = @metadata_store_factory.call(active_model).read(root)
           identity = metadata&.dig('identity') || {}
@@ -88,21 +78,25 @@ module Granete
           instance_ref = identity['instanceRef'].to_s
           return nil if instance_ref.empty?
 
-          Host::MutationCommand.new(
-            name: 'update_furniture',
-            operation_name: "Aplicar Apertura · #{definition['name']}",
-            semantic_target: design_opening_rebuild_target(identity, instance_ref),
-            resolve: design_opening_rebuild_resolve(definition, intent, design_id),
-            context_valid: design_opening_rebuild_context_guard(root, instance_ref),
-            apply: design_opening_rebuild_apply(root, definition, intent)
-          )
-        end
-
-        def design_opening_rebuild_target(identity, instance_ref)
           target = { 'furnitureInstanceRef' => instance_ref }
           server_id = identity['furnitureInstanceId'].to_s
           target['furnitureInstanceId'] = server_id unless server_id.empty?
-          target
+
+          context_guard = lambda {
+            model = active_model
+            current = @metadata_store_factory.call(model).read(root)
+            # rubocop:disable-next SketchupSuggestions/ModelEntities
+            current&.dig('identity', 'instanceRef') == instance_ref && model.entities.to_a.include?(root)
+          }
+
+          Host::MutationCommand.new(
+            name: 'update_furniture',
+            operation_name: "Aplicar Apertura · #{definition['name']}",
+            semantic_target: target,
+            resolve: design_opening_rebuild_resolve(definition, intent, design_id),
+            context_valid: context_guard,
+            apply: design_opening_rebuild_apply(root, definition, intent)
+          )
         end
 
         def design_opening_rebuild_resolve(definition, intent, design_id)
@@ -112,8 +106,7 @@ module Granete
             layout = @catalog_provider.resolved_native_layout(
               definition['furniture_definition_id'], parameters, choices, design_id
             )
-            # Fail-closed: an opening design never rebuilds to a generic
-            # preview — the previous valid geometry survives instead.
+            # Fail-closed: never rebuild to a generic preview.
             if layout.nil?
               raise Library::LayoutResolutionError,
                     'el canal de resolución de autoría no está disponible para actualizar la apertura'
@@ -121,17 +114,6 @@ module Granete
 
             Host::LayoutResolveResult.new(layout: layout, message_id: ctx[:message_id],
                                           idempotency_key: ctx[:idempotency_key])
-          }
-        end
-
-        def design_opening_rebuild_context_guard(root, instance_ref)
-          lambda {
-            model = active_model
-            current = @metadata_store_factory.call(model).read(root)
-            valid_ref = current&.dig('identity', 'instanceRef') == instance_ref
-            # Managed furniture are top-level: the model ROOT is intentional.
-            # rubocop:disable-next SketchupSuggestions/ModelEntities
-            valid_ref && model.entities.to_a.include?(root)
           }
         end
 
