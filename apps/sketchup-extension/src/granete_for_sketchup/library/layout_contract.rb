@@ -588,7 +588,7 @@ module Granete
       # keeps the server-resolved AABB placement — already anchored against
       # the final host board — so the renderer applies a plain translation,
       # never an orientation guess.
-      module HardwareContractParsing
+      module HardwareContractParsing # rubocop:disable Metrics/ModuleLength
         module_function
 
         def parse(raw)
@@ -598,7 +598,7 @@ module Granete
           raw.map { |entry| parse_placement(entry) }
         end
 
-        # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength
+        # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength, Metrics/PerceivedComplexity
         def parse_placement(raw)
           raise LayoutContract::ContractError, 'Herraje de composición inválido' unless raw.is_a?(Hash)
 
@@ -614,8 +614,12 @@ module Granete
                   '(procedencia #350); el cliente nunca adivina la procedencia'
           end
 
-          anchor_face = ContractCoercions.optional_opaque_string(raw['anchorFace'],
-                                                                 "anchorFace de #{placement_id}")
+          anchor_face = if raw['anchorFace'].to_s.strip.empty?
+                          nil
+                        else
+                          ContractCoercions.optional_opaque_string(raw['anchorFace'],
+                                                                   "anchorFace de #{placement_id}")
+                        end
           offset_mm = if raw['offsetMm'].is_a?(Array)
                         raw['offsetMm'].map(&:to_f)
                       elsif raw['offsetMm'].is_a?(Numeric)
@@ -661,9 +665,13 @@ module Granete
             placement_kind: placement_kind,
             option_role: ContractCoercions.optional_opaque_string(raw['optionRole'],
                                                                   "optionRole de #{placement_id}"),
-            host_component_instance_id: ContractCoercions.optional_opaque_string(
-              raw['hostComponentInstanceId'], "hostComponentInstanceId de #{placement_id}"
-            ),
+            host_component_instance_id: if raw['hostComponentInstanceId'].to_s.strip.empty?
+                                          nil
+                                        else
+                                          ContractCoercions.optional_opaque_string(
+                                            raw['hostComponentInstanceId'], "hostComponentInstanceId de #{placement_id}"
+                                          )
+                                        end,
             translation: ContractCoercions.optional_triple(raw.dig('transform', 'translationMm'),
                                                            "translationMm de #{placement_id}"),
             dimensions: ContractCoercions.optional_triple(raw['dimensionsMm'],

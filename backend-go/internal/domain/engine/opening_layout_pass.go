@@ -112,7 +112,11 @@ type OpeningMembers struct {
 // [0, dims.WidthMm], aligned at the top-front of the carcass [0, DepthMm, HeightMm],
 // the left support mounts at X = 0, and the right support mounts at X = WidthMm with
 // its X axis inverted (mirrored into the cabinet).
-func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims, bottomBoundary bool) {
+func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims, bottomBoundary bool, hostBoardID string) {
+	face := "top"
+	if bottomBoundary {
+		face = "bottom"
+	}
 	if members.ProfileHardwareID == "" {
 		return
 	}
@@ -139,6 +143,8 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 				Z: [3]float64{0, 0, 1},
 			},
 			[3]float64{totalW, 56.5, 27.2},
+			hostBoardID,
+			face,
 		))
 	}
 
@@ -156,6 +162,8 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 					Z: [3]float64{0, 0, 1},
 				},
 				[3]float64{20, 40, 20},
+				hostBoardID,
+				face,
 			))
 			// Intermediate supports if width exceeds spacing:
 			if members.SupportSpacingMm > 0 && totalW > float64(members.SupportSpacingMm) {
@@ -172,6 +180,8 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 							Z: [3]float64{0, 0, 1},
 						},
 						[3]float64{20, 40, 20},
+						hostBoardID,
+						face,
 					))
 				}
 			}
@@ -186,6 +196,8 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 					Z: [3]float64{0, 0, 1},
 				},
 				[3]float64{20, 40, 20},
+				hostBoardID,
+				face,
 			))
 		}
 	}
@@ -194,14 +206,14 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 	if members.CapHardwareID != "" {
 		if hw, ok := findHardware(catalog, members.CapHardwareID); ok && hw.Active {
 			layout.Hardware = append(layout.Hardware,
-				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-left-%s", hw.ID), [3]float64{0, yPos, zPos}, LayoutBasis{X: [3]float64{1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, [3]float64{3, 58, 29}),
-				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-right-%s", hw.ID), [3]float64{totalW, yPos, zPos}, LayoutBasis{X: [3]float64{-1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, [3]float64{3, 58, 29}),
+				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-left-%s", hw.ID), [3]float64{0, yPos, zPos}, LayoutBasis{X: [3]float64{1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, [3]float64{3, 58, 29}, hostBoardID, face),
+				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-right-%s", hw.ID), [3]float64{totalW, yPos, zPos}, LayoutBasis{X: [3]float64{-1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, [3]float64{3, 58, 29}, hostBoardID, face),
 			)
 		}
 	}
 }
 
-func buildDerivedHardware(hw domain.Hardware, placementID string, translation [3]float64, basis LayoutBasis, dims [3]float64) LayoutHardware {
+func buildDerivedHardware(hw domain.Hardware, placementID string, translation [3]float64, basis LayoutBasis, dims [3]float64, hostBoardID string, anchorFace string) LayoutHardware {
 	shape := "custom"
 	if hw.PreviewShape != nil && *hw.PreviewShape != "" {
 		shape = *hw.PreviewShape
@@ -221,11 +233,13 @@ func buildDerivedHardware(hw domain.Hardware, placementID string, translation [3
 	}
 
 	return LayoutHardware{
-		PlacementID:      placementID,
-		HardwareID:       hw.ID,
-		Name:             hw.Name,
-		Shape:            shape,
-		PlacementKind:    HardwarePlacementKindDerived,
+		PlacementID:             placementID,
+		HardwareID:              hw.ID,
+		Name:                    hw.Name,
+		Shape:                   shape,
+		AnchorFace:              anchorFace,
+		HostComponentInstanceID: hostBoardID,
+		PlacementKind:           HardwarePlacementKindDerived,
 		Transform:        LayoutTransform{TranslationMm: translation},
 		DimensionsMm:     dims,
 		LocalTransform:   LayoutLocalTransform{TranslationMm: translation, Basis: basis},
