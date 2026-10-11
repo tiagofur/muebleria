@@ -1817,4 +1817,50 @@ test('hardware groups: no consumed groups means no card, and groups catalog abse
   assert.strictEqual(previewBtn.title, 'Catálogo sin grupos');
 });
 
+test('#1261: opening summary card surfaces design opening when bound, and configure button clears selection', () => {
+  const clearSelectionCalls = [];
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      opening: {
+        getSummary: () => ({
+          system: 'gola',
+          systemLabel: 'Gola',
+          profileId: 'profile.gola-l.8006',
+          profileName: 'Gola L Cymisa 8006',
+          placementLabel: 'Superior',
+          resolvedText: '600 × 676 mm',
+          isGola: true
+        }),
+        ensureLoaded: () => {}
+      }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox, {
+    clearSelection: () => clearSelectionCalls.push(1),
+    sketchup: {
+      clear_selection: () => clearSelectionCalls.push(1)
+    }
+  });
+  const api = sandbox.window.GraneteUI.inspector;
+
+  // 1. Unbound: card remains hidden
+  api.onBindingStatus({ state: 'unbound', binding: null });
+  api.onSelectionChange(furnitureContext());
+  assert(!visible(el(sandbox, 'inspector-opening-summary-card')), 'unbound: card must be hidden');
+
+  // 2. Bound: card is visible with the summary
+  api.onBindingStatus({ state: 'connected', binding: { designId: 'd-1261', projectId: 'p-1' } });
+  api.onSelectionChange(furnitureContext());
+  assert(visible(el(sandbox, 'inspector-opening-summary-card')), 'bound: card must be visible');
+  const text = el(sandbox, 'inspector-opening-summary-text').textContent;
+  assert.ok(text.includes('Gola L Cymisa 8006 (Superior)'), 'must include profile and placement');
+  assert.ok(text.includes('600 × 676 mm'), 'must include resolved front size');
+
+  // 3. Click configure: calls clear_selection
+  const configureBtn = el(sandbox, 'btn-configure-design-opening');
+  configureBtn.click();
+  assert.strictEqual(clearSelectionCalls.length, 1, 'clicking configure must clear selection');
+});
+
 console.log(JSON.stringify({ success: true, testsPassed: testsPassed, module: 'granete-inspector.js' }));

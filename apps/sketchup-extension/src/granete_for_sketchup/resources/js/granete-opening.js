@@ -441,6 +441,9 @@
     }
     state.status = "ready";
     render();
+    if (typeof deps.onSummaryChanged === "function") {
+      deps.onSummaryChanged();
+    }
   }
 
   function onDesignOpeningApplied(answer) {
@@ -461,6 +464,9 @@
       // never a local guess (a failure converges on the next edit/sync).
       state.geometryOutcome = normalizeGeometryOutcome(answer.geometry);
       render();
+      if (typeof deps.onSummaryChanged === "function") {
+        deps.onSummaryChanged();
+      }
       return;
     }
     if (answer.status === "invalid") {
@@ -486,16 +492,80 @@
     };
   }
 
+  // #1261: structured summary of the design's persisted opening, accessible
+  // by the furniture inspector so the opening is discoverable when a cabinet
+  // is selected.
+  function getSummary() {
+    if (!state.designId) return null;
+    var opening = state.persisted && state.persisted.opening;
+    var system = (opening && opening.system) || "handle";
+    var systemLabel = labelFor(SYSTEM_LABELS, system) || system;
+    var profileName = "";
+    if (opening && opening.profileId) {
+      for (var i = 0; i < state.profiles.length; i++) {
+        if (state.profiles[i].id === opening.profileId) {
+          profileName = state.profiles[i].name || state.profiles[i].code || opening.profileId;
+          break;
+        }
+      }
+      if (!profileName) profileName = opening.profileId;
+    }
+    var placementLabel = "";
+    if (opening && opening.placements && opening.placements.length > 0) {
+      placementLabel = labelFor(PLACEMENT_LABELS, opening.placements[0]) || opening.placements[0];
+    }
+    var resolution = state.persisted && state.persisted.resolution;
+    var resolvedText = "";
+    if (resolution && resolution.state === "resolved" && resolution.fronts && resolution.fronts.length > 0) {
+      var f = resolution.fronts[0];
+      resolvedText = f.widthMm + " × " + f.heightMm + " mm";
+    }
+    return {
+      designId: state.designId,
+      system: system,
+      systemLabel: systemLabel,
+      profileId: (opening && opening.profileId) || "",
+      profileName: profileName,
+      placementLabel: placementLabel,
+      resolvedText: resolvedText,
+      isGola: system === "gola"
+    };
+  }
+
+  function ensureLoaded(designId) {
+    if (!initialized) {
+      deps.sketchup = window.sketchup || null;
+      initialized = Boolean(deps.sketchup);
+    }
+    if (!deps.sketchup || !designId) return;
+    if (state.designId === designId && (state.status === "ready" || state.status === "loading")) {
+      return;
+    }
+    state.designId = designId;
+    state.status = "loading";
+    state.requestId += 1;
+    deps.sketchup.get_design_opening(JSON.stringify({
+      requestId: state.requestId,
+      designId: designId
+    }));
+  }
+
   window.GraneteUI.opening = {
     init: function (opts) {
-      if (initialized) return;
       deps.sketchup = (opts && opts.sketchup) || (window.sketchup || null);
+      if (opts && typeof opts.onSummaryChanged === "function") {
+        deps.onSummaryChanged = opts.onSummaryChanged;
+      }
       initialized = true;
     },
     // The Design Inspector drives the card's lifecycle: the lane activates
     // with a bound design and deactivates on any selection.
     refresh: function (designId, workingVersion) {
-      if (!initialized || !deps.sketchup || !designId) return;
+      if (!initialized) {
+        deps.sketchup = window.sketchup || null;
+        initialized = Boolean(deps.sketchup);
+      }
+      if (!deps.sketchup || !designId) return;
       state.designId = designId;
       state.workingVersion = workingVersion || null;
       state.laneActive = true;
@@ -509,6 +579,8 @@
         designId: designId
       }));
     },
+    ensureLoaded: ensureLoaded,
+    getSummary: getSummary,
     hide: function () {
       state.laneActive = false;
       if (!initialized) return;

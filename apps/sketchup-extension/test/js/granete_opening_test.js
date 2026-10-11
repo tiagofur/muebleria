@@ -391,4 +391,36 @@ test('#1264: el outcome de geometría del apply se muestra honesto (converged y 
   assert.ok(failedOutcome.textContent.includes('canal no disponible'), failedOutcome.textContent);
 });
 
+test('#1261: getSummary reporta el resumen de apertura y ensureLoaded consulta en background', () => {
+  const bridgeCalls = [];
+  const { opening } = initModule(bridgeCalls);
+
+  // Unbound -> getSummary es null
+  assert.strictEqual(opening.getSummary(), null);
+
+  // ensureLoaded dispara get_design_opening
+  opening.ensureLoaded('d-1261');
+  assert.strictEqual(bridgeCalls.length, 1);
+  assert.strictEqual(bridgeCalls[0].command, 'get_design_opening');
+  assert.strictEqual(bridgeCalls[0].payload.designId, 'd-1261');
+
+  // getSummary con gola
+  opening.onDesignOpening({
+    requestId: bridgeCalls[0].payload.requestId,
+    status: 'ready',
+    designId: 'd-1261',
+    opening: { system: 'gola', profileId: 'profile.gola-l.alu', placements: ['top'] },
+    resolution: { state: 'resolved', fronts: [{ zoneId: 'z1', widthMm: 600, heightMm: 650 }] },
+    profiles: [{ id: 'profile.gola-l.alu', name: 'Gola L Cymisa' }]
+  });
+
+  const summary = opening.getSummary();
+  assert.ok(summary);
+  assert.strictEqual(summary.system, 'gola');
+  assert.strictEqual(summary.profileName, 'Gola L Cymisa');
+  assert.strictEqual(summary.placementLabel, 'Superior');
+  assert.strictEqual(summary.resolvedText, '600 × 650 mm');
+  assert.strictEqual(summary.isGola, true);
+});
+
 console.log(JSON.stringify({ success: true, testsPassed }));

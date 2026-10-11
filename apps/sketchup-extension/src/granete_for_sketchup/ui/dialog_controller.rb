@@ -244,8 +244,7 @@ module Granete
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
           dialog.add_action_callback('open_hardware_selector') { |_c, p| handle_open_hardware_selector(dialog, p) }
           dialog.add_action_callback('prepare_hardware_mount') { |_c, p| handle_prepare_hardware_mount(dialog, p) }
-          dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(dialog, p) }
-          register_motion_callbacks(dialog)
+          register_inspector_bridge_callbacks(dialog)
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }
           dialog.add_action_callback('close_dialog') { dialog.close }
           register_auth_callbacks(dialog)
@@ -268,7 +267,9 @@ module Granete
           dialog.add_action_callback('preflight_review') { |_c, p| handle_preflight_review(dialog, p) }
         end
 
-        def register_motion_callbacks(dialog)
+        def register_inspector_bridge_callbacks(dialog)
+          dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(dialog, p) }
+          dialog.add_action_callback('clear_selection') { |_c, _p| handle_clear_selection(dialog) }
           dialog.add_action_callback('toggle_door_motion') { |_c, p| handle_toggle_door_motion(dialog, p) }
           dialog.add_action_callback('close_all_doors') { handle_close_all_doors(dialog) }
         end

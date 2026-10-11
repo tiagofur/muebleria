@@ -674,6 +674,22 @@
                 <div id="inspector-params-container" style="margin-top: var(--space-2);"></div>
               </div>
 
+              <!-- #1261: Resumen de apertura del diseño conectado. Hace
+                   descubrible la selección (Jaladera / Gola / Rebase) cuando un
+                   mueble está seleccionado, sin tener que adivinar que el editor
+                   completo vive en el carril sin selección. -->
+              <div class="card" id="inspector-opening-summary-card" style="display: none;">
+                <div class="card-header-row">
+                  <div style="flex: 1; min-width: 0;">
+                    <div class="card-title">Apertura del diseño</div>
+                    <div id="inspector-opening-summary-text" class="subhead" style="margin-top: var(--space-1); font-size: var(--text-xs); line-height: 1.4;">
+                      --
+                    </div>
+                  </div>
+                  <button id="btn-configure-design-opening" type="button" class="btn btn-sm btn-secondary" style="margin-left: var(--space-2); white-space: nowrap;" title="Deseleccionar el mueble para configurar la apertura del diseño">Configurar</button>
+                </div>
+              </div>
+
               <!-- #529: Card condicional de presentación de puertas. Se muestra
                    únicamente si el mueble tiene puertas detectadas (metadata
                    gestionada, parámetro doorSwing o doorAccessories del
@@ -1947,6 +1963,17 @@
           },
           showToast: function (kind, text) { showToast(kind, text); }
         });
+
+        if (window.GraneteUI.opening && window.GraneteUI.opening.init) {
+          window.GraneteUI.opening.init({
+            sketchup: window.sketchup,
+            onSummaryChanged: function () {
+              if (window.GraneteUI.inspector && window.GraneteUI.inspector.updateOpeningSummary) {
+                window.GraneteUI.inspector.updateOpeningSummary();
+              }
+            }
+          });
+        }
 
         window.GraneteUI.materialRoles.init({
           icon: icon,
