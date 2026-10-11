@@ -391,6 +391,52 @@ test('#1264: el outcome de geometría del apply se muestra honesto (converged y 
   assert.ok(failedOutcome.textContent.includes('canal no disponible'), failedOutcome.textContent);
 });
 
+test('#1272: el resultado del canal gola (placeholder) se muestra junto a la geometría', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening(READY_ANSWER);
+
+  const body = elementsById['design-inspector-opening-body'];
+  void body;
+  const systemSelect = findDeep(body, (child) => child.id === 'opening-system-select');
+  const golaOption = systemSelect.children.find((option) => option.value === 'gola');
+  golaOption.selected = true;
+  systemSelect.value = 'gola';
+  systemSelect.onchange();
+  const applyButton = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-apply');
+  applyButton.onclick();
+  const applyCall = bridgeCalls[1];
+
+  const freshState = {
+    opening: { system: 'gola', profileId: 'profile.gola-l.alu', placements: [] },
+    resolution: { state: 'resolved', fronts: [{ zoneId: 'z1', widthMm: 400, heightMm: 680, offsetMm: 0, grips: [], rules: {} }] },
+    dimsKnown: true
+  };
+
+  opening.onDesignOpeningApplied({
+    requestId: applyCall.payload.requestId, status: 'ok', state: freshState,
+    geometry: { status: 'converged', units: 1, channel: { status: 'drawn', heightMm: 27, depthMm: 56 } }
+  });
+  let channel = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-channel-outcome');
+  assert.ok(channel, 'the drawn channel outcome must render');
+  assert.ok(channel.textContent.includes('27×56 mm'), channel.textContent);
+  assert.ok(channel.textContent.includes('provisorio'), channel.textContent);
+
+  // A skipped placeholder keeps the honest reason visible too.
+  const systemSelect2 = findDeep(elementsById['design-inspector-opening-body'], (child) => child.id === 'opening-system-select');
+  systemSelect2.value = 'gola';
+  systemSelect2.onchange();
+  findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-apply').onclick();
+  opening.onDesignOpeningApplied({
+    requestId: bridgeCalls[bridgeCalls.length - 1].payload.requestId, status: 'ok', state: freshState,
+    geometry: { status: 'converged', units: 1, channel: { status: 'skipped', reason: 'sin puerta en el mueble' } }
+  });
+  channel = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-channel-outcome');
+  assert.ok(channel.textContent.includes('sin representar'), channel.textContent);
+  assert.ok(channel.textContent.includes('sin puerta en el mueble'), channel.textContent);
+});
+
 test('#1261: getSummary reporta el resumen de apertura y ensureLoaded consulta en background', () => {
   const bridgeCalls = [];
   const { opening } = initModule(bridgeCalls);

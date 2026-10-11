@@ -14,7 +14,7 @@ module Granete
         METADATA_VERSION = 1
 
         SUPPORTED_KINDS = %w[bootstrapIntent furnitureInstance componentInstance
-                             partInstance].freeze
+                             partInstance openingChannelPlaceholder].freeze
         ENTITY_CLASSES = %w[part hardware aggregate].freeze
         PLACEMENT_KINDS = %w[manual derived].freeze
         # #416 representation-migration provenance (marker only, never

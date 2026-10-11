@@ -161,10 +161,22 @@
     if (!geometry || typeof geometry !== "object") return null;
     var status = geometry.status;
     if (status !== "converged" && status !== "failed" && status !== "skipped" && status !== "unchanged") return null;
+    var channel = geometry.channel;
+    var normalizedChannel = null;
+    if (channel && typeof channel === "object" &&
+        (channel.status === "drawn" || channel.status === "skipped")) {
+      normalizedChannel = {
+        status: channel.status,
+        heightMm: channel.heightMm || 0,
+        depthMm: channel.depthMm || 0,
+        reason: channel.reason || ""
+      };
+    }
     return {
       status: status,
       units: geometry.units || 0,
-      reason: geometry.reason || ""
+      reason: geometry.reason || "",
+      channel: normalizedChannel
     };
   }
 
@@ -186,6 +198,25 @@
       // exactly what the host smoke needs to see.
       var prefix = outcome.status === "skipped" ? "Sin cambios en la geometría" : "Ningún mueble colocado para actualizar";
       row.textContent = prefix + (outcome.reason ? " (" + outcome.reason + ")." : ".");
+    }
+    body.appendChild(row);
+    renderChannelOutcome(body);
+  }
+
+  // #1272: the gola channel placeholder result — the block stands in for
+  // the profile until its real SKP design lands.
+  function renderChannelOutcome(body) {
+    var channel = state.geometryOutcome && state.geometryOutcome.channel;
+    if (!channel) return;
+    var row = document.createElement("p");
+    row.className = "subhead";
+    row.style.cssText = "font-size: var(--text-xs); margin: var(--space-1) 0 0;";
+    row.setAttribute("data-testid", "opening-channel-outcome");
+    if (channel.status === "drawn") {
+      row.textContent = "Canal de gola representado con un bloque de " + channel.heightMm + "×" +
+        channel.depthMm + " mm (provisorio, a la espera del diseño SKP del perfil).";
+    } else {
+      row.textContent = "Canal de gola sin representar (" + (channel.reason || "sin razón") + ").";
     }
     body.appendChild(row);
   }

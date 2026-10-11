@@ -6,6 +6,7 @@ require_relative '../../src/granete_for_sketchup/connection/model_binding'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/ui/bridges/design_opening_bridge'
 require_relative '../../src/granete_for_sketchup/ui/bridges/design_opening_geometry_bridge'
+require_relative '../../src/granete_for_sketchup/ui/bridges/design_opening_channel_bridge'
 require_relative '../../src/granete_for_sketchup/host/mutation_outcome'
 require_relative '../../src/granete_for_sketchup/host/mutation_command'
 require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
@@ -123,6 +124,7 @@ class DesignOpeningBridgeTest < Minitest::Test
     @bridge = Object.new
     @bridge.extend(Granete::SketchUpExtension::UserInterface::DesignOpeningBridge)
     @bridge.extend(Granete::SketchUpExtension::UserInterface::DesignOpeningGeometryBridge)
+    @bridge.extend(Granete::SketchUpExtension::UserInterface::DesignOpeningChannelBridge)
     @bridge.instance_variable_set(:@logger, logger)
     @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(@service))
     @bridge.define_singleton_method(:execute_bridge) do |dialog, method, payload|
@@ -252,15 +254,17 @@ class DesignOpeningBridgeTest < Minitest::Test
   end
 
   class FakeConvergeCatalogProvider
-    attr_reader :layout_resolves
+    attr_reader :layout_resolves, :definition_lookups
 
     def initialize(definition, layout)
       @definition = definition
       @layout = layout
       @layout_resolves = []
+      @definition_lookups = []
     end
 
-    def find_definition(_id)
+    def find_definition(id)
+      @definition_lookups << id
       @definition
     end
 
@@ -274,13 +278,20 @@ class DesignOpeningBridgeTest < Minitest::Test
   class FakeConvergeCoordinator
     attr_reader :batches
 
-    def initialize(outcome)
+    def initialize(outcome, apply: false)
       @outcome = outcome
+      @apply = apply
       @batches = []
     end
 
     def execute_batch(commands)
       @batches << commands
+      if @apply
+        commands.each do |command|
+          result = command.resolve_intent({ message_id: 'm', idempotency_key: 'k' })
+          command.apply_accepted_state(result, nil)
+        end
+      end
       @outcome
     end
   end
@@ -447,5 +458,193 @@ class DesignOpeningBridgeTest < Minitest::Test
     assert_equal 2, puts_calls.length
     assert_equal 'stale-v1', puts_calls[0][3]
     assert_equal 'fresh-token-v2', puts_calls[1][3]
+  end
+
+  # #1272 — a working item written by the pre-fix intent store carries a
+  # NULL definition; the placed root's OWN persisted intent is the fallback
+  # the convergence resolves with (never a name/order guess).
+  def test_apply_converges_with_definition_fallback_from_root_intent
+    working_item = Struct.new(:furniture_instance_id, :furniture_definition_id, :parameters,
+                              :material_choices).new('fi-1272', nil, {}, {})
+    applied_state = { 'opening' => { 'system' => 'gola' },
+                      'resolution' => { 'state' => 'resolved', 'fronts' => [] },
+                      'dimsKnown' => true,
+                      'workingVersion' => '2026-10-11T12:00:00.000000Z' }
+    service = FakeService.new(applied_state: applied_state,
+                              working_copy: Struct.new(:items).new([working_item]))
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(service))
+
+    root = Object.new
+    layout = Object.new
+    definition = { 'furniture_definition_id' => 'mod-1272', 'name' => 'Gabinete Gola' }
+    metadata = { root => {
+      'identity' => { 'instanceRef' => 'inst-1272', 'furnitureInstanceId' => 'fi-1272' },
+      'intent' => { 'furnitureDefinitionId' => 'mod-1272', 'parameters' => {}, 'materialChoices' => {} }
+    } }
+    provider = FakeConvergeCatalogProvider.new(definition, layout)
+    coordinator = FakeConvergeCoordinator.new(
+      Granete::SketchUpExtension::Host::MutationOutcome.new(outcome: 'committed')
+    )
+    builder = FakeConvergeBuilder.new
+    @bridge.instance_variable_set(:@catalog_provider, provider)
+    @bridge.instance_variable_set(:@metadata_store_factory, ->(_model) { FakeMetadataStore.new(metadata) })
+    @bridge.define_singleton_method(:mutation_coordinator) { coordinator }
+    @bridge.define_singleton_method(:furniture_builder_for) { |_model| builder }
+    binding_json = JSON.generate({ 'projectId' => PROJECT, 'designId' => DESIGN_A,
+                                   'baseRevisionId' => nil, 'schemaVersion' => 1 })
+    @bridge.define_singleton_method(:active_model) { FakeEntitiesModel.new([root], binding_json) }
+
+    @bridge.handle_apply_design_opening(
+      @dialog,
+      JSON.generate({ 'requestId' => 51, 'designId' => DESIGN_A,
+                      'selection' => { 'system' => 'gola', 'profileId' => 'profile.gola-l.8006' } })
+    )
+
+    answer = last_script_payload
+    assert_equal 'ok', answer['status']
+    assert_equal({ 'status' => 'converged', 'units' => 1 }, answer['geometry'])
+    assert_includes provider.definition_lookups, 'mod-1272'
+  end
+
+  # #1272 — a placed, identified mueble whose definition the local catalog
+  # cannot resolve reports the TRUE blocker; it never says "no colocado"
+  # again for a mueble that IS placed.
+  def test_apply_reports_missing_definition_honestly
+    working_item = Struct.new(:furniture_instance_id, :furniture_definition_id, :parameters,
+                              :material_choices).new('fi-1272', 'mod-desconocido', {}, {})
+    applied_state = { 'opening' => { 'system' => 'gola' },
+                      'resolution' => { 'state' => 'resolved', 'fronts' => [] },
+                      'dimsKnown' => true,
+                      'workingVersion' => '2026-10-11T12:00:00.000000Z' }
+    service = FakeService.new(applied_state: applied_state,
+                              working_copy: Struct.new(:items).new([working_item]))
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(service))
+
+    root = Object.new
+    metadata = { root => {
+      'identity' => { 'instanceRef' => 'inst-1272', 'furnitureInstanceId' => 'fi-1272' },
+      'intent' => { 'parameters' => {}, 'materialChoices' => {} }
+    } }
+    provider = FakeConvergeCatalogProvider.new(nil, Object.new)
+    @bridge.instance_variable_set(:@catalog_provider, provider)
+    @bridge.instance_variable_set(:@metadata_store_factory, ->(_model) { FakeMetadataStore.new(metadata) })
+    binding_json = JSON.generate({ 'projectId' => PROJECT, 'designId' => DESIGN_A,
+                                   'baseRevisionId' => nil, 'schemaVersion' => 1 })
+    @bridge.define_singleton_method(:active_model) { FakeEntitiesModel.new([root], binding_json) }
+
+    @bridge.handle_apply_design_opening(
+      @dialog,
+      JSON.generate({ 'requestId' => 52, 'designId' => DESIGN_A,
+                      'selection' => { 'system' => 'gola', 'profileId' => 'profile.gola-l.8006' } })
+    )
+
+    answer = last_script_payload
+    assert_equal 'ok', answer['status']
+    geometry = answer['geometry']
+    assert_equal 'unchanged', geometry['status']
+    assert_equal 'la definición del mueble no está en el catálogo local (1)', geometry['reason']
+  end
+
+  # #1272 — the gola channel placeholder spec comes ONLY from server data
+  # (profile geometry + resolved front grips); anything less is nil, never
+  # an invented block.
+  def test_channel_spec_derives_from_server_profile_and_front
+    service = FakeService.new(
+      profiles: [{ 'id' => 'profile.gola-l.8006', 'code' => 'GOLA-L-8006',
+                   'profile_height_mm' => 27, 'profile_depth_mm' => 56 }]
+    )
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(service))
+    state = {
+      'opening' => { 'system' => 'gola', 'profileId' => 'profile.gola-l.8006' },
+      'resolution' => { 'state' => 'resolved',
+                        'fronts' => [{ 'widthMm' => 400, 'heightMm' => 680,
+                                       'grips' => [{ 'boundary' => 'top', 'consumedMm' => 40 }] }] }
+    }
+    assert_equal({ 'profileId' => 'profile.gola-l.8006', 'profileCode' => 'GOLA-L-8006',
+                   'heightMm' => 27, 'depthMm' => 56, 'boundary' => 'top' },
+                 @bridge.design_opening_channel_spec(state))
+
+    bottom = { 'opening' => state['opening'],
+               'resolution' => { 'fronts' => [{ 'grips' => [{ 'boundary' => 'bottom' }] }] } }
+    assert_equal 'bottom', @bridge.design_opening_channel_spec(bottom)['boundary']
+
+    # Non-gola systems and profiles without declared geometry draw nothing.
+    assert_nil @bridge.design_opening_channel_spec(
+      'opening' => { 'system' => 'jaladera' }, 'resolution' => { 'fronts' => [] }
+    )
+    geometryless = FakeService.new(profiles: [{ 'id' => 'p1', 'code' => 'X' }])
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(geometryless))
+    assert_nil @bridge.design_opening_channel_spec(state)
+  end
+
+  # #1272 — pure geometry of the placeholder block: door width on X, flush
+  # front face with the profile depth inwards, anchored to the envelope's
+  # grip boundary edge.
+  def test_channel_box_math_top_front_at_max
+    spec = { 'heightMm' => 27, 'depthMm' => 56, 'boundary' => 'top' }
+    box = @bridge.design_opening_channel_box_mm(
+      [0.0, 556.0, 40.0], [400.0, 574.0, 720.0], [0.0, 0.0, 0.0], [400.0, 590.0, 720.0], spec
+    )
+    assert_equal [0.0, 400.0], [box['min_mm'][0], box['max_mm'][0]]
+    assert_equal [518.0, 574.0], [box['min_mm'][1], box['max_mm'][1]]
+    assert_equal [693.0, 720.0], [box['min_mm'][2], box['max_mm'][2]]
+  end
+
+  def test_channel_box_math_bottom_front_at_min
+    spec = { 'heightMm' => 27, 'depthMm' => 56, 'boundary' => 'bottom' }
+    box = @bridge.design_opening_channel_box_mm(
+      [0.0, 16.0, 0.0], [400.0, 34.0, 680.0], [0.0, 0.0, 0.0], [400.0, 590.0, 720.0], spec
+    )
+    assert_equal [16.0, 72.0], [box['min_mm'][1], box['max_mm'][1]]
+    assert_equal [0.0, 27.0], [box['min_mm'][2], box['max_mm'][2]]
+  end
+
+  # The placeholder drawing is auxiliary: a root without a door actor skips
+  # honestly and the converged answer carries the reason.
+  def test_apply_reports_channel_skip_without_door
+    working_item = Struct.new(:furniture_instance_id, :furniture_definition_id, :parameters,
+                              :material_choices).new('fi-1272', 'mod-1272', {}, {})
+    applied_state = { 'opening' => { 'system' => 'gola', 'profileId' => 'profile.gola-l.8006' },
+                      'resolution' => { 'state' => 'resolved',
+                                        'fronts' => [{ 'widthMm' => 400, 'heightMm' => 680,
+                                                       'grips' => [{ 'boundary' => 'top', 'consumedMm' => 40 }] }] },
+                      'dimsKnown' => true,
+                      'workingVersion' => '2026-10-11T12:00:00.000000Z' }
+    service = FakeService.new(applied_state: applied_state,
+                              working_copy: Struct.new(:items).new([working_item]),
+                              profiles: [{ 'id' => 'profile.gola-l.8006', 'code' => 'GOLA-L-8006',
+                                           'profile_height_mm' => 27, 'profile_depth_mm' => 56 }])
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(service))
+
+    root = Object.new
+    layout = Object.new
+    definition = { 'furniture_definition_id' => 'mod-1272', 'name' => 'Gabinete Gola' }
+    metadata = { root => {
+      'identity' => { 'instanceRef' => 'inst-1272', 'furnitureInstanceId' => 'fi-1272' },
+      'intent' => { 'furnitureDefinitionId' => 'mod-1272', 'parameters' => {}, 'materialChoices' => {} }
+    } }
+    provider = FakeConvergeCatalogProvider.new(definition, layout)
+    coordinator = FakeConvergeCoordinator.new(
+      Granete::SketchUpExtension::Host::MutationOutcome.new(outcome: 'committed'), apply: true
+    )
+    builder = FakeConvergeBuilder.new
+    @bridge.instance_variable_set(:@catalog_provider, provider)
+    @bridge.instance_variable_set(:@metadata_store_factory, ->(_model) { FakeMetadataStore.new(metadata) })
+    @bridge.define_singleton_method(:mutation_coordinator) { coordinator }
+    @bridge.define_singleton_method(:furniture_builder_for) { |_model| builder }
+    binding_json = JSON.generate({ 'projectId' => PROJECT, 'designId' => DESIGN_A,
+                                   'baseRevisionId' => nil, 'schemaVersion' => 1 })
+    @bridge.define_singleton_method(:active_model) { FakeEntitiesModel.new([root], binding_json) }
+
+    @bridge.handle_apply_design_opening(
+      @dialog,
+      JSON.generate({ 'requestId' => 53, 'designId' => DESIGN_A,
+                      'selection' => { 'system' => 'gola', 'profileId' => 'profile.gola-l.8006' } })
+    )
+
+    answer = last_script_payload
+    assert_equal({ 'status' => 'converged', 'units' => 1,
+                   'channel' => { 'status' => 'skipped', 'reason' => 'sin puerta en el mueble' } },
+                 answer['geometry'])
   end
 end
