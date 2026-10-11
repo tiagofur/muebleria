@@ -103,7 +103,11 @@ class GraneteInspectorJsTest < Minitest::Test
       'onUpdateResult' => 'function (result)',
       'onDeleteResult' => 'function (result)',
       'onMaterialChoiceApplied' => 'function (payload)',
-      'activateInspectorTab' => 'function ()'
+      'activateInspectorTab' => 'function ()',
+      # #1137/#1261: the Apertura card's two answers must stay wired — the
+      # Ruby bridge pushes them via execute_bridge('onDesignOpening…').
+      'onDesignOpening' => 'function (payload)',
+      'onDesignOpeningApplied' => 'function (payload)'
     }.each do |name, signature|
       assert_includes html, "#{name}: #{signature}",
                       "GraneteDialog.#{name} must stay as the Ruby-facing wrapper"
@@ -117,7 +121,10 @@ class GraneteInspectorJsTest < Minitest::Test
       "onDeleteResult: function (result) {\n            window.GraneteUI.inspector.onDeleteResult(result);",
       "onMaterialChoiceApplied: function (payload) {\n            " \
       'window.GraneteUI.inspector.onMaterialChoiceApplied(payload);',
-      "activateInspectorTab: function () {\n            window.GraneteUI.inspector.activateInspectorTab();"
+      "activateInspectorTab: function () {\n            window.GraneteUI.inspector.activateInspectorTab();",
+      "onDesignOpening: function (payload) {\n            window.GraneteUI.opening.onDesignOpening(payload);",
+      "onDesignOpeningApplied: function (payload) {\n            " \
+      'window.GraneteUI.opening.onDesignOpeningApplied(payload);'
     ].each do |body|
       assert_includes html, body, 'GraneteDialog wrapper must delegate to window.GraneteUI.inspector'
     end

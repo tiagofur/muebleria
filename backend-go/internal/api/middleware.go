@@ -674,6 +674,12 @@ var extensionClientGetPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^/api/designs/[^/]+/working-copy/material-provenance$`),
 	// #1252: read-only consumed hardware option groups for the Inspector card.
 	regexp.MustCompile(`^/api/designs/[^/]+/hardware-option-groups$`),
+	// #1137 / #1261: the design opening lane — read-only state+resolution for
+	// the exact connected design, plus the org's opening capabilities and
+	// profile catalog that feed the card's filtered options.
+	regexp.MustCompile(`^/api/designs/[^/]+/opening$`),
+	regexp.MustCompile(`^/api/catalog/opening-capabilities$`),
+	regexp.MustCompile(`^/api/catalog/opening-profiles$`),
 	// #668: read hardware asset details and revision list for visual mount-frame preparation.
 	regexp.MustCompile(`^/api/hardware-assets/[^/]+$`),
 }
@@ -802,6 +808,10 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 // denied for the extension credential.
 var extensionTokenMayPutPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^/api/designs/[^/]+/working-copy$`),
+	// #1137: the opening card's Aplicar — surgical write of the design's
+	// opening selection (capabilities + catalog validated server-side, 422
+	// with the stable reason on refusal).
+	regexp.MustCompile(`^/api/designs/[^/]+/opening$`),
 }
 
 func extensionTokenMayPost(path string) bool {
