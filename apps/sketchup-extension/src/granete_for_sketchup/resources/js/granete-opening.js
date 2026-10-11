@@ -44,6 +44,7 @@
     profiles: [], // the org's opening profile catalog
     draft: null, // { system, profileId, placements[] } — local, unsaved
     draftError: null, // { reason, message } — the last refused apply
+    errorReason: null, // why the authoritative READ failed (transport/credential)
     saving: false,
     laneActive: false,
     inlineActive: false
@@ -369,6 +370,33 @@
         loading.style.cssText = "font-size: var(--text-xs); margin: var(--space-1) 0;";
         loading.textContent = "Cargando opciones de apertura…";
         inlineContainer.appendChild(loading);
+      } else if (state.inlineActive && state.status === "error") {
+        // #1261: an honest error surface — never a stale "Cargando…". The
+        // load failed (transport/credentials/binding); retry re-issues the
+        // authoritative read.
+        inlineContainer.style.display = "block";
+        clearChildren(inlineContainer);
+        var errorLine = document.createElement("p");
+        errorLine.className = "subhead";
+        errorLine.style.cssText = "font-size: var(--text-xs); margin: var(--space-1) 0; color: var(--danger, #b00020);";
+        errorLine.setAttribute("data-testid", "opening-inline-error");
+        errorLine.setAttribute("role", "alert");
+        errorLine.textContent = state.errorReason || "No se pudo cargar la apertura del diseño.";
+        inlineContainer.appendChild(errorLine);
+        var retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "btn btn-secondary btn-sm";
+        retry.style.marginTop = "var(--space-1)";
+        retry.setAttribute("data-testid", "opening-inline-retry");
+        retry.textContent = "Reintentar";
+        retry.onclick = function () {
+          // ensureLoaded owns the loading transition (its guard accepts a
+          // retry from "error"; setting status here would trip it).
+          if (state.designId) {
+            ensureLoaded(state.designId);
+          }
+        };
+        inlineContainer.appendChild(retry);
       } else if (!state.inlineActive) {
         inlineContainer.style.display = "none";
       }
@@ -468,9 +496,14 @@
     state.saving = false;
     if (answer.status !== "ready") {
       state.status = "error";
+      state.errorReason = answer.reason || answer.message || "";
       render();
+      if (typeof deps.onSummaryChanged === "function") {
+        deps.onSummaryChanged();
+      }
       return;
     }
+    state.errorReason = null;
     state.persisted = {
       opening: answer.opening || null,
       resolution: answer.resolution || null,
@@ -573,7 +606,11 @@
       profileName: profileName,
       placementLabel: placementLabel,
       resolvedText: resolvedText,
-      isGola: system === "gola"
+      isGola: system === "gola",
+      // #1261: honest load state for the furniture summary card — "error"
+      // must surface, never a misleading default.
+      loadStatus: state.status,
+      errorReason: state.errorReason || ""
     };
   }
 

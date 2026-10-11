@@ -445,4 +445,31 @@ test('#1261: toggleInlineEditor alterna el editor inline de apertura en el conte
   assert.strictEqual(btn.textContent, 'Configurar');
 });
 
+test('#1261: un error de carga muestra superficie honesta con Reintentar, nunca un loading eterno', () => {
+  const bridgeCalls = [];
+  const { opening, sandbox } = initModule(bridgeCalls);
+  opening.refresh('d-err', 'v1');
+  opening.onDesignOpening(READY_ANSWER); // arranca listo para el lane
+
+  opening.toggleInlineEditor();
+  // El servidor rechaza la relectura (403/transporte): status error.
+  opening.onDesignOpening({
+    requestId: bridgeCalls[bridgeCalls.length - 1].payload.requestId,
+    status: 'error',
+    reason: 'credencial sin permisos'
+  });
+
+  const inlineContainer = sandbox.document.getElementById('inspector-opening-inline-editor');
+  const errorLine = findDeep(inlineContainer, (c) => c.attributes['data-testid'] === 'opening-inline-error');
+  assert.ok(errorLine, 'the honest error line must render');
+  assert.ok(errorLine.textContent.includes('credencial sin permisos'), errorLine.textContent);
+  const retryBtn = findDeep(inlineContainer, (c) => c.attributes['data-testid'] === 'opening-inline-retry');
+  assert.ok(retryBtn, 'the retry button must render');
+
+  const callsBefore = bridgeCalls.length;
+  retryBtn.onclick();
+  assert.strictEqual(bridgeCalls.length, callsBefore + 1, 'retry re-issues the authoritative read');
+  assert.strictEqual(bridgeCalls[bridgeCalls.length - 1].command, 'get_design_opening');
+});
+
 console.log(JSON.stringify({ success: true, testsPassed }));

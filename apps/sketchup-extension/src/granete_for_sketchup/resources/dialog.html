@@ -1549,6 +1549,14 @@
           onHardwareGroups: function (payload) {
             window.GraneteUI.designInspector.onHardwareGroups(payload);
           },
+          // #1137 / #1261: the Apertura card's answers (requestId-correlated;
+          // late/foreign responses are discarded inside the module).
+          onDesignOpening: function (payload) {
+            window.GraneteUI.opening.onDesignOpening(payload);
+          },
+          onDesignOpeningApplied: function (payload) {
+            window.GraneteUI.opening.onDesignOpeningApplied(payload);
+          },
           onDeleteResult: function (result) {
             window.GraneteUI.inspector.onDeleteResult(result);
           },

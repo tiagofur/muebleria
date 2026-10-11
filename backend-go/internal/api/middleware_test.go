@@ -1059,8 +1059,7 @@ func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
 		// #1177 grant: the panel's explicit "Quitar del proyecto" — terminal
 		// :remove lifecycle command, every guard owned server-side (If-Match,
 		// owner scope, live roles, audit).
-		{"remove furniture instance (#1177)", http.MethodPost, "/api/furniture-instances/" + projectID + ":remove", true},
-		{"quote-line materialize stays denied", http.MethodPost, "/api/projects/" + projectID + "/quote-lines/" + projectID + ":materialize", false},
+		{"remove furniture instance (#1177)", http.MethodPost, "/api/furniture-instances/" + projectID + ":remove", true},		{"quote-line materialize stays denied", http.MethodPost, "/api/projects/" + projectID + "/quote-lines/" + projectID + ":materialize", false},
 		{"reset working copy", http.MethodPost, "/api/designs/" + designID + "/working-copy:reset", false},
 		{"publish revision (#392)", http.MethodPost, "/api/designs/" + designID + "/revisions", false},
 		// #668 hardware asset revision read-only authorization grant
@@ -1074,6 +1073,42 @@ func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
 		{"quote line links", http.MethodGet, "/api/projects/" + projectID + "/quote-lines/" + projectID + "/furniture-instances", false},
 		{"put elsewhere", http.MethodPut, "/api/projects/" + projectID, false},
 		{"delete verb", http.MethodDelete, "/api/designs/" + designID + "/working-copy", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := extensionClientMayAccess(tc.verb, tc.path); got != tc.want {
+				t.Fatalf("extensionClientMayAccess(%s %s) = %v, want %v", tc.verb, tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestExtensionClientBoundaryDesignOpening pins the #1137/#1261 opening lane
+// grants for the SketchUp extension credential: the card reads the connected
+// design's opening state+resolution plus the org's capabilities/profile
+// catalog, and Aplicar is the credential's ONLY opening write (PUT opening).
+// Every surrounding surface — other designs' opening, POST/DELETE verbs, the
+// opening profile CRUD — stays DENIED.
+func TestExtensionClientBoundaryDesignOpening(t *testing.T) {
+	designID := "52000000-0000-0000-0000-000000000001"
+	cases := []struct {
+		name string
+		verb string
+		path string
+		want bool
+	}{
+		// The card's three reads.
+		{"read design opening state", http.MethodGet, "/api/designs/" + designID + "/opening", true},
+		{"read opening capabilities", http.MethodGet, "/api/catalog/opening-capabilities", true},
+		{"read opening profile catalog", http.MethodGet, "/api/catalog/opening-profiles", true},
+		// Aplicar: the surgical selection write (server validates + 422s).
+		{"apply opening selection", http.MethodPut, "/api/designs/" + designID + "/opening", true},
+		// Surrounding surface stays closed.
+		{"opening profile create stays denied", http.MethodPost, "/api/catalog/opening-profiles", false},
+		{"opening profile update stays denied", http.MethodPut, "/api/catalog/opening-profiles/" + designID, false},
+		{"opening profile delete stays denied", http.MethodDelete, "/api/catalog/opening-profiles/" + designID, false},
+		{"opening validate endpoint stays denied", http.MethodPost, "/api/catalog/opening-configuration/validate", false},
+		{"opening via query traversal denied", http.MethodGet, "/api/designs/" + designID + "/opening/extra", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

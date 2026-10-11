@@ -376,7 +376,12 @@
     }
     inspectorOpeningSummaryCard.style.display = "block";
     var parts = [];
-    if (summary.isGola && summary.profileName) {
+    if (summary.loadStatus === "error") {
+      // #1261: an honest failure line — never a misleading default when the
+      // authoritative read failed (transport/credential/binding).
+      parts.push("No se pudo cargar la apertura del diseño" +
+        (summary.errorReason ? " (" + summary.errorReason + ")" : "") + ".");
+    } else if (summary.isGola && summary.profileName) {
       var golaDesc = summary.systemLabel + ": " + summary.profileName;
       if (summary.placementLabel) golaDesc += " (" + summary.placementLabel + ")";
       parts.push(golaDesc);
@@ -385,7 +390,7 @@
     } else {
       parts.push("Sistema: " + summary.systemLabel);
     }
-    if (summary.resolvedText) {
+    if (summary.loadStatus !== "error" && summary.resolvedText) {
       parts.push("Frente: " + summary.resolvedText);
     }
     inspectorOpeningSummaryText.textContent = parts.join(" · ");
