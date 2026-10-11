@@ -17,6 +17,7 @@ module Granete
         include DesignInspectorBridge
         include DesignOpeningBridge
         include DesignOpeningGeometryBridge
+        include DesignOpeningChannelBridge
         include DesignInheritanceBridge
         include DesignHardwareGroupsBridge
         include DesignWorkflowBridge

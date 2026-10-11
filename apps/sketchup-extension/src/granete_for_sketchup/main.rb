@@ -118,6 +118,7 @@ module Granete
         ui/bridges/design_inspector_bridge
         ui/bridges/design_opening_bridge
         ui/bridges/design_opening_geometry_bridge
+        ui/bridges/design_opening_channel_bridge
         ui/bridges/design_inheritance_bridge
         ui/bridges/design_hardware_groups_bridge
         ui/bridges/design_workflow_bridge

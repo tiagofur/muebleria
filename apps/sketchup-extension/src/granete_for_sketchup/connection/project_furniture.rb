@@ -444,7 +444,8 @@ module Granete
             @intents = {}
           end
 
-          def store(instance_id, parameters:, material_choices:, material_choice_modes: nil)
+          def store(instance_id, parameters:, material_choices:, material_choice_modes: nil,
+                    furniture_definition_id: nil, definition_version: nil)
             return unless instance_id
 
             entry = {
@@ -456,6 +457,12 @@ module Granete
             if material_choice_modes.is_a?(Hash) && !material_choice_modes.empty?
               entry['materialChoiceModes'] = material_choice_modes
             end
+            # #1272: the placement's definition rides the pending intent —
+            # a working item built from this entry (position sync ahead of
+            # confirm) must carry the definition, never a NULL one.
+            entry['furnitureDefinitionId'] = furniture_definition_id if furniture_definition_id.is_a?(String) &&
+                                                                        !furniture_definition_id.strip.empty?
+            entry['definitionVersion'] = definition_version unless definition_version.nil?
             @intents[instance_id.to_s] = entry
           end
 
@@ -875,7 +882,13 @@ module Granete
               idempotency_key: key
             )
             @intent_store.store(created.id, parameters: prep['params'], material_choices: material_choices,
-                                            material_choice_modes: material_choice_modes)
+                                            material_choice_modes: material_choice_modes,
+                                            furniture_definition_id: prep['definition']['furniture_definition_id'],
+                                            definition_version: Contract.authoritative_definition_version(
+                                              prep['definition']['definition_version'] ||
+                                              prep['definition']['definitionVersion'] ||
+                                              prep['definition']['version']
+                                            ))
 
             located = locate_unit(model, created.id)
             return { 'ok' => true, 'code' => 'pending_position', 'instanceId' => created.id } if located['entity']

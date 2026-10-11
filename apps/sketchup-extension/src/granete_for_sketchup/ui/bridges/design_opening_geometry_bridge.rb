@@ -7,21 +7,27 @@
 module Granete
   module SketchUpExtension
     module UserInterface
-      module DesignOpeningGeometryBridge
+      module DesignOpeningGeometryBridge # rubocop:disable Metrics/ModuleLength
         # Converges the design's placed furniture to the fresh opening truth
         # (server-born rebuild; pilot scope = the first module's units).
         def design_opening_converge_geometry(stored, state)
           targets = design_opening_convergence_targets(stored, state)
           return targets if targets.is_a?(Hash)
 
+          channel_spec = design_opening_channel_spec(state)
+          channel_results = []
           commands = targets.filter_map do |target|
-            design_opening_rebuild_command(target[:root], target[:definition], stored.design_id)
+            design_opening_rebuild_command(target[:root], target[:definition], stored.design_id,
+                                           channel_spec, channel_results)
           end
           return { 'status' => 'unchanged', 'reason' => 'muebles no colocados' } if commands.empty?
 
           outcome = mutation_coordinator.execute_batch(commands)
           if outcome.outcome == 'committed'
-            { 'status' => 'converged', 'units' => commands.length }
+            answer = { 'status' => 'converged', 'units' => commands.length }
+            channel = design_opening_channel_summary(channel_spec, channel_results)
+            answer['channel'] = channel if channel
+            answer
           else
             { 'status' => 'failed', 'reason' => outcome.reason.to_s }
           end
@@ -40,8 +46,16 @@ module Granete
           items = Array(design_opening_placer.service.get_working_copy(stored.design_id)&.items)
           return { 'status' => 'skipped', 'reason' => 'diseño sin muebles' } if items.empty?
 
-          targets = collect_placed_design_targets(active_model, items)
-          targets.empty? ? { 'status' => 'unchanged', 'reason' => 'mueble no colocado en el modelo' } : targets
+          targets, matched, skipped_definition = collect_placed_design_targets(active_model, items)
+          if targets.empty? && skipped_definition.positive?
+            reason = "la definición del mueble no está en el catálogo local (#{skipped_definition})"
+            return { 'status' => 'unchanged', 'reason' => reason }
+          end
+          if targets.empty? && matched.zero?
+            return { 'status' => 'unchanged', 'reason' => 'mueble no colocado en el modelo' }
+          end
+
+          targets
         end
 
         def collect_placed_design_targets(model, items)
@@ -49,19 +63,35 @@ module Granete
           store = @metadata_store_factory.call(model)
           placed = Connection::ProjectFurniture::ManagedFurniture.index(model, store)[:by_id]
           targets = []
+          matched = 0
+          skipped_definition = 0
           placed.each do |fi_id, entries|
             item = items_by_id[fi_id]
-            next unless item && (defn = @catalog_provider&.find_definition(item.furniture_definition_id))
+            next unless item
 
-            entries.each { |e| targets << { root: e[:entity], definition: defn } }
+            matched += entries.length
+            entries.each do |e|
+              # #1272: a pre-fix working item may carry a NULL definition while
+              # its placed root still holds the placement's persisted intent —
+              # the root's own intent is the fallback, never a name guess.
+              intent = e[:metadata].is_a?(Hash) ? (e[:metadata]['intent'] || {}) : {}
+              definition_id = item.furniture_definition_id || intent['furnitureDefinitionId']
+              defn = definition_id && @catalog_provider&.find_definition(definition_id)
+              if defn
+                targets << { root: e[:entity], definition: defn }
+              else
+                skipped_definition += 1
+              end
+            end
           end
-          targets
+          [targets, matched, skipped_definition]
         end
 
         # One coordinated rebuild command for a placed unit: design-pinned
         # resolve, server-born rebuild (no authoring_dirty), freshest-identity
         # context guard (#498).
-        def design_opening_rebuild_command(root, definition, design_id)
+        def design_opening_rebuild_command(root, definition, design_id, channel_spec = nil,
+                                           channel_results = nil)
           metadata = @metadata_store_factory.call(active_model).read(root)
           identity = metadata&.dig('identity') || {}
           intent = metadata&.dig('intent') || {}
@@ -85,7 +115,7 @@ module Granete
             semantic_target: target,
             resolve: design_opening_rebuild_resolve(definition, intent, design_id),
             context_valid: context_guard,
-            apply: design_opening_rebuild_apply(root, definition, intent)
+            apply: design_opening_rebuild_apply(root, definition, intent, channel_spec, channel_results)
           )
         end
 
@@ -107,7 +137,7 @@ module Granete
           }
         end
 
-        def design_opening_rebuild_apply(root, definition, intent)
+        def design_opening_rebuild_apply(root, definition, intent, channel_spec = nil, channel_results = nil)
           parameters = intent['parameters'] || {}
           choices = intent['materialChoices'] || {}
           lambda { |result, _host_context|
@@ -117,6 +147,14 @@ module Granete
               transaction: false, authoring_dirty: false
             )
             raise Host::MutationCommand::ApplyRefused, outcome['error'].to_s unless outcome['success'] == true
+
+            # The channel placeholder is auxiliary visualization (#1272): it
+            # never fails the rebuild that already committed — an honest
+            # skip rides the outcome instead.
+            if channel_spec
+              channel = design_opening_draw_channel_placeholder(active_model, root, channel_spec)
+              channel_results << channel if channel_results
+            end
           }
         end
       end

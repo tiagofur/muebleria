@@ -572,7 +572,7 @@ module Granete
         # persisted placement intent (what was rendered), still preserving
         # every field SketchUp does not author (room). A first-time item is
         # always built from the placement intent metadata.
-        module WorkingCopyMerger
+        module WorkingCopyMerger # rubocop:disable Metrics/ModuleLength
           module_function
 
           def merge(working, furniture_instance_id, entity, intent: {}, locator: nil, authoring_dirty: false)
@@ -582,12 +582,34 @@ module Granete
               updated.transform = TransformContract.from_host(entity.transformation)
               updated.technical_client_locator = locator
               apply_authoring_intent!(updated, intent) if authoring_dirty
+              backfill_absent_definition!(updated, intent)
               return working.items.map do |item|
                 item.furniture_instance_id == furniture_instance_id ? updated : item
               end
             end
 
             working.items + [new_working_item(furniture_instance_id, entity, intent, locator)]
+          end
+
+          # #1272 repair: an item written by a pre-fix intent store carries a
+          # NULL definition while its placed entity holds the placement's own
+          # persisted intent. The next merge fills ONLY the absent field from
+          # that intent — it never overwrites a server-authored value (#810
+          # rule A stays intact for authoring writes).
+          def backfill_absent_definition!(item, intent)
+            return item unless intent.is_a?(Hash)
+
+            if item.furniture_definition_id.to_s.strip.empty?
+              definition_id = intent['furnitureDefinitionId']
+              item.furniture_definition_id = definition_id if definition_id.is_a?(String) && !definition_id.strip.empty?
+            end
+            if item.definition_version.nil?
+              version = Contract.authoritative_definition_version(
+                intent['definitionVersion'], intent['definition_version']
+              )
+              item.definition_version = version unless version.nil?
+            end
+            item
           end
 
           # #810 rule A: authoring fields of an existing item are replaced
