@@ -35,14 +35,17 @@ class DesignOpeningBridgeTest < Minitest::Test
   class FakeService
     attr_reader :calls
 
+    attr_accessor :conflict_first_pass
+
     def initialize(opening: nil, capabilities: nil, profiles: nil, error: nil, working_copy: nil,
-                   applied_state: nil)
+                   applied_state: nil, conflict_first_pass: false)
       @opening = opening
       @capabilities = capabilities
       @profiles = profiles
       @error = error
       @working_copy = working_copy
       @applied_state = applied_state
+      @conflict_first_pass = conflict_first_pass
       @calls = []
     end
 
@@ -69,6 +72,12 @@ class DesignOpeningBridgeTest < Minitest::Test
 
     def put_design_opening(design_id, selection, expected_working_version: nil)
       @calls << [:put_design_opening, design_id, selection, expected_working_version]
+      if @conflict_first_pass
+        @conflict_first_pass = false
+        raise ::Granete::SketchUpExtension::Connection::ProjectFurniture::Service::Error.new(
+          :conflict, 'el diseño cambió en el servidor', status: 409
+        )
+      end
       raise @error if @error
 
       @applied_state || { 'opening' => selection, 'resolution' => nil, 'dimsKnown' => false,
@@ -388,5 +397,55 @@ class DesignOpeningBridgeTest < Minitest::Test
     answer = last_script_payload
     assert_equal 'ok', answer['status']
     assert_equal 'skipped', answer['geometry']['status']
+  end
+
+  # #969d auto-advance: a background auto-sync bump retries once with the
+  # fresh token so the user's Apply succeeds on the first click.
+  def test_apply_auto_advances_token_on_conflict_and_converges
+    working_item = Struct.new(:furniture_instance_id, :furniture_definition_id, :parameters,
+                              :material_choices).new('fi-1264', 'mod-1264', {}, {})
+    fresh_wc = Struct.new(:items, :updated_at).new([working_item], 'fresh-token-v2')
+    applied_state = { 'opening' => { 'system' => 'gola' },
+                      'resolution' => { 'state' => 'resolved', 'fronts' => [] },
+                      'dimsKnown' => true,
+                      'workingVersion' => 'fresh-token-v2' }
+    service = FakeService.new(applied_state: applied_state, working_copy: fresh_wc, conflict_first_pass: true)
+
+    root = Object.new
+    layout = Object.new
+    definition = { 'furniture_definition_id' => 'mod-1264', 'name' => 'Gabinete Gola' }
+    metadata = { root => {
+      'identity' => { 'instanceRef' => 'inst-abc', 'furnitureInstanceId' => 'fi-1264' },
+      'intent' => { 'parameters' => { 'widthMm' => 600 }, 'materialChoices' => { 'FRENTE' => 'mat-1' } }
+    } }
+    provider = FakeConvergeCatalogProvider.new(definition, layout)
+    coordinator = FakeConvergeCoordinator.new(
+      Granete::SketchUpExtension::Host::MutationOutcome.new(outcome: 'committed')
+    )
+    builder = FakeConvergeBuilder.new
+    @bridge.instance_variable_set(:@catalog_provider, provider)
+    @bridge.instance_variable_set(:@metadata_store_factory, ->(_model) { FakeMetadataStore.new(metadata) })
+    @bridge.define_singleton_method(:mutation_coordinator) { coordinator }
+    @bridge.define_singleton_method(:furniture_builder_for) { |_model| builder }
+    binding_json = JSON.generate({ 'projectId' => PROJECT, 'designId' => DESIGN_A,
+                                   'baseRevisionId' => nil, 'schemaVersion' => 1 })
+    @bridge.define_singleton_method(:active_model) { FakeEntitiesModel.new([root], binding_json) }
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(service))
+
+    @bridge.handle_apply_design_opening(
+      @dialog,
+      JSON.generate({ 'requestId' => 50, 'designId' => DESIGN_A,
+                      'selection' => { 'system' => 'gola', 'profileId' => 'profile.gola-l.alu' },
+                      'expectedWorkingVersion' => 'stale-v1' })
+    )
+
+    answer = last_script_payload
+    assert_equal 'ok', answer['status']
+    assert_equal({ 'status' => 'converged', 'units' => 1 }, answer['geometry'])
+    # First attempt sent stale-v1, second attempt auto-advanced to fresh-token-v2
+    puts_calls = service.calls.select { |c| c.first == :put_design_opening }
+    assert_equal 2, puts_calls.length
+    assert_equal 'stale-v1', puts_calls[0][3]
+    assert_equal 'fresh-token-v2', puts_calls[1][3]
   end
 end

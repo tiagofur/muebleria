@@ -257,7 +257,7 @@ test('Aplicar emite UN PUT con el draft y el token; ok limpia el draft y renderi
   assert.deepStrictEqual(bridgeCalls[1].payload.selection, {
     system: 'gola',
     profileId: 'profile.gola-l.alu',
-    placements: []
+    placements: ['top']
   });
   assert.strictEqual(bridgeCalls[1].payload.expectedWorkingVersion, 'v1');
 

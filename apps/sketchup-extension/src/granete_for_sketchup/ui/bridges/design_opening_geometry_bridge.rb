@@ -11,14 +11,13 @@ module Granete
         # Converges the design's placed furniture to the fresh opening truth
         # (server-born rebuild; pilot scope = the first module's units).
         def design_opening_converge_geometry(stored, state)
-          target = design_opening_convergence_target(stored, state)
-          return target if target.is_a?(Hash)
+          targets = design_opening_convergence_targets(stored, state)
+          return targets if targets.is_a?(Hash)
 
-          definition, roots = target
-          commands = roots.filter_map do |root|
-            design_opening_rebuild_command(root, definition, stored.design_id)
+          commands = targets.filter_map do |target|
+            design_opening_rebuild_command(target[:root], target[:definition], stored.design_id)
           end
-          return { 'status' => 'unchanged' } if commands.empty?
+          return { 'status' => 'unchanged', 'reason' => 'muebles no colocados' } if commands.empty?
 
           outcome = mutation_coordinator.execute_batch(commands)
           if outcome.outcome == 'committed'
@@ -31,41 +30,32 @@ module Granete
           { 'status' => 'failed', 'reason' => e.message }
         end
 
-        # Preconditions + target discovery: a Hash return is the honest
-        # outcome (skipped/unchanged/failed reason); [definition, roots] is
-        # the converge target (the pilot module's placed units, #1261).
-        def design_opening_convergence_target(stored, state)
+        # Finds all placed units in the active model belonging to the design (#1261).
+        def design_opening_convergence_targets(stored, state)
           resolved = state.is_a?(Hash) && state['dimsKnown'] &&
                      state['resolution'].is_a?(Hash) && state['resolution']['state'] == 'resolved'
           return { 'status' => 'skipped' } unless resolved
+          return { 'status' => 'skipped' } unless active_model.respond_to?(:entities)
 
-          model = active_model
-          return { 'status' => 'skipped' } unless model.respond_to?(:entities)
-
-          first = design_opening_first_working_item(stored, model)
-          return first if first.is_a?(Hash)
-
-          definition = @catalog_provider&.find_definition(first.furniture_definition_id)
-          if definition.nil?
-            return { 'status' => 'skipped', 'reason' => 'la definición del mueble no está en el catálogo' }
-          end
-
-          metadata_store = @metadata_store_factory.call(model)
-          roots = Connection::ProjectFurniture::ManagedFurniture
-                  .index(model, metadata_store)[:by_id][first.furniture_instance_id]
-                  .map { |entry| entry[:entity] }
-          return { 'status' => 'unchanged' } if roots.empty?
-
-          [definition, roots]
-        end
-
-        # The opening's pilot unit (#1261): first item with a definition.
-        def design_opening_first_working_item(stored, _model)
           items = Array(design_opening_placer.service.get_working_copy(stored.design_id)&.items)
           return { 'status' => 'skipped', 'reason' => 'diseño sin muebles' } if items.empty?
 
-          items.find { |i| !i.furniture_definition_id.to_s.strip.empty? } ||
-            { 'status' => 'skipped', 'reason' => 'ninguna unidad del diseño tiene definición de mueble' }
+          targets = collect_placed_design_targets(active_model, items)
+          targets.empty? ? { 'status' => 'unchanged', 'reason' => 'mueble no colocado en el modelo' } : targets
+        end
+
+        def collect_placed_design_targets(model, items)
+          items_by_id = items.to_h { |i| [i.furniture_instance_id, i] }
+          store = @metadata_store_factory.call(model)
+          placed = Connection::ProjectFurniture::ManagedFurniture.index(model, store)[:by_id]
+          targets = []
+          placed.each do |fi_id, entries|
+            item = items_by_id[fi_id]
+            next unless item && (defn = @catalog_provider&.find_definition(item.furniture_definition_id))
+
+            entries.each { |e| targets << { root: e[:entity], definition: defn } }
+          end
+          targets
         end
 
         # One coordinated rebuild command for a placed unit: design-pinned

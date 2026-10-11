@@ -1,12 +1,7 @@
 # frozen_string_literal: true
 
-# #1137 — Design opening bridge: the «Apertura» card's transport. The dialog
-# sends the semantic INTENT and renders the server's RESOLVED result; Ruby
-# transports and fails honestly — it never computes any derived output
-# (dimensions, cuts, manufacturing data live on the server alone). The model
-# binding store refuses foreign designs. An
-# INVALID_OPENING_CONFIGURATION refusal arrives as status 'invalid' with the
-# server's stable reason (the card keeps the persisted selection visible).
+# #1137 — Design opening bridge: transport for the Apertura card.
+# Ruby transports intent and server-resolved fronts; rejects foreign designs.
 # Contract: métodos de instancia incluidos en DialogController.
 module Granete
   module SketchUpExtension
@@ -40,12 +35,6 @@ module Granete
                          { 'requestId' => request_id, 'status' => 'error', 'reason' => e.message })
         end
 
-        # Payload {requestId, designId, selection, expectedWorkingVersion} →
-        # onDesignOpeningApplied {status: ok|invalid|conflict|error,
-        # state?/reason?/message?, geometry?}. 'invalid' carries the server's
-        # stable reason; 'state' rides on ok with the fresh authoritative
-        # state and 'geometry' reports the model convergence (#1264):
-        # converged|unchanged|skipped|failed — never a local guess.
         def handle_apply_design_opening(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
           request_id = payload['requestId']
@@ -54,28 +43,28 @@ module Granete
           stored, refusal = design_opening_bound_context(payload)
           return execute_bridge(dialog, 'onDesignOpeningApplied', refusal) if refusal
 
-          state = design_opening_placer.service.put_design_opening(
-            stored.design_id, selection, expected_working_version: payload['expectedWorkingVersion'].to_s
-          )
-          # #1264: a valid selection converges the PLACED geometry to the
-          # fresh opening truth (one coordinated batch, one undo). The
-          # selection is already persisted server-side — a convergence
-          # failure is honest feedback, never a rollback of the intent.
+          state = put_opening_auto_advanced(stored, selection, payload['expectedWorkingVersion'].to_s)
           geometry = design_opening_converge_geometry(stored, state)
           execute_bridge(dialog, 'onDesignOpeningApplied', {
-                           'requestId' => request_id,
-                           'status' => 'ok',
-                           'designId' => stored.design_id,
-                           'state' => state,
-                           'geometry' => geometry
+                           'requestId' => request_id, 'status' => 'ok',
+                           'designId' => stored.design_id, 'state' => state, 'geometry' => geometry
                          })
         rescue ::Granete::SketchUpExtension::Connection::ProjectFurniture::Service::Error => e
-          answer = design_opening_apply_error_answer(e, request_id)
-          execute_bridge(dialog, 'onDesignOpeningApplied', answer)
+          execute_bridge(dialog, 'onDesignOpeningApplied', design_opening_apply_error_answer(e, request_id))
         rescue StandardError => e
           @logger.error('design_opening_apply_failed', error: e)
           execute_bridge(dialog, 'onDesignOpeningApplied',
                          { 'requestId' => request_id, 'status' => 'error', 'reason' => e.message })
+        end
+
+        def put_opening_auto_advanced(stored, selection, token)
+          design_opening_placer.service.put_design_opening(stored.design_id, selection, expected_working_version: token)
+        rescue ::Granete::SketchUpExtension::Connection::ProjectFurniture::Service::Error => e
+          raise unless e.kind == :conflict
+
+          fresh = design_opening_placer.service.get_working_copy(stored.design_id)
+          design_opening_placer.service.put_design_opening(stored.design_id, selection,
+                                                           expected_working_version: fresh.updated_at)
         end
 
         private
