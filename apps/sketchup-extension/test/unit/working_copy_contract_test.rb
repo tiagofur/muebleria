@@ -55,4 +55,35 @@ class WorkingCopyContractTest < Minitest::Test
     item.material_choice_modes = { 'INTERIOR' => 'override', 'DELETED_ROLE' => 'design' }
     assert_equal({ 'INTERIOR' => 'override', 'FRENTES' => 'override' }, item.to_contract_h['material_choice_modes'])
   end
+
+  # #1272 — an item written by the pre-fix intent store carries a NULL
+  # definition while its placed entity holds the placement's intent: the
+  # next merge repairs ONLY the absent fields and never overwrites a
+  # server-authored value (#810 rule A intact).
+  def test_merge_backfills_absent_definition_from_entity_intent
+    item = PF::Contract::WorkingItem.new(furniture_instance_id: 'fi-1272')
+    working = PF::Contract::WorkingCopy.new(items: [item])
+    entity = Entity.new(Geom::Transformation.new)
+    intent = { 'furnitureDefinitionId' => 'def-1272', 'definitionVersion' => 3 }
+
+    merged = PF::WorkingCopyMerger.merge(working, 'fi-1272', entity, intent: intent,
+                                                                     locator: nil)
+    assert_equal 1, merged.length
+    assert_equal 'def-1272', merged.first.furniture_definition_id
+    assert_equal 3, merged.first.definition_version
+  end
+
+  def test_merge_never_overwrites_authored_definition
+    item = PF::Contract::WorkingItem.new(furniture_instance_id: 'fi-1272',
+                                         furniture_definition_id: 'def-server',
+                                         definition_version: 7)
+    working = PF::Contract::WorkingCopy.new(items: [item])
+    entity = Entity.new(Geom::Transformation.new)
+    intent = { 'furnitureDefinitionId' => 'def-intent', 'definitionVersion' => 2 }
+
+    merged = PF::WorkingCopyMerger.merge(working, 'fi-1272', entity, intent: intent,
+                                                                     locator: nil)
+    assert_equal 'def-server', merged.first.furniture_definition_id
+    assert_equal 7, merged.first.definition_version
+  end
 end
