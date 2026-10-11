@@ -148,11 +148,11 @@ module Granete
             )
             raise Host::MutationCommand::ApplyRefused, outcome['error'].to_s unless outcome['success'] == true
 
-            # The channel placeholder is auxiliary visualization (#1272): it
+            # The channel result is auxiliary visualization (#1272/#1274): it
             # never fails the rebuild that already committed — an honest
             # skip rides the outcome instead.
             if channel_spec
-              channel = design_opening_draw_channel_placeholder(active_model, root, channel_spec)
+              channel = design_opening_channel_result(result.layout, root, channel_spec)
               channel_results << channel if channel_results
             end
           }
