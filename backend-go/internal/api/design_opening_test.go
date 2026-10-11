@@ -48,9 +48,10 @@ func designWCWithDims(itemParameters map[string]any) *domain.DesignWorkingCopy {
 	}
 	if itemParameters != nil {
 		wc.Items = []domain.DesignWorkingItem{{
-			ID:                  "witem-1",
-			FurnitureInstanceID: "fi-1",
-			Parameters:          itemParameters,
+			ID:                    "witem-1",
+			FurnitureInstanceID:   "fi-1",
+			FurnitureDefinitionID: "mod-pilot",
+			Parameters:            itemParameters,
 		}}
 	}
 	return wc
@@ -383,6 +384,7 @@ func TestHandleDesignOpeningResolvesBOM(t *testing.T) {
 	// No structure context: the truthful absence, never a guessed run.
 	bare := openingDesignStub()
 	bareWC := designWCWithDims(map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0})
+	bareWC.Items[0].FurnitureDefinitionID = "mod-sin-estructura"
 	bareWC.AuthoringDefaults.Opening = newSelection()
 	bare.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{"d1137000-0000-0000-0000-000000000001": *bareWC}
 	rr = openingRequest(t, &Server{Store: bare}, http.MethodGet, "")
@@ -400,5 +402,60 @@ func TestHandleDesignOpeningResolvesBOM(t *testing.T) {
 	}
 	if bareGot.Resolution == nil || bareGot.Resolution.BOM != nil || bareGot.Resolution.BOMReason != "OPENING_BOM_BODY_CONTEXT_MISSING" {
 		t.Fatalf("expected the truthful absence, got %s", rr.Body.String())
+	}
+}
+
+// #1261 host smoke — the pilot is the design's first REPRESENTABLE unit: a
+// definition-less junk row (legacy seed) never captures the opening scope.
+func TestHandleDesignOpeningPilotSkipsDefinitionlessItems(t *testing.T) {
+	store := openingDesignStub()
+	store.catalogOverride = &domain.Catalog{
+		Modules:    []domain.Module{{ID: "mod-base", StructureID: "struct-base"}},
+		Structures: []domain.Structure{{ID: "struct-base", Components: []domain.ComponentInstance{{ComponentID: "comp-side", Quantity: 2}}}},
+		Components: []domain.Component{{ID: "comp-side", ThicknessMm: 18, Construction: &domain.ComponentConstruction{ConstructiveRole: "lateral"}}},
+	}
+	junk := domain.DesignWorkingItem{
+		ID: "witem-junk", FurnitureInstanceID: "fi-junk",
+		Parameters: map[string]any{"widthMm": 999.0, "heightMm": 999.0, "depthMm": 999.0},
+	}
+	real := domain.DesignWorkingItem{
+		ID: "witem-real", FurnitureInstanceID: "fi-real",
+		FurnitureDefinitionID: "mod-base",
+		Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0},
+	}
+	wc := designWCWithDims(nil)
+	wc.Items = []domain.DesignWorkingItem{junk, real}
+	wc.AuthoringDefaults.Opening = &domain.DesignOpeningSelection{
+		System: "gola", ProfileID: "profile.gola-l.alu",
+		ProfilePin: &domain.DesignOpeningProfilePin{
+			ProfileCode: "GOLA-L-ALU", FrontReductionMm: 66, GripClearanceMm: 4, DatasheetStatus: "verified",
+		},
+	}
+	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{
+		"d1137000-0000-0000-0000-000000000001": *wc,
+	}
+	srv := &Server{Store: store}
+
+	rr := openingRequest(t, srv, http.MethodGet, "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	var got struct {
+		Resolution *struct {
+			State  string `json:"state"`
+			Fronts []struct {
+				HeightMm int `json:"heightMm"`
+			} `json:"fronts"`
+		} `json:"resolution"`
+		DimsKnown bool `json:"dimsKnown"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// The pilot is the REAL unit (600×720): the front resolves from ITS dims
+	// (720−70=650), never from the junk row's 999s.
+	if !got.DimsKnown || got.Resolution == nil || got.Resolution.State != "resolved" ||
+		len(got.Resolution.Fronts) != 1 || got.Resolution.Fronts[0].HeightMm != 650 {
+		t.Fatalf("pilot must skip the junk row and resolve over the real unit: %s", rr.Body.String())
 	}
 }

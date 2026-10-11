@@ -131,10 +131,11 @@ func (s *Server) designOpeningBOMContext(r *http.Request, wc *domain.DesignWorki
 		Ends:     engine.OpeningBOMDefaultEnds,
 		Profiles: profiles,
 	}
-	if len(wc.Items) == 0 || wc.Items[0].FurnitureDefinitionID == "" {
+	pilot := designOpeningPilotItem(wc)
+	if pilot == nil {
 		return ctx
 	}
-	dims := domain.CommercialDimsFromParameters(wc.Items[0].Parameters)
+	dims := domain.CommercialDimsFromParameters(pilot.Parameters)
 	if dims == nil {
 		return ctx
 	}
@@ -143,7 +144,7 @@ func (s *Server) designOpeningBOMContext(r *http.Request, wc *domain.DesignWorki
 		return ctx
 	}
 	for _, module := range catalog.Modules {
-		if module.ID != wc.Items[0].FurnitureDefinitionID || module.StructureID == "" {
+		if module.ID != pilot.FurnitureDefinitionID || module.StructureID == "" {
 			continue
 		}
 		for _, structure := range catalog.Structures {
@@ -163,14 +164,29 @@ func (s *Server) designOpeningBOMContext(r *http.Request, wc *domain.DesignWorki
 
 type openingDims struct{ widthMm, heightMm int }
 
+// designOpeningPilotItem is the ONE module the v1 opening resolves over: the
+// working copy's first REPRESENTABLE unit — an item with an explicit furniture
+// definition. Definition-less rows (legacy seeds, placement-sync gaps) are not
+// addressable furniture: skipping them keeps the pilot deterministic instead
+// of silently landing on a row no surface can resolve (#1261 host smoke).
+func designOpeningPilotItem(wc *domain.DesignWorkingCopy) *domain.DesignWorkingItem {
+	for i := range wc.Items {
+		if strings.TrimSpace(wc.Items[i].FurnitureDefinitionID) != "" {
+			return &wc.Items[i]
+		}
+	}
+	return nil
+}
+
 // designOpeningDims resolves the furniture's explicit dimensions from the
-// working copy's first item (the pilot's one-module scope). No explicit
-// dims = nil: the caller sees DimsKnown=false, never a guessed size.
+// pilot item (first representable unit). No explicit dims = nil: the caller
+// sees DimsKnown=false, never a guessed size.
 func designOpeningDims(wc *domain.DesignWorkingCopy) *openingDims {
-	if len(wc.Items) == 0 {
+	pilot := designOpeningPilotItem(wc)
+	if pilot == nil {
 		return nil
 	}
-	custom := domain.CommercialDimsFromParameters(wc.Items[0].Parameters)
+	custom := domain.CommercialDimsFromParameters(pilot.Parameters)
 	if custom == nil {
 		return nil
 	}
@@ -390,9 +406,11 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 	if selection == nil || selection.System == domain.OpeningGripSystemHandle {
 		return nil, nil
 	}
-	// Pilot scope: the opening belongs to the design's first module —
-	// resolving any other furniture of the same design never borrows it.
-	if len(wc.Items) == 0 || wc.Items[0].FurnitureDefinitionID != module.ID {
+	// Pilot scope: the opening belongs to the design's pilot module (the
+	// first REPRESENTABLE unit, #1261) — resolving any other furniture of
+	// the same design never borrows it.
+	pilot := designOpeningPilotItem(wc)
+	if pilot == nil || pilot.FurnitureDefinitionID != module.ID {
 		return nil, nil
 	}
 	widthMm, heightMm := module.WidthMm, module.HeightMm
