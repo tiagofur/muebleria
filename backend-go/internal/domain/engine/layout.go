@@ -160,8 +160,8 @@ type LayoutHardware struct {
 	DiameterMm              float64 `json:"diameterMm,omitempty"`
 	ProjectionMm            float64 `json:"projectionMm"`
 	ColorHex                string  `json:"colorHex,omitempty"`
-	HostComponentInstanceID string  `json:"hostComponentInstanceId"`
-	AnchorFace              string  `json:"anchorFace"`
+	HostComponentInstanceID string  `json:"hostComponentInstanceId,omitempty"`
+	AnchorFace              string  `json:"anchorFace,omitempty"`
 	PlacementKind           string  `json:"placementKind"`
 	// OptionRole echoes the #1046 group code when this placement was authored
 	// by option group (resolved to the chosen concrete HardwareID from the
@@ -379,7 +379,17 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 	// #1274 / #1276: opening hardware members placed in furniture space:
 	// profile across full cabinet width [0, dims.WidthMm], supports at sides with right inverted.
 	if len(opts.fronts) > 0 && opts.openingMembers != nil {
-		appendOpeningMemberLayoutHardware(&layout, catalog, *opts.openingMembers, dims, openingFrontsBottomBoundary(opts.fronts))
+		hostBoardID := ""
+		for i := range boards {
+			if isDoorBoard(&boards[i]) || boardIsOpeningFront(&boards[i]) {
+				hostBoardID = boards[i].id
+				break
+			}
+		}
+		if hostBoardID == "" && len(boards) > 0 {
+			hostBoardID = boards[0].id
+		}
+		appendOpeningMemberLayoutHardware(&layout, catalog, *opts.openingMembers, dims, openingFrontsBottomBoundary(opts.fronts), hostBoardID)
 	}
 
 	if opts.manualPlacements != nil {
