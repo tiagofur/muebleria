@@ -86,6 +86,50 @@ func boardIsOpeningFront(board *layoutBoard) bool {
 		isDoorBoard(board)
 }
 
+// applyOpeningFrontsToBomParts (#1305) mirrors applyOpeningFrontsToBoards
+// over the BOM expansion: every door/drawer-front part shrinks by the SAME
+// total consumption so the cut list and the machining layout can never
+// disagree about a constrained front's size. The BOM carries no pose — the
+// bottom-grip lift is layout-only — but the DIMENSION rule is the same one
+// arithmetic. Fail-closed: a part that would end non-positive rejects the
+// resolve — never an invented size.
+func applyOpeningFrontsToBomParts(parts []domain.BoardPart, fronts []OpeningResolvedFront) error {
+	if len(fronts) == 0 {
+		return nil
+	}
+	// v1 pilot: ONE front region per furniture — the design opening resolves
+	// a single zone (ratio 1); multi-zone layouts are V3 explicit scope.
+	front := fronts[0]
+	totalConsumed := 0
+	for _, grip := range front.Grips {
+		totalConsumed += grip.ConsumedMm
+	}
+	if totalConsumed == 0 {
+		return nil
+	}
+	for i := range parts {
+		if !bomPartIsOpeningFront(&parts[i]) {
+			continue
+		}
+		if parts[i].LengthMm-totalConsumed <= 0 {
+			return fmt.Errorf(
+				"la apertura deja el frente %s sin altura válida (consumo %d mm sobre %d mm)",
+				parts[i].ID, totalConsumed, parts[i].LengthMm)
+		}
+		parts[i].LengthMm -= totalConsumed
+	}
+	return nil
+}
+
+// bomPartIsOpeningFront is the BOM twin of boardIsOpeningFront: the SAME
+// managed placements plus the SAME FRENTE role criterion, evaluated on the
+// placement the composed expansion copied from the component (#1305).
+func bomPartIsOpeningFront(part *domain.BoardPart) bool {
+	return part.Placement == string(domain.PlacementPuerta) ||
+		part.Placement == string(domain.PlacementFrenteCajon) ||
+		strings.EqualFold(part.OptionRole, "FRENTE")
+}
+
 // OpeningMembers is the pinned member set (#1274) the layout materializes
 // as DERIVED hardware placements when the design's opening constrained a
 // furniture's fronts: the gola run plus its factory-declared companions.
@@ -295,17 +339,17 @@ func buildDerivedHardware(hw domain.Hardware, placementID string, translation [3
 		AnchorFace:              anchorFace,
 		HostComponentInstanceID: hostBoardID,
 		PlacementKind:           HardwarePlacementKindDerived,
-		Transform:        LayoutTransform{TranslationMm: translation},
-		DimensionsMm:     dims,
-		LocalTransform:   LayoutLocalTransform{TranslationMm: translation, Basis: basis},
-		AssetID:          assetID,
-		AssetRevisionID:  assetRevisionID,
-		SHA256:           sha256,
-		ExpectedBytes:    expectedBytes,
-		Representation:   rep,
-		ValidationState:  valState,
-		PreparationState: prepState,
-		MountFrame:       mountFrame,
+		Transform:               LayoutTransform{TranslationMm: translation},
+		DimensionsMm:            dims,
+		LocalTransform:          LayoutLocalTransform{TranslationMm: translation, Basis: basis},
+		AssetID:                 assetID,
+		AssetRevisionID:         assetRevisionID,
+		SHA256:                  sha256,
+		ExpectedBytes:           expectedBytes,
+		Representation:          rep,
+		ValidationState:         valState,
+		PreparationState:        prepState,
+		MountFrame:              mountFrame,
 	}
 }
 

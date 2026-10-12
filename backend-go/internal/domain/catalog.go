@@ -200,6 +200,12 @@ type BoardPart struct {
 	CatalogComponentID string `json:"catalog_component_id,omitempty"`
 	LengthFormula      string `json:"length_formula,omitempty"`
 	WidthFormula       string `json:"width_formula,omitempty"`
+	// Placement (#1305): the managed placement vocabulary the composed
+	// expansion copied from the component (puerta, frente_cajon, …), with the
+	// same instance override the layout applies — the opening fronts pass
+	// selects door parts with the SAME criterion on both derivations, never
+	// a name match. Empty on legacy flat template parts.
+	Placement string `json:"placement,omitempty"`
 }
 
 type HardwareLine struct {

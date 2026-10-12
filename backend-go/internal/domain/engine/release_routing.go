@@ -124,7 +124,11 @@ type ReleaseServerInputs struct {
 // whole derivation (a release can never commit without complete routing
 // evidence), and a machining operation hosted outside the frozen BOM part
 // identities is an error, never a silent drop.
-func DeriveReleaseRoutingProgram(items []domain.DesignRevisionItem, units []ResolvedReleaseUnit, catalog domain.Catalog, server *ReleaseServerInputs) (*ReleaseRoutingProgram, [][]HardwareProfileDemandLine, error) {
+// openings (#1305) maps each furniture instance to its per-furniture opening
+// resolution; the routing resolve consumes the SAME fronts/members/modifiers
+// the BOM expansion consumed, so the frozen machining evidence and the cut
+// list agree on every constrained front. nil/absent = no opening.
+func DeriveReleaseRoutingProgram(items []domain.DesignRevisionItem, units []ResolvedReleaseUnit, catalog domain.Catalog, server *ReleaseServerInputs, openings map[string]ReleaseUnitOpening) (*ReleaseRoutingProgram, [][]HardwareProfileDemandLine, error) {
 	if len(items) != len(units) || len(units) == 0 {
 		return nil, nil, fmt.Errorf("routing program requires matching nonempty items and units")
 	}
@@ -135,7 +139,7 @@ func DeriveReleaseRoutingProgram(items []domain.DesignRevisionItem, units []Reso
 	}
 	demand := make([][]HardwareProfileDemandLine, 0, len(units))
 	for i := range units {
-		unitProgram, unitDemand, err := deriveReleaseRoutingUnit(items[i], units[i], catalog, server)
+		unitProgram, unitDemand, err := deriveReleaseRoutingUnit(items[i], units[i], catalog, server, unitOpeningFor(openings, items[i].FurnitureInstanceID))
 		if err != nil {
 			return nil, nil, fmt.Errorf("routing unit %s: %w", items[i].FurnitureInstanceID, err)
 		}
@@ -148,7 +152,7 @@ func DeriveReleaseRoutingProgram(items []domain.DesignRevisionItem, units []Reso
 	return program, demand, nil
 }
 
-func deriveReleaseRoutingUnit(item domain.DesignRevisionItem, unit ResolvedReleaseUnit, catalog domain.Catalog, server *ReleaseServerInputs) (*ReleaseRoutingUnit, []HardwareProfileDemandLine, error) {
+func deriveReleaseRoutingUnit(item domain.DesignRevisionItem, unit ResolvedReleaseUnit, catalog domain.Catalog, server *ReleaseServerInputs, opening *ReleaseUnitOpening) (*ReleaseRoutingUnit, []HardwareProfileDemandLine, error) {
 	var module domain.Module
 	matches := 0
 	for _, candidate := range catalog.Modules {
@@ -183,7 +187,7 @@ func deriveReleaseRoutingUnit(item domain.DesignRevisionItem, unit ResolvedRelea
 		policy = server.Policy
 		profilesByID = server.ProfilesByID
 	}
-	resolved, err := ResolveAuthoringLayout(AuthoringResolveInput{
+	input := AuthoringResolveInput{
 		Module:                    module,
 		Catalog:                   catalog,
 		Dims:                      dims,
@@ -195,7 +199,17 @@ func deriveReleaseRoutingUnit(item domain.DesignRevisionItem, unit ResolvedRelea
 		EvaluatedParameters:       unit.EvaluatedParameters,
 		ResolvedSideRecipes:       sideRecipes,
 		FactoryConstructionPolicy: policy,
-	})
+	}
+	// #1305: the SAME governed opening the BOM consumed constrains the layout
+	// here — fronts shrink the door boards, body modifiers cut the resolved
+	// notches (which freeze as route operations) and the pinned members ride
+	// as derived hardware. nil opening leaves the resolve byte-identical.
+	if opening != nil {
+		input.Fronts = opening.Fronts
+		input.OpeningMembers = opening.Members
+		input.OpeningBodyModifiers = opening.Modifiers
+	}
+	resolved, err := ResolveAuthoringLayout(input)
 	if err != nil {
 		return nil, nil, err
 	}

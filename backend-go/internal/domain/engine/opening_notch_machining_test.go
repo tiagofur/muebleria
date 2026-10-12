@@ -157,7 +157,7 @@ func TestValidateReleaseRoutingProgramRouteIntent(t *testing.T) {
 	// program and mutates ONLY the CNC part's single operation.
 	buildWithRoute := func(edit func(*ReleaseRoutingOperation)) (*ReleaseRoutingProgram, []ResolvedReleaseUnit, error) {
 		items, units, catalog := routingFixture(t)
-		program, _, err := DeriveReleaseRoutingProgram(items, units, catalog, nil)
+		program, _, err := DeriveReleaseRoutingProgram(items, units, catalog, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

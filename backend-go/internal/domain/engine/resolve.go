@@ -53,7 +53,7 @@ func ResolveBom(
 	if len(measurePresetID) > 0 {
 		presetID = measurePresetID[0]
 	}
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, presetID, nil, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, presetID, nil, nil, nil, nil)
 }
 
 // ResolveBomWithContext is the #442-aware canonical variant: it carries the
@@ -70,7 +70,7 @@ func ResolveBomWithContext(
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, baseContext)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, baseContext, nil)
 }
 
 // ResolveBomWithDims is the F144-aware variant (#310 / P3D-7): customDims
@@ -87,7 +87,7 @@ func ResolveBomWithDims(
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, nil, nil)
 }
 
 // ResolveBomForRelease resolves the BOM of an already-published design unit
@@ -108,7 +108,24 @@ func ResolveBomForRelease(
 	customDims *domain.ItemCustomDims,
 	baseContext *BaseResolutionContext,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext)
+	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext, nil)
+}
+
+// ResolveBomForReleaseWithOpening (#1305) is the release variant that feeds
+// the design opening's resolved front region into the BOM expansion: the
+// door/drawer-front parts shrink by the SAME consumption the machining
+// layout applies, so a gola design releases one coherent set of evidence.
+// The fronts are the server-resolved output of ResolveDesignOpening over the
+// revision's frozen selection — never client input.
+func ResolveBomForReleaseWithOpening(
+	module domain.Module,
+	optionChoices map[string]string,
+	catalog domain.Catalog,
+	customDims *domain.ItemCustomDims,
+	baseContext *BaseResolutionContext,
+	openingFronts []OpeningResolvedFront,
+) (domain.ResolvedBom, error) {
+	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext, openingFronts)
 }
 
 // ResolveBomWithPin is the #108-aware variant of ResolveBom. It accepts an
@@ -126,7 +143,7 @@ func ResolveBomWithPin(
 	measurePresetID string,
 	pin *int,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, pin, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, pin, nil, nil, nil)
 }
 
 // resolveBomCommon is the single BOM path (#442): every exported variant
@@ -142,6 +159,7 @@ func resolveBomCommon(
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
 	baseContext *BaseResolutionContext,
+	openingFronts []OpeningResolvedFront,
 ) (domain.ResolvedBom, error) {
 	if err := ValidateModule(module); err != nil {
 		return domain.ResolvedBom{}, err
@@ -175,6 +193,13 @@ func resolveBomCommon(
 		if module.DepthMm > 0 {
 			depthMm = module.DepthMm
 		}
+	}
+
+	// #1305: the design opening's front region constrains door/drawer-front
+	// parts with the SAME arithmetic the layout pass applies — the cut list
+	// and the machining layout share one consumed number by construction.
+	if err := applyOpeningFrontsToBomParts(rawParts, openingFronts); err != nil {
+		return domain.ResolvedBom{}, err
 	}
 
 	// #1210: component-instance placements (module + structure) are hardware
@@ -668,6 +693,11 @@ func expandComponentInstances(
 				// the per-component hinge demand exception (C3) can key on
 				// it downstream.
 				CatalogComponentID: comp.ID,
+				// #1305: the SAME placement vocabulary the layout publishes
+				// (comp.Placement + instance override), so the opening fronts
+				// pass selects door parts on both derivations with one
+				// criterion.
+				Placement: boardPlacementLabel(comp, inst),
 			})
 		}
 	}
