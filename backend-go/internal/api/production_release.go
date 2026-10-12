@@ -518,7 +518,23 @@ func routingProvenanceDTO(p engine.ResolvedMachiningProvenance) openapi.Manufact
 	dto.TechnicalProfileId = stringPtr(p.TechnicalProfileID)
 	dto.TechnicalProfileRevision = stringPtr(p.TechnicalProfileRevision)
 	dto.HardwarePlacementId = stringPtr(p.HardwarePlacementID)
+	dto.OpeningProfileId = stringPtr(p.OpeningProfileID)
+	dto.Boundary = stringPtr(p.Boundary)
 	return dto
+}
+
+func routingCutsDTO(cuts []engine.ReleaseRoutingCut) []openapi.ManufacturingRoutingCut {
+	if len(cuts) == 0 {
+		return nil
+	}
+	out := make([]openapi.ManufacturingRoutingCut, 0, len(cuts))
+	for _, cut := range cuts {
+		out = append(out, openapi.ManufacturingRoutingCut{
+			StartMm: []float64{cut.StartMm[0], cut.StartMm[1], cut.StartMm[2]},
+			SizeMm:  []float64{cut.SizeMm[0], cut.SizeMm[1], cut.SizeMm[2]},
+		})
+	}
+	return out
 }
 
 func routingHolesDTO(holes []engine.ReleaseRoutingHole) []openapi.ManufacturingRoutingHole {
@@ -550,6 +566,7 @@ func toManufacturingSnapshotDTO(snapshot *storage.ReleaseManufacturingSnapshot) 
 					Provenance:  routingProvenanceDTO(operation.Provenance),
 					Operation:   operation.Operation,
 					Holes:       routingHolesDTO(operation.Holes),
+					RoutingCuts: routingCutsDTO(operation.Routing),
 				})
 			}
 			parts = append(parts, openapi.ManufacturingRoutingPart{

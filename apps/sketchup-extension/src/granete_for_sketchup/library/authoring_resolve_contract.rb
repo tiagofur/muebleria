@@ -35,13 +35,14 @@ module Granete
       # provenance keeps exactly one source variant — the parser fails closed
       # on ambiguous/empty provenance instead of guessing.
       class AuthoringMachiningOperation
-        attr_reader :operation_id, :host_component_instance_id, :provenance, :holes
+        attr_reader :operation_id, :host_component_instance_id, :provenance, :holes, :routing_cuts
 
-        def initialize(operation_id:, host_component_instance_id:, provenance:, holes:)
+        def initialize(operation_id:, host_component_instance_id:, provenance:, holes:, routing_cuts: [])
           @operation_id = operation_id
           @host_component_instance_id = host_component_instance_id
           @provenance = provenance
           @holes = holes
+          @routing_cuts = routing_cuts
         end
 
         def relationship_id
@@ -98,11 +99,49 @@ module Granete
         end
       end
 
+      # #1302/§13.3: the resolved subtraction boxes of a routing operation —
+      # the plugin never recomputes them; a malformed box fails closed.
+      module AuthoringResolveRoutingCuts
+        ROUTING_CUT_KEYS = %w[startMm sizeMm].freeze
+
+        module_function
+
+        def parse(raw, context)
+          return [] if raw.nil?
+
+          unless raw.is_a?(Array)
+            raise AuthoringResolveContract::ContractError,
+                  "Cortes de routing inválidos en #{context}"
+          end
+
+          raw.map do |cut|
+            unless valid?(cut)
+              raise AuthoringResolveContract::ContractError,
+                    "Corte de routing con campos inválidos en #{context}"
+            end
+
+            cut
+          end
+        end
+
+        def valid?(cut)
+          return false unless cut.is_a?(Hash) && cut.keys.sort == ROUTING_CUT_KEYS.sort
+
+          %w[startMm sizeMm].all? do |key|
+            cut[key].is_a?(Array) && cut[key].length == 3 && cut[key].all? { |value| finite_number?(value) }
+          end && cut['sizeMm'].all?(&:positive?)
+        end
+
+        def finite_number?(value)
+          value.is_a?(Numeric) && value.to_f.finite?
+        end
+      end
+
       # Wire-level validation of the machining/snapshot sections.
       # Fail-closed on shape violations: ambiguous provenance, unknown hole
       # faces or a broken fingerprint never parse into a usable result.
       module AuthoringResolveWireParsing
-        PROVENANCE_SOURCE_KINDS = %w[relationship manualHardwarePlacement].freeze
+        PROVENANCE_SOURCE_KINDS = %w[relationship manualHardwarePlacement openingProfile].freeze
         HOLE_FACES = %w[front back left right top bottom].freeze
         HOLE_KEYS = %w[face xMm yMm diameterMm depthMm type].freeze
 
@@ -130,14 +169,33 @@ module Granete
             operation_id: operation_id,
             host_component_instance_id: host,
             provenance: provenance(raw['provenance'], operation_id),
-            holes: holes(raw['holes'], operation_id)
+            holes: holes(raw['holes'], operation_id),
+            routing_cuts: AuthoringResolveRoutingCuts.parse(raw['routingCuts'], operation_id)
           )
         end
 
         # Exactly one provenance variant: empty or ambiguous combinations are
-        # contract violations (#346 §6), never a guess.
+        # contract violations (#346 §6), never a guess. Relationship may carry
+        # familyId (#874 J2-A) and the versioned recipe identity (#874 J2-B);
+        # openingProfile names the pinned profile + grip boundary it derives
+        # from (#1302/§13.3). Every field stays optional beyond the required
+        # identity keys and unknown keys fail.
         PROVENANCE_KEYS = %w[relationshipId jointPlacementId hardwarePlacementId catalogRuleId familyId
-                             recipeRevision technicalProfileId technicalProfileRevision sourceKind].freeze
+                             recipeRevision technicalProfileId technicalProfileRevision sourceKind
+                             openingProfileId boundary].freeze
+
+        PROVENANCE_REQUIRED_KEYS = {
+          'relationship' => %w[relationshipId],
+          'manualHardwarePlacement' => %w[hardwarePlacementId],
+          'openingProfile' => %w[openingProfileId boundary]
+        }.freeze
+
+        PROVENANCE_ALLOWED_KEYS = {
+          'relationship' => %w[sourceKind relationshipId catalogRuleId familyId
+                               recipeRevision technicalProfileId technicalProfileRevision],
+          'manualHardwarePlacement' => %w[sourceKind hardwarePlacementId],
+          'openingProfile' => %w[sourceKind openingProfileId boundary]
+        }.freeze
 
         def provenance(raw, context)
           raise AuthoringResolveContract::ContractError, "Provenance inválida en #{context}" unless raw.is_a?(Hash)
@@ -148,30 +206,15 @@ module Granete
                   "Provenance con sourceKind desconocido en #{context}: #{source_kind.inspect}"
           end
 
-          case source_kind
-          when 'relationship'
-            unless raw['relationshipId'].is_a?(String) && !raw['relationshipId'].empty?
-              raise AuthoringResolveContract::ContractError,
-                    "Provenance de relationship sin relationshipId en #{context}"
-            end
-          when 'manualHardwarePlacement'
-            unless raw['hardwarePlacementId'].is_a?(String) && !raw['hardwarePlacementId'].empty?
-              raise AuthoringResolveContract::ContractError, "Provenance manual sin hardwarePlacementId en #{context}"
-            end
+          missing = PROVENANCE_REQUIRED_KEYS[source_kind].find do |key|
+            !(raw[key].is_a?(String) && !raw[key].empty?)
+          end
+          if missing
+            raise AuthoringResolveContract::ContractError,
+                  "Provenance #{source_kind} sin #{missing} en #{context}"
           end
 
-          # Exclusivity: a provenance carries exactly its variant's keys — a
-          # relationship provenance with a hardwarePlacementId (or vice versa)
-          # is ambiguous and fails closed (#346 §6). Relationship provenance
-          # may carry familyId (#874 J2-A) and the versioned recipe identity
-          # (#874 J2-B); every field stays optional and unknown keys fail.
-          allowed = case source_kind
-                    when 'relationship'
-                      %w[sourceKind relationshipId catalogRuleId familyId
-                         recipeRevision technicalProfileId technicalProfileRevision]
-                    when 'manualHardwarePlacement' then %w[sourceKind hardwarePlacementId]
-                    else %w[sourceKind relationshipId jointPlacementId catalogRuleId]
-                    end
+          allowed = PROVENANCE_ALLOWED_KEYS[source_kind]
           unless (raw.keys - allowed).empty? && (raw.keys - PROVENANCE_KEYS).empty?
             raise AuthoringResolveContract::ContractError,
                   "Provenance ambigua en #{context}: #{(raw.keys - allowed).inspect}"
@@ -741,6 +784,11 @@ module Granete
             case source['sourceKind']
             when 'relationship' then relationship_ids.include?(source['relationshipId'])
             when 'manualHardwarePlacement' then manual_ids.include?(source['hardwarePlacementId'])
+            when 'openingProfile'
+              # #1302/§13.3: routing truth is DESIGN-level (the pinned opening
+              # profile catalog), not furniture-snapshot truth — there is no
+              # snapshot row to join; the wire parse already validated shape.
+              source['openingProfileId'].is_a?(String) && !source['openingProfileId'].empty?
             else false
             end
           end

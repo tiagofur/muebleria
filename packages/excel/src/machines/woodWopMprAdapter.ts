@@ -135,6 +135,19 @@ function readinessReasons(
       detail: `${unrepresentable.count} ${unrepresentable.kind} operation(s) outside the evidenced operationMacros; refusing instead of dropping them`,
     });
   }
+  // #1302 / §13.3: routing cuts are material removal, not drilling — no macro
+  // in the evidenced set represents them, so their presence refuses the whole
+  // serialization explicitly instead of smuggling them through a drill kind.
+  const routingCuts = (job.routing?.patterns ?? []).reduce((sum, pattern) => sum + pattern.cuts.length, 0);
+  if (routingCuts > 0) {
+    reasons.push({
+      code: 'OPERATION_NOT_REPRESENTABLE',
+      dimension: 'operationMacros',
+      detail: `${routingCuts} routing cut(s) outside the evidenced operationMacros ('${String(
+        profile.dimensions.operationMacros ?? '',
+      )}' evidences drilling macros only — no grooving/routing macro is evidenced); refusing instead of dropping them`,
+    });
+  }
   let programs: MprCandidatePieceProgram[];
   try {
     programs = transformJobToMprCandidatePrograms(job, MPR_PROVENANCE);

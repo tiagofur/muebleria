@@ -1282,7 +1282,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-d1136a23117338f88a351ad48222a8ff699ecf496c8e4cc204e3a12f0c6e7694"
+            "manufacturingFingerprint": "sha256-7c27692fa8a7b3521bf7fede10cdb2bc9583c6f8560bc013e7c9e89d9c5136be"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -2271,7 +2271,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-decb0431283cd5243567251125a0a8e71538e29608aab2a7a0b2858d918a3a83"
+            "manufacturingFingerprint": "sha256-636744111f0a27c6a5fde190da389397cbdb5e646c5d4f3e054b1c21ef27847a"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -3649,7 +3649,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-e2648f075783705d4080de2a0b9abc148ddef3ed924baa5398ce3a85d9610c31"
+            "manufacturingFingerprint": "sha256-85c1c59c8a73264c95bc2aa7072ae487be8753d4bc0c466229b8a8a3b510634c"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -4235,7 +4235,7 @@
               }
             ],
             "derivedHardwarePlacements": [],
-            "manufacturingFingerprint": "sha256-5053a4fa19ebcb8317c1599dfebec4c3a430be81ba95ba10d1a79e972ebf0286"
+            "manufacturingFingerprint": "sha256-4cd7cad640bd8f2f7c5893d57b73e5114d520a4f9a342258217c4a704026194f"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -5230,7 +5230,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-fdaab8fbf0a4a7393a6f87793a1e76757c3f443086a02bd102f1b8ca43fdbebf"
+            "manufacturingFingerprint": "sha256-17258d4c2afed3b2c24e9b42851fa7430218e81d1bf8bd820106949511c6f59e"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -6136,7 +6136,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-c0a0c9b8a5caf8f4bb277c36f676618186a0af1f8c7f2433d9dc633e6f2ed2b8"
+            "manufacturingFingerprint": "sha256-7e244b5ad639ee870e933eec652a8278e3968cd75b55e3cc122c75bd7ac57da1"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -7641,7 +7641,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-cf3ffdbfbe932a0e9db47ad926bf32f7a8471b8e21f478c037d2bd20af1a52c0"
+            "manufacturingFingerprint": "sha256-cf6e8134a67d2567fc87484594351e13eb392e34b8c8b737185ed7cace03cc4e"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -8610,7 +8610,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-9a790a9e0c3d0cb1b87515c8e5e91d8d3d22d8fd4686defcc91c6b80a4310d26"
+            "manufacturingFingerprint": "sha256-3cf0a9ed5b3cc4117c4759f2cef505ed935a749d759ea857c9a6c86aaf1e7040"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -9579,7 +9579,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-814ddd80f2458c997104b60fa715e7571d8c86a9ff0777560e74dbb1c25fd097"
+            "manufacturingFingerprint": "sha256-727fe995ed60a7b3aecabd371a41f24885147975570d222dc40fc8d7b0603a7d"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -10417,7 +10417,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-0090fa4520614a21f56cf4b951f68bff8c0cc2cd9331e6fc2937fc9761710045"
+            "manufacturingFingerprint": "sha256-7f409660ff2fb10cd817bf1ffa301f3dd59c8fd33f1a97dc387de55054b8a155"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -12076,7 +12076,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-ab0a15af158a22f19ae8c626a3d0a62efa070d5990c646f8a82f081aca7f1b8d"
+            "manufacturingFingerprint": "sha256-14d69d13f520dcfb35afb1de2ee06f3c7cdb320a3e69ce04ba3eaa90f3002de9"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -13002,7 +13002,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-5d137e32a4c154bc1af2eb7371c7b7705e9f02465761bb8b3e7e6cac66dc3fe0"
+            "manufacturingFingerprint": "sha256-91596b83d737788bfc4d0e980163ce768012607e2f7ce368d4cafc2fc0e5566f"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -13873,7 +13873,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-4036911d2695e10b2f35031e5fc0617b9e1ccf4fdfae1c69a83da7258a1fcc77"
+            "manufacturingFingerprint": "sha256-2e6a5a117301766859124c72cae15fb7d620148b28d975c27b9f63e73ae57b32"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -14799,7 +14799,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-5d137e32a4c154bc1af2eb7371c7b7705e9f02465761bb8b3e7e6cac66dc3fe0"
+            "manufacturingFingerprint": "sha256-91596b83d737788bfc4d0e980163ce768012607e2f7ce368d4cafc2fc0e5566f"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -16037,7 +16037,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-c6b73c0e8f32f68042dfdf8327206307628a3e4823e608e2dca7ad19fcb3ea58"
+            "manufacturingFingerprint": "sha256-8bd435efc73fcdf955283bc4713b9eefa49b850ec452659769e0a678d4772660"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -16995,7 +16995,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-b45a4d2b763411f9b7c22db166f81f773dc5089a0d77ff632c42ea034fbc1a91"
+            "manufacturingFingerprint": "sha256-dff4a491dd936daf29783acc17f222698ab90db140365a1c13e6dbca576dab10"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -17895,7 +17895,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-12b4ad34ab39e73da2948405b54c865354fad73a786a99c64d53e6a8eefc193c"
+            "manufacturingFingerprint": "sha256-483491831960f61beddbdfae913498d94cbdeae5778a78bcd45b98625264336e"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -18970,7 +18970,7 @@
                 ]
               }
             ],
-            "manufacturingFingerprint": "sha256-5de7d13c0604f9450398a7b9b2a4cf55377dcf10eb21becc9706ed614da12761"
+            "manufacturingFingerprint": "sha256-fd9558a0bc97f9385e13bfa7740e040b40cc195b1f2887c6e3ea171da243a000"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -20065,7 +20065,7 @@
                 ]
               }
             ],
-            "manufacturingFingerprint": "sha256-5601a273b2058c396f3c36a2b49e953e8312ca11c1735737e7e9db69aaac965f"
+            "manufacturingFingerprint": "sha256-da7df0c4f50fb562e9dc0d7e800ed6761c1f78252e0478decb512e7b693d9ea5"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -21158,7 +21158,7 @@
                 ]
               }
             ],
-            "manufacturingFingerprint": "sha256-12723a8b6a64d4e98ff7b2d3604f1cc515fe0c8ba37ab02b50d98dd64198950b"
+            "manufacturingFingerprint": "sha256-0b01ee712ed6bb78cb14db1c4413af6ca112a0be48362ca5136c7d4b4bea3373"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -22251,7 +22251,7 @@
                 ]
               }
             ],
-            "manufacturingFingerprint": "sha256-5de7d13c0604f9450398a7b9b2a4cf55377dcf10eb21becc9706ed614da12761"
+            "manufacturingFingerprint": "sha256-fd9558a0bc97f9385e13bfa7740e040b40cc195b1f2887c6e3ea171da243a000"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -23238,7 +23238,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-cf3ffdbfbe932a0e9db47ad926bf32f7a8471b8e21f478c037d2bd20af1a52c0"
+            "manufacturingFingerprint": "sha256-cf6e8134a67d2567fc87484594351e13eb392e34b8c8b737185ed7cace03cc4e"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -24401,7 +24401,7 @@
                 ]
               }
             ],
-            "manufacturingFingerprint": "sha256-21acab0bb5d3484ca4a3495ab60f5c3ef641838d212644096af076621d8d1ecc"
+            "manufacturingFingerprint": "sha256-1c8500277365242395a91e6886cce4962a535f864022be67381207da7f056659"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -25488,7 +25488,7 @@
                 ]
               }
             ],
-            "manufacturingFingerprint": "sha256-853941541f0a2dc96d8961282d8d9cfebd27e0fb65ba6b6bced208c852767080"
+            "manufacturingFingerprint": "sha256-43dc8843f77cae2f184703c051591300223eaeba73cd926a18d6acafc5f0cd6e"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -26534,7 +26534,7 @@
                 ]
               }
             ],
-            "manufacturingFingerprint": "sha256-cf3ffdbfbe932a0e9db47ad926bf32f7a8471b8e21f478c037d2bd20af1a52c0"
+            "manufacturingFingerprint": "sha256-cf6e8134a67d2567fc87484594351e13eb392e34b8c8b737185ed7cace03cc4e"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -27679,7 +27679,7 @@
                 "blockers": []
               }
             ],
-            "manufacturingFingerprint": "sha256-57044ba5e66fda38f9707d4a09b26dc46369a4237850460d227a566b1cb75ad9"
+            "manufacturingFingerprint": "sha256-db04e43fb286f2a3017899004423e234a72368764d5c854a140022b2820efa63"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -29005,7 +29005,7 @@
                 "blockers": []
               }
             ],
-            "manufacturingFingerprint": "sha256-44006c66d88565e1635f59b3ab6ff43d2a62e2fd4415074237950d40d3feea8c",
+            "manufacturingFingerprint": "sha256-a29e9d0a6f372d89acde3be6f7e2a2da7663a20d48b61cceb14f2ed156415751",
             "hardwareProfileDemand": [
               {
                 "hardwareId": "f9160000-0000-0000-0000-000000000002",

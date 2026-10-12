@@ -1059,8 +1059,11 @@ export {
   type OutputFormatFamily,
   type ExportPresentation,
   type PostprocessorAdapter,
+  type PartRoutingPattern,
+  type ProjectRoutingData,
   type ResolvedCuttingJob,
   type ResolvedMachiningJob,
+  type RoutingCutDefinition,
 } from './machineOutput';
 
 // --- Symbolic six-face machining geometry (#879 B2a) ---

@@ -127,6 +127,19 @@ function readinessReasons(
       detail: `${unrepresentable.count} ${unrepresentable.kind} operation(s) outside the evidenced operationTypeNos; refusing instead of dropping them`,
     });
   }
+  // #1302 / §13.3: routing cuts are material removal, not holes — no TypeNo
+  // in the evidenced set represents them, so their presence refuses the whole
+  // serialization explicitly instead of smuggling them through a hole kind.
+  const routingCuts = (job.routing?.patterns ?? []).reduce((sum, pattern) => sum + pattern.cuts.length, 0);
+  if (routingCuts > 0) {
+    reasons.push({
+      code: 'OPERATION_NOT_REPRESENTABLE',
+      dimension: 'operationTypeNos',
+      detail: `${routingCuts} routing cut(s) outside the evidenced operationTypeNos ('${String(
+        profile.dimensions.operationTypeNos ?? '',
+      )}' evidences hole TypeNos only — no grooving/routing TypeNo is evidenced); refusing instead of dropping them`,
+    });
+  }
   let programs: KdtPieceProgram[];
   try {
     programs = transformJobToPrograms(job, KDT_PROVENANCE);
