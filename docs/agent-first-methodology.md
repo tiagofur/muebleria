@@ -39,14 +39,20 @@ reglas son un subconjunto medible del clean code, no una alternativa.
 
 Es la formalización de la etapa actual del proyecto: escribir código a mano
 deja de ser el cuello de botella; definir bien y verificar rápido pasa a serlo.
-El proceso G-ODD ya vigente en este repo (§7) formaliza esta división desde el
-lado del proceso; la industria (agentic engineering, spec-driven development)
-corrobora la misma dirección.
+El proceso G-ODD, vigente en este repo como contrato operativo de proceso (§7 y
+`docs/demo/software-factory-human-start.md`), formaliza esta división en la
+ejecución cotidiana (lanes, un escritor, gates de verificación V0/V1/V2). Su
+adopción operativa demuestra la viabilidad de ese flujo de proceso, pero no
+constituye por sí misma una validación o ratificación global de toda la
+propuesta estructural Agent-First ni de sus umbrales cuantitativos. La
+industria (agentic engineering, spec-driven development) corrobora una
+dirección similar.
 
 ## 2. Genealogía: Granete ya ejecutó Agent-First antes de nombrarlo
 
-Esta metodología no importa un modelo externo: **nombra y sistematiza lo que
-este repo ya probó con escritura por agentes en producción.**
+Esta metodología no importa un modelo abstracto externo: **sistematiza como
+propuesta estructural aprendizajes de prácticas previas de este repo** (como el
+split del plugin SketchUp y el contrato de proceso G-ODD).
 
 **El split del plugin SketchUp fue la primera ejecución.** `dialog.html`
 (7.512 líneas) y `dialog_controller.rb` (3.766 líneas / 239 métodos) se
@@ -62,18 +68,21 @@ patrón a replicar; cada pieza implementa principios de §4:
 | --- | --- |
 | Mapa de bridges: interacción → dueño/no-dueño → "empieza aquí" → prueba focal | P3, P6 |
 | Mapa JS por síntoma: "problema → módulo → prueba focal" | P2, P6 |
-| Mandatory reading acotada + routing por tipo de trabajo | P1, P6 |
+| Lectura selectiva por tarea (sustituye la lectura obligatoria previa a toda implementación) | P1, P6 |
 | Boundary de ownership no negociable + reglas de identidad | P3 (+ invariantes de raíz) |
 | Plan obligatorio pre-código (14 puntos) + checklist cross-surface | P5, P6 |
 | Verificación por comandos exactos; sin PASS simulado | P5, P7 |
 
-**G-ODD es la mitad de proceso, también propia.** El contrato portátil
-(`docs/demo/software-factory-human-start.md`) define lanes Direct / ODD / SDD
-explícito, un writer por issue, reviewer fresco, niveles V0/V1/V2 y one-shot
-con ronda de corrección única. No adoptamos SDD externo: en este repo SDD es
-un lane bajo demanda explícita del humano *dentro* de G-ODD, y TDD es práctica
-de verificación dentro de P5. La evidencia externa de §3 explica por qué esto
-funciona; la práctica ya está validada aquí.
+**G-ODD es el contrato de proceso vigente.** El contrato portátil
+(`docs/demo/software-factory-human-start.md`) rige de forma operativa en
+producción: define topologías Inline Direct y Delegated Direct (junto con SDD
+bajo demanda explícita del humano), un writer por issue, reviewer independiente
+y fresco, niveles V0/V1/V2 y handoffs trazables. La viabilidad y efectividad
+operativa de G-ODD como contrato de proceso están demostradas en el repositorio;
+sin embargo, no deben extrapolarse como una validación automática ni una
+ratificación global de todas las tesis, métricas o presupuestos cuantitativos de
+la propuesta Agent-First, que permanecen como propuesta sujeta a revisión y
+decisión explícita.
 
 ## 3. Base científica: hallazgo → regla de diseño
 
@@ -152,8 +161,8 @@ Las docs son el "repo map" (E7) y la spec (E8); se escriben para ser
 
 - Cada doc declara disparador y audiencia en el header ("léeme cuando…").
 - AGENTS.md raíz = mapa de entradas (ya existe); un AGENTS.md por directorio de
-  app con la tabla `dominio → dueño → prueba focal` (el backend aún no tiene
-  uno: Fase G del plan).
+  app con la tabla `dominio → dueño → prueba focal` (como
+  `apps/sketchup-extension/AGENTS.md` y `backend-go/AGENTS.md`).
 - Cada archivo nuevo empieza con header de contrato de 1–2 líneas: qué expone,
   quién lo consume.
 - Prohibido: docs turísticas sin disparador, duplicar invariantes de la raíz
@@ -163,7 +172,7 @@ Las docs son el "repo map" (E7) y la spec (E8); se escriben para ser
 Un agente necesita que el mismo comando dé el mismo resultado (y un humano
 reviewer también): runtimes pinneados, seeds explícitas en tests flaky,
 comandos versionados en docs, DBs de test desechables por contrato
-`test-database-isolation.md`.
+`docs/architecture/test-database-isolation.md`.
 
 ### P8 — Subconjunto de clean code, no su sustituto
 Nombres descriptivos, bajo acoplamiento, alta cohesión, contratos: todo
@@ -204,20 +213,23 @@ los presupuestos se recalibran con ellas.
 | Tiempo de ciclo | issue abierta → merge | beneficio integrado |
 | Conflictos entre writers | rebases/merges con conflicto por PR | P3 |
 
-## 7. Integración con lo existente (dos pilares propios, cero reemplazos)
+## 7. Integración con lo existente (distinción entre proceso operativo y propuesta estructural)
 
-AF es la mitad **estructura** del sistema agent-first de este repo; G-ODD es
-la mitad **proceso**. Ambas son metodología propia, portátil (adapter
-Gentle-AI nativo o repo manual) y ya probadas con escritura por agentes.
+G-ODD rige como contrato de **proceso** operativo del repositorio
+(`docs/demo/software-factory-human-start.md`), plenamente vigente y probado en
+producción. Esta metodología (AF) se plantea como la contraparte de
+**estructura** (organización de código, navegación y presupuestos), pero se
+mantiene en estado de propuesta mientras no exista ratificación global del
+owner.
 
-| Pieza | Rol bajo AF |
+| Pieza | Rol y estado |
 | --- | --- |
-| G-ODD (lanes Direct/ODD/SDD explícito, un writer, reviewer fresco, V0/V1/V2) | Proceso: **quién** hace qué, con qué gates y evidencia |
-| Esta metodología (AF) | Estructura: **cómo** son los artefactos que ese proceso lee y escribe |
-| `AGENTS.md` raíz + `apps/sketchup-extension/AGENTS.md` | Índices de navegación ya vigentes; el del plugin es el patrón a replicar (§2) |
-| `docs/conventions.md` | Ya fija presupuestos TS; AF los unifica por stack y añade Go |
-| Invariantes de raíz (server authority, RLS, APIs generadas…) | Intocables; AF las referencia, jamás duplica |
-| Plan backend 2026-09-27 | Segunda aplicación del patrón; primer piloto formal bajo la metodología nombrada |
+| G-ODD (topologías Direct/ODD/SDD explícito, un writer, reviewer fresco, V0/V1/V2) | Proceso operativo vigente: **quién** hace qué, con qué gates y evidencia |
+| Esta metodología (AF) | Propuesta estructural global: **cómo** organizar los artefactos que ese proceso lee y escribe (pendiente de ratificación global) |
+| `AGENTS.md` raíz + `apps/sketchup-extension/AGENTS.md` | Índices de navegación adoptados operativamente; el del plugin es el caso de referencia de lectura selectiva por tarea (§2) |
+| `docs/conventions.md` | Convenciones y presupuestos TS adoptados; AF propone unificarlos por stack y añadir Go |
+| Invariantes de raíz (server authority, RLS, APIs generadas…) | Intocables; gobiernan todo el desarrollo; AF las referencia, jamás duplica |
+| Plan backend 2026-09-27 | Caso de aplicación específico, ejecutado mediante fases autorizadas independientes (issue #1017) |
 
 SDD y TDD externos no sustituyen nada: SDD es aquí un lane bajo demanda
 explícita del humano dentro de G-ODD; TDD es práctica de verificación dentro
@@ -226,12 +238,14 @@ corroboración de dirección, no autoridad.
 
 ## 8. Plan de adopción
 
-1. **Ratificación (owner, sin issue):** aprobar este doc y sus presupuestos;
-   ajustar cifras si el owner quiere otros umbrales.
+1. **Ratificación global (owner, sin issue):** evaluar este documento y sus
+   presupuestos estructurales; ajustar cifras si el owner requiere otros
+   umbrales. La metodología completa permanece como propuesta hasta esa decisión.
 2. **Piloto backend (issue + ODD, lane sustancial):** ejecutar el plan
-   2026-09-27 tal cual (fases A–G, moves mecánicos, verde por commit). La
-   primera ejecución fue el plugin; éste es el primer piloto formal bajo la
-   metodología nombrada, con baseline y métricas ya definidas.
+   2026-09-27 (`docs/backend-agent-first-refactor-plan-2026-09-27.md`) mediante
+   el issue autorizado #1017 (fases A–G, moves mecánicos, verde por commit). Su
+   ejecución demuestra la viabilidad de refactors mecánicos por dominio, pero no
+   sustituye la ratificación formal de toda la metodología.
 3. **Medición:** 2–4 semanas post-merge, medir §6 contra baseline; recalibrar
    presupuestos numéricos con datos, no con opinión.
 4. **Extensión:** `packages/storage` y `apps/web` (auditar monolitos TS con el
@@ -254,7 +268,7 @@ Clean Code) ejecutado como move verificado.
 | Hacia dónde | Archivo destino ya propuesto en el plan backend si aplica (`server.go`, `routes_auth.go`, `store_catalog.go`…); si no, el archivo dueño del dominio más cercano; si no existe, se crea con header de contrato |
 | Cómo | Move mecánico tal cual: sin cambiar firmas, rutas, payloads ni mensajes; nombres de tests intactos |
 | Presupuesto | Máx. **una** extracción por PR; sólo lo que el diff ya toca — nunca "ya que estoy, parto el archivo completo" |
-| Contrato G-ODD | Commit separado `refactor(<dominio>): extraer <cosa> de <monolito>`, declarado en el plan de la issue/ODD como paso acotado, verde por commit. No es refactor oportunista: es esta regla ratificada por el owner (2026-09-29) |
+| Contrato G-ODD | Commit separado `refactor(<dominio>): extraer <cosa> de <monolito>`, declarado en el plan de la issue/ODD como paso acotado, verde por commit. No es refactor oportunista: es esta regla operativa local ratificada por el owner el 2026-09-29 en [issue #924](https://github.com/tiagofur/muebleria/issues/924) y [PR #925](https://github.com/tiagofur/muebleria/pull/925) (la ratificación aplica estrictamente a esta regla y a no ingresar código nuevo a monolitos, no a la metodología completa en bloque) |
 | Exclusiones | Hotfix/freeze, ventanas de release, `generated/`, y cuando el bloque tocado no puede moverse sin cambio de comportamiento (entonces no se mueve; se registra como deuda) |
 | Progreso | Sin ledger nuevo: `git log --follow` del monolito + métricas §6 re-medidas; el churn de §5 prioriza solo — los monolitos más tocados se parten primero |
 
@@ -284,8 +298,8 @@ duplicar catálogo/docs, no métricas inventadas (se miden o no se afirman).
 externas arriba explican por qué funcionan):
 
 - `apps/sketchup-extension/AGENTS.md` — artefacto canónico AF (mapa de
-  bridges, mapa JS por síntoma, mandatory reading, boundary de ownership,
-  plan pre-código, verificación)
+  bridges, mapa JS por síntoma, lectura selectiva por tarea, boundary de
+  ownership, plan pre-código, verificación)
 - `docs/demo/software-factory-human-start.md` — contrato portátil G-ODD
   (lanes, un writer, reviewer fresco, V0/V1/V2, one-shot, publicación)
 - `docs/backend-agent-first-refactor-plan-2026-09-27.md` — diagnóstico y plan

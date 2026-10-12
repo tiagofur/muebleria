@@ -53,12 +53,16 @@ dominial: `internal/api` (endpoints), `packages/excel` (adapters) y los docs de
   #1017) y `api/hardware_assets.go`.
 - **Lo nuevo no entra a monolitos**: una función/handler/ruta nueva nace
   directamente en el archivo dueño de su dominio.
-- **Extracción al tocar** (regla operativa local; `docs/agent-first-methodology.md`
-  §8.1 registra una ratificación fechada el 2026-09-29, cuyo registro de decisión
-  aún debe enlazarse aquí): si tu diff toca un bloque de un archivo sobre
-  presupuesto, ese bloque emigra a su archivo dueño — máx. una extracción por
-  PR, commit separado `refactor(<dominio>): extraer <cosa> de <monolito>`, verde
-  por commit. Esta regla local no ratifica toda la metodología Agent-First.
+- **Extracción al tocar** (regla operativa local ratificada para este ámbito en
+  el [issue #924](https://github.com/tiagofur/muebleria/issues/924) y [PR #925](https://github.com/tiagofur/muebleria/pull/925)
+  el 2026-09-29 / 2026-09-30; ver `docs/agent-first-methodology.md` §8.1): si tu
+  diff toca un bloque de un archivo sobre presupuesto, ese bloque emigra a su
+  archivo dueño — máx. una extracción por PR, commit separado
+  `refactor(<dominio>): extraer <cosa> de <monolito>`, verde por commit. Esta
+  autorización operativa local rige exclusivamente para la extracción incremental
+  y la regla complementaria ("lo nuevo no entra a monolitos"); no constituye una
+  ratificación en bloque de la metodología global Agent-First ni de sus umbrales
+  teóricos.
 - Headers de contrato: todo archivo nuevo abre con 1-3 líneas (qué expone,
   quién lo consume).
 - Moves mecánicos o nada: sin cambios de firmas/rutas/payloads/mensajes

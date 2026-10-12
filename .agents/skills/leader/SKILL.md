@@ -23,7 +23,8 @@ a second workflow, or treat an artifact as authorization.
 4. Assign exactly one writer. Give it the outcome, exclusions, paths, invariants,
    V0/V1/V2 checks, exact base, and the smallest relevant source references.
 5. After a coherent candidate is frozen, assign a different fresh reviewer with the
-   exact issue, HEAD/base, diff, execution artifact, and verification evidence.
+   exact issue, HEAD/base, diff, execution artifact (when the lane uses one), and
+   verification evidence.
 6. Consolidate real blockers into at most one correction round when feasible. If a
    blocker remains, return the decision to the human; the target is not a dogma.
 7. Publish only after exact readback of current metadata, CI, review, and pins.
