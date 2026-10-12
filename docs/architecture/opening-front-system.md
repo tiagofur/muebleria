@@ -93,8 +93,12 @@ openingProfile:
     frontReductionMm: <datasheet>   # how much the front is shortened at this boundary
     gripClearanceMm: <datasheet>    # finger space behind the front
   bodyModifiers:
-    - role: top                     # constructive role, not name
-      depthReductionMm: <derived>   # top sits behind the profile
+    # Potential effects declared by profile; the server resolve selects the
+    # compatible target using the declared Construction Variant/topology.
+    - role: top                     # full-top variant only; constructive role, not name
+      depthReductionMm: <derived>   # full top sits behind the profile
+    - role: <canonical-manguete-role> # manguetes variant only; role vocabulary must be defined by #1139
+      retractTowardBackMm: <derived>
     - role: side
       notch: { heightMm: <derived>, depthMm: <derived>, at: top_front }
   bom:
@@ -151,8 +155,8 @@ family enum is introduced.
 
 | Case | Type | Layout | Grip | Body effect | Front effect | BOM |
 | --- | --- | --- | --- | --- | --- | --- |
-| **A** | inferior | 2 hinged doors | gola L, `top` | Top shortened in depth (sits behind the profile); side notches at top front for the profile | Door height reduced by the profile's front reduction so fingers reach behind the door | Profile by length, supports, end caps |
-| **B** | inferior | drawers 1x / 1x / 2x | gola L `top` + gola C `between(z2,z3)` | Top as A; side notches at the C boundary | Drawer 1 gripped from above (gola L); drawer 2 gripped from below (gola C upward recess); drawer 3 gripped from above (gola C downward recess). Heights from §5 with two grip boundaries | L + C profiles, supports, end caps |
+| **A** | inferior | 2 hinged doors | gola L, `top` | Body effect depends on declared Construction Variant: full-top → reduce top depth; manguetes → retract manguetes toward back. Apply only the compatible effect. Side notch only if required by verified profile/install data. | Door height reduced by the profile's front reduction so fingers reach behind the door | Profile by length, supports, end caps |
+| **B** | inferior | drawers 1x / 1x / 2x | gola L `top` + gola C `between(z2,z3)` | Gola L body effect follows the declared Construction Variant (full-top reduction OR manguetes retraction); side/C notches only if required by verified profile/install data | Drawer 1 gripped from above (gola L); drawer 2 gripped from below (gola C upward recess); drawer 3 gripped from above (gola C downward recess). Heights from §5 with two grip boundaries | L + C profiles, supports, end caps |
 | **C** | superior | 1–2 hinged doors | `bottom_overhang` (no hardware) | None | Door extends below the cabinet bottom by an overhang; user grips from underneath | No grip hardware |
 | Baseline | inferior | 2 hinged doors | handle | None | Standard overlay | Handle per door |
 
