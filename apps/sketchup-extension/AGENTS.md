@@ -57,35 +57,51 @@ Los harnesses Node que ejecutan `dialog.html` cargan los scripts reales en
 orden de diálogo mediante `test/js/support/dialog_scripts.js` — nunca copies
 el contenido de un módulo dentro del test.
 
-## Mandatory reading
+## Lectura por tarea
 
-Before implementation, read:
+Lee primero la issue aprobada, sus criterios/exclusiones y comentarios que sean
+prerrequisitos. Después abre únicamente el contrato y el código que correspondan
+al cambio. Esta tabla sustituye la lectura obligatoria indiscriminada de todos
+los documentos de arquitectura: las invariantes de las secciones siguientes
+siguen aplicando aunque no debas abrir cada documento.
 
-1. `../../docs/architecture/sketchup-designer-workflow.md`;
-2. `../../docs/architecture/sketchup-plugin-excellence.md`;
-3. `../../docs/architecture/sketchup-backend-web-integration-excellence.md`;
-4. `../../docs/architecture/sketchup-authoring-interaction-contract.md`;
-5. `../../docs/sketchup-excellence-execution-plan.md`;
-6. `../../docs/architecture/sketchup-interaction-model.md`;
-7. `../../docs/architecture/sketchup-native-entity-model.md` + ADR-0004;
-8. `../../docs/sketchup-manufacturing-contract.md` + ADR-0001;
-9. the exact GitHub issue and all hard prerequisites/comments.
+| Tipo de cambio | Lectura obligatoria inicial | Amplía la lectura cuando… |
+| --- | --- | --- |
+| JS/HtmlDialog: Biblioteca, Inspector, Configurator, cuenta o formulario | fila pertinente del mapa JS de arriba + módulo y prueba focal | cambies bootstrap/carga, estado compartido o límites entre módulos: contrato de interacción HtmlDialog y #498 |
+| Bridge Ruby, callback o routing | bridge dueño + fila del mapa de bridges + prueba focal | cambies ciclo de vida del diálogo, coordinación compartida o errores degradados: `../../docs/architecture/sketchup-authoring-interaction-contract.md` |
+| Colocación, preview, snapping o anchors | `tools/furniture_placement_tool.rb`, `host/placement_environment.rb` y `ui/bridges/placement_preview_bridge.rb` según el cambio | cambien semántica de interacción o reglas de placement: `../../docs/architecture/sketchup-designer-workflow.md` |
+| Mutación/reconstrucción de entidades nativas | `../../docs/architecture/sketchup-authoring-interaction-contract.md` + `../../docs/architecture/sketchup-native-entity-model.md` + prueba focal | cambien ownership, undo/rollback, metadata o representación física: añade `../../docs/architecture/sketchup-plugin-excellence.md` y el contrato de manufactura |
+| Project Furniture, Design, sincronización o publicación | bridge/conexión dueños + `../../docs/architecture/sketchup-backend-web-integration-excellence.md` + `../../docs/architecture/project-design-digital-thread.md` + ADR-0003 | el cambio altere identidad, revisiones, adopción/copia o contratos generados: issue y #384/#496 según corresponda |
+| Catálogo, parámetros, acabados, materiales o espesores | módulo dueño + prueba focal + `../../docs/architecture/material-aware-furniture-resolution.md` si afecta resolución de materiales | cambien schema/API o autoridad de resolución: #496 y documentación canónica de la API/dominio |
+| Herrajes, relaciones, juntas o mecanizado | `../../docs/architecture/manufacturing-feature-model.md` y contrato de manufactura; prueba focal del dominio | cambie la semántica de pieza/instancia, operación derivada o salida de máquina: amplía al modelo nativo y a perfiles/adapters |
+| Auth, pairing, sesión o credenciales | código dueño + contrato de integración + #460/#499 según el flujo | se alteren capabilities, scopes, expiración, revocación o trust boundary |
+| Diagnóstico, soporte o telemetría | código dueño + sección Diagnostics and privacy de este archivo | cambie el bundle de soporte: #504; respeta siempre la exclusión de secretos y datos privados |
+| Integración transversal o cambio de límites arquitectónicos | contratos de cada superficie afectada y la issue exacta | el cambio cruce Go/API/React/SketchUp, requiera una nueva decisión o altere aceptación V2 |
 
-Additional routing:
+### Referencias de coordinación
 
-- generated furniture/API/schema work: #496 + #448/#477;
-- shared HtmlDialog/host mutation/degraded-state work: #498 + #474;
+Los números siguientes son rutas de contexto, no sustituyen la issue aprobada ni
+prueban que un ticket siga abierto o que su estado histórico sea actual. Comprueba
+el estado remoto cuando sea relevante.
+
+- generated furniture/API/schema: #496 + #448/#477;
+- shared HtmlDialog/host mutation/degraded-state: #498 + #474;
 - typed parameter/catalog administration integration: #497 + #483/#486;
 - Project/Design identity, revisions, copy/adoption or publish: #384 + ADR-0003;
 - secure Web-to-SketchUp handoff/model binding: #388 + #499;
 - React Project/Design workspace: #396 and its children #500–#502;
 - auth/session/media/client credentials: #460;
 - audit/request/trace/support diagnostics: #461 + #504;
-- placement/semantic anchors/snapping/repeat: #469 + `sketchup-designer-workflow.md`;
+- placement/semantic anchors/snapping/repeat: #469;
 - Design defaults/inheritance/contextual no-selection Inspector: #784 + #471;
 - materials/thickness: `material-aware-furniture-resolution.md` and #402–#405;
 - relationships/hardware/machining: #356/#350 and `manufacturing-feature-model.md`;
 - machine output/evidence: #348/#351–#355 and #503.
+
+No cargues `sketchup-excellence-execution-plan.md` por rutina: úsalo cuando la
+issue continúe explícitamente una fase de ese plan o cuando el cambio afecte su
+secuencia de adopción. Las pruebas reales de host y demás evidencias operativas
+siguen determinadas por el DoD de la issue; esta lectura selectiva no las rebaja.
 
 ## Non-negotiable ownership boundary
 
