@@ -57,35 +57,37 @@ Los harnesses Node que ejecutan `dialog.html` cargan los scripts reales en
 orden de diálogo mediante `test/js/support/dialog_scripts.js` — nunca copies
 el contenido de un módulo dentro del test.
 
-## Mandatory reading
+## Lectura por tarea
 
-Before implementation, read:
+Empieza por la issue aprobada, sus criterios/exclusiones y los prerrequisitos
+confirmados. Después lee el módulo y la prueba focal de la tabla inicial y sólo
+los contratos aplicables abajo. Esto sustituye la lectura obligatoria de todos
+los documentos antes de cualquier cambio; no rebaja las invariantes ni la
+evidencia que exige el DoD.
 
-1. `../../docs/architecture/sketchup-designer-workflow.md`;
-2. `../../docs/architecture/sketchup-plugin-excellence.md`;
-3. `../../docs/architecture/sketchup-backend-web-integration-excellence.md`;
-4. `../../docs/architecture/sketchup-authoring-interaction-contract.md`;
-5. `../../docs/sketchup-excellence-execution-plan.md`;
-6. `../../docs/architecture/sketchup-interaction-model.md`;
-7. `../../docs/architecture/sketchup-native-entity-model.md` + ADR-0004;
-8. `../../docs/sketchup-manufacturing-contract.md` + ADR-0001;
-9. the exact GitHub issue and all hard prerequisites/comments.
+| Cambio | Lee primero | Amplía sólo si… |
+| --- | --- | --- |
+| JS/HtmlDialog | fila JS + módulo + prueba focal | cambian bootstrap/estado compartido: #498 y contrato de interacción |
+| Bridge/callback Ruby | bridge dueño + prueba focal | cambia mutación, rollback o coordinación: `../../docs/architecture/sketchup-authoring-interaction-contract.md` |
+| Placement/preview/snapping | bridge/tool/environment dueños + prueba focal | cambia semántica de interacción: `../../docs/architecture/sketchup-designer-workflow.md` |
+| Entidad nativa/metadata/undo | `../../docs/architecture/sketchup-authoring-interaction-contract.md` + `../../docs/architecture/sketchup-native-entity-model.md` + prueba focal | cambia ownership o fabricación: añade contrato de manufactura y `sketchup-plugin-excellence.md` |
+| Project/Design/sync/publicación | bridge/conexión dueños + `../../docs/architecture/sketchup-backend-web-integration-excellence.md` + Digital Thread/ADR-0003 | cambia identidad, revisiones o API: #384/#496 y contrato generado |
+| Catálogo/parámetros/materiales | módulo + prueba focal; `material-aware-furniture-resolution.md` si aplica | cambia schema o autoridad de resolución: #496 + fuente canónica del dominio |
+| Herrajes/juntas/mecanizado/máquinas | `manufacturing-feature-model.md` + contrato de manufactura + prueba focal | cambia representación nativa o salida: modelo nativo y perfiles/adapters |
+| Auth/pairing/soporte | código dueño + contrato de integración + #460/#499 o #504 según el caso | cambia capability, expiración, revocación, privacidad o límites de confianza |
+| Cambio transversal | contratos de cada superficie afectada | la issue exige integración Go/API/React/SketchUp o evidencia V2 |
 
-Additional routing:
+Los números de issues son pistas de navegación, no prueba de estado actual:
+comprueba GitHub cuando importe. Rutas útiles: #496/#448/#477 (API); #498/#474
+(runtime/host); #497/#483/#486 (catálogo); #384/ADR-0003 (Project/Design);
+#388/#499 (pairing); #396/#500–#502 (workspace); #460 (sesiones); #461/#504
+(diagnóstico); #469 (placement); #784/#471 (defaults/Inspector); #402–#405
+(materiales); #350/#356 (relaciones/mecanizado); #348/#351–#355/#503 (máquinas).
 
-- generated furniture/API/schema work: #496 + #448/#477;
-- shared HtmlDialog/host mutation/degraded-state work: #498 + #474;
-- typed parameter/catalog administration integration: #497 + #483/#486;
-- Project/Design identity, revisions, copy/adoption or publish: #384 + ADR-0003;
-- secure Web-to-SketchUp handoff/model binding: #388 + #499;
-- React Project/Design workspace: #396 and its children #500–#502;
-- auth/session/media/client credentials: #460;
-- audit/request/trace/support diagnostics: #461 + #504;
-- placement/semantic anchors/snapping/repeat: #469 + `sketchup-designer-workflow.md`;
-- Design defaults/inheritance/contextual no-selection Inspector: #784 + #471;
-- materials/thickness: `material-aware-furniture-resolution.md` and #402–#405;
-- relationships/hardware/machining: #356/#350 and `manufacturing-feature-model.md`;
-- machine output/evidence: #348/#351–#355 and #503.
+Lee `../../docs/sketchup-excellence-execution-plan.md` sólo si la issue continúa
+una fase de ese plan o afecta su secuencia. La lectura selectiva no rebaja los
+requisitos de TestUp/host real, browser, PostgreSQL o máquina cuando el DoD los
+exige.
 
 ## Non-negotiable ownership boundary
 

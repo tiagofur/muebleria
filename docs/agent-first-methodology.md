@@ -1,8 +1,20 @@
 # Metodología Agent-First: organizar el repo para que el primer lector sea un agente
 
-**Estado:** propuesta ratificable por el owner (2026-09-29). Destilada de lo
-que Granete ya ejecutó (split del plugin SketchUp + contrato G-ODD) y anclada
-en evidencia externa; es teoría + reglas + plan de adopción, no toca código.
+**Estado global:** propuesta ratificable por el owner (2026-09-29). Destilada
+de lo que Granete ya ejecutó (split del plugin SketchUp + contrato G-ODD) y
+anclada en evidencia externa; es teoría + reglas + plan de adopción, no toca
+código. La propuesta completa no debe tratarse como política aprobada en bloque.
+
+**Adopción por regla:** otros documentos pueden declarar una regla específica
+como operativa (por ejemplo, la extracción incremental de `backend-go/AGENTS.md`
+§ Presupuestos y reglas de estructura). Esa declaración sólo aplica a la regla y
+al ámbito que indique; no ratifica automáticamente todos los principios,
+presupuestos o fases de esta metodología. Cuando una regla dependa de una
+decisión del owner, conserva la referencia verificable a esa decisión en la
+fuente operativa. Si falta o hay conflicto sobre su alcance, no infieras una
+aprobación más amplia: registra la discrepancia y pide aclaración antes de
+convertir la propuesta general en requisito.
+
 El primer caso de aplicación formal es
 `docs/backend-agent-first-refactor-plan-2026-09-27.md` (pendiente de issue).
 
