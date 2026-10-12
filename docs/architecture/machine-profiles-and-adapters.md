@@ -55,7 +55,7 @@ Reglas:
 - **Versiones de software distintas ⇒ perfiles distintos.** Cambiar la versión
   del control publica una nueva revisión del perfil; nunca se reinterpreta
   silenciosamente.
-- **Un adapter nuevo no modifica cálculos.** Conformance ADR-0001: consume
+- **Un adapter nuevo no modifica cálculos.** Conformance [ADR-0001](../adr/0001-sketchup-authoring-granete-manufacturing-truth.md): consume
   DTOs resueltos; paridad vía contract fixtures compartidos si una regla
   viviera en TS y Go.
 - **El digest no hashea archivos fuente completos.** Se vincula a un descriptor
@@ -185,7 +185,7 @@ registran como PASS por exclusión.
 
 - Contract §10/§11/§12: `docs/sketchup-manufacturing-contract.md`
 - Preflight: `packages/domain/src/sketchupPreflight.ts` (F168)
-- ADR-0001, ADR-0002; `docs/architecture.md` §6/§7
+- [ADR-0001](../adr/0001-sketchup-authoring-granete-manufacturing-truth.md), [ADR-0002](../adr/0002-parametric-furniture-library-architecture.md); [`docs/architecture.md`](../architecture.md) §6/§7
 - Issues: #290, #347, #348, #351, #352/#353, #354, #591, #650
 - Ledger histórico: F130 (DXF capas), F132 (SCM nativo), F168
 - [Dossier PTX/CAD4](../machines/ptx-cadmatic4/README.md)

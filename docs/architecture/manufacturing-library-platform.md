@@ -2,6 +2,8 @@
 
 > Status: **Canonical target architecture**
 >
+> Decision record: [ADR-0008](../adr/0008-manufacturing-library-releases-overlays-and-local-store.md)
+>
 > Scope: Granete-managed manufacturing libraries, organization-specific manufacturing overlays, immutable releases, distribution to SketchUp, local persistent library storage, update/rebase rules, and project pinning.
 >
 > This document does **not** create a second furniture/catalog domain. It composes and distributes the canonical definitions already owned by the catalog, hardware/material, resolver, and 3D asset domains.

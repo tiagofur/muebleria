@@ -1,12 +1,15 @@
 # Smart Parametric Furniture Library Architecture
 
+> **Status:** CANONICAL TARGET  
+> **Date:** 2026-08-24  
+> **Decision record:** [ADR-0002](../adr/0002-parametric-furniture-library-architecture.md)  
+> **Core Architectural Invariant:**  
+> Granete is not a fixed cabinet catalog. It is an open furniture composition and manufacturing platform.  
+> SketchUp / 3D Clients own authoring and visual interaction; Granete owns manufacturing truth, parametric resolution, and preflight gating.
+
 ## 1. Executive Summary & Architectural Invariant
 
-This document establishes the canonical architecture for the **Smart Parametric Furniture Library** in Granete. 
-
-### Core Architectural Invariant
-> **Granete is not a fixed cabinet catalog. It is an open furniture composition and manufacturing platform.**
-> **SketchUp / 3D Clients own authoring and visual interaction; Granete owns manufacturing truth, parametric resolution, and preflight gating.**
+This document establishes the canonical architecture for the **Smart Parametric Furniture Library** in Granete.
 
 A furniture library must never be coupled to a specific category (such as "Cabinet") or hardcoded geometry fields (`doorCount`, `shelfCount`, `drawerCount`). Instead, every piece of furniture—whether a kitchen base unit, wall cabinet, wardrobe/closet tower, executive desk, bathroom vanity, or modular bookcase—is an instance of a generic, versioned parametric template composed of decoupled domain entities.
 

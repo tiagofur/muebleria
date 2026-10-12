@@ -19,7 +19,7 @@ Referencia de preparación: `main@b5697951021f6484cf3e71161ec396ff6f434194`. La 
 | #356 y `sketchupRelationshipMachining.ts`: relaciones, instancias y machining derivado; rama específica `shelf-support` | No demuestran un motor general de todos los contactos |
 | `jointDrillingRules.ts`, `partDrillingResolver.ts`, `projectDrilling.ts` | Existen caminos particulares/fallbacks; hay que trazar consumidores, no añadir un tercero |
 | `backend-go/internal/domain/engine/authoring_machining.go` | La paridad de un ejemplo no certifica una receta industrial real |
-| #772/#773/#775 y ADR-0008 | Arquitectura de releases/overlays; verificar qué está integrado, no declararla completa por existir documentos |
+| #772/#773/#775 y [ADR-0008](../adr/0008-manufacturing-library-releases-overlays-and-local-store.md) | Arquitectura de releases/overlays; verificar qué está integrado, no declararla completa por existir documentos |
 | #676 | Corrección acotada de proyección e integridad DXF; no homologa CNC |
 
 Fuentes de código: [resolvedor TS](../../packages/domain/src/sketchupRelationshipMachining.ts), [reglas](../../packages/domain/src/jointDrillingRules.ts), [assembler](../../packages/domain/src/projectDrilling.ts), [resolvedor Go](../../backend-go/internal/domain/engine/authoring_machining.go). No se reabren #356/#347 ni se reescriben sus pruebas históricas por planificar esta extensión.

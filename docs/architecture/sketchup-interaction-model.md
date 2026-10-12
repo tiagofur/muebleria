@@ -2,7 +2,7 @@
 
 > **Estado:** CANÓNICO  
 > **Fecha:** 2026-08-26  
-> **ADR relacionados:** [ADR-0001](../adr/0001-sketchup-manufacturing-ownership.md), [ADR-0002](../adr/0002-parametric-furniture-library-architecture.md), [ADR-0004](../adr/0004-sketchup-native-component-entity-model.md)  
+> **ADR relacionados:** [ADR-0001](../adr/0001-sketchup-authoring-granete-manufacturing-truth.md), [ADR-0002](../adr/0002-parametric-furniture-library-architecture.md), [ADR-0004](../adr/0004-sketchup-native-component-entity-model.md)  
 > **Host representation:** [sketchup-native-entity-model.md](sketchup-native-entity-model.md)  
 > **Resolución Material-Aware:** [material-aware-furniture-resolution.md](material-aware-furniture-resolution.md)  
 > **Digital Thread:** [project-design-digital-thread.md](project-design-digital-thread.md)  

@@ -3,9 +3,8 @@
 - **Status:** Proposed canonical contract
 - **Date:** 2026-08-28
 - **Program:** #446
-- **Architecture issue:** #447
-- **Decision record:** `docs/adr/0006-membership-lifecycle-and-organization-relationships.md`
-- **Extends:** ADR-0005 and `docs/multi-organization-distribution-model.md`
+- **Decision record:** [ADR-0006](../adr/0006-membership-lifecycle-and-organization-relationships.md)
+- **Extends:** [ADR-0005](../adr/0005-multi-organization-tenancy.md), [ADR-0007](../adr/0007-bounded-revocable-sessions-and-client-credentials.md) and [`docs/multi-organization-distribution-model.md`](../multi-organization-distribution-model.md)
 
 > This document is the canonical architecture and implementation contract for
 > Users, Memberships, Organizations, tenant isolation and the Sales Network.

@@ -4,7 +4,7 @@
 > **Fecha:** 2026-08-26  
 > **Tracking:** #413, #414, #415, #416, #417, #418  
 > **Programas relacionados:** #290 (Granete for SketchUp), #384 (Project Digital Thread), #401 (material-aware resolution)  
-> **ADR:** `docs/adr/0004-sketchup-native-component-entity-model.md`  
+> **ADR:** [ADR-0004](../adr/0004-sketchup-native-component-entity-model.md)  
 > **Invariante central:** **Granete owns business/manufacturing truth and contract identities; SketchUp owns authoring interaction and native host representation.**
 
 ---
