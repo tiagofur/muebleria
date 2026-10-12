@@ -27,13 +27,17 @@ import (
 // a future extension never collides with a v1 payload.
 const ReleaseRoutingProgramContract = "granete.release-manufacturing-program.v1"
 
-// Neutral operation intents. DRILL is the neutral manufacturing intent; the
-// physical execution vocabulary maps it to the existing "cnc" station
-// operation at derivation time (domain part execution), never here.
+// Neutral operation intents. DRILL and ROUTE are the neutral manufacturing
+// intents; the physical execution vocabulary maps them to the existing "cnc"
+// station operation at derivation time (domain part execution), never here.
+// ROUTE (#1302 / §13.3) is the material-removal intent of the opening's
+// resolved side notches — representation only until a machine profile
+// evidences routing capability (adapters refuse, never approximate).
 const (
 	ReleaseRoutingOperationCut      = "cut"
 	ReleaseRoutingOperationEdgeBand = "edge_banding"
 	ReleaseRoutingOperationDrill    = "drill"
+	ReleaseRoutingOperationRoute    = "route"
 )
 
 // ReleaseRoutingHole is one frozen board-local machining feature (#477
@@ -47,13 +51,23 @@ type ReleaseRoutingHole struct {
 	Type       string  `json:"type"`
 }
 
+// ReleaseRoutingCut is one frozen board-local material-removal box
+// (#1302 / §13.3 ResolveRoutingCut parity): the resolved notch subtraction in
+// the host part's local frame, never a recomputation.
+type ReleaseRoutingCut struct {
+	StartMm [3]float64 `json:"startMm"`
+	SizeMm  [3]float64 `json:"sizeMm"`
+}
+
 // ReleaseRoutingOperation is one frozen machining operation with the exact
-// provenance the #477 resolver derived it from.
+// provenance the #477 resolver derived it from. Exactly one payload is
+// non-empty: DRILL carries holes, ROUTE carries cuts.
 type ReleaseRoutingOperation struct {
 	OperationID string                      `json:"operationId"`
 	Provenance  ResolvedMachiningProvenance `json:"provenance"`
 	Operation   string                      `json:"operation"`
 	Holes       []ReleaseRoutingHole        `json:"holes"`
+	Routing     []ReleaseRoutingCut         `json:"routing,omitempty"`
 }
 
 // ReleaseRoutingPart is the frozen routing evidence of ONE released part.
@@ -194,24 +208,9 @@ func deriveReleaseRoutingUnit(item domain.DesignRevisionItem, unit ResolvedRelea
 		}
 	}
 
-	operationsByHost := make(map[string][]ReleaseRoutingOperation, len(resolved.Machining.Operations))
-	for _, operation := range resolved.Machining.Operations {
-		if len(operation.Holes) == 0 {
-			continue
-		}
-		holes := make([]ReleaseRoutingHole, 0, len(operation.Holes))
-		for _, hole := range operation.Holes {
-			holes = append(holes, ReleaseRoutingHole{
-				Face: hole.Face, XMm: hole.XMm, YMm: hole.YMm,
-				DiameterMm: hole.DiameterMm, DepthMm: hole.DepthMm, Type: hole.Type,
-			})
-		}
-		operationsByHost[operation.HostComponentInstanceID] = append(operationsByHost[operation.HostComponentInstanceID], ReleaseRoutingOperation{
-			OperationID: operation.OperationID,
-			Provenance:  operation.Provenance,
-			Operation:   ReleaseRoutingOperationDrill,
-			Holes:       holes,
-		})
+	operationsByHost, err := releaseRoutingOperationsFromResolved(resolved.Machining.Operations)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	parts := make([]ReleaseRoutingPart, 0, len(unit.BOM.BoardParts))
@@ -280,6 +279,51 @@ func releaseUnitLayoutDims(module domain.Module, item domain.DesignRevisionItem)
 		}
 	}
 	return dims, nil
+}
+
+// releaseRoutingOperationsFromResolved freezes the authoritative authoring
+// machining operations into the neutral program vocabulary: a drilling
+// operation (holes) freezes DRILL, a routing operation (cuts, #1302/§13.3)
+// freezes ROUTE with the SAME resolved boxes. An operation with neither
+// payload never freezes an intent — it is skipped exactly like the
+// historical empty-hole skip (relationship resolutions may legitimately
+// derive zero holes); a dual-payload operation is ambiguous and errors.
+func releaseRoutingOperationsFromResolved(operations []ResolvedMachiningOperation) (map[string][]ReleaseRoutingOperation, error) {
+	operationsByHost := make(map[string][]ReleaseRoutingOperation, len(operations))
+	for _, operation := range operations {
+		switch {
+		case len(operation.Holes) > 0 && len(operation.Routing) > 0:
+			return nil, fmt.Errorf("machining operation %s carries both holes and routing cuts", operation.OperationID)
+		case len(operation.Holes) == 0 && len(operation.Routing) == 0:
+			continue
+		case len(operation.Holes) > 0:
+			holes := make([]ReleaseRoutingHole, 0, len(operation.Holes))
+			for _, hole := range operation.Holes {
+				holes = append(holes, ReleaseRoutingHole{
+					Face: hole.Face, XMm: hole.XMm, YMm: hole.YMm,
+					DiameterMm: hole.DiameterMm, DepthMm: hole.DepthMm, Type: hole.Type,
+				})
+			}
+			operationsByHost[operation.HostComponentInstanceID] = append(operationsByHost[operation.HostComponentInstanceID], ReleaseRoutingOperation{
+				OperationID: operation.OperationID,
+				Provenance:  operation.Provenance,
+				Operation:   ReleaseRoutingOperationDrill,
+				Holes:       holes,
+			})
+		case len(operation.Routing) > 0:
+			cuts := make([]ReleaseRoutingCut, 0, len(operation.Routing))
+			for _, cut := range operation.Routing {
+				cuts = append(cuts, ReleaseRoutingCut{StartMm: cut.StartMm, SizeMm: cut.SizeMm})
+			}
+			operationsByHost[operation.HostComponentInstanceID] = append(operationsByHost[operation.HostComponentInstanceID], ReleaseRoutingOperation{
+				OperationID: operation.OperationID,
+				Provenance:  operation.Provenance,
+				Operation:   ReleaseRoutingOperationRoute,
+				Routing:     cuts,
+			})
+		}
+	}
+	return operationsByHost, nil
 }
 
 // ValidateReleaseRoutingProgram is the fail-closed structural validation every
@@ -351,24 +395,49 @@ func ValidateReleaseRoutingProgram(program *ReleaseRoutingProgram, units []Resol
 					return fmt.Errorf("routing operation %s appears more than once", operation.OperationID)
 				}
 				seenOperations[operation.OperationID] = true
-				if operation.Operation != ReleaseRoutingOperationDrill {
+				switch operation.Operation {
+				case ReleaseRoutingOperationDrill:
+					if len(operation.Holes) == 0 {
+						return fmt.Errorf("drilling operation %s freezes no holes", operation.OperationID)
+					}
+					if len(operation.Routing) > 0 {
+						return fmt.Errorf("drilling operation %s must not carry routing cuts", operation.OperationID)
+					}
+					for _, hole := range operation.Holes {
+						if strings.TrimSpace(hole.Face) == "" || strings.TrimSpace(hole.Type) == "" {
+							return fmt.Errorf("routing operation %s freezes a hole without face or type", operation.OperationID)
+						}
+						if !(hole.DiameterMm > 0) || !(hole.DepthMm > 0) {
+							return fmt.Errorf("routing operation %s freezes a hole without positive diameter/depth", operation.OperationID)
+						}
+					}
+				case ReleaseRoutingOperationRoute:
+					// #1302 / §13.3: a frozen routing operation IS the resolved
+					// subtraction box — positive extents and an opening-profile
+					// provenance that names the definition it came from.
+					if len(operation.Routing) == 0 {
+						return fmt.Errorf("routing operation %s freezes no cuts", operation.OperationID)
+					}
+					if len(operation.Holes) > 0 {
+						return fmt.Errorf("routing operation %s must not carry holes", operation.OperationID)
+					}
+					if operation.Provenance.SourceKind != "openingProfile" {
+						return fmt.Errorf("routing operation %s carries provenance %q; routing freezes only openingProfile provenance", operation.OperationID, operation.Provenance.SourceKind)
+					}
+					for _, cut := range operation.Routing {
+						for _, extent := range cut.SizeMm {
+							if !(extent > 0) {
+								return fmt.Errorf("routing operation %s freezes a cut without positive extents", operation.OperationID)
+							}
+						}
+					}
+				default:
 					return fmt.Errorf("routing operation %s carries unknown neutral intent %q", operation.OperationID, operation.Operation)
 				}
 				switch operation.Provenance.SourceKind {
-				case "relationship", "manualHardwarePlacement":
+				case "relationship", "manualHardwarePlacement", "openingProfile":
 				default:
 					return fmt.Errorf("routing operation %s carries unknown provenance %q", operation.OperationID, operation.Provenance.SourceKind)
-				}
-				if len(operation.Holes) == 0 {
-					return fmt.Errorf("routing operation %s freezes no holes", operation.OperationID)
-				}
-				for _, hole := range operation.Holes {
-					if strings.TrimSpace(hole.Face) == "" || strings.TrimSpace(hole.Type) == "" {
-						return fmt.Errorf("routing operation %s freezes a hole without face or type", operation.OperationID)
-					}
-					if !(hole.DiameterMm > 0) || !(hole.DepthMm > 0) {
-						return fmt.Errorf("routing operation %s freezes a hole without positive diameter/depth", operation.OperationID)
-					}
 				}
 			}
 		}

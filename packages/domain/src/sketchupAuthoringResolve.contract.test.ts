@@ -735,3 +735,40 @@ describe('authoringResolveFingerprint joinery statuses (J1-B)', () => {
     expect(ordered).not.toBe(a);
   });
 });
+
+describe('authoringResolveFingerprint routing cuts (#1302/§13.3)', () => {
+  const boards = [{ id: 'side', defId: 'd1', role: 'lateral', lengthMm: 720, widthMm: 560, thicknessMm: 18 }];
+  const drillOp = {
+    operationId: 'side:hw-1',
+    hostComponentInstanceId: 'side',
+    provenance: { sourceKind: 'manualHardwarePlacement', hardwarePlacementId: 'hp-1' },
+    holes: [{ face: 'front', xMm: 9, yMm: 100, diameterMm: 8, depthMm: 12, type: 'dowel' }],
+  };
+  const routeOp = {
+    operationId: 'side:notch-0',
+    hostComponentInstanceId: 'side',
+    provenance: { sourceKind: 'openingProfile', openingProfileId: 'prof-8006', boundary: 'top' },
+    holes: [],
+    routing: [{ startMm: [0, 532.8, 663.5] as [number, number, number], sizeMm: [18, 27.2, 56.5] as [number, number, number] }],
+  };
+  const fingerprint = (operations: readonly unknown[]) =>
+    authoringResolveFingerprint({
+      boards, manualPlacements: [], derivedHardwarePlacements: [],
+      operations: operations as never,
+    });
+
+  test('an absent routing key and an explicit empty array hash identically (Go parity)', () => {
+    const withoutKey = fingerprint([drillOp]);
+    const withEmptyKey = fingerprint([{ ...drillOp, routing: [] }]);
+    expect(withEmptyKey).toBe(withoutKey);
+  });
+
+  test('a routing cut moves the hash and is deterministic', () => {
+    const withRoute = fingerprint([drillOp, routeOp]);
+    const again = fingerprint([drillOp, { ...routeOp, routing: [{ startMm: [0, 532.8, 663.5] as [number, number, number], sizeMm: [18, 27.2, 56.5] as [number, number, number] }] }]);
+    expect(withRoute).not.toBe(fingerprint([drillOp]));
+    expect(again).toBe(withRoute);
+    const moved = fingerprint([drillOp, { ...routeOp, routing: [{ startMm: [0, 532.8, 660] as [number, number, number], sizeMm: [18, 27.2, 56.5] as [number, number, number] }] }]);
+    expect(moved).not.toBe(withRoute);
+  });
+});

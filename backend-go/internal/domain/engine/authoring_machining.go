@@ -118,11 +118,23 @@ type ResolveHole struct {
 	Type       string  `json:"type"`
 }
 
+// ResolveRoutingCut is one board-local material-removal box of a routing
+// operation (#1302 / §13.3): the EXACT subtraction box the resolved layout
+// already carries (LayoutNotch StartMm/SizeMm in the host board's local
+// frame) — never a recomputation. The box is machine-neutral: adapters and
+// machine profiles decide representability from their OWN evidenced
+// capabilities, and an unsupported machine refuses instead of approximating.
+type ResolveRoutingCut struct {
+	StartMm [3]float64 `json:"startMm"`
+	SizeMm  [3]float64 `json:"sizeMm"`
+}
+
 // ResolvedMachiningProvenance carries exactly one source variant
-// (relationship | manualHardwarePlacement); the wire shape matches the TS
-// discriminated union of the same name. Recipe operations pin the versioned
-// technical identity (#874 J2-B): a recipe or profile revision bump moves
-// the manufacturing fingerprint even when the geometry is identical.
+// (relationship | manualHardwarePlacement | openingProfile); the wire shape
+// matches the TS discriminated union of the same name. Recipe operations pin
+// the versioned technical identity (#874 J2-B): a recipe or profile revision
+// bump moves the manufacturing fingerprint even when the geometry is
+// identical.
 type ResolvedMachiningProvenance struct {
 	SourceKind               string `json:"sourceKind"`
 	RelationshipID           string `json:"relationshipId,omitempty"`
@@ -132,6 +144,11 @@ type ResolvedMachiningProvenance struct {
 	TechnicalProfileID       string `json:"technicalProfileId,omitempty"`
 	TechnicalProfileRevision string `json:"technicalProfileRevision,omitempty"`
 	HardwarePlacementID      string `json:"hardwarePlacementId,omitempty"`
+	// OpeningProfile provenance (#1302 / §13.3): the pinned opening profile
+	// and grip boundary the routing cut derives from, so a frozen routing
+	// program can always name the profile definition it came from.
+	OpeningProfileID string `json:"openingProfileId,omitempty"`
+	Boundary         string `json:"boundary,omitempty"`
 }
 
 func (p ResolvedMachiningProvenance) canonical() map[string]any {
@@ -157,16 +174,25 @@ func (p ResolvedMachiningProvenance) canonical() map[string]any {
 	if p.HardwarePlacementID != "" {
 		m["hardwarePlacementId"] = p.HardwarePlacementID
 	}
+	if p.OpeningProfileID != "" {
+		m["openingProfileId"] = p.OpeningProfileID
+	}
+	if p.Boundary != "" {
+		m["boundary"] = p.Boundary
+	}
 	return m
 }
 
 // ResolvedMachiningOperation is one derived machining operation with the
-// board-local detail the host piece drills.
+// board-local detail the host piece drills (Holes) or routes (Routing).
+// Exactly one payload is non-empty: a drilling operation carries holes, a
+// routing operation carries cuts (#1302 / §13.3).
 type ResolvedMachiningOperation struct {
 	OperationID             string                      `json:"operationId"`
 	HostComponentInstanceID string                      `json:"hostComponentInstanceId"`
 	Provenance              ResolvedMachiningProvenance `json:"provenance"`
 	Holes                   []ResolveHole               `json:"holes"`
+	Routing                 []ResolveRoutingCut         `json:"routing,omitempty"`
 }
 
 // DerivedHardwarePlacement mirrors the TS type: a hardware placement whose
@@ -397,6 +423,15 @@ func deriveAuthoringMachining(
 	for _, placement := range placements {
 		deriveManualPlacementMachining(placement, catalog, &operations, &issues)
 	}
+	// #1302 / §13.3: the opening's declared side notches become routing
+	// operations derived from the SAME resolved subtraction boxes the visible
+	// geometry consumes — one definition, never a second geometric
+	// derivation. The operation is representation only: machine output
+	// selection still refuses a machine whose evidenced capabilities cannot
+	// express routing (§13.3 fail-closed), and the #1302 release gate keeps
+	// opening designs from freezing a production release until the release
+	// resolve consumes the opening.
+	deriveOpeningNotchOperations(boards, &operations)
 
 	detectHoleCollisions(operations, &issues)
 	joineryStatuses = reconcileJoineryStatusesWithCollisions(joineryStatuses, operations, issues)
@@ -406,6 +441,29 @@ func deriveAuthoringMachining(
 		DerivedHardwarePlacements: derived,
 		JoineryStatuses:           joineryStatuses,
 	}, issues
+}
+
+// deriveOpeningNotchOperations emits one routing operation per resolved side
+// notch (#1302 / §13.3): the cut IS the resolved LayoutNotch box (local min
+// corner + extents), the host is the notched board and the provenance names
+// the opening profile and grip boundary. Board and notch order are the
+// resolver's deterministic order, so the operation ids and the manufacturing
+// fingerprint are stable across repeated resolves.
+func deriveOpeningNotchOperations(boards []layoutBoard, operations *[]ResolvedMachiningOperation) {
+	for i := range boards {
+		for n, notch := range boards[i].notches {
+			*operations = append(*operations, ResolvedMachiningOperation{
+				OperationID:             fmt.Sprintf("%s:notch-%d", boards[i].id, n),
+				HostComponentInstanceID: boards[i].id,
+				Provenance: ResolvedMachiningProvenance{
+					SourceKind:       "openingProfile",
+					OpeningProfileID: notch.ProfileID,
+					Boundary:         notch.Boundary,
+				},
+				Routing: []ResolveRoutingCut{{StartMm: notch.StartMm, SizeMm: notch.SizeMm}},
+			})
+		}
+	}
 }
 
 func deriveRelationshipOperations(
@@ -740,13 +798,24 @@ func authoringManufacturingFingerprint(
 				"diameterMm": h.DiameterMm, "depthMm": h.DepthMm, "type": h.Type,
 			})
 		}
+		// Routing cuts (#1302 / §13.3) join the manufacturing identity: a
+		// moved/resized/notched board must move the fingerprint even before
+		// any machine can represent the operation.
+		routing := make([]any, 0, len(o.Routing))
+		for _, c := range o.Routing {
+			routing = append(routing, map[string]any{
+				"startMm": []any{c.StartMm[0], c.StartMm[1], c.StartMm[2]},
+				"sizeMm":  []any{c.SizeMm[0], c.SizeMm[1], c.SizeMm[2]},
+			})
+		}
 		operationCanonical = append(operationCanonical, map[string]any{
 			"sort": o.OperationID,
 			"body": map[string]any{
-				"id":    o.OperationID,
-				"host":  o.HostComponentInstanceID,
-				"prov":  o.Provenance.canonical(),
-				"holes": holes,
+				"id":      o.OperationID,
+				"host":    o.HostComponentInstanceID,
+				"prov":    o.Provenance.canonical(),
+				"holes":   holes,
+				"routing": routing,
 			},
 		})
 	}

@@ -94,15 +94,46 @@ export interface ResolvedCuttingJob {
   readonly manufacturingLabels?: ManufacturingLabelProjection;
 }
 
+/**
+ * One board-local material-removal box (#1302 / §13.3): the resolved side
+ * notch subtraction in the host part's local frame — start is the local min
+ * corner, size the positive extents. It IS the resolved geometry, never a
+ * recomputation.
+ */
+export interface RoutingCutDefinition {
+  readonly startMm: readonly [number, number, number];
+  readonly sizeMm: readonly [number, number, number];
+}
+
+/** One part's frozen routing cuts with the opening provenance they derive from. */
+export interface PartRoutingPattern {
+  readonly pieceCode: string;
+  readonly cuts: readonly RoutingCutDefinition[];
+  readonly openingProfileId?: string;
+  readonly boundary?: string;
+}
+
+/**
+ * Routing section of a machining job (#1302 / §13.3). Present only when the
+ * resolved/frozen model carries routing cuts; adapters decide
+ * representability from their OWN evidenced capabilities and refuse — never
+ * approximate or invent.
+ */
+export interface ProjectRoutingData {
+  readonly schema: 'muebles.routing-data.v1';
+  readonly patterns: readonly PartRoutingPattern[];
+}
+
 export interface ResolvedMachiningJob {
   readonly jobId: string;
   readonly provenance: ManufacturingJobProvenance;
   /**
-   * Drilling-only today (HoleDefinition faces/diameters/depths). Grooves and
-   * routing are NOT_REPRESENTED by the current resolved model; when they are,
-   * they extend this job — adapters must never invent them.
+   * Drilling (HoleDefinition faces/diameters/depths). #1302/§13.3 adds the
+   * resolved model's routing cuts as `routing`; adapters must never invent
+   * them and never serialize a routing cut into a hole.
    */
   readonly drilling: ProjectDrillingData;
+  readonly routing?: ProjectRoutingData;
 }
 
 // ---------------------------------------------------------------------------

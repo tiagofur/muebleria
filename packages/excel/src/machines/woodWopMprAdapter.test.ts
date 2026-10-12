@@ -100,3 +100,48 @@ describe('WOODWOP_MPR_POSTPROCESSOR_ADAPTER (serializer B2, #879)', () => {
     );
   });
 });
+
+describe('routing cuts refuse explicitly (#1302/§13.3)', () => {
+  const jobWithRouting = () => {
+    const job = buildFixtureMachiningJob();
+    return {
+      ...job,
+      routing: {
+        schema: 'muebles.routing-data.v1' as const,
+        patterns: [
+          {
+            pieceCode: 'fixture-module-m.fixture-panel-001',
+            cuts: [
+              { startMm: [0, 382, 543.5] as [number, number, number], sizeMm: [18, 27.2, 56.5] as [number, number, number] },
+            ],
+            openingProfileId: 'prof-8006',
+            boundary: 'top',
+          },
+        ],
+      },
+    };
+  };
+
+  it('canSerialize answers OPERATION_NOT_REPRESENTABLE: evidenced operationMacros carry drilling only', () => {
+    const readiness = WOODWOP_MPR_POSTPROCESSOR_ADAPTER.canSerialize(jobWithRouting(), MPR_WOODWOP_PROFILE);
+    expect(readiness.ready).toBe(false);
+    const routingReasons = readiness.reasons.filter(
+      (reason) => reason.code === 'OPERATION_NOT_REPRESENTABLE' && reason.detail.includes('routing cut'),
+    );
+    expect(routingReasons).toHaveLength(1);
+    expect(routingReasons[0]?.dimension).toBe('operationMacros');
+    expect(routingReasons[0]?.detail).toContain('refusing instead of dropping');
+  });
+
+  it('serialize throws AdapterSerializationBlocked instead of serializing routing as drilling', () => {
+    expect(() => WOODWOP_MPR_POSTPROCESSOR_ADAPTER.serialize(jobWithRouting(), MPR_WOODWOP_PROFILE)).toThrow(
+      AdapterSerializationBlocked,
+    );
+  });
+
+  it('serializeMprPerPiece refuses too', () => {
+    expect(() => serializeMprPerPiece(jobWithRouting(), MPR_WOODWOP_PROFILE)).toThrow(
+      AdapterSerializationBlocked,
+    );
+  });
+});

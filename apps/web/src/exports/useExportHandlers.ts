@@ -507,7 +507,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
             );
           }
           if (frozen) {
-            drilling = composeFrozenDrilling(project, frozen, resolved).patterns;
+            drilling = composeFrozenDrilling(project, frozen, resolved).drilling.patterns;
           }
         }
         await downloadCutPlanDxf(cutPlan, variant, undefined, undefined, { drilling });
@@ -640,7 +640,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
             `No se puede exportar KDT: ${resolutionIssue.message} Revise el ítem ${resolutionIssue.projectItemId}.`,
           );
         }
-        const drilling = composeFrozenDrilling(project, frozen, resolved);
+        const composed = composeFrozenDrilling(project, frozen, resolved);
         const machiningJob: import('@granete/domain').ResolvedMachiningJob = {
           jobId: `${project.id}--kdt`,
           provenance: {
@@ -649,7 +649,10 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
             productionReleaseId: frozen.releaseId,
             bomFingerprint: frozen.manufacturingFingerprint,
           },
-          drilling,
+          drilling: composed.drilling,
+          // #1302/§13.3: frozen routing cuts ride the job so the adapter
+          // answers the explicit representability verdict — never dropped here.
+          routing: composed.routing,
         };
         const result: CuttingDownloadResult = await runWithCuttingOutputAuthority(
           machiningOutputSelectionState,

@@ -127,3 +127,48 @@ describe('KDT_POSTPROCESSOR_ADAPTER (serializer K2, #1005)', () => {
     );
   });
 });
+
+describe('routing cuts refuse explicitly (#1302/§13.3)', () => {
+  const jobWithRouting = () => {
+    const job = buildFixtureMachiningJob();
+    return {
+      ...job,
+      routing: {
+        schema: 'muebles.routing-data.v1' as const,
+        patterns: [
+          {
+            pieceCode: 'fixture-module-m.fixture-panel-001',
+            cuts: [
+              { startMm: [0, 382, 543.5] as [number, number, number], sizeMm: [18, 27.2, 56.5] as [number, number, number] },
+            ],
+            openingProfileId: 'prof-8006',
+            boundary: 'top',
+          },
+        ],
+      },
+    };
+  };
+
+  it('canSerialize answers OPERATION_NOT_REPRESENTABLE: evidenced operationTypeNos carry hole TypeNos only', () => {
+    const readiness = KDT_POSTPROCESSOR_ADAPTER.canSerialize(jobWithRouting(), KDT_FLEXDRILL_1200_PROFILE);
+    expect(readiness.ready).toBe(false);
+    const routingReasons = readiness.reasons.filter(
+      (reason) => reason.code === 'OPERATION_NOT_REPRESENTABLE' && reason.detail.includes('routing cut'),
+    );
+    expect(routingReasons).toHaveLength(1);
+    expect(routingReasons[0]?.dimension).toBe('operationTypeNos');
+    expect(routingReasons[0]?.detail).toContain('refusing instead of dropping');
+  });
+
+  it('serialize throws AdapterSerializationBlocked instead of serializing routing as a hole', () => {
+    expect(() => KDT_POSTPROCESSOR_ADAPTER.serialize(jobWithRouting(), KDT_FLEXDRILL_1200_PROFILE)).toThrow(
+      AdapterSerializationBlocked,
+    );
+  });
+
+  it('serializePerPiece refuses too', () => {
+    expect(() => serializePerPiece(jobWithRouting(), KDT_FLEXDRILL_1200_PROFILE)).toThrow(
+      AdapterSerializationBlocked,
+    );
+  });
+});

@@ -1238,6 +1238,28 @@ function validateResolvedMachining(
         problems.push(`${path} contains an invalid hole`);
       }
     }
+    // #1302 / §13.3: a routing operation carries its resolved subtraction
+    // boxes and no holes. Historical relationship/manual operations may carry
+    // zero holes (the wire always allowed it) — only the routing variant
+    // carries the payload guarantee.
+    const routing = operation.routing;
+    if (routing !== undefined && !Array.isArray(routing)) {
+      problems.push(`${path} contains an invalid routing payload`); continue;
+    }
+    const routingCuts = (routing ?? []) as unknown[];
+    if (asRecord(operation.provenance)?.sourceKind === 'openingProfile') {
+      if (operation.holes.length !== 0 || routingCuts.length === 0) {
+        problems.push(`${path} carries a routing payload mismatch`); continue;
+      }
+    }
+    for (const cutValue of routingCuts) {
+      const cut = asRecord(cutValue);
+      if (!cut ||
+        !Array.isArray(cut.startMm) || cut.startMm.length !== 3 || !cut.startMm.every(isFiniteNumber) ||
+        !Array.isArray(cut.sizeMm) || cut.sizeMm.length !== 3 || !cut.sizeMm.every((v) => isFiniteNumber(v) && (v as number) > 0)) {
+        problems.push(`${path} contains an invalid routing cut`);
+      }
+    }
   }
 }
 
@@ -1277,6 +1299,13 @@ function isValidProvenance(value: unknown): boolean {
   }
   if (provenance.sourceKind === 'manualHardwarePlacement') {
     return isBoundedString(provenance.hardwarePlacementId) && provenance.relationshipId === undefined && provenance.catalogRuleId === undefined;
+  }
+  // #1302 / §13.3: routing operations derive from the pinned opening profile
+  // — the provenance names the profile and grip boundary, nothing else.
+  if (provenance.sourceKind === 'openingProfile') {
+    return isBoundedString(provenance.openingProfileId) && isBoundedString(provenance.boundary) &&
+      provenance.relationshipId === undefined && provenance.hardwarePlacementId === undefined &&
+      provenance.technicalProfileId === undefined;
   }
   return false;
 }
@@ -1395,6 +1424,11 @@ export function authoringResolveFingerprint(input: {
     readonly hostComponentInstanceId: string;
     readonly provenance: Record<string, unknown>;
     readonly holes: readonly ResolveHoleV1[];
+    /** Routing cuts (#1302 / §13.3); absent reads as empty (drill-only op). */
+    readonly routing?: readonly {
+      readonly startMm: readonly [number, number, number];
+      readonly sizeMm: readonly [number, number, number];
+    }[];
   }[];
   /** J1-B joinery states (#874); absent leaves the hash byte-identical. */
   readonly joineryStatuses?: readonly FingerprintJoineryStatus[];
@@ -1445,6 +1479,13 @@ export function authoringResolveFingerprint(input: {
         holes: operation.holes.map((hole) => ({
           face: hole.face, xMm: hole.xMm, yMm: hole.yMm,
           diameterMm: hole.diameterMm, depthMm: hole.depthMm, type: hole.type,
+        })),
+        // Mirrors the Go canonical body exactly: the key is ALWAYS present
+        // (empty array for drill-only operations) so the byte-level
+        // Go/TS parity over the shared fixture holds.
+        routing: (operation.routing ?? []).map((cut) => ({
+          startMm: [...cut.startMm],
+          sizeMm: [...cut.sizeMm],
         })),
       },
     }))

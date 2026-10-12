@@ -1199,6 +1199,12 @@ type ManufacturingRoutingOperation struct {
 	Provenance  ManufacturingRoutingProvenance `json:"provenance"`
 	Operation   string                         `json:"operation"`
 	Holes       []ManufacturingRoutingHole     `json:"holes"`
+	RoutingCuts []ManufacturingRoutingCut      `json:"routingCuts,omitempty"`
+}
+
+type ManufacturingRoutingCut struct {
+	StartMm []float64 `json:"startMm"`
+	SizeMm  []float64 `json:"sizeMm"`
 }
 
 type ManufacturingRoutingProvenance struct {
@@ -1210,6 +1216,8 @@ type ManufacturingRoutingProvenance struct {
 	TechnicalProfileId       *string `json:"technicalProfileId,omitempty"`
 	TechnicalProfileRevision *string `json:"technicalProfileRevision,omitempty"`
 	HardwarePlacementId      *string `json:"hardwarePlacementId,omitempty"`
+	OpeningProfileId         *string `json:"openingProfileId,omitempty"`
+	Boundary                 *string `json:"boundary,omitempty"`
 }
 
 type ManufacturingRoutingHole struct {

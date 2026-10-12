@@ -253,14 +253,46 @@ describe('composeFrozenDrilling (#995 export bridge K1)', () => {
   const project = { id: 'proj-1', name: 'Obra' } as never as Project;
 
   it('replaces heuristic holes with the frozen ones and pins the release identity', () => {
-    const data = composeFrozenDrilling(project, frozen(), legacyResolved());
-    expect(data.source).toBe('frozen-release');
-    expect(data.releaseId).toBe('rel-1');
-    expect(data.manufacturingFingerprint).toBe('fp-1');
-    expect(data.totalPiecesCount).toBe(1);
-    expect(data.totalHolesCount).toBe(2);
-    expect(data.patterns[0]?.pieceCode).toBe('MOD-L1');
-    expect(data.patterns[0]?.holes.map((hole) => hole.diameterMm)).toEqual([15, 8]);
+    const { drilling } = composeFrozenDrilling(project, frozen(), legacyResolved());
+    expect(drilling.source).toBe('frozen-release');
+    expect(drilling.releaseId).toBe('rel-1');
+    expect(drilling.manufacturingFingerprint).toBe('fp-1');
+    expect(drilling.totalPiecesCount).toBe(1);
+    expect(drilling.totalHolesCount).toBe(2);
+    expect(drilling.patterns[0]?.pieceCode).toBe('MOD-L1');
+    expect(drilling.patterns[0]?.holes.map((hole) => hole.diameterMm)).toEqual([15, 8]);
+  });
+
+  it('carries frozen route operations as routing instead of dropping them (#1302/§13.3)', () => {
+    const withRoute = frozen();
+    (
+      withRoute as unknown as {
+        snapshot: { routing: { units: { parts: { operations: { operationId: string; provenance: Record<string, unknown>; operation: string; holes: unknown[]; routingCuts?: { startMm: number[]; sizeMm: number[] }[] }[] }[] }[] } };
+      }
+    ).snapshot.routing.units[0]!.parts[0]!.operations.push({
+      operationId: 'part-1:notch-0',
+      provenance: { sourceKind: 'openingProfile', openingProfileId: 'prof-8006', boundary: 'top' },
+      operation: 'route',
+      holes: [],
+      routingCuts: [{ startMm: [0, 532.8, 663.5], sizeMm: [18, 27.2, 56.5] }],
+    });
+    const { drilling, routing } = composeFrozenDrilling(project, withRoute, legacyResolved());
+    expect(drilling.totalHolesCount).toBe(2);
+    expect(routing).toBeDefined();
+    expect(routing?.schema).toBe('muebles.routing-data.v1');
+    expect(routing?.patterns).toHaveLength(1);
+    expect(routing?.patterns[0]?.pieceCode).toBe('MOD-L1');
+    expect(routing?.patterns[0]?.openingProfileId).toBe('prof-8006');
+    expect(routing?.patterns[0]?.boundary).toBe('top');
+    expect(routing?.patterns[0]?.cuts).toEqual([
+      { startMm: [0, 532.8, 663.5], sizeMm: [18, 27.2, 56.5] },
+    ]);
+  });
+
+  it('omits the routing section when the frozen program carries drill operations only', () => {
+    const { drilling, routing } = composeFrozenDrilling(project, frozen(), legacyResolved());
+    expect(drilling.totalHolesCount).toBe(2);
+    expect(routing).toBeUndefined();
   });
 
   it('fails closed on a covered-parts count mismatch', () => {

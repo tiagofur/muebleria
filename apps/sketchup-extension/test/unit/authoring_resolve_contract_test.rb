@@ -205,6 +205,56 @@ class AuthoringResolveContractTest < Minitest::Test
     end
   end
 
+  # #1302/§13.3: routing operations derive from the pinned opening profile —
+  # the Ruby mirror parses the provenance variant and the resolved cut boxes
+  # fail-closed, without recomputing anything.
+  def test_opening_profile_routing_operation_parses
+    op = scenario('02-move-shelf')['response']['resolved']['machining']['operations'][0]
+         .merge('operationId' => 'side:notch-0',
+                'provenance' => { 'sourceKind' => 'openingProfile',
+                                  'openingProfileId' => 'prof-8006',
+                                  'boundary' => 'top' },
+                'holes' => [],
+                'routingCuts' => [{ 'startMm' => [0, 532.8, 663.5], 'sizeMm' => [18, 27.2, 56.5] }])
+    machining = scenario('02-move-shelf')['response']['resolved']['machining'].merge('operations' => [op])
+    resolved = scenario('02-move-shelf')['response']['resolved'].merge('machining' => machining)
+    body = scenario('02-move-shelf')['response'].merge('resolved' => resolved)
+    result = parse_response(body)
+    operation = result.operations[0]
+    assert_equal 'openingProfile', operation.provenance['sourceKind']
+    assert_equal [], operation.holes
+    assert_equal [{ 'startMm' => [0, 532.8, 663.5], 'sizeMm' => [18, 27.2, 56.5] }], operation.routing_cuts
+  end
+
+  def test_opening_profile_provenance_with_unknown_key_fails_closed
+    op = scenario('02-move-shelf')['response']['resolved']['machining']['operations'][0]
+         .merge('provenance' => { 'sourceKind' => 'openingProfile',
+                                  'openingProfileId' => 'prof-8006',
+                                  'boundary' => 'top',
+                                  'relationshipId' => 'rel-1' })
+    machining = scenario('02-move-shelf')['response']['resolved']['machining'].merge('operations' => [op])
+    resolved = scenario('02-move-shelf')['response']['resolved'].merge('machining' => machining)
+    body = scenario('02-move-shelf')['response'].merge('resolved' => resolved)
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      parse_response(body)
+    end
+  end
+
+  def test_malformed_routing_cut_fails_closed
+    op = scenario('02-move-shelf')['response']['resolved']['machining']['operations'][0]
+         .merge('provenance' => { 'sourceKind' => 'openingProfile',
+                                  'openingProfileId' => 'prof-8006',
+                                  'boundary' => 'top' },
+                'holes' => [],
+                'routingCuts' => [{ 'startMm' => [0, 532.8], 'sizeMm' => [18, 27.2, 56.5] }])
+    machining = scenario('02-move-shelf')['response']['resolved']['machining'].merge('operations' => [op])
+    resolved = scenario('02-move-shelf')['response']['resolved'].merge('machining' => machining)
+    body = scenario('02-move-shelf')['response'].merge('resolved' => resolved)
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      parse_response(body)
+    end
+  end
+
   def test_recipe_provenance_identity_fields_parse
     # The fixed-shelf golden (#939) is the first scenario whose relationship
     # provenance carries the versioned recipe identity (#874 J2-B); parsing

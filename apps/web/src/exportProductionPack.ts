@@ -37,8 +37,11 @@ import {
 import type {
   HoleDefinition,
   MachineOutputSelection,
+  PartRoutingPattern,
   ProjectDrillingData,
   ProjectDrillingResult,
+  ProjectRoutingData,
+  RoutingCutDefinition,
 } from '@granete/domain';
 import type { ProjectManufacturingSnapshot } from '@granete/storage';
 import {
@@ -80,32 +83,75 @@ export interface FrozenDrillingSource {
  * dims, material) while the holes are REPLACED by the frozen routing holes
  * matched through the shared part identity. Fail-closed: a released part
  * whose identity cannot be joined, or a frozen/routed count mismatch, throws
- * — never a silent partial truth.
+ * — never a silent partial truth. #1302/§13.3: frozen route operations ride
+ * the result as `routing` instead of being dropped — the machining adapters
+ * own the representability verdict (explicit OPERATION_NOT_REPRESENTABLE,
+ * never a silent approximation into holes).
  */
+export interface ComposedFrozenMachining {
+  readonly drilling: ProjectDrillingData;
+  readonly routing?: ProjectRoutingData;
+}
+
+/** Frozen routing triple → tuple, fail-closed on wire shapes that are not 3 finite coordinates. */
+function frozenRoutingTriple(values: ReadonlyArray<number>): [number, number, number] {
+  const [a, b, c] = values;
+  if (a === undefined || b === undefined || c === undefined || values.length !== 3) {
+    throw new Error(`la caja de routing congelada no tiene 3 coordenadas: ${JSON.stringify(values)}`);
+  }
+  return [a, b, c];
+}
+
 export function composeFrozenDrilling(
   project: Project,
   frozen: FrozenDrillingSource,
   resolved: ProjectDrillingResult,
-): ProjectDrillingData {
+): ComposedFrozenMachining {
   const holesByPart = new Map<string, HoleDefinition[]>();
+  const routingByPart = new Map<string, {
+    cuts: RoutingCutDefinition[];
+    openingProfileId?: string;
+    boundary?: string;
+  }>();
   for (const unit of frozen.snapshot.routing.units) {
     for (const part of unit.parts) {
-      const holes = part.operations
-        .filter((operation) => operation.operation === 'drill')
-        .flatMap((operation) =>
-          operation.holes.map((hole) => ({
-            // The frozen wire carries the SAME face/type vocabulary the
-            // resolver emitted (#477); the generated openapi type widens both
-            // to string, so the boundary cast restates the real domain union.
-            face: hole.face as HoleDefinition['face'],
-            xMm: hole.xMm,
-            yMm: hole.yMm,
-            diameterMm: hole.diameterMm,
-            depthMm: hole.depthMm,
-            type: hole.type as HoleDefinition['type'],
-          })),
-        );
+      const holes: HoleDefinition[] = [];
+      const cuts: RoutingCutDefinition[] = [];
+      let openingProfileId: string | undefined;
+      let boundary: string | undefined;
+      for (const operation of part.operations) {
+        if (operation.operation === 'drill') {
+          for (const hole of operation.holes) {
+            holes.push({
+              // The frozen wire carries the SAME face/type vocabulary the
+              // resolver emitted (#477); the generated openapi type widens both
+              // to string, so the boundary cast restates the real domain union.
+              face: hole.face as HoleDefinition['face'],
+              xMm: hole.xMm,
+              yMm: hole.yMm,
+              diameterMm: hole.diameterMm,
+              depthMm: hole.depthMm,
+              type: hole.type as HoleDefinition['type'],
+            });
+          }
+        } else {
+          // A route operation IS the resolved subtraction box (#1302/§13.3);
+          // all of a part's cuts share the opening provenance (one profile
+          // notches a side panel — multi-profile sides are not resolved yet).
+          for (const cut of operation.routingCuts ?? []) {
+            cuts.push({
+              startMm: frozenRoutingTriple(cut.startMm),
+              sizeMm: frozenRoutingTriple(cut.sizeMm),
+            });
+          }
+          openingProfileId = openingProfileId ?? operation.provenance.openingProfileId;
+          boundary = boundary ?? operation.provenance.boundary;
+        }
+      }
       holesByPart.set(part.partId, holes);
+      if (cuts.length > 0) {
+        routingByPart.set(part.partId, { cuts, openingProfileId, boundary });
+      }
     }
   }
   if (resolved.links.length !== frozen.snapshot.routing.units.reduce((sum, unit) => sum + unit.parts.length, 0)) {
@@ -114,6 +160,7 @@ export function composeFrozenDrilling(
     );
   }
   let totalHoles = 0;
+  const routingPatterns: PartRoutingPattern[] = [];
   const patterns = resolved.links.map((link, index) => {
     const holes = holesByPart.get(link.partId);
     if (!holes) {
@@ -124,6 +171,15 @@ export function composeFrozenDrilling(
       throw new Error(`el despiece no identifica la partida liberada ${link.partId}`);
     }
     totalHoles += holes.length;
+    const route = routingByPart.get(link.partId);
+    if (route) {
+      routingPatterns.push({
+        pieceCode: legacy.pieceCode,
+        cuts: route.cuts,
+        openingProfileId: route.openingProfileId,
+        boundary: route.boundary,
+      });
+    }
     return {
       pieceCode: legacy.pieceCode,
       moduleCode: legacy.moduleCode,
@@ -137,16 +193,21 @@ export function composeFrozenDrilling(
     };
   });
   return {
-    schema: 'muebles.drilling-data.v1',
-    projectId: project.id,
-    projectName: project.name,
-    generatedAt: new Date().toISOString(),
-    totalPiecesCount: patterns.length,
-    totalHolesCount: totalHoles,
-    patterns,
-    source: 'frozen-release',
-    releaseId: frozen.releaseId,
-    manufacturingFingerprint: frozen.manufacturingFingerprint,
+    drilling: {
+      schema: 'muebles.drilling-data.v1',
+      projectId: project.id,
+      projectName: project.name,
+      generatedAt: new Date().toISOString(),
+      totalPiecesCount: patterns.length,
+      totalHolesCount: totalHoles,
+      patterns,
+      source: 'frozen-release',
+      releaseId: frozen.releaseId,
+      manufacturingFingerprint: frozen.manufacturingFingerprint,
+    },
+    routing: routingPatterns.length > 0
+      ? { schema: 'muebles.routing-data.v1', patterns: routingPatterns }
+      : undefined,
   };
 }
 
@@ -274,12 +335,12 @@ export async function buildProductionPackExport(
       const resolved = resolveProjectDrilling({ project, catalog });
       // #995: frozen evidence replaces the heuristic holes when the project's
       // canonical release governs; the legacy chain keeps everything else.
-      const drilling = frozen
+      const composed = frozen
         ? composeFrozenDrilling(project, frozen, resolved)
-        : resolved.data;
+        : { drilling: resolved.data };
       zip.file(
         `perforaciones_${baseName}.json`,
-        JSON.stringify(drilling, null, 2),
+        JSON.stringify(composed.drilling, null, 2),
       );
     } catch (error) {
       // Unresolvable project keeps the rest of the pack intact — surfaced in

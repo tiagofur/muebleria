@@ -11076,13 +11076,48 @@
           },
           "operation": {
             "type": "string",
-            "description": "cut | edge_banding | drill (neutral intent)."
+            "description": "cut | edge_banding | drill | route (neutral intent)."
           },
           "holes": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ManufacturingRoutingHole"
             }
+          },
+          "routingCuts": {
+            "type": "array",
+            "description": "Material-removal boxes of a route operation (#1302/§13.3): the resolved side-notch subtraction in the host part's local frame.",
+            "items": {
+              "$ref": "#/components/schemas/ManufacturingRoutingCut"
+            }
+          }
+        }
+      },
+      "ManufacturingRoutingCut": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "startMm",
+          "sizeMm"
+        ],
+        "properties": {
+          "startMm": {
+            "type": "array",
+            "description": "Local min corner of the removal box.",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "sizeMm": {
+            "type": "array",
+            "description": "Positive extents of the removal box.",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
           }
         }
       },
@@ -11116,6 +11151,14 @@
           },
           "hardwarePlacementId": {
             "type": "string"
+          },
+          "openingProfileId": {
+            "type": "string",
+            "description": "Opening profile id a route operation derives from (#1302/§13.3)."
+          },
+          "boundary": {
+            "type": "string",
+            "description": "Grip boundary the routed notch hangs from (top|bottom)."
           }
         }
       },

@@ -35,13 +35,14 @@ module Granete
       # provenance keeps exactly one source variant — the parser fails closed
       # on ambiguous/empty provenance instead of guessing.
       class AuthoringMachiningOperation
-        attr_reader :operation_id, :host_component_instance_id, :provenance, :holes
+        attr_reader :operation_id, :host_component_instance_id, :provenance, :holes, :routing_cuts
 
-        def initialize(operation_id:, host_component_instance_id:, provenance:, holes:)
+        def initialize(operation_id:, host_component_instance_id:, provenance:, holes:, routing_cuts: [])
           @operation_id = operation_id
           @host_component_instance_id = host_component_instance_id
           @provenance = provenance
           @holes = holes
+          @routing_cuts = routing_cuts
         end
 
         def relationship_id
@@ -102,9 +103,10 @@ module Granete
       # Fail-closed on shape violations: ambiguous provenance, unknown hole
       # faces or a broken fingerprint never parse into a usable result.
       module AuthoringResolveWireParsing
-        PROVENANCE_SOURCE_KINDS = %w[relationship manualHardwarePlacement].freeze
+        PROVENANCE_SOURCE_KINDS = %w[relationship manualHardwarePlacement openingProfile].freeze
         HOLE_FACES = %w[front back left right top bottom].freeze
         HOLE_KEYS = %w[face xMm yMm diameterMm depthMm type].freeze
+        ROUTING_CUT_KEYS = %w[startMm sizeMm].freeze
 
         module_function
 
@@ -130,14 +132,16 @@ module Granete
             operation_id: operation_id,
             host_component_instance_id: host,
             provenance: provenance(raw['provenance'], operation_id),
-            holes: holes(raw['holes'], operation_id)
+            holes: holes(raw['holes'], operation_id),
+            routing_cuts: routing_cuts(raw['routingCuts'], operation_id)
           )
         end
 
         # Exactly one provenance variant: empty or ambiguous combinations are
         # contract violations (#346 §6), never a guess.
         PROVENANCE_KEYS = %w[relationshipId jointPlacementId hardwarePlacementId catalogRuleId familyId
-                             recipeRevision technicalProfileId technicalProfileRevision sourceKind].freeze
+                             recipeRevision technicalProfileId technicalProfileRevision sourceKind
+                             openingProfileId boundary].freeze
 
         def provenance(raw, context)
           raise AuthoringResolveContract::ContractError, "Provenance inválida en #{context}" unless raw.is_a?(Hash)
@@ -158,6 +162,14 @@ module Granete
             unless raw['hardwarePlacementId'].is_a?(String) && !raw['hardwarePlacementId'].empty?
               raise AuthoringResolveContract::ContractError, "Provenance manual sin hardwarePlacementId en #{context}"
             end
+          when 'openingProfile'
+            # #1302/§13.3: a routing operation names the pinned opening profile
+            # and grip boundary it derives from — nothing else.
+            unless raw['openingProfileId'].is_a?(String) && !raw['openingProfileId'].empty? &&
+                   raw['boundary'].is_a?(String) && !raw['boundary'].empty?
+              raise AuthoringResolveContract::ContractError,
+                    "Provenance de openingProfile sin openingProfileId/boundary en #{context}"
+            end
           end
 
           # Exclusivity: a provenance carries exactly its variant's keys — a
@@ -170,6 +182,7 @@ module Granete
                       %w[sourceKind relationshipId catalogRuleId familyId
                          recipeRevision technicalProfileId technicalProfileRevision]
                     when 'manualHardwarePlacement' then %w[sourceKind hardwarePlacementId]
+                    when 'openingProfile' then %w[sourceKind openingProfileId boundary]
                     else %w[sourceKind relationshipId jointPlacementId catalogRuleId]
                     end
           unless (raw.keys - allowed).empty? && (raw.keys - PROVENANCE_KEYS).empty?
@@ -193,6 +206,27 @@ module Granete
             end
 
             hole
+          end
+        end
+
+        # #1302/§13.3: the resolved subtraction boxes of a routing operation —
+        # the plugin never recomputes them; a malformed box fails closed.
+        def routing_cuts(raw, context)
+          return [] if raw.nil?
+
+          raise AuthoringResolveContract::ContractError, "Cortes de routing inválidos en #{context}" unless raw.is_a?(Array)
+
+          raw.map do |cut|
+            unless cut.is_a?(Hash) && cut.keys.sort == ROUTING_CUT_KEYS.sort &&
+                   %w[startMm sizeMm].all? { |key|
+                     cut[key].is_a?(Array) && cut[key].length == 3 &&
+                       cut[key].all? { |value| finite_number?(value) }
+                   } &&
+                   cut['sizeMm'].all? { |value| value.positive? }
+              raise AuthoringResolveContract::ContractError, "Corte de routing con campos inválidos en #{context}"
+            end
+
+            cut
           end
         end
 
@@ -741,6 +775,11 @@ module Granete
             case source['sourceKind']
             when 'relationship' then relationship_ids.include?(source['relationshipId'])
             when 'manualHardwarePlacement' then manual_ids.include?(source['hardwarePlacementId'])
+            when 'openingProfile'
+              # #1302/§13.3: routing truth is DESIGN-level (the pinned opening
+              # profile catalog), not furniture-snapshot truth — there is no
+              # snapshot row to join; the wire parse already validated shape.
+              source['openingProfileId'].is_a?(String) && !source['openingProfileId'].empty?
             else false
             end
           end
