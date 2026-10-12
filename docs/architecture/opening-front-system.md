@@ -306,3 +306,28 @@ The effective front adjustment must be explicit, scoped to the applicable profil
 
 See [#1282](https://github.com/tiagofur/muebleria/issues/1282) for the issue-level acceptance criteria.
 
+### 13.6. Conditional body effect: full top versus manguetes
+
+The top Gola L profile's physical depth must be available to resolve the body geometry. Its effect is **conditional on the declared Construction Variant/body topology**, not inferred from component names, dimensions, visual inspection, or whichever component happens to be found first.
+
+The intended alternatives are:
+
+1. **Full top/techo completo:** shorten the depth of the component whose canonical constructive role represents the full top by the resolved Gola L depth (subject to the verified profile/install reference). The body resolver must state which edge/reference is held fixed and which edge moves; “reduce depth” alone is not a complete geometric contract.
+2. **Manguetes construction:** do not apply the same depth reduction to a full-top component if that topology does not have one. Instead, retract the relevant manguete component(s) toward the back by the resolved Gola L depth, using their declared local frame and installation reference.
+
+The terms *techo completo* and *manguetes* are semantic construction choices. The selected Construction Variant must explicitly declare the body topology and the canonical component role(s) that exist. The resolve composes that intent with the selected Opening Profile and emits the corresponding body modifier. It must not guess from names such as `techo`, `manguete`, `costado`, from part dimensions, or from mesh inspection.
+
+This preserves the architectural boundary: Construction Variant declares **which body construction exists**; Opening Profile declares **which dimensional effect its installation requires**; server resolve combines them. Neither layer should absorb the other's intent. If the declared variant is absent, ambiguous, or does not provide the required role/reference, fail closed with an actionable diagnostic rather than applying the modifier to a similarly named part.
+
+The exact mapping for “manguete” to the repository's canonical `ConstructiveRole` vocabulary must be confirmed during the Construction Variant contract. Do not introduce a role string ad hoc or silently map it to `divider`/ `custom` without documenting the semantic meaning and fixtures.
+
+### 13.7. Required validation for top construction variants
+
+- A fixture with **full top** proves that the top's resolved depth is reduced by the selected Gola L profile depth from the documented reference.
+- A fixture with **manguetes** proves that the relevant manguete component(s) retract toward the back by that same resolved profile depth, and that the full-top modifier is not also applied.
+- The two variants use the same opening profile and otherwise equivalent cabinet dimensions; only the declared Construction Variant changes the body effect.
+- A variant never receives both alternatives unless its explicit contract requires both.
+- Missing profile depth, missing reference frame, unknown body variant or missing target role blocks the affected resolve; no zero/default depth or name-based fallback.
+- The body geometry, side notch/CNC feature (when the exact profile requires it), and BOM/placement output remain consistent after resolve, rebuild and synchronization.
+- Go/server resolve is authoritative; TS parity fixtures mirror the contract, while SketchUp sends the selected construction/opening intent and consumes resolved output.
+
