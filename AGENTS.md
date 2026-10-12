@@ -51,6 +51,7 @@ mirror context but never overrides repository, GitHub, code, tests, or remote st
 | Líder | `.agents/skills/leader/SKILL.md` |
 | Implementador (por defecto) | `.agents/skills/implementer/SKILL.md` |
 | Revisor independiente | `.agents/skills/reviewer/SKILL.md` |
+| Mapa de documentación (routing; no leer todo) | `docs/README.md` |
 | Arquitectura / convenciones | `docs/architecture.md`, `docs/conventions.md` |
 | Arquitectura Agent-First (organización del repo para agentes; regla de extracción al tocar monolitos) | `docs/agent-first-methodology.md` |
 | Producto / prioridad | `docs/prd-v2.md`, `docs/roadmap-comercial-v2.md`, `docs/demo-mvp-plan-2026-09-05.md` |
