@@ -263,25 +263,17 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 			&domain.ReleasePreflightBlockedError{Result: preflight}
 	}
 
-	// 1b. Opening production-integration gate (#1302): the release snapshot
-	// resolves WITHOUT the design opening (fronts, members, body modifiers —
-	// AuthoringResolveInput in deriveReleaseRoutingUnit carries none of
-	// them), so a revision whose frozen selection declares a real opening
-	// would freeze fronts at their definition dimensions, drop the side
-	// notch and omit the opening hardware the quote already sells. Block the
-	// command AND the preflight verdict with the typed issue until the
-	// opening is wired into the release resolve. The handle system is the
-	// baseline the resolve itself treats as no-opening, and a legacy
-	// revision (nil snapshot) never declared one — neither blocks.
+	// 1b. Opening selection gate (#1302→#1305): a revision whose frozen
+	// selection declares a real opening (gola/rebase) must resolve it
+	// COMPLETELY before anything freezes. The synthesis itself runs after the
+	// catalog capture (step 2) — it needs the same catalog snapshot the
+	// collection resolve consumes. Handle system and legacy revisions (nil
+	// snapshot) resolve exactly as before.
 	selection, err := s.loadDesignRevisionOpeningSelection(ctx, designRevisionID)
 	if err != nil {
 		return nil, err
 	}
-	if openingSelectionRequiresProductionIntegration(selection) {
-		preflight = preflightBlockedByOpeningRelease(preflight)
-		return &releaseGateOutcome{items: items, preflight: preflight},
-			&domain.ReleasePreflightBlockedError{Result: preflight}
-	}
+	openingGoverned := openingSelectionRequiresProductionIntegration(selection)
 
 	// 1c. Frozen base authority (#830): a quoted release loads the exact
 	// revision's immutable per-unit base contexts inside this same boundary.
@@ -320,10 +312,26 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 		return &releaseGateOutcome{items: items, preflight: preflightBlockedBySnapshotResolution(preflight, err)},
 			fmt.Errorf("%w: %v", ErrReleaseSnapshotResolution, err)
 	}
+
+	// 2a. Opening synthesis (#1305): ONE ResolveDesignOpening per furniture
+	// over the FROZEN selection (pin-first, the same precedence the authoring
+	// resolve uses) governs the BOM expansion, the routing layout and the
+	// purchase requirements. An opening that cannot resolve completely blocks
+	// the command AND the preflight verdict — a partial opening never freezes.
+	var openings map[string]engine.ReleaseUnitOpening
+	if openingGoverned {
+		openings, err = s.resolveReleaseOpenings(ctx, selection, items, catalog)
+		if err != nil {
+			preflight = preflightBlockedByOpeningRelease(preflight, err)
+			return &releaseGateOutcome{items: items, preflight: preflight},
+				&domain.ReleasePreflightBlockedError{Result: preflight}
+		}
+	}
+
 	// The routing program and per-unit profile demand derive INSIDE the
 	// collection resolve, so the gate verdict, the merged requirements and
 	// the frozen snapshot are one derivation.
-	collection, err := engine.ResolveReleaseCollection(designRevisionID, items, catalog, authority, serverInputs, nil)
+	collection, err := engine.ResolveReleaseCollection(designRevisionID, items, catalog, authority, serverInputs, openings)
 	if err != nil {
 		// Server-side diagnostics: the 409 envelope is business-safe (typed
 		// blocker, unit identities only) — the underlying resolution cause is
@@ -375,22 +383,152 @@ func openingSelectionRequiresProductionIntegration(selection *domain.DesignOpeni
 }
 
 // preflightBlockedByOpeningRelease derives the honest BLOCKED verdict from
-// the #1302 opening gate: same scope, same revision, one issue carrying the
-// design-level blocker (an opening belongs to the whole design, not to one
-// furniture instance).
-func preflightBlockedByOpeningRelease(ready *domain.ManufacturingPreflightResult) *domain.ManufacturingPreflightResult {
+// the #1305 opening synthesis: same scope, same revision, one issue carrying
+// the design-level blocker and the underlying reason (an opening belongs to
+// the whole design, not to one furniture instance).
+func preflightBlockedByOpeningRelease(ready *domain.ManufacturingPreflightResult, reason error) *domain.ManufacturingPreflightResult {
 	blocked := &domain.ManufacturingPreflightResult{
 		DesignRevisionID: ready.DesignRevisionID,
 		Scope:            ready.Scope,
 		Status:           domain.ManufacturingPreflightBlocked,
 		Items:            ready.Items,
 	}
+	message := "el diseño declara una apertura (gola/rebase) que no puede resolverse completamente para producción"
+	if reason != nil {
+		message += ": " + reason.Error()
+	}
 	blocked.Issues = append(blocked.Issues, domain.ManufacturingPreflightIssue{
-		Code: domain.PreflightIssueOpeningReleaseUnsupported,
-		Message: "el diseño declara una apertura (gola/rebase) cuya integración de producción no está implementada: " +
-			"el release congelaría frentes con dimensiones de definición, sin la muesca del costado y sin el herraje de gola",
+		Code:    domain.PreflightIssueOpeningReleaseUnresolved,
+		Message: message,
 	})
 	return blocked
+}
+
+// resolveReleaseOpenings synthesizes the per-furniture opening resolution
+// the release consumes (#1305): ONE ResolveDesignOpening per unit over the
+// frozen selection — pin-first profile slice (the same precedence the
+// authoring resolve uses), the backed overhang rule and the interior width
+// derived from the unit's own structure — never a second derivation. The
+// first incomplete resolution fails the whole gate with an actionable
+// reason: fronts at definition dimensions or missing member demand can
+// never freeze.
+func (s *PostgresStore) resolveReleaseOpenings(ctx context.Context, selection *domain.DesignOpeningSelection, items []domain.DesignRevisionItem, catalog domain.Catalog) (map[string]engine.ReleaseUnitOpening, error) {
+	profileData, bomProfiles, err := s.releaseOpeningProfileSlices(ctx, selection)
+	if err != nil {
+		return nil, err
+	}
+	overhangMm, err := s.GetOpeningOverhangRule(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	openings := make(map[string]engine.ReleaseUnitOpening, len(items))
+	for _, item := range items {
+		widthMm, heightMm, ok := releaseOpeningDims(item)
+		if !ok {
+			return nil, fmt.Errorf("la apertura no puede resolverse sin dimensiones explícitas para %s", item.FurnitureInstanceID)
+		}
+		bomCtx := &engine.DesignOpeningBOMContext{Ends: engine.OpeningBOMDefaultEnds, Profiles: bomProfiles}
+		bomCtx.CabinetInteriorWidthMm = releaseOpeningInteriorWidth(item.FurnitureDefinitionID, widthMm, catalog)
+		resolution, resErr := engine.ResolveDesignOpening(widthMm, heightMm, selection, profileData, engine.OpeningOverhangRuleMm(overhangMm), bomCtx)
+		if resErr != nil {
+			return nil, fmt.Errorf("resolución de apertura para %s: %s", item.FurnitureInstanceID, resErr.Code)
+		}
+		if resolution.State != engine.DesignOpeningStateResolved {
+			return nil, fmt.Errorf("la apertura del diseño está bloqueada (%s) para %s", resolution.Reason, item.FurnitureInstanceID)
+		}
+		if resolution.BOMReason != "" {
+			return nil, fmt.Errorf("el BOM de la apertura no puede resolverse (%s) para %s", resolution.BOMReason, item.FurnitureInstanceID)
+		}
+		openings[item.FurnitureInstanceID] = engine.ReleaseUnitOpening{
+			Fronts:    resolution.Fronts,
+			Members:   engine.OpeningMembersFromFrozenPin(selection),
+			Modifiers: resolution.BodyModifiers,
+			BOMLines:  resolution.BOM,
+		}
+	}
+	return openings, nil
+}
+
+// releaseOpeningProfileSlices builds the pin-first profile projections the
+// opening resolve consumes: a pinned selection resolves against ITS frozen
+// datasheet slice; a legacy pre-pin selection falls back to the live
+// catalog rows exactly like the authoring resolve.
+func (s *PostgresStore) releaseOpeningProfileSlices(ctx context.Context, selection *domain.DesignOpeningSelection) ([]engine.OpeningProfileData, []engine.OpeningProfileBOMData, error) {
+	if pin := selection.ProfilePin; pin != nil {
+		return []engine.OpeningProfileData{{
+			ProfileID:            selection.ProfileID,
+			DatasheetStatus:      pin.DatasheetStatus,
+			FrontReductionMm:     pin.FrontReductionMm,
+			GripClearanceMm:      pin.GripClearanceMm,
+			CompatiblePlacements: pin.CompatiblePlacements,
+			BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
+		}}, nil, nil
+	}
+	profiles, err := s.ListOpeningProfiles(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	profileData := make([]engine.OpeningProfileData, 0, len(profiles))
+	bomProfiles := make([]engine.OpeningProfileBOMData, 0, len(profiles))
+	for _, profile := range profiles {
+		profileData = append(profileData, engine.OpeningProfileData{
+			ProfileID:            profile.ID,
+			DatasheetStatus:      profile.DatasheetStatus,
+			FrontReductionMm:     derefOpeningInt(profile.FrontReductionMm),
+			GripClearanceMm:      derefOpeningInt(profile.GripClearanceMm),
+			CompatiblePlacements: profile.CompatiblePlacements,
+			BodyModifiers:        engine.ContractBodyModifiersFromEntities(profile.BodyModifiers),
+		})
+		bomProfiles = append(bomProfiles, engine.OpeningProfileBOMData{
+			ProfileID:  profile.ID,
+			Version:    profile.Version,
+			BOMMembers: openingQuoteMembers(profile.BOMMembers),
+		})
+	}
+	return profileData, bomProfiles, nil
+}
+
+// releaseOpeningDims extracts the explicit unit dimensions the opening
+// resolve consumes — the same parameters the release unit already requires
+// for structured definitions.
+func releaseOpeningDims(item domain.DesignRevisionItem) (int, int, bool) {
+	width, ok := item.Parameters["widthMm"].(float64)
+	if !ok || width <= 0 {
+		return 0, 0, false
+	}
+	height, ok := item.Parameters["heightMm"].(float64)
+	if !ok || height <= 0 {
+		return 0, 0, false
+	}
+	return int(width), int(height), true
+}
+
+// releaseOpeningInteriorWidth mirrors openingQuoteInteriorWidth: the run
+// input from the unit's structure (commercial width minus the two lateral
+// panels); 0 = underivable body context — reported truthfully by the
+// engine, never guessed here.
+func releaseOpeningInteriorWidth(furnitureDefinitionID string, widthMm int, catalog domain.Catalog) int {
+	if furnitureDefinitionID == "" {
+		return 0
+	}
+	for _, module := range catalog.Modules {
+		if module.ID != furnitureDefinitionID || module.StructureID == "" {
+			continue
+		}
+		for _, structure := range catalog.Structures {
+			if structure.ID != module.StructureID {
+				continue
+			}
+			if thickness, ok := engine.StructureSidePanelThicknessMm(structure, catalog); ok {
+				if interior := widthMm - 2*thickness; interior > 0 {
+					return interior
+				}
+			}
+		}
+		break
+	}
+	return 0
 }
 
 // preflightBlockedBySnapshotResolution derives the honest BLOCKED verdict from
