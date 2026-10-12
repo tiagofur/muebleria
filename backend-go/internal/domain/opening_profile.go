@@ -28,8 +28,13 @@ type OpeningProfile struct {
 	// Datasheet-backed geometry. nil = not provided yet (blocked authoring).
 	FrontReductionMm *int `json:"front_reduction_mm,omitempty"`
 	GripClearanceMm  *int `json:"grip_clearance_mm,omitempty"`
-	ProfileHeightMm  *int `json:"profile_height_mm,omitempty"`
-	ProfileDepthMm   *int `json:"profile_depth_mm,omitempty"`
+	// #1283 / §13.2: decimal datasheet values (8006: 56.5 tall × 27.2 deep,
+	// SCILM 2022-04-01 p. 42). HeightMm is the vertical drop from the
+	// mounting reference; DepthMm is the under-top flange reach toward the
+	// back. REAL columns since 000161 — rounding the datasheet into ints
+	// would be the silent invention the contract forbids.
+	ProfileHeightMm *float64 `json:"profile_height_mm,omitempty"`
+	ProfileDepthMm  *float64 `json:"profile_depth_mm,omitempty"`
 	// Auditable origin of the geometry values (supplier datasheet reference).
 	// Required when DatasheetStatus is "verified".
 	GeometryOrigin  string                      `json:"geometry_origin,omitempty"`
@@ -59,6 +64,13 @@ type OpeningBOMMember struct {
 	Rule       string `json:"rule"`
 	Unit       string `json:"unit,omitempty"`
 	SpacingMm  *int   `json:"spacing_mm,omitempty"`
+	// DimensionsMm is the accessory's declared physical envelope
+	// [length-along-run, depth, height] from the same verified datasheet as
+	// the profile (#1283 / §13.1: herrajes conservan dimensiones aunque sean
+	// de solo lectura). It pins the layout render box; nil = the member does
+	// not declare geometry and the layout places nothing for it (fail-closed,
+	// never an engine default).
+	DimensionsMm *[3]float64 `json:"dimensions_mm,omitempty"`
 }
 
 var (
@@ -92,8 +104,14 @@ func (p *OpeningProfile) AuthoringBlocker() string {
 	for missing, value := range map[string]*int{
 		"front_reduction_mm": p.FrontReductionMm,
 		"grip_clearance_mm":  p.GripClearanceMm,
-		"profile_height_mm":  p.ProfileHeightMm,
-		"profile_depth_mm":   p.ProfileDepthMm,
+	} {
+		if value == nil {
+			return fmt.Sprintf("falta el parámetro de ficha %s", missing)
+		}
+	}
+	for missing, value := range map[string]*float64{
+		"profile_height_mm": p.ProfileHeightMm,
+		"profile_depth_mm":  p.ProfileDepthMm,
 	} {
 		if value == nil {
 			return fmt.Sprintf("falta el parámetro de ficha %s", missing)

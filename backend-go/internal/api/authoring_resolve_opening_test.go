@@ -184,12 +184,19 @@ func TestAuthoringResolveDesignOpeningPlacesPinnedMembers(t *testing.T) {
 	const designID = "d1264000-0000-0000-0000-000000000004"
 	spacing := 400
 	wc := openingDesignWC(designID, true)
+	// #1283 / §13.2: the pin freezes the datasheet envelope (8006: 56.5 tall
+	// × 27.2 deep) and the accessories' declared dims; the layout places from
+	// these, never from engine constants.
+	wc.AuthoringDefaults.Opening.ProfilePin.ProfileHeightMm = 56.5
+	wc.AuthoringDefaults.Opening.ProfilePin.ProfileDepthMm = 27.2
+	supportDims := [3]float64{17, 19.5, 39.5}
+	capDims := [3]float64{3, 28.8, 58}
 	wc.AuthoringDefaults.Opening.ProfilePin.BOM = &domain.DesignOpeningProfilePinBOM{
 		ProfileVersion: 1,
 		Members: map[string]domain.OpeningBOMMember{
 			"profile":  {HardwareID: "hw-gola-profile", Rule: "interior_width", Unit: "meter"},
-			"supports": {HardwareID: "hw-gola-support", Rule: "per_length", SpacingMm: &spacing},
-			"endCaps":  {HardwareID: "hw-gola-cap", Rule: "per_exposed_end"},
+			"supports": {HardwareID: "hw-gola-support", Rule: "per_length", SpacingMm: &spacing, DimensionsMm: &supportDims},
+			"endCaps":  {HardwareID: "hw-gola-cap", Rule: "per_exposed_end", DimensionsMm: &capDims},
 		},
 	}
 	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{designID: wc}
@@ -248,6 +255,16 @@ func TestAuthoringResolveDesignOpeningPlacesPinnedMembers(t *testing.T) {
 	// 600 interior: span 564 → supports ceil(564/400)+1 = 3; caps 2; run 1.
 	if counts["hw-gola-profile"] != 1 || counts["hw-gola-support"] != 3 || counts["hw-gola-cap"] != 2 {
 		t.Fatalf("derived member counts = %v", counts)
+	}
+	// §13.2 numeric rule: every support origin sits at profile height / 2
+	// below the declared top reference — 720 − 56.5/2 = 691.75.
+	for _, hw := range response.Resolved.Layout.Hardware {
+		if hw.HardwareID == "hw-gola-support" {
+			z := hw.Transform.TranslationMm[2]
+			if diff := z - (720 - 56.5/2); diff < -1e-9 || diff > 1e-9 {
+				t.Fatalf("support Z = %v, want 691.75 (top ref − profile height/2)", z)
+			}
+		}
 	}
 	if derivedAssets == 0 {
 		t.Fatalf("derived placements must carry the catalog asset fields")

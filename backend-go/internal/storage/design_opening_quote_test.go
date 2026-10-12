@@ -49,18 +49,20 @@ func TestCreateInitialDesignQuoteRevisionFreezesOpeningBOM(t *testing.T) {
 	seedOpeningQuoteContext(t, fx)
 
 	spacing := 400
+	supportDims := [3]float64{17, 19.5, 39.5}
+	capDims := [3]float64{3, 28.8, 58}
 	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 		return fx.store.CreateOpeningProfile(ctx, &domain.OpeningProfile{
 			ID: openingProfileID, Code: "GOLA-L-8006", Name: "Gola L Cymisa 8006",
 			GripType: "gola", CrossSectionShape: "L", CompatiblePlacements: []string{"top"},
 			FrontReductionMm: intPtr(38), GripClearanceMm: intPtr(2),
-			ProfileHeightMm: intPtr(27), ProfileDepthMm: intPtr(56),
-			GeometryOrigin:  "docs/fichas/perfil_gola_l_ficha_tecnica.pdf (Cymisa 8006)",
+			ProfileHeightMm: floatPtr(56.5), ProfileDepthMm: floatPtr(27.2),
+			GeometryOrigin:  "docs/fichas/perfil_gola_l_ficha_tecnica.pdf (SCILM GOLA PROFILES 2022-04-01 pp. 42-45)",
 			DatasheetStatus: "verified", Active: true, BodyModifiers: []domain.OpeningBodyModifier{},
 			BOMMembers: map[string]domain.OpeningBOMMember{
 				"profile":  {HardwareID: openingHWProfile, Rule: "interior_width", Unit: "meter"},
-				"supports": {HardwareID: openingHWSupport, Rule: "per_length", SpacingMm: &spacing},
-				"endCaps":  {HardwareID: openingHWCap, Rule: "per_exposed_end"},
+				"supports": {HardwareID: openingHWSupport, Rule: "per_length", SpacingMm: &spacing, DimensionsMm: &supportDims},
+				"endCaps":  {HardwareID: openingHWCap, Rule: "per_exposed_end", DimensionsMm: &capDims},
 			},
 		})
 	})
@@ -101,6 +103,7 @@ func TestCreateInitialDesignQuoteRevisionFreezesOpeningBOM(t *testing.T) {
 				System: "gola", ProfileID: openingProfileID, Placements: []string{"top"},
 				ProfilePin: &domain.DesignOpeningProfilePin{
 					ProfileCode: "GOLA-L-8006", FrontReductionMm: 38, GripClearanceMm: 2, DatasheetStatus: "verified",
+					ProfileHeightMm: 56.5, ProfileDepthMm: 27.2,
 					BOM: &domain.DesignOpeningProfilePinBOM{ProfileVersion: profileVersion, Members: map[string]domain.OpeningBOMMember{
 						"profile":  {HardwareID: openingHWProfile, Rule: "interior_width", Unit: "meter"},
 						"supports": {HardwareID: openingHWSupport, Rule: "per_length", SpacingMm: &spacing},
@@ -200,18 +203,20 @@ func TestCreateInitialDesignQuoteRevisionFreezesOpeningBOM(t *testing.T) {
 func seedVerifiedGolaProfile(t *testing.T, fx *designQuoteFixture) int64 {
 	t.Helper()
 	spacing := 400
+	supportDims := [3]float64{17, 19.5, 39.5}
+	capDims := [3]float64{3, 28.8, 58}
 	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 		return fx.store.CreateOpeningProfile(ctx, &domain.OpeningProfile{
 			ID: openingProfileID, Code: "GOLA-L-8006", Name: "Gola L Cymisa 8006",
 			GripType: "gola", CrossSectionShape: "L", CompatiblePlacements: []string{"top"},
 			FrontReductionMm: intPtr(38), GripClearanceMm: intPtr(2),
-			ProfileHeightMm: intPtr(27), ProfileDepthMm: intPtr(56),
-			GeometryOrigin:  "docs/fichas/perfil_gola_l_ficha_tecnica.pdf (Cymisa 8006)",
+			ProfileHeightMm: floatPtr(56.5), ProfileDepthMm: floatPtr(27.2),
+			GeometryOrigin:  "docs/fichas/perfil_gola_l_ficha_tecnica.pdf (SCILM GOLA PROFILES 2022-04-01 pp. 42-45)",
 			DatasheetStatus: "verified", Active: true, BodyModifiers: []domain.OpeningBodyModifier{},
 			BOMMembers: map[string]domain.OpeningBOMMember{
 				"profile":  {HardwareID: openingHWProfile, Rule: "interior_width", Unit: "meter"},
-				"supports": {HardwareID: openingHWSupport, Rule: "per_length", SpacingMm: &spacing},
-				"endCaps":  {HardwareID: openingHWCap, Rule: "per_exposed_end"},
+				"supports": {HardwareID: openingHWSupport, Rule: "per_length", SpacingMm: &spacing, DimensionsMm: &supportDims},
+				"endCaps":  {HardwareID: openingHWCap, Rule: "per_exposed_end", DimensionsMm: &capDims},
 			},
 		})
 	})
@@ -305,6 +310,7 @@ func TestCreateInitialDesignQuoteRevisionFailsWhenOpeningBOMUnderivable(t *testi
 				// quote refuses to under-price the declared gola.
 				ProfilePin: &domain.DesignOpeningProfilePin{
 					ProfileCode: "GOLA-L-8006", FrontReductionMm: 38, GripClearanceMm: 2, DatasheetStatus: "verified",
+					ProfileHeightMm: 56.5, ProfileDepthMm: 27.2,
 				},
 			},
 			ActorUserID: rlsUserA,

@@ -300,6 +300,11 @@ func (s *Server) handleDesignOpeningPut(w http.ResponseWriter, r *http.Request, 
 					FrontReductionMm: derefInt(profile.FrontReductionMm),
 					GripClearanceMm:  derefInt(profile.GripClearanceMm),
 					DatasheetStatus:  profile.DatasheetStatus,
+					// #1283 / §13.2: the datasheet physical envelope rides
+					// with the frozen slice — the historical layout places
+					// the member hardware from these, never live values.
+					ProfileHeightMm: derefFloat(profile.ProfileHeightMm),
+					ProfileDepthMm:  derefFloat(profile.ProfileDepthMm),
 					BOM: &domain.DesignOpeningProfilePinBOM{
 						ProfileVersion: profile.Version,
 						Members:        members,
@@ -369,6 +374,13 @@ func (s *Server) handleDesignOpeningPut(w http.ResponseWriter, r *http.Request, 
 }
 
 func derefInt(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func derefFloat(value *float64) float64 {
 	if value == nil {
 		return 0
 	}
@@ -458,6 +470,10 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 // openingMembersFromPin projects the selection's frozen BOM slice onto the
 // layout's member placement set (#1274). Absent pin/BOM or members without
 // hardware place nothing — the truthful absence, never a live-catalog guess.
+// #1283 / §13.2: the pinned datasheet envelope (profile height/depth and the
+// accessories' declared dims) rides along; a pin authored before the envelope
+// existed carries zeros and the layout places nothing until the selection is
+// re-applied — never an invented constant.
 func openingMembersFromPin(selection *domain.DesignOpeningSelection) *engine.OpeningMembers {
 	if selection == nil || selection.ProfilePin == nil || selection.ProfilePin.BOM == nil {
 		return nil
@@ -471,6 +487,14 @@ func openingMembersFromPin(selection *domain.DesignOpeningSelection) *engine.Ope
 		SupportHardwareID: selection.ProfilePin.BOM.Members["supports"].HardwareID,
 		CapHardwareID:     selection.ProfilePin.BOM.Members["endCaps"].HardwareID,
 		SupportSpacingMm:  spacing,
+		ProfileHeightMm:   selection.ProfilePin.ProfileHeightMm,
+		ProfileDepthMm:    selection.ProfilePin.ProfileDepthMm,
+	}
+	if dims := selection.ProfilePin.BOM.Members["supports"].DimensionsMm; dims != nil {
+		members.SupportDimsMm = &(*dims)
+	}
+	if dims := selection.ProfilePin.BOM.Members["endCaps"].DimensionsMm; dims != nil {
+		members.CapDimsMm = &(*dims)
 	}
 	if members.ProfileHardwareID == "" && members.SupportHardwareID == "" && members.CapHardwareID == "" {
 		return nil

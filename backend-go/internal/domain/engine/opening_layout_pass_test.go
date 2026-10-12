@@ -3,6 +3,8 @@ package engine
 import (
 	"strings"
 	"testing"
+
+	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
 // #1264 / V2 OPEN-FRONT — the opening layout pass: the server-resolved front
@@ -158,5 +160,145 @@ func TestOpeningFrontsSupersedeAuthoredTranslation(t *testing.T) {
 	floor := findBoard(opened.Layout, "floor-01")
 	if floor == nil || floor.Transform.TranslationMm[2] != 10 {
 		t.Fatalf("body authored poses must survive: %+v", floor)
+	}
+}
+
+// #1283 / §13.2 — the member hardware's envelopes and the support's vertical
+// position come from the pin's DECLARED datasheet geometry, never engine
+// constants. 8006 datasheet (SCILM 2022-04-01): profile 56.5 tall × 27.2
+// deep; SU116 support [17, 19.5, 39.5]; CF8006TP cap [3, 28.8, 58]. The
+// support's local origin sits at profile height / 2 from the declared height
+// reference (the carcass top plane at a top-boundary gola).
+func TestOpeningMembersPlaceFromDeclaredDatasheet(t *testing.T) {
+	module, catalog := oneDoorCabinetCatalog()
+	catalog.Hardware = append(catalog.Hardware,
+		domain.Hardware{ID: "hw-gola-8006", Code: "8006", Name: "Perfil Gola L 8006", Unit: domain.UnitMeter, Active: true},
+		domain.Hardware{ID: "hw-su116", Code: "SU116", Name: "Soporte Gola SU116", Unit: domain.UnitPiece, Active: true},
+		domain.Hardware{ID: "hw-cf8006tp", Code: "CF8006TP", Name: "Tapa CF8006TP", Unit: domain.UnitPiece, Active: true},
+	)
+	dims := &LayoutDims{WidthMm: 400, HeightMm: 720, DepthMm: 560}
+	members := OpeningMembers{
+		ProfileHardwareID: "hw-gola-8006",
+		SupportHardwareID: "hw-su116",
+		CapHardwareID:     "hw-cf8006tp",
+		SupportSpacingMm:  400,
+		ProfileHeightMm:   56.5,
+		ProfileDepthMm:    27.2,
+		SupportDimsMm:     &[3]float64{17, 19.5, 39.5},
+		CapDimsMm:         &[3]float64{3, 28.8, 58},
+	}
+
+	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
+		fronts:         openingPassFront("top", 40),
+		openingMembers: &members,
+	})
+	if err != nil {
+		t.Fatalf("resolve with declared members: %v", err)
+	}
+	byID := map[string]LayoutHardware{}
+	for _, hw := range layout.Hardware {
+		if strings.HasPrefix(hw.PlacementID, "opening-") {
+			byID[hw.PlacementID] = hw
+		}
+	}
+	if len(byID) != 5 {
+		t.Fatalf("want profile + 2 supports + 2 caps, got %d opening members: %v", len(byID), byID)
+	}
+
+	profile := byID["opening-profile-hw-gola-8006"]
+	if profile.DimensionsMm != [3]float64{400, 27.2, 56.5} {
+		t.Fatalf("profile envelope = %v, want [400 27.2 56.5] (datasheet, front flush)", profile.DimensionsMm)
+	}
+	if profile.Transform.TranslationMm != [3]float64{0, 560, 720} {
+		t.Fatalf("profile translation = %v, want [0 560 720]", profile.Transform.TranslationMm)
+	}
+
+	// §13.2 core rule: support origin at profile height / 2 below the top
+	// reference — 720 − 56.5/2 = 691.75.
+	left := byID["opening-support-left-hw-su116"]
+	if left.Transform.TranslationMm != [3]float64{0, 560, 691.75} {
+		t.Fatalf("left support translation = %v, want [0 560 691.75] (top ref − 56.5/2)", left.Transform.TranslationMm)
+	}
+	if left.DimensionsMm != [3]float64{17, 19.5, 39.5} {
+		t.Fatalf("support envelope = %v, want declared [17 19.5 39.5]", left.DimensionsMm)
+	}
+	right := byID["opening-support-right-hw-su116"]
+	if right.Transform.TranslationMm != [3]float64{400, 560, 691.75} {
+		t.Fatalf("right support translation = %v, want [400 560 691.75]", right.Transform.TranslationMm)
+	}
+	if right.LocalTransform.Basis.X != [3]float64{-1, 0, 0} {
+		t.Fatalf("right support must stay mirrored in X, got %v", right.LocalTransform.Basis.X)
+	}
+
+	capLeft := byID["opening-cap-left-hw-cf8006tp"]
+	if capLeft.DimensionsMm != [3]float64{3, 28.8, 58} {
+		t.Fatalf("cap envelope = %v, want declared [3 28.8 58]", capLeft.DimensionsMm)
+	}
+
+	// Idempotence: a second resolve is byte-identical (no duplicated members).
+	again, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
+		fronts:         openingPassFront("top", 40),
+		openingMembers: &members,
+	})
+	if err != nil {
+		t.Fatalf("second resolve: %v", err)
+	}
+	if len(again.Hardware) != len(layout.Hardware) {
+		t.Fatalf("resolve must be idempotent: %d vs %d hardware", len(again.Hardware), len(layout.Hardware))
+	}
+}
+
+// A pin authored before the declared envelope existed (#1283) carries zeros —
+// the layout places NO opening hardware (truthful absence), never an invented
+// constant. A member without declared dims skips only that member.
+func TestOpeningMembersWithoutDeclaredGeometryPlaceNothing(t *testing.T) {
+	module, catalog := oneDoorCabinetCatalog()
+	catalog.Hardware = append(catalog.Hardware,
+		domain.Hardware{ID: "hw-gola-8006", Code: "8006", Name: "Perfil Gola L 8006", Unit: domain.UnitMeter, Active: true},
+		domain.Hardware{ID: "hw-su116", Code: "SU116", Name: "Soporte Gola SU116", Unit: domain.UnitPiece, Active: true},
+	)
+	dims := &LayoutDims{WidthMm: 400, HeightMm: 720, DepthMm: 560}
+
+	prePinEnvelope := OpeningMembers{
+		ProfileHardwareID: "hw-gola-8006",
+		SupportHardwareID: "hw-su116",
+		SupportSpacingMm:  400,
+	}
+	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
+		fronts:         openingPassFront("top", 40),
+		openingMembers: &prePinEnvelope,
+	})
+	if err != nil {
+		t.Fatalf("resolve with pre-#1283 members: %v", err)
+	}
+	for _, hw := range layout.Hardware {
+		if strings.HasPrefix(hw.PlacementID, "opening-") {
+			t.Fatalf("a pin without declared geometry must place nothing, got %s %+v", hw.PlacementID, hw)
+		}
+	}
+
+	// Declared envelope but the support member declares no dims: the profile
+	// still places, the support does not (fail-closed per member).
+	noSupportDims := OpeningMembers{
+		ProfileHardwareID: "hw-gola-8006",
+		SupportHardwareID: "hw-su116",
+		SupportSpacingMm:  400,
+		ProfileHeightMm:   56.5,
+		ProfileDepthMm:    27.2,
+	}
+	layout, _, err = resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
+		fronts:         openingPassFront("top", 40),
+		openingMembers: &noSupportDims,
+	})
+	if err != nil {
+		t.Fatalf("resolve without support dims: %v", err)
+	}
+	for _, hw := range layout.Hardware {
+		if strings.Contains(hw.PlacementID, "support") {
+			t.Fatalf("a member without declared dims must not place: %s", hw.PlacementID)
+		}
+		if strings.HasPrefix(hw.PlacementID, "opening-profile-") && hw.DimensionsMm != [3]float64{400, 27.2, 56.5} {
+			t.Fatalf("declared profile envelope must survive: %+v", hw.DimensionsMm)
+		}
 	}
 }

@@ -622,11 +622,15 @@ export function openingProfileFromApi(raw: Record<string, unknown>): OpeningProf
   const bomMembers: Record<string, OpeningBOMMember> = {};
   for (const [key, member] of Object.entries(bomRaw)) {
     if (!member || typeof member !== 'object') continue;
+    const dimsRaw = member.dimensions_mm ?? member.dimensionsMm;
+    const dims =
+      Array.isArray(dimsRaw) && dimsRaw.length === 3 ? (dimsRaw as [number, number, number]) : undefined;
     bomMembers[key] = {
       hardwareId: str(member.hardware_id ?? member.hardwareId),
       rule: str(member.rule),
       unit: str(member.unit ?? member.Unit) || undefined,
       spacingMm: openingProfileInt(member.spacing_mm ?? member.spacingMm),
+      dimensionsMm: dims,
     };
   }
   return {
@@ -660,6 +664,21 @@ export function openingProfileFromApi(raw: Record<string, unknown>): OpeningProf
 }
 
 export function openingProfileToApi(profile: OpeningProfile): Record<string, unknown> {
+  // Members go out in the Go entity's snake_case shape (#1283): the API
+  // unmarshals domain.OpeningBOMMember directly, so camelCase keys silently
+  // dropped every member field on a web write.
+  const bomMembers: Record<string, unknown> = {};
+  if (profile.bomMembers) {
+    for (const [key, member] of Object.entries(profile.bomMembers)) {
+      bomMembers[key] = {
+        hardware_id: member.hardwareId,
+        rule: member.rule,
+        unit: member.unit ?? null,
+        spacing_mm: member.spacingMm ?? null,
+        dimensions_mm: member.dimensionsMm ? [...member.dimensionsMm] : null,
+      };
+    }
+  }
   return {
     id: profile.id,
     code: profile.code,
@@ -674,7 +693,7 @@ export function openingProfileToApi(profile: OpeningProfile): Record<string, unk
     profile_height_mm: profile.profileHeightMm ?? null,
     profile_depth_mm: profile.profileDepthMm ?? null,
     body_modifiers: profile.bodyModifiers ? [...profile.bodyModifiers] : [],
-    bom_members: profile.bomMembers ? { ...profile.bomMembers } : {},
+    bom_members: bomMembers,
     active: profile.active,
   };
 }
