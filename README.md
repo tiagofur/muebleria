@@ -125,6 +125,7 @@ Detalle y smoke: `docs/verification.md` § Nivel 6.
 ├── init.sh                     # Verificación e inicialización del entorno
 │
 ├── docs/
+│   ├── README.md               # Índice agent-first: fuente canónica y routing por tarea
 │   ├── prd-v2.md               # Producto: qué, por qué, fórmulas, requisitos
 │   ├── architecture.md         # Cómo está estructurado el código
 │   ├── conventions.md          # Estilo, nombres, tests, errores
