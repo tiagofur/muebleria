@@ -403,11 +403,29 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 	// #1274 / #1276: opening hardware members placed in furniture space:
 	// profile across full cabinet width [0, dims.WidthMm], supports at sides with right inverted.
 	if len(opts.fronts) > 0 && opts.openingMembers != nil {
+		// #1300: the opening members mount on the CARCASS — the profile run,
+		// supports and caps stay fixed to the cabinet while the door swings.
+		// The host binding drives the presentation adapter's rigid grouping,
+		// so hosting them on the door made the whole grip swing with it.
+		// The truthful host is the carcass board of the boundary: the top
+		// board for a top-boundary gola, the bottom board for a rebase.
 		hostBoardID := ""
+		wanted := string(domain.PlacementSuperior)
+		if openingFrontsBottomBoundary(opts.fronts) {
+			wanted = string(domain.PlacementBase)
+		}
 		for i := range boards {
-			if isDoorBoard(&boards[i]) || boardIsOpeningFront(&boards[i]) {
+			if boards[i].placement == wanted {
 				hostBoardID = boards[i].id
 				break
+			}
+		}
+		if hostBoardID == "" {
+			for i := range boards {
+				if !boardIsOpeningFront(&boards[i]) {
+					hostBoardID = boards[i].id
+					break
+				}
 			}
 		}
 		if hostBoardID == "" && len(boards) > 0 {

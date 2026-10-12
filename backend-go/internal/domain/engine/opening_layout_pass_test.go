@@ -314,3 +314,42 @@ func TestOpeningMembersWithoutDeclaredGeometryPlaceNothing(t *testing.T) {
 		}
 	}
 }
+
+// #1300: the opening members' HOST is the carcass board of the boundary
+// (the top board for a top-boundary gola) — the presentation adapter
+// rotates the door with its OWN hardware only, so a door-hosted grip
+// swung with the door. The members must never host on the front.
+func TestOpeningMembersHostOnTheCarcassBoard(t *testing.T) {
+	module, catalog := oneDoorCabinetCatalog()
+	catalog.Hardware = append(catalog.Hardware,
+		domain.Hardware{ID: "hw-gola-8006", Code: "8006", Name: "Perfil Gola L 8006", Unit: domain.UnitMeter, Active: true},
+	)
+	dims := &LayoutDims{WidthMm: 400, HeightMm: 720, DepthMm: 560}
+	members := OpeningMembers{
+		ProfileHardwareID: "hw-gola-8006",
+		ProfileHeightMm:   56.5,
+		ProfileDepthMm:    27.2,
+	}
+	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
+		fronts:         openingPassFront("top", 40),
+		openingMembers: &members,
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	for _, hw := range layout.Hardware {
+		if !strings.HasPrefix(hw.PlacementID, "opening-") {
+			continue
+		}
+		if hw.HostComponentInstanceID == "" {
+			t.Fatalf("%s lost its host binding", hw.PlacementID)
+		}
+		for _, component := range layout.Components {
+			if component.ComponentInstanceID == hw.HostComponentInstanceID &&
+				(component.SlotID == "puerta" || component.SlotID == "frente_cajon") {
+				t.Fatalf("%s hosts on the front %s — the grip must stay fixed to the carcass",
+					hw.PlacementID, component.ComponentInstanceID)
+			}
+		}
+	}
+}
