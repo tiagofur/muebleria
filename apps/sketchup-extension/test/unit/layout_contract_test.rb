@@ -320,21 +320,43 @@ class LayoutContractTest < Minitest::Test
     assert_equal [0.0, -1.0, 0.0], placement.basis['z']
   end
 
-  def test_hardware_with_malformed_local_transform_basis_fails_safe
+  # #1280: left/right hardware companions (gola supports) are physically
+  # mirrored parts — a mirrored (det = -1) hardware basis parses; a degraded
+  # basis (non-unit / non-orthogonal) still fails closed. Boards keep the
+  # strict right-handed rule (test_malformed_basis_fails_safe).
+  def test_hardware_mirrored_local_transform_basis_parses
     hw_raw = golden_hardware(
       'localTransform' => {
-        'translationMm' => [0.0, 0.0, 0.0],
+        'translationMm' => [400.0, 590.0, 720.0],
         'basis' => {
-          'x' => [0.0, 1.0, 0.0],
-          'y' => [1.0, 0.0, 0.0],
-          'z' => [0.0, 0.0, 1.0] # Left-handed (det = -1)
+          'x' => [-1.0, 0.0, 0.0],
+          'y' => [0.0, 1.0, 0.0],
+          'z' => [0.0, 0.0, 1.0]
         }
       }
     )
-    body = golden_layout.merge('hardware' => [hw_raw])
+    layout = Granete::SketchUpExtension::Library::LayoutContract.parse!(golden_layout.merge('hardware' => [hw_raw]))
+    assert_equal [-1.0, 0.0, 0.0], layout.hardware.first.basis['x']
+  end
 
-    assert_raises(Granete::SketchUpExtension::Library::LayoutContract::ContractError) do
-      Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+  def test_hardware_with_malformed_local_transform_basis_fails_safe
+    [
+      { 'x' => [0.0, -2.0, 0.0], 'y' => [1.0, 0.0, 0.0], 'z' => [0.0, 0.0, 1.0] }, # non-unit
+      { 'x' => [1.0, 0.0, 0.0], 'y' => [1.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }, # non-orthogonal
+      nil # basis missing
+    ].each do |basis|
+      hw_raw = golden_hardware(
+        'localTransform' => {
+          'translationMm' => [0.0, 0.0, 0.0],
+          'basis' => basis
+        }
+      )
+      body = golden_layout.merge('hardware' => [hw_raw])
+
+      assert_raises(Granete::SketchUpExtension::Library::LayoutContract::ContractError,
+                    "hardware basis #{basis.inspect} must fail safely") do
+        Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+      end
     end
   end
 

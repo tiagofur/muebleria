@@ -559,6 +559,37 @@ module Granete
         end
 
         def validate!(basis, id)
+          validate_shape!(basis, id)
+          det = ContractCoercions.dot(basis['x'], ContractCoercions.cross(basis['y'], basis['z']))
+          return if (det - 1.0).abs <= VECTOR_TOLERANCE
+
+          raise LayoutContract::ContractError,
+                "Componente #{id}: base no es diestra (det=#{det}); un espejo nunca se aplica"
+        end
+
+        # #1280: los herrajes SÍ pueden espejarse — los compañeros
+        # izquierda/derecha (soportes de gola) son físicamente espejados y
+        # SketchUp aplica transformaciones espejo en instancias legalmente.
+        # Unitario + ortogonal + |det|=1 se sigue exigiendo; los tableros
+        # conservan la regla estricta diestra de arriba.
+        def parse_mirrored(raw, id)
+          raise LayoutContract::ContractError, "Herraje #{id}: falta localTransform.basis" unless raw.is_a?(Hash)
+
+          basis = {
+            'x' => ContractCoercions.numeric_triple(raw['x'], "basis.x de #{id}"),
+            'y' => ContractCoercions.numeric_triple(raw['y'], "basis.y de #{id}"),
+            'z' => ContractCoercions.numeric_triple(raw['z'], "basis.z de #{id}")
+          }
+          validate_shape!(basis, id)
+          det = ContractCoercions.dot(basis['x'], ContractCoercions.cross(basis['y'], basis['z']))
+          unless (det.abs - 1.0).abs <= VECTOR_TOLERANCE
+            raise LayoutContract::ContractError,
+                  "Herraje #{id}: base degradada (det=#{det}); sólo se admite rotación o espejo puro"
+          end
+          basis
+        end
+
+        def validate_shape!(basis, id)
           basis.each do |axis, v|
             norm = Math.sqrt(ContractCoercions.dot(v, v))
             next if (norm - 1.0).abs <= VECTOR_TOLERANCE
@@ -576,11 +607,6 @@ module Granete
                     "Componente #{id}: basis.#{a}·basis.#{b} = #{d}, no es ortonormal"
             end
           end
-          det = ContractCoercions.dot(basis['x'], ContractCoercions.cross(basis['y'], basis['z']))
-          return if (det - 1.0).abs <= VECTOR_TOLERANCE
-
-          raise LayoutContract::ContractError,
-                "Componente #{id}: base no es diestra (det=#{det}); un espejo nunca se aplica"
         end
       end
 
@@ -632,7 +658,8 @@ module Granete
                                   raw.dig('localTransform', 'translationMm'),
                                   "translationMm de localTransform de herraje #{placement_id}"
                                 ),
-                                'basis' => BasisValidation.parse(raw.dig('localTransform', 'basis'), placement_id)
+                                'basis' => BasisValidation.parse_mirrored(raw.dig('localTransform', 'basis'),
+                                                                          placement_id)
                               }
                             end
 

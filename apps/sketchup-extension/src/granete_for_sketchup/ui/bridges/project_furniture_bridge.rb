@@ -64,11 +64,48 @@ module Granete
             handle_get_project_furniture(dialog)
             push_preflight_state(dialog)
             mark_host_save_pending
+            converge_design_opening_after_sync
           end
         rescue StandardError => e
           @logger.error('design_sync_handler_failed', error: e)
           execute_bridge(dialog, 'onSynchronizeDesignResult',
                          { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        # #1280 — the card's promise made real: "convergerá en la próxima
+        # edición o sincronización". After a successful sync of a bound
+        # model whose design DECLARES an opening, the placed furniture
+        # rebuilds to the fresh opening truth — opening a saved project
+        # brings its furniture in AS gola, not as the stale geometry the
+        # file happens to carry. The model attribute pins the workingVersion
+        # already converged so repeated syncs rebuild nothing; a new Apply
+        # (version bump) reconverges here. Designs without an opening (or
+        # handle baseline) skip without a single extra request beyond the
+        # opening state read.
+        def converge_design_opening_after_sync
+          stored = design_opening_binding_store.read
+          return unless stored
+
+          state = design_opening_placer.service.get_design_opening(stored.design_id)
+          return unless state.is_a?(Hash) && state['opening'].is_a?(Hash) &&
+                        state['opening']['system'] && state['opening']['system'] != 'handle'
+
+          version = state['workingVersion'].to_s
+          model = active_model
+          return unless model.respond_to?(:get_attribute)
+          return if !version.empty? &&
+                    model.get_attribute(Granete::SketchUpExtension::Metadata::Store::DICTIONARY,
+                                        'openingConvergedWorkingVersion').to_s == version
+
+          outcome = design_opening_converge_geometry(stored, state)
+          if outcome['status'] == 'converged' && !version.empty?
+            model.set_attribute(Granete::SketchUpExtension::Metadata::Store::DICTIONARY,
+                                'openingConvergedWorkingVersion', version)
+          end
+          outcome
+        rescue StandardError => e
+          @logger.error('design_sync_opening_convergence_failed', error: e)
+          nil
         end
 
         # Place EXISTING FurnitureInstance: identity arrives from the server
