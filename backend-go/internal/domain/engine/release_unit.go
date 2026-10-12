@@ -26,15 +26,62 @@ type ResolvedReleaseUnit struct {
 	ModuleDepthMm  int
 }
 
+// ReleaseUnitOpening (#1305) carries the per-furniture opening resolution
+// the release consumes: the resolved front region (BOM + routing layout),
+// the pinned member set (derived hardware in the layout), the resolved body
+// modifiers (side notches) and the resolved member BOM lines (production
+// hardware demand). All four come from ONE ResolveDesignOpening output over
+// the revision's frozen selection — the release never re-derives them.
+type ReleaseUnitOpening struct {
+	Fronts    []OpeningResolvedFront
+	Members   *OpeningMembers
+	Modifiers []ResolvedOpeningBodyModifier
+	BOMLines  []OpeningResolvedBOMLine
+}
+
+// openingMemberHardwareLines synthesizes the opening members' production
+// hardware lines from the resolved member BOM (#1263 rules — profile run in
+// metres, supports per length, caps per exposed end). No OptionRole: the
+// demand derives from the versioned opening selection, never from a material
+// choice, so the choices≡consumed gate ignores it. Lines without a resolved
+// hardware id place no demand (truthful absence — the underivable-BOM case
+// blocks upstream at the selection gate, never here).
+func openingMemberHardwareLines(moduleCode string, lines []OpeningResolvedBOMLine) []domain.ResolvedHardwareLine {
+	out := make([]domain.ResolvedHardwareLine, 0, len(lines))
+	for _, line := range lines {
+		if line.HardwareID == "" || line.Quantity <= 0 {
+			continue
+		}
+		out = append(out, domain.ResolvedHardwareLine{
+			ID:         fmt.Sprintf("%s-opening-%s", moduleCode, line.LineID),
+			Quantity:   line.Quantity,
+			HardwareID: line.HardwareID,
+		})
+	}
+	return out
+}
+
+// unitOpeningFor resolves the map entry for one physical unit; a nil/absent
+// map or a unit the opening does not govern resolves with no opening.
+func unitOpeningFor(openings map[string]ReleaseUnitOpening, furnitureInstanceID string) *ReleaseUnitOpening {
+	if len(openings) == 0 {
+		return nil
+	}
+	if opening, ok := openings[furnitureInstanceID]; ok {
+		return &opening
+	}
+	return nil
+}
+
 // ResolveReleaseUnit resolves one unversioned revision item from an already
 // tenant-scoped catalog. Callers must capture that catalog and result atomically;
 // this pure function does not make a mutable catalog historically authoritative.
 func ResolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog) (*ResolvedReleaseUnit, error) {
-	return resolveReleaseUnit(item, catalog, nil, nil)
+	return resolveReleaseUnit(item, catalog, nil, nil, nil)
 }
 
-func resolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog, collection *releaseExpansionBudget, baseCtx *BaseResolutionContext) (*ResolvedReleaseUnit, error) {
-	return resolveReleaseUnitOpt(item, catalog, collection, true, baseCtx)
+func resolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog, collection *releaseExpansionBudget, baseCtx *BaseResolutionContext, opening *ReleaseUnitOpening) (*ResolvedReleaseUnit, error) {
+	return resolveReleaseUnitOpt(item, catalog, collection, true, baseCtx, opening)
 }
 
 // resolveReleaseUnitOpt with strictChoices=false skips the choices≡consumed
@@ -42,7 +89,7 @@ func resolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog, 
 // commercial seed (extra roles included) to derive the consumed set, then let
 // callers intersect or reject explicitly. baseCtx (#830) is the unit's frozen
 // base-treatment authority; nil resolves with the module catalog defaults.
-func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalog, collection *releaseExpansionBudget, strictChoices bool, baseCtx *BaseResolutionContext) (*ResolvedReleaseUnit, error) {
+func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalog, collection *releaseExpansionBudget, strictChoices bool, baseCtx *BaseResolutionContext, opening *ReleaseUnitOpening) (*ResolvedReleaseUnit, error) {
 	if strings.TrimSpace(item.FurnitureInstanceID) == "" || strings.TrimSpace(item.FurnitureDefinitionID) == "" {
 		return nil, fmt.Errorf("release unit requires physical and definition identities")
 	}
@@ -137,9 +184,26 @@ func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalo
 	// manufacturing truth; commercial measure presets are not consulted.
 	// #830: the frozen base context (quoted authority) resolves the same
 	// effective base mode the pricing snapshot froze for this exact unit.
-	bom, err := ResolveBomForRelease(prepared, item.MaterialChoices, catalog, dims, baseCtx)
+	// #1305: the design opening's resolved fronts constrain the door parts of
+	// the SAME BOM expansion the machining layout will consume, and the
+	// resolved member lines (profile run, supports, caps) join the hardware
+	// demand — one governed resolve for the cut list, the machining evidence
+	// and the purchase requirements.
+	var unitOpening *ReleaseUnitOpening
+	if opening != nil && (len(opening.Fronts) > 0 || len(opening.BOMLines) > 0) {
+		unitOpening = opening
+	}
+	var bom domain.ResolvedBom
+	if unitOpening != nil {
+		bom, err = ResolveBomForReleaseWithOpening(prepared, item.MaterialChoices, catalog, dims, baseCtx, unitOpening.Fronts)
+	} else {
+		bom, err = ResolveBomForRelease(prepared, item.MaterialChoices, catalog, dims, baseCtx)
+	}
 	if err != nil {
 		return nil, err
+	}
+	if unitOpening != nil {
+		bom.HardwareLines = append(bom.HardwareLines, openingMemberHardwareLines(module.Code, unitOpening.BOMLines)...)
 	}
 	if strictChoices {
 		if err := validateReleaseUnitChoices(prepared, item.MaterialChoices, catalog, bom); err != nil {

@@ -323,7 +323,7 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 	// The routing program and per-unit profile demand derive INSIDE the
 	// collection resolve, so the gate verdict, the merged requirements and
 	// the frozen snapshot are one derivation.
-	collection, err := engine.ResolveReleaseCollection(designRevisionID, items, catalog, authority, serverInputs)
+	collection, err := engine.ResolveReleaseCollection(designRevisionID, items, catalog, authority, serverInputs, nil)
 	if err != nil {
 		// Server-side diagnostics: the 409 envelope is business-safe (typed
 		// blocker, unit identities only) — the underlying resolution cause is

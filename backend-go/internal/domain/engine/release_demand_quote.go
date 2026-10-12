@@ -51,11 +51,11 @@ func DeriveQuoteUnitProfileDemand(
 		return nil, nil
 	}
 	var budget releaseExpansionBudget
-	unit, err := resolveReleaseUnit(item, catalog, &budget, nil)
+	unit, err := resolveReleaseUnit(item, catalog, &budget, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	_, demand, err := deriveReleaseRoutingUnit(item, *unit, catalog, server)
+	_, demand, err := deriveReleaseRoutingUnit(item, *unit, catalog, server, nil)
 	if err != nil {
 		return nil, err
 	}

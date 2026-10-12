@@ -34,7 +34,12 @@ type ResolvedReleaseCollection struct {
 // derive the routing program and per-unit profile demand, merging the demand
 // into the material requirements BEFORE any package rounding, exactly like
 // every other hardware line.
-func ResolveReleaseCollection(designRevisionID string, items []domain.DesignRevisionItem, catalog domain.Catalog, authority *ReleaseResolutionContext, server *ReleaseServerInputs) (*ResolvedReleaseCollection, error) {
+// openings (#1305) maps each furniture instance to its per-furniture opening
+// resolution (fronts/members/modifiers/member BOM lines), synthesized by the
+// storage layer from the revision's frozen selection through ONE
+// ResolveDesignOpening call. nil/absent = no opening: the collection resolves
+// byte-identically to the pre-opening semantics.
+func ResolveReleaseCollection(designRevisionID string, items []domain.DesignRevisionItem, catalog domain.Catalog, authority *ReleaseResolutionContext, server *ReleaseServerInputs, openings map[string]ReleaseUnitOpening) (*ResolvedReleaseCollection, error) {
 	if strings.TrimSpace(designRevisionID) == "" || len(items) == 0 || len(items) > releaseUnitExpansionLimit {
 		return nil, fmt.Errorf("release collection requires an exact revision and 1..%d physical units", releaseUnitExpansionLimit)
 	}
@@ -63,7 +68,7 @@ func ResolveReleaseCollection(designRevisionID string, items []domain.DesignRevi
 				Reason:                err.Error(),
 			}
 		}
-		unit, err := resolveReleaseUnit(item, catalog, &budget, baseCtx)
+		unit, err := resolveReleaseUnit(item, catalog, &budget, baseCtx, unitOpeningFor(openings, item.FurnitureInstanceID))
 		if err != nil {
 			// #727: keep the exact physical identities and the business-safe
 			// cause typed — the API surfaces an actionable 409, never a parsed
@@ -95,7 +100,7 @@ func ResolveReleaseCollection(designRevisionID string, items []domain.DesignRevi
 	var profileDemand [][]HardwareProfileDemandLine
 	if server != nil {
 		var err error
-		routing, profileDemand, err = DeriveReleaseRoutingProgram(items, units, catalog, server)
+		routing, profileDemand, err = DeriveReleaseRoutingProgram(items, units, catalog, server, openings)
 		if err != nil {
 			return nil, err
 		}

@@ -472,6 +472,22 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 	return layout, boards, nil
 }
 
+// boardPlacementLabel resolves the managed placement vocabulary a board or
+// BOM part carries: the component's placement, possibly overridden by the
+// instance, "custom" when neither declares one. ONE helper feeds the layout
+// boards AND the BOM expansion so the opening fronts pass selects door
+// pieces with the same criterion on both derivations (#1305).
+func boardPlacementLabel(comp domain.Component, inst domain.ComponentInstance) string {
+	placement := string(comp.Placement)
+	if inst.PlacementOverride != nil && strings.TrimSpace(string(*inst.PlacementOverride)) != "" {
+		placement = strings.TrimSpace(string(*inst.PlacementOverride))
+	}
+	if placement == "" {
+		placement = "custom"
+	}
+	return placement
+}
+
 // resolveLayoutBoards walks structure + module + agregado component instances
 // (mirrors TS resolveComposedModule) and returns the resolved boards.
 func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims LayoutDims, optionChoices map[string]string, opts resolveOptions) ([]layoutBoard, error) {
@@ -751,13 +767,7 @@ func expandLayoutInstances(
 			}
 		}
 
-		placement := string(comp.Placement)
-		if inst.PlacementOverride != nil && strings.TrimSpace(string(*inst.PlacementOverride)) != "" {
-			placement = strings.TrimSpace(string(*inst.PlacementOverride))
-		}
-		if placement == "" {
-			placement = "custom"
-		}
+		placement := boardPlacementLabel(comp, inst)
 
 		defID := fmt.Sprintf("%s%s", idPrefix, comp.ID)
 		if opts.templateCollector != nil {
