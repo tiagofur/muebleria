@@ -11,7 +11,7 @@ Un administrador asigna una representación 3D a un herraje del catálogo. La mi
 
 «Completo» significa que el recorrido y su matriz de aceptación están implementados y ensayados. No significa un lector universal de cualquier archivo CAD, un catálogo de todos los fabricantes, fotorrealismo ni certificación de máquinas. El primer caso real es una jaladera; el segundo, una configuración exacta de MERIVOBOX. El mecanismo debe ser genérico y reutilizable para bisagras, correderas, patas, perfiles y accesorios, sin ramas por marca en Ruby o React.
 
-Este documento extiende, no sustituye, `3d-asset-library.md`, `parametric-furniture-library.md`, `sketchup-backend-web-integration-excellence.md`, ADR-0002/0003/0004 y el modelo existente de `Agregado`. Abrir/cerrar sigue perteneciendo a #529. Proyectar→Design working copy/publicación sigue perteneciendo a #643. PTX/CNC, pricing general, ERP y red de ventas no forman parte de esta implementación.
+Este documento extiende, no sustituye, [`3d-asset-library.md`](3d-asset-library.md), [`parametric-furniture-library.md`](parametric-furniture-library.md), [`sketchup-backend-web-integration-excellence.md`](sketchup-backend-web-integration-excellence.md), [ADR-0002](../adr/0002-parametric-furniture-library-architecture.md)/[ADR-0003](../adr/0003-project-owned-furniture-identity-and-versioned-design.md)/[ADR-0004](../adr/0004-sketchup-native-component-entity-model.md) y el modelo existente de `Agregado`. Abrir/cerrar sigue perteneciendo a #529. Proyectar→Design working copy/publicación sigue perteneciendo a #643. PTX/CNC, pricing general, ERP y red de ventas no forman parte de esta implementación.
 
 ## 2. Evidencia actual frente al objetivo
 

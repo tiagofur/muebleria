@@ -61,11 +61,11 @@
 Fuentes normativas:
 
 - principios 10–12:
-  `docs/architecture/project-design-digital-thread.md` + ADR-0003;
+  [`docs/architecture/project-design-digital-thread.md`](architecture/project-design-digital-thread.md) + [ADR-0003](adr/0003-project-owned-furniture-identity-and-versioned-design.md);
 - principio 13:
-  `docs/architecture/material-aware-furniture-resolution.md`;
+  [`docs/architecture/material-aware-furniture-resolution.md`](architecture/material-aware-furniture-resolution.md);
 - principios 14–20:
-  `docs/architecture/organization-foundation-v2.md` + ADR-0006.
+  [`docs/architecture/organization-foundation-v2.md`](architecture/organization-foundation-v2.md) + [ADR-0005](adr/0005-multi-organization-tenancy.md) / [ADR-0006](adr/0006-membership-lifecycle-and-organization-relationships.md).
 
 ---
 
@@ -451,11 +451,11 @@ semantic metadata. Debe conservar `furnitureInstanceId`. No puede usar
 La extensión no implementa BOM, drilling rules, nesting, kerf, stale/release gates ni
 postprocessing. Granete valida el
 [`SketchUp Manufacturing Contract`](sketchup-manufacturing-contract.md) y conserva
-la autoridad descrita en ADR-0001.
+la autoridad descrita en [ADR-0001](adr/0001-sketchup-authoring-granete-manufacturing-truth.md).
 
 El binding Project/Design, versionado de `.skp`, semantic manifest, duplicate
-identity handling y reconciliation se rigen por Project Design Digital Thread y
-ADR-0003.
+identity handling y reconciliation se rigen por [`Project Design Digital Thread`](architecture/project-design-digital-thread.md) y
+[ADR-0003](adr/0003-project-owned-furniture-identity-and-versioned-design.md).
 
 Un machine adapter serializa DTOs resueltos y capabilities declaradas; no inventa
 reglas de ingeniería.
@@ -510,8 +510,8 @@ transporte; fixtures cubren semántica de dominio duplicada.
 
 ## 8. Multi-organización, RLS y transacciones
 
-Fuentes: ADR-0005, ADR-0006 y
-`docs/architecture/organization-foundation-v2.md`.
+Fuentes: [ADR-0005](adr/0005-multi-organization-tenancy.md), [ADR-0006](adr/0006-membership-lifecycle-and-organization-relationships.md) y
+[`docs/architecture/organization-foundation-v2.md`](architecture/organization-foundation-v2.md).
 
 ### 8.1 Contexto de actor
 
@@ -897,19 +897,24 @@ relationship, publication y price policy stale.
   ver §9 para las dos capas del API;
 - UX: `docs/design.md` + `docs/operational-ux.md`;
 - producto: `docs/prd-v2.md`;
-- plan: `docs/operational-core-v1.md`;
+- plan: [`docs/operational-core-v1.md`](operational-core-v1.md);
 - Organization Foundation:
-  `docs/architecture/organization-foundation-v2.md` + ADR-0006;
-- tenancy baseline: ADR-0005;
-- distribución: `docs/multi-organization-distribution-model.md`;
-- gates: #462 + `docs/pilot-readiness.md` cuando se amplíe;
-- programa SketchUp: `docs/sketchup-granete-strategy.md`;
-- boundary SketchUp/Granete: ADR-0001;
-- selector visual de opciones: `docs/architecture/catalog-option-selector.md`;
+  [`docs/architecture/organization-foundation-v2.md`](architecture/organization-foundation-v2.md) + [ADR-0006](adr/0006-membership-lifecycle-and-organization-relationships.md);
+- tenancy baseline: [ADR-0005](adr/0005-multi-organization-tenancy.md);
+- distribución: [`docs/multi-organization-distribution-model.md`](multi-organization-distribution-model.md);
+- gates: #462 + [`docs/pilot-readiness.md`](pilot-readiness.md) cuando se amplíe;
+- programa SketchUp: [`docs/sketchup-granete-strategy.md`](sketchup-granete-strategy.md);
+- boundary SketchUp/Granete: [ADR-0001](adr/0001-sketchup-authoring-granete-manufacturing-truth.md);
+- parametric furniture library: [`docs/architecture/parametric-furniture-library.md`](architecture/parametric-furniture-library.md) + [ADR-0002](adr/0002-parametric-furniture-library-architecture.md);
+- SketchUp native entity model: [`docs/architecture/sketchup-native-entity-model.md`](architecture/sketchup-native-entity-model.md) + [ADR-0004](adr/0004-sketchup-native-component-entity-model.md);
+- manufacturing library platform: [`docs/architecture/manufacturing-library-platform.md`](architecture/manufacturing-library-platform.md) + [ADR-0008](adr/0008-manufacturing-library-releases-overlays-and-local-store.md);
+- opening / front system: [`docs/architecture/opening-front-system.md`](architecture/opening-front-system.md) + [ADR-0009](adr/0009-opening-front-system.md) (Proposed);
+- construction variants: [`docs/architecture/construction-variants.md`](architecture/construction-variants.md) + [ADR-0010](adr/0010-construction-variants.md) (Proposed);
+- selector visual de opciones: [`docs/architecture/catalog-option-selector.md`](architecture/catalog-option-selector.md);
 - material-aware resolution:
-  `docs/architecture/material-aware-furniture-resolution.md`;
-- furniture semantics: `docs/architecture/domain-model.md`;
-- Digital Thread: `docs/architecture/project-design-digital-thread.md` + ADR-0003.
+  [`docs/architecture/material-aware-furniture-resolution.md`](architecture/material-aware-furniture-resolution.md);
+- furniture semantics: [`docs/architecture/domain-model.md`](architecture/domain-model.md);
+- Digital Thread: [`docs/architecture/project-design-digital-thread.md`](architecture/project-design-digital-thread.md) + [ADR-0003](adr/0003-project-owned-furniture-identity-and-versioned-design.md).
 
 ---
 

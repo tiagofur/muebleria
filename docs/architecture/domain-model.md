@@ -35,7 +35,7 @@ For project lifecycle identity and quote/design/release versioning, the addition
 
 > **Project owns `FurnitureInstance` identity. QuoteRevision owns commercial truth. DesignRevision owns spatial/design truth. Granete owns manufacturing truth.**
 
-See `project-design-digital-thread.md` and ADR-0003. This document defines the furniture semantics; the digital-thread document defines how the same physical instance survives commercial/design/manufacturing revisions.
+See [`project-design-digital-thread.md`](project-design-digital-thread.md) and [ADR-0003](../adr/0003-project-owned-furniture-identity-and-versioned-design.md). This document defines the furniture semantics; the digital-thread document defines how the same physical instance survives commercial/design/manufacturing revisions.
 
 ---
 

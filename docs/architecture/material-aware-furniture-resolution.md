@@ -4,7 +4,7 @@
 > **Fecha:** 2026-08-26  
 > **Bounded Contexts:** Engineering, Catalog & Libraries, Design / Proyectar 3D, SketchUp Integration, Manufacturing  
 > **Programa:** #401 · issues #402–#405  
-> **Documentos relacionados:** `smart-furniture-engine.md`, `parametric-furniture-library.md`, `domain-model.md`, `catalog-option-selector.md`, `sketchup-interaction-model.md`, `docs/sketchup-manufacturing-contract.md`, ADR-0001 y ADR-0002.  
+> **Documentos relacionados:** [`smart-furniture-engine.md`](smart-furniture-engine.md), [`parametric-furniture-library.md`](parametric-furniture-library.md), [`domain-model.md`](domain-model.md), [`catalog-option-selector.md`](catalog-option-selector.md), [`sketchup-interaction-model.md`](sketchup-interaction-model.md), [`docs/sketchup-manufacturing-contract.md`](../sketchup-manufacturing-contract.md), [ADR-0001](../adr/0001-sketchup-authoring-granete-manufacturing-truth.md) y [ADR-0002](../adr/0002-parametric-furniture-library-architecture.md).  
 > **Invariante central:** **para toda pieza de tablero respaldada por un `MaterialBoard` seleccionado, el espesor efectivo del material participa en la resolución paramétrica antes de calcular dimensiones, posiciones, poses, anchors o geometría 3D.**
 
 ---

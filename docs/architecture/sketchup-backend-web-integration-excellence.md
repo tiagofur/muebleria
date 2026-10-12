@@ -1,6 +1,7 @@
 # Granete for SketchUp — Backend and React Integration Excellence
 
 Status: **Canonical cross-surface implementation contract**  
+Decision record: [ADR-0001](../adr/0001-sketchup-authoring-granete-manufacturing-truth.md)  
 Program: #465  
 Related authorities: #384, #446/#462, #413, #496–#504  
 Date: 2026-09-05 America/Mexico_City
