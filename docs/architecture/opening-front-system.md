@@ -243,3 +243,66 @@ grip-governed dimension is an authoring error, not a silent precedence rule.
   front reduction, side notch, support spacing, length rule interior vs exterior).
 - **OQ-3** Case C: overhang value, whether the bottom panel moves, and how
   overhang interacts with lights/under-cabinet profiles (REACH).
+
+## 13. Dimensional contract for profile supports, side notches and CNC
+
+Tracking issue: [#1282](https://github.com/tiagofur/muebleria/issues/1282). This section records the intended contract; it does **not** claim that the physical values or CNC output have already been verified.
+
+### 13.1. Dimensions, references and manufacturing rules are different data
+
+An Opening Profile / hardware definition must expose its physical dimensions even when the consuming factory cannot edit them. At minimum, the Gola profile needs datasheet-backed height and depth, a stable product identity/revision, supported placements, and an explicit geometric reference frame.
+
+Keep these concepts separate:
+
+- **Physical profile dimensions**: dimensions of the exact commercial profile, sourced from an identified datasheet.
+- **Support geometry and placement**: dimensions of the compatible support, its local origin/orientation, and the point or face used to position it.
+- **Insertion into the side**: the support's insertion/contact point and tool-entry face, resolved against the actual side-panel thickness and local coordinate frame.
+- **Front manufacturing adjustment**: the rule used to calculate the final door/front dimension. It is not automatically equal to the physical profile height or depth.
+- **Body machining**: the notch/cut-out and the corresponding machining feature for the side panel.
+
+Do not introduce global fields such as `gola_l_height` or `gola_c_height` as the source of truth when several exact profiles can belong to one family. Store dimensions with the exact profile/product definition; store factory-specific, allowed manufacturing adjustments in the existing policy/overlay model and pin the effective values through the existing release lifecycle. Reuse #1102/#772/#773; do not add a second versioning mechanism.
+
+### 13.2. Support placement contract
+
+For a support compatible with a given profile, the intended geometric constraints are:
+
+- Vertical position: **profile height / 2**, measured from the explicitly declared height reference of that profile.
+- Depth position: resolved from the profile's declared depth and an explicit reference (for example, a profile face, support bearing face, or insertion point). The contract must state which reference is used; the word “depth” alone is insufficient.
+- Side insertion point: resolved using the actual side thickness, support geometry, installation face and local coordinate frame. Thickness is an input to the geometric relationship, not a coordinate by itself.
+- Orientation and handedness: left/right side transforms must preserve the intended physical entry face and must not accidentally mirror the machining operation to the wrong face.
+
+The exact support SKU, local origin, offsets and installation face must be documented from a verified drawing/datasheet or an explicit validated factory rule. Do not infer them from the visual asset, a product name, or a guessed center point. The formula height/2 is a placement rule, not permission to invent missing profile/support dimensions.
+
+### 13.3. Side notch and CNC operation
+
+A side notch is a construction/manufacturing effect of a compatible Opening Profile only when that profile's verified installation specification requires it. Do not assume all Gola L/C profiles require the same notch; some installations may not require a body notch.
+
+When required, the notch definition must identify at least: target constructive role (`side`), local reference/anchor, side and face, height, depth, width/extent, position, tool-entry face, units, source profile/revision, and applicable tolerances/constraints. Values mentioned during investigation such as 19 × 10 mm are **unverified examples**, not defaults or universal specifications.
+
+The visible side geometry and the CNC machining feature must derive from the same resolved definition. The notch must flow through the existing machining pipeline and retain provenance to the source profile/release and target component instance. Validate operation depth, access/face, panel thickness, coordinate transform and machine/output capability. A visual cut-out without a corresponding manufacturing operation is incomplete; a machining operation without matching resolved geometry is also incomplete.
+
+Use constructive roles and stable component-instance identities, never part names or string matching. Do not create a second CNC/machining engine. If the required physical data or output capability is missing, block the affected authoring/manufacturing result with an explicit diagnostic rather than silently omitting the cut or inventing a fallback.
+
+### 13.4. Door-height adjustment: 30 mm versus 40 mm
+
+A factory has reported using a 30 mm door-height adjustment where a manual/reference is understood to indicate 40 mm. This is an open investigation, not a decision that either value is universally correct.
+
+Before setting a default, document what each number measures and its reference geometry: physical profile height, installation envelope, door/front reduction, grip clearance, or a total adjustment that may include other clearances. Confirm the exact profile/SKU and source document. Do not change the physical profile dimensions to make a door formula match a factory adjustment.
+
+The effective front adjustment must be explicit, scoped to the applicable profile/installation/factory policy, validated, and traceable. A missing required physical dimension blocks authoring; a permitted factory-specific adjustment must not be silently replaced by the catalogue dimension. Avoid double-applying reductions when multiple grip boundaries (for example, top Gola L plus intermediate Gola C) are present.
+
+### 13.5. Required validation scenarios
+
+- Gola L and Gola C profiles with verified dimensions and explicit support compatibility.
+- Support height at profile height / 2, tested numerically against the declared reference.
+- Depth positioning with the reference documented and the side insertion point resolved for the actual panel thickness.
+- Left and right side panels, mirrored transforms, and correct machining face.
+- Profile that requires a notch versus a verified profile/installation that does not.
+- Same geometry definition drives both the visible notch and CNC feature.
+- Missing dimensions, missing support drawing, unknown notch requirements, incompatible thickness or unsupported machining capability fail closed.
+- Factory front adjustment of 30 mm versus 40 mm is tested only as two explicitly configured cases after the meaning and reference of each are documented; neither becomes a universal default by test convenience.
+- Resolve/rebuild/sync is deterministic and idempotent; no duplicate cuts or repeated door reductions.
+- Go/server resolve remains authoritative; TS is parity-only where applicable, and SketchUp consumes the resolved placement/machining output rather than maintaining its own geometric formula.
+
+See [#1282](https://github.com/tiagofur/muebleria/issues/1282) for the issue-level acceptance criteria.
+
