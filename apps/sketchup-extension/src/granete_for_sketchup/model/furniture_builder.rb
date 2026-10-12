@@ -107,21 +107,23 @@ module Granete
         # convention the #414 basis maps onto the furniture frame). World/AABB
         # coordinates are never baked into definition geometry.
         def build_local_box(definition, width_mm, thickness_mm, length_mm, notches: [])
-          width = width_mm * MM_TO_INCHES
-          thickness = thickness_mm * MM_TO_INCHES
-          length = length_mm * MM_TO_INCHES
+          extents = [width_mm, thickness_mm, length_mm].map { |value| value * MM_TO_INCHES }
 
-          local_box_segments(width, thickness, length, notches).each do |segment|
-            add_box_segment(definition, segment, thickness)
+          local_box_segments(extents, notches).each do |segment|
+            add_box_segment(definition, segment)
           end
         end
 
-        def add_box_segment(definition, segment, thickness)
+        def add_box_segment(definition, segment)
+          x0 = segment[:x0]
+          x1 = segment[:x1]
+          y0 = segment[:y0]
+          y1 = segment[:y1]
           pts = [
-            Geom::Point3d.new(segment[:x0], 0, segment[:z0]),
-            Geom::Point3d.new(segment[:x1], 0, segment[:z0]),
-            Geom::Point3d.new(segment[:x1], thickness, segment[:z0]),
-            Geom::Point3d.new(segment[:x0], thickness, segment[:z0])
+            Geom::Point3d.new(x0, y0, segment[:z0]),
+            Geom::Point3d.new(x1, y0, segment[:z0]),
+            Geom::Point3d.new(x1, y1, segment[:z0]),
+            Geom::Point3d.new(x0, y1, segment[:z0])
           ]
           face = definition.entities.add_face(pts)
           return unless face
@@ -134,51 +136,78 @@ module Granete
         # local Z (the vertical axis of the opening notch): full cross-section
         # below and above, and the front-reduced cross-section across the
         # notch band — the visible subtraction without boolean operations.
-        # Only through-thickness corner notches are representable; anything
-        # else fails loudly instead of silently rendering a plain box.
-        def local_box_segments(width, thickness, length, notches)
-          return [{ x0: 0.0, x1: width, z0: 0.0, z1: length }] if notches.nil? || notches.empty?
+        # Axis-agnostic like the engine: the local width/thickness naming is
+        # a catalog convention (a lateral may carry X=thickness and Y=depth
+        # or the mirror), so the through axis is whichever span the notch
+        # covers FULLY. Only a through corner notch with its height band on
+        # the local Z is representable; anything else fails loudly instead
+        # of silently rendering a plain box.
+        def local_box_segments(extents, notches)
+          full = { x0: 0.0, x1: extents[0], y0: 0.0, y1: extents[1], z0: 0.0, z1: extents[2] }
+          return [full] if notches.nil? || notches.empty?
 
           raise ArgumentError, 'sólo se materializa una muesca por tablero' if notches.size > 1
 
-          notch = notches.first
-          unless through_thickness?(notch, thickness)
-            raise ArgumentError, 'la muesca debe atravesar todo el espesor del tablero'
-          end
-
-          band = notch_band_in_inches(notch)
-          reduced = reduced_span(band, width)
+          band = notch_band_in_inches(notches.first, extents)
+          reduced = reduced_cross_section(band, extents)
 
           segments = []
-          segments << { x0: 0.0, x1: width, z0: 0.0, z1: band[:z0] } if band[:z0].positive?
-          segments << { x0: reduced[:x0], x1: reduced[:x1], z0: band[:z0], z1: band[:z1] }
-          segments << { x0: 0.0, x1: width, z0: band[:z1], z1: length } if band[:z1] < length - 1.0e-6
+          segments << full.merge(z0: 0.0, z1: band[:z0]) if band[:z0].positive?
+          segments << full.merge(x0: reduced[:x0], x1: reduced[:x1], y0: reduced[:y0], y1: reduced[:y1],
+                                 z0: band[:z0], z1: band[:z1])
+          segments << full.merge(z0: band[:z1], z1: extents[2]) if band[:z1] < extents[2] - 1.0e-6
           segments
         end
 
-        def through_thickness?(notch, thickness)
-          (notch['sizeMm'][1] - thickness).abs < 1.0e-6
+        def notch_band_in_inches(notch, extents)
+          band = notch_band_mm(notch).transform_values { |value| value * MM_TO_INCHES }
+          through_axis?(band, extents) || raise_full_thickness
+          unless band[:z1] <= extents[2] + 1.0e-6
+            raise ArgumentError, 'la muesca excede la dimensión vertical del tablero'
+          end
+
+          band
         end
 
-        def notch_band_in_inches(notch)
+        def notch_band_mm(notch)
           start_mm = notch['startMm']
           size_mm = notch['sizeMm']
           {
-            x0: start_mm[0] * MM_TO_INCHES,
-            x1: (start_mm[0] + size_mm[0]) * MM_TO_INCHES,
-            z0: start_mm[2] * MM_TO_INCHES,
-            z1: (start_mm[2] + size_mm[2]) * MM_TO_INCHES
+            x0: start_mm[0], x1: start_mm[0] + size_mm[0],
+            y0: start_mm[1], y1: start_mm[1] + size_mm[1],
+            z0: start_mm[2], z1: start_mm[2] + size_mm[2]
           }
         end
 
-        # The notch must reach one X edge for the two-segment construction;
-        # an interior strip is not representable and fails loudly.
-        def reduced_span(band, width)
-          touches_start = band[:x0] <= 1.0e-6
-          touches_end = band[:x1] >= width - 1.0e-6
+        def through_axis?(band, extents)
+          full_x = (band[:x1] - band[:x0] - extents[0]).abs < 1.0e-6
+          full_y = (band[:y1] - band[:y0] - extents[1]).abs < 1.0e-6
+          full_x || full_y
+        end
+
+        def raise_full_thickness
+          raise ArgumentError, 'la muesca debe atravesar todo el espesor del tablero'
+        end
+
+        # The cross-section complement of the notch band is representable as
+        # ONE rectangle only when the partial span reaches one edge; an
+        # interior strip is not representable and fails loudly.
+        def reduced_cross_section(band, extents)
+          if (band[:y1] - band[:y0] - extents[1]).abs < 1.0e-6
+            touches_start = band[:x0] <= 1.0e-6
+            touches_end = band[:x1] >= extents[0] - 1.0e-6
+            raise ArgumentError, 'la muesca debe alcanzar un borde del tablero' unless touches_start || touches_end
+
+            return { x0: touches_start ? band[:x1] : 0.0, x1: touches_start ? extents[0] : band[:x0],
+                     y0: 0.0, y1: extents[1] }
+          end
+
+          touches_start = band[:y0] <= 1.0e-6
+          touches_end = band[:y1] >= extents[1] - 1.0e-6
           raise ArgumentError, 'la muesca debe alcanzar un borde del tablero' unless touches_start || touches_end
 
-          { x0: touches_start ? band[:x1] : 0.0, x1: touches_start ? width : band[:x0] }
+          { x0: 0.0, x1: extents[0],
+            y0: touches_start ? band[:y1] : 0.0, y1: touches_start ? extents[1] : band[:y0] }
         end
       end
 

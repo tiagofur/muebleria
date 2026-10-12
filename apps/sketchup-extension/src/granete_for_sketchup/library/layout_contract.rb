@@ -1157,10 +1157,10 @@ module Granete
         def parse(raw, id)
           return [] if raw.nil?
 
-          raise ContractError, "notches de #{id} debe ser un arreglo" unless raw.is_a?(Array)
+          raise LayoutContract::ContractError, "notches de #{id} debe ser un arreglo" unless raw.is_a?(Array)
 
           raw.map do |notch|
-            raise ContractError, "notch de #{id} inválido" unless notch.is_a?(Hash)
+            raise LayoutContract::ContractError, "notch de #{id} inválido" unless notch.is_a?(Hash)
 
             {
               'startMm' => ContractCoercions.numeric_triple(notch['startMm'], "startMm del notch de #{id}"),
@@ -1173,7 +1173,10 @@ module Granete
 
         def positive_size(raw, id)
           size = ContractCoercions.numeric_triple(raw, "sizeMm del notch de #{id}")
-          raise ContractError, "sizeMm del notch de #{id} debe ser positivo en cada eje" unless size.all?(&:positive?)
+          unless size.all?(&:positive?)
+            raise LayoutContract::ContractError,
+                  "sizeMm del notch de #{id} debe ser positivo en cada eje"
+          end
 
           size
         end
