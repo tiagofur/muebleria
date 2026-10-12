@@ -28,7 +28,7 @@ func TestOpeningProfile_roundTripAndIfMatch(t *testing.T) {
 			DatasheetStatus: "pending",
 			BodyModifiers: []domain.OpeningBodyModifier{
 				{Role: "top", DepthReductionMm: openingIntPtr(18)},
-				{Role: "side", NotchHeightMm: openingIntPtr(16), NotchDepthMm: openingIntPtr(9), NotchAt: "top_front"},
+				{Role: "side", NotchHeightMm: openingFloatPtr(56.5), NotchDepthMm: openingFloatPtr(27.2), NotchAt: "top_front"},
 			},
 			BOMMembers: map[string]domain.OpeningBOMMember{
 				"profile": {HardwareID: "", Rule: "interior_width", Unit: "meter"},
@@ -75,3 +75,5 @@ func TestOpeningProfile_roundTripAndIfMatch(t *testing.T) {
 }
 
 func openingIntPtr(v int) *int { return &v }
+
+func openingFloatPtr(v float64) *float64 { return &v }

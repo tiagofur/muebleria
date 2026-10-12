@@ -103,27 +103,27 @@ func localNotchBox(board *layoutBoard, modifier ResolvedOpeningBodyModifier, kin
 	// Vertical span: the notch hangs from the board's furniture-top end
 	// (top boundary) or rises from its furniture-bottom end (bottom).
 	axisSize := sizes[axis]
-	if float64(modifier.NotchHeightMm) >= axisSize {
+	if modifier.NotchHeightMm >= axisSize {
 		return LayoutNotch{}, fmt.Errorf(
-			"componente %s: la muesca %d mm no cabe en la dimensión vertical %g mm",
+			"componente %s: la muesca %g mm no cabe en la dimensión vertical %g mm",
 			board.id, modifier.NotchHeightMm, axisSize)
 	}
 	if (kind == "top") == (sign > 0) {
-		start[axis] = axisSize - float64(modifier.NotchHeightMm)
+		start[axis] = axisSize - modifier.NotchHeightMm
 	}
-	size[axis] = float64(modifier.NotchHeightMm)
+	size[axis] = modifier.NotchHeightMm
 
 	// Front span: from the furniture-front edge toward the back.
 	frontSize := sizes[frontAxis]
-	if float64(modifier.NotchDepthMm) >= frontSize {
+	if modifier.NotchDepthMm >= frontSize {
 		return LayoutNotch{}, fmt.Errorf(
-			"componente %s: la muesca %d mm no cabe en la dimensión de frente %g mm",
+			"componente %s: la muesca %g mm no cabe en la dimensión de frente %g mm",
 			board.id, modifier.NotchDepthMm, frontSize)
 	}
 	if frontSign > 0 {
-		start[frontAxis] = frontSize - float64(modifier.NotchDepthMm)
+		start[frontAxis] = frontSize - modifier.NotchDepthMm
 	}
-	size[frontAxis] = float64(modifier.NotchDepthMm)
+	size[frontAxis] = modifier.NotchDepthMm
 
 	// Through the full remaining (thickness) axis.
 	for a := 0; a < 3; a++ {

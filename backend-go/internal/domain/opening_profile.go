@@ -49,12 +49,14 @@ type OpeningProfile struct {
 
 // OpeningBodyModifier declares (data, not logic) how the profile modifies a
 // body component addressed by constructive role — never by name (#1052).
+// #1292 / §13.3: the notch is the profile's own section passage (8006:
+// 56.5 × 27.2) — decimal by datasheet, so REAL/float64, never truncated.
 type OpeningBodyModifier struct {
-	Role             string `json:"role"`
-	DepthReductionMm *int   `json:"depth_reduction_mm,omitempty"`
-	NotchHeightMm    *int   `json:"notch_height_mm,omitempty"`
-	NotchDepthMm     *int   `json:"notch_depth_mm,omitempty"`
-	NotchAt          string `json:"notch_at,omitempty"`
+	Role             string   `json:"role"`
+	DepthReductionMm *int     `json:"depth_reduction_mm,omitempty"`
+	NotchHeightMm    *float64 `json:"notch_height_mm,omitempty"`
+	NotchDepthMm     *float64 `json:"notch_depth_mm,omitempty"`
+	NotchAt          string   `json:"notch_at,omitempty"`
 }
 
 // OpeningBOMMember is a BOM reference/rule (exact SKU + length rule), never a

@@ -256,13 +256,14 @@ func TestAuthoringResolveDesignOpeningPlacesPinnedMembers(t *testing.T) {
 	if counts["hw-gola-profile"] != 1 || counts["hw-gola-support"] != 3 || counts["hw-gola-cap"] != 2 {
 		t.Fatalf("derived member counts = %v", counts)
 	}
-	// §13.2 numeric rule: every support origin sits at profile height / 2
-	// below the declared top reference — 720 − 56.5/2 = 691.75.
+	// #1292: every support origin (its top mounting edge) sits AT the
+	// declared height reference — the carcass top plane 720; the SKP hangs
+	// down from it and its grip centers on the profile section.
 	for _, hw := range response.Resolved.Layout.Hardware {
 		if hw.HardwareID == "hw-gola-support" {
 			z := hw.Transform.TranslationMm[2]
-			if diff := z - (720 - 56.5/2); diff < -1e-9 || diff > 1e-9 {
-				t.Fatalf("support Z = %v, want 691.75 (top ref − profile height/2)", z)
+			if diff := z - 720; diff < -1e-9 || diff > 1e-9 {
+				t.Fatalf("support Z = %v, want 720 (top mounting edge at the top reference)", z)
 			}
 		}
 	}

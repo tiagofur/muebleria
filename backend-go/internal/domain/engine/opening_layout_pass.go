@@ -175,13 +175,17 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 		))
 	}
 
-	// 2. Supports: vertical position = profile height / 2 from the declared
-	// height reference (§13.2); envelope from the accessory's declared dims.
-	// Members without declared geometry place nothing.
+	// 2. Supports: the SKP's local origin is its top mounting edge
+	// ("arista superior de montaje", the modeling convention the SU116 asset
+	// carries) — placed AT the declared height reference (the carcass top
+	// plane), the plate hangs down and its grip centers on the profile
+	// section. §13.2's height/2 rule holds through that convention; the
+	// envelope comes from the accessory's declared dims. Members without
+	// declared geometry place nothing.
 	if members.SupportHardwareID != "" && members.SupportDimsMm != nil {
 		if hw, ok := findHardware(catalog, members.SupportHardwareID); ok && hw.Active {
 			supportDims := *members.SupportDimsMm
-			zSupport := zPos - members.ProfileHeightMm/2
+			zSupport := zPos
 			// Left support: at X = 0, normal orientation
 			layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 				hw,
@@ -233,13 +237,19 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 		}
 	}
 
-	// 3. End Caps:
+	// 3. End Caps: the cap covers the profile's exposed section end, so its
+	// envelope sits INSIDE the profile's band — origin at the box's MIN
+	// corner (the host's fallback box extends +axes from the translation;
+	// an origin at the top-front plane would float above/in front of the
+	// cabinet). Left cap spans X [0, 3]; right mirrors at the far end.
 	if members.CapHardwareID != "" && members.CapDimsMm != nil {
 		if hw, ok := findHardware(catalog, members.CapHardwareID); ok && hw.Active {
 			capDims := *members.CapDimsMm
+			capY := yPos - capDims[1]
+			capZ := zPos - capDims[2]
 			layout.Hardware = append(layout.Hardware,
-				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-left-%s", hw.ID), [3]float64{0, yPos, zPos}, LayoutBasis{X: [3]float64{1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, capDims, hostBoardID, face),
-				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-right-%s", hw.ID), [3]float64{totalW, yPos, zPos}, LayoutBasis{X: [3]float64{-1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, capDims, hostBoardID, face),
+				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-left-%s", hw.ID), [3]float64{0, capY, capZ}, LayoutBasis{X: [3]float64{1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, capDims, hostBoardID, face),
+				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-right-%s", hw.ID), [3]float64{totalW, capY, capZ}, LayoutBasis{X: [3]float64{-1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, capDims, hostBoardID, face),
 			)
 		}
 	}

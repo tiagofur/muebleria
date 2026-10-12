@@ -213,18 +213,19 @@ func TestOpeningMembersPlaceFromDeclaredDatasheet(t *testing.T) {
 		t.Fatalf("profile translation = %v, want [0 560 720]", profile.Transform.TranslationMm)
 	}
 
-	// §13.2 core rule: support origin at profile height / 2 below the top
-	// reference — 720 − 56.5/2 = 691.75.
+	// #1292: the support's local origin is its top mounting edge — placed AT
+	// the declared height reference (the carcass top plane 720); the SKP
+	// hangs down from it and its grip centers on the profile section.
 	left := byID["opening-support-left-hw-su116"]
-	if left.Transform.TranslationMm != [3]float64{0, 560, 691.75} {
-		t.Fatalf("left support translation = %v, want [0 560 691.75] (top ref − 56.5/2)", left.Transform.TranslationMm)
+	if left.Transform.TranslationMm != [3]float64{0, 560, 720} {
+		t.Fatalf("left support translation = %v, want [0 560 720] (top mounting edge at the top reference)", left.Transform.TranslationMm)
 	}
 	if left.DimensionsMm != [3]float64{17, 19.5, 39.5} {
 		t.Fatalf("support envelope = %v, want declared [17 19.5 39.5]", left.DimensionsMm)
 	}
 	right := byID["opening-support-right-hw-su116"]
-	if right.Transform.TranslationMm != [3]float64{400, 560, 691.75} {
-		t.Fatalf("right support translation = %v, want [400 560 691.75]", right.Transform.TranslationMm)
+	if right.Transform.TranslationMm != [3]float64{400, 560, 720} {
+		t.Fatalf("right support translation = %v, want [400 560 720]", right.Transform.TranslationMm)
 	}
 	if right.LocalTransform.Basis.X != [3]float64{-1, 0, 0} {
 		t.Fatalf("right support must stay mirrored in X, got %v", right.LocalTransform.Basis.X)
@@ -233,6 +234,16 @@ func TestOpeningMembersPlaceFromDeclaredDatasheet(t *testing.T) {
 	capLeft := byID["opening-cap-left-hw-cf8006tp"]
 	if capLeft.DimensionsMm != [3]float64{3, 28.8, 58} {
 		t.Fatalf("cap envelope = %v, want declared [3 28.8 58]", capLeft.DimensionsMm)
+	}
+	// #1292: the cap box sits INSIDE the profile band (min-corner origin —
+	// the host fallback extends +axes from the translation): Y [531.2, 560],
+	// Z [662, 720], left cap X [0, 3] / right cap X [397, 400].
+	if capLeft.Transform.TranslationMm != [3]float64{0, 531.2, 662} {
+		t.Fatalf("left cap translation = %v, want [0 531.2 662] (min corner of the cap band)", capLeft.Transform.TranslationMm)
+	}
+	capRight := byID["opening-cap-right-hw-cf8006tp"]
+	if capRight.Transform.TranslationMm != [3]float64{400, 531.2, 662} {
+		t.Fatalf("right cap translation = %v, want [400 531.2 662] (mirrored)", capRight.Transform.TranslationMm)
 	}
 
 	// Idempotence: a second resolve is byte-identical (no duplicated members).
