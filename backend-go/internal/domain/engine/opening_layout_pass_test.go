@@ -213,19 +213,20 @@ func TestOpeningMembersPlaceFromDeclaredDatasheet(t *testing.T) {
 		t.Fatalf("profile translation = %v, want [0 560 720]", profile.Transform.TranslationMm)
 	}
 
-	// #1292: the support's local origin is its top mounting edge — placed AT
-	// the declared height reference (the carcass top plane 720); the SKP
-	// hangs down from it and its grip centers on the profile section.
+	// #1296: the support's origin (the L's corner: plate face, arm rear,
+	// bracket bottom) mounts on the side's INNER face (18mm board), behind
+	// the profile band (arm tip at 560−27.2) and centered on the profile's
+	// height (720−56.5/2−39.5/2).
 	left := byID["opening-support-left-hw-su116"]
-	if left.Transform.TranslationMm != [3]float64{0, 560, 720} {
-		t.Fatalf("left support translation = %v, want [0 560 720] (top mounting edge at the top reference)", left.Transform.TranslationMm)
+	if left.Transform.TranslationMm != [3]float64{18, 513.3, 672} {
+		t.Fatalf("left support translation = %v, want [18 513.3 672] (inner face, behind profile, height-centered)", left.Transform.TranslationMm)
 	}
 	if left.DimensionsMm != [3]float64{17, 19.5, 39.5} {
 		t.Fatalf("support envelope = %v, want declared [17 19.5 39.5]", left.DimensionsMm)
 	}
 	right := byID["opening-support-right-hw-su116"]
-	if right.Transform.TranslationMm != [3]float64{400, 560, 720} {
-		t.Fatalf("right support translation = %v, want [400 560 720]", right.Transform.TranslationMm)
+	if right.Transform.TranslationMm != [3]float64{382, 513.3, 672} {
+		t.Fatalf("right support translation = %v, want [382 513.3 672] (mirrored inner face)", right.Transform.TranslationMm)
 	}
 	if right.LocalTransform.Basis.X != [3]float64{-1, 0, 0} {
 		t.Fatalf("right support must stay mirrored in X, got %v", right.LocalTransform.Basis.X)
