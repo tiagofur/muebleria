@@ -45,12 +45,17 @@ func TestMFAAttemptLimiter_ConcurrentInvalidAttemptsAdmitOnlyBurst(t *testing.T)
 			defer wg.Done()
 			<-start
 			complete, ok := limiter.reserve("step-up:user")
-			attempted.Done()
+			// #1247: the channel send must precede Done — otherwise Wait can
+			// return while a goroutine is still between reserve and its send,
+			// and the len() counts below read a half-filled channel (the
+			// timing race that made this test flake).
 			if !ok {
 				rejected <- struct{}{}
+				attempted.Done()
 				return
 			}
 			admitted <- struct{}{}
+			attempted.Done()
 			<-release
 			complete(storage.ErrMFAInvalidCode)
 		}()
