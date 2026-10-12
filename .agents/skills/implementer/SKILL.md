@@ -6,24 +6,33 @@ description: "Trigger: implement one approved issue as the sole writer under the
 # Implementer
 
 Read [the portable G-ODD contract](../../../docs/demo/software-factory-human-start.md),
-`AGENTS.md`, the approved issue, and the applicable execution artifact before writing.
-You own the candidate, not scope selection, approval, independent review, or merge.
+`AGENTS.md`, and the open approved issue before writing. Confirm the authorized
+lane: read the canonical execution artifact only when that lane requires one.
+Do not invent or generate execution artifacts for Direct, never duplicate an
+ODD or SDD artifact, and never treat an execution artifact as authority to
+expand approved scope. You own the candidate, not scope selection, approval,
+independent review, or merge.
 
 ## Protocol
 
 1. Verify acceptance/exclusions, exact base, existing PR, ownership/reservation,
    branch/worktree, one-writer state, and current remote facts required by the issue.
-2. Confirm the lane. Direct has no artifact; ODD has exactly one
-   `odd/tasks/<issue>-<slug>.md`; explicit SDD uses its canonical tasks artifact.
+2. Confirm the authorized lane. Direct requires no execution artifact (do not
+   invent or generate one); substantial ODD has exactly one canonical
+   `odd/tasks/<issue>-<slug>.md`; explicit SDD uses its canonical tasks artifact
+   without creating an ODD duplicate. Do not use an artifact to expand scope
+   beyond the approved issue.
 3. Run `python3 scripts/factory_preflight.py` and require task tools as needed. Its
    `PREFLIGHT_OK_NOT_VERIFIED` result authorizes nothing and proves no behavior.
 4. Read only the affected code, tests, contracts, ADRs, and domain documentation.
    Do not use the capability catalog or a global progress ledger to choose work,
-   store execution state, or perform routine completion cleanup. For ODD, read only
-   the exact issue artifact after the issue is known.
+   store execution state, or perform routine completion cleanup. When the lane
+   requires an execution artifact, read only that exact canonical issue artifact
+   after the issue is known.
 5. Record the outcome, scope, tasks, checks, forecast, and delivery strategy in the
-   existing execution artifact when the lane has one. Never create a review-round or
-   tool-specific duplicate.
+   existing execution artifact only when the authorized lane has one. Never create
+   a review-round or tool-specific duplicate, and never treat an execution artifact
+   as authorization for extra scope.
 6. Implement the approved root change in one coherent pass. Keep tests and docs with
    behavior and avoid adjacent refactors. Use configured TDD when explicitly active;
    otherwise run ordinary focused checks while developing.
