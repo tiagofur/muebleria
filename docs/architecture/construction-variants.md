@@ -84,3 +84,15 @@ Furniture definition (Module + Structure)
 > Este documento no activa writers de producto, ni migraciones, ni UI; su
 > único entregable son las fronteras y el contrato inicial aprobados en
 > [#1139](https://github.com/tiagofur/muebleria/issues/1139).
+
+## 6. Concrete cross-system example: Gola L depth
+
+The Opening/Front System has a body modifier whose target depends on the selected Construction Variant. For the same Gola L profile and equivalent cabinet dimensions:
+
+- **Full-top variant:** reduce the depth of the canonical full-top component by the resolved profile depth, using an explicit anchor/reference.
+- **Manguetes variant:** retract the relevant manguete component(s) toward the back by the resolved profile depth, using their local frame/reference.
+
+This is not a reason to merge ConstructionVariant into OpeningProfile. ConstructionVariant declares which body topology and canonical roles exist; OpeningProfile supplies the physical dimensions/effect; server resolve composes them. The resolver must not infer the construction from component names, dimensions, or mesh inspection.
+
+The domain meaning and stable `ConstructiveRole` mapping for *manguete* remains an explicit question for this contract. Do not assume it means `divider` or `custom` without a documented decision and fixtures. The geometry contract and acceptance tests are tracked by [#1139](https://github.com/tiagofur/muebleria/issues/1139), [#1132](https://github.com/tiagofur/muebleria/issues/1132) and [#1282](https://github.com/tiagofur/muebleria/issues/1282).
+
