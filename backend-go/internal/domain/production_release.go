@@ -177,6 +177,15 @@ const (
 	// (missing, malformed/incomplete, or not binding the exact unit). The
 	// remedy is preparing a new modern quote — never refilling history.
 	PreflightIssueFrozenBaseContext ManufacturingPreflightIssueCode = "frozen_base_context"
+	// PreflightIssueOpeningReleaseUnsupported (#1302): the revision's frozen
+	// authoring defaults declare a real opening system (gola/rebase) whose
+	// production integration does not exist yet — the release snapshot
+	// resolves WITHOUT the opening fronts/members/body modifiers, so a
+	// release would freeze fronts at definition dimensions, drop the side
+	// notch and omit the opening hardware the quote already sells. The
+	// remedy is wiring the opening into the release resolve, never bypassing
+	// the gate.
+	PreflightIssueOpeningReleaseUnsupported ManufacturingPreflightIssueCode = "opening_release_unsupported"
 )
 
 type ManufacturingPreflightIssue struct {
