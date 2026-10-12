@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -262,7 +263,27 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 			&domain.ReleasePreflightBlockedError{Result: preflight}
 	}
 
-	// 1b. Frozen base authority (#830): a quoted release loads the exact
+	// 1b. Opening production-integration gate (#1302): the release snapshot
+	// resolves WITHOUT the design opening (fronts, members, body modifiers —
+	// AuthoringResolveInput in deriveReleaseRoutingUnit carries none of
+	// them), so a revision whose frozen selection declares a real opening
+	// would freeze fronts at their definition dimensions, drop the side
+	// notch and omit the opening hardware the quote already sells. Block the
+	// command AND the preflight verdict with the typed issue until the
+	// opening is wired into the release resolve. The handle system is the
+	// baseline the resolve itself treats as no-opening, and a legacy
+	// revision (nil snapshot) never declared one — neither blocks.
+	selection, err := s.loadDesignRevisionOpeningSelection(ctx, designRevisionID)
+	if err != nil {
+		return nil, err
+	}
+	if openingSelectionRequiresProductionIntegration(selection) {
+		preflight = preflightBlockedByOpeningRelease(preflight)
+		return &releaseGateOutcome{items: items, preflight: preflight},
+			&domain.ReleasePreflightBlockedError{Result: preflight}
+	}
+
+	// 1c. Frozen base authority (#830): a quoted release loads the exact
 	// revision's immutable per-unit base contexts inside this same boundary.
 	// Missing/malformed/unbound frozen truth blocks BOTH the command and the
 	// read-only preflight verdict — never a silent fallback to module
@@ -312,6 +333,64 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 			fmt.Errorf("%w: %w", ErrReleaseSnapshotResolution, err)
 	}
 	return &releaseGateOutcome{items: items, preflight: preflight, catalog: catalog, collection: collection}, nil
+}
+
+// loadDesignRevisionOpeningSelection reads the EXACT revision's frozen
+// authoring defaults and returns its opening selection: nil for a legacy
+// revision published before the snapshot contract existed (reads as
+// canonical empty) or for a revision without an opening declaration. The
+// snapshot is the versioned truth the release would pin — never the live
+// working copy.
+func (s *PostgresStore) loadDesignRevisionOpeningSelection(ctx context.Context, designRevisionID string) (*domain.DesignOpeningSelection, error) {
+	var rawDefaults []byte
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT COALESCE(authoring_defaults_snapshot, 'null'::jsonb)
+		FROM design_revisions WHERE id = $1
+	`, designRevisionID).Scan(&rawDefaults)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrDesignRevisionNotFound
+		}
+		return nil, err
+	}
+	if len(rawDefaults) == 0 || string(rawDefaults) == "null" {
+		return nil, nil
+	}
+	var defaults domain.DesignAuthoringDefaults
+	if err := json.Unmarshal(rawDefaults, &defaults); err != nil {
+		return nil, fmt.Errorf("%w: read back authoring defaults snapshot: %v", domain.ErrSerializationFailed, err)
+	}
+	return defaults.Opening, nil
+}
+
+// openingSelectionRequiresProductionIntegration reports whether the frozen
+// opening selection declares a system whose production results the release
+// resolve cannot produce yet. The handle system is the baseline: the
+// authoring resolve itself treats it as no-opening (nil fronts/members/
+// modifiers), so a handle revision releases exactly as before. Any other
+// declared system (gola, bottom_overhang) changes front geometry the
+// release would silently ignore.
+func openingSelectionRequiresProductionIntegration(selection *domain.DesignOpeningSelection) bool {
+	return selection != nil && selection.System != domain.OpeningGripSystemHandle
+}
+
+// preflightBlockedByOpeningRelease derives the honest BLOCKED verdict from
+// the #1302 opening gate: same scope, same revision, one issue carrying the
+// design-level blocker (an opening belongs to the whole design, not to one
+// furniture instance).
+func preflightBlockedByOpeningRelease(ready *domain.ManufacturingPreflightResult) *domain.ManufacturingPreflightResult {
+	blocked := &domain.ManufacturingPreflightResult{
+		DesignRevisionID: ready.DesignRevisionID,
+		Scope:            ready.Scope,
+		Status:           domain.ManufacturingPreflightBlocked,
+		Items:            ready.Items,
+	}
+	blocked.Issues = append(blocked.Issues, domain.ManufacturingPreflightIssue{
+		Code: domain.PreflightIssueOpeningReleaseUnsupported,
+		Message: "el diseño declara una apertura (gola/rebase) cuya integración de producción no está implementada: " +
+			"el release congelaría frentes con dimensiones de definición, sin la muesca del costado y sin el herraje de gola",
+	})
+	return blocked
 }
 
 // preflightBlockedBySnapshotResolution derives the honest BLOCKED verdict from

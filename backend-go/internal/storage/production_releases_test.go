@@ -45,11 +45,14 @@ func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *re
 // releaseFixtureOptions extends the canonical release fixture: quoteSnapshot
 // overrides the frozen commercial truth frozen beside Q3 (#830 fixtures freeze
 // an explicit per-unit base-mode pricing context); seedCatalog runs extra
-// catalog statements with the admin pool before the flow starts.
+// catalog statements with the admin pool before the flow starts;
+// authoringDefaults freezes working-copy defaults beside R3 (#1302 opening
+// gate fixtures freeze an explicit opening selection).
 type releaseFixtureOptions struct {
-	choices       map[string]string
-	quoteSnapshot func(items []storage.CreateQuoteRevisionItemCommand) *domain.QuoteCommercialSnapshot
-	seedCatalog   func(t *testing.T, admin *pgxpool.Pool)
+	choices           map[string]string
+	quoteSnapshot     func(items []storage.CreateQuoteRevisionItemCommand) *domain.QuoteCommercialSnapshot
+	seedCatalog       func(t *testing.T, admin *pgxpool.Pool)
+	authoringDefaults *domain.DesignAuthoringDefaults
 }
 
 func setupReleaseFixtureWithOptions(t *testing.T, opts releaseFixtureOptions) *releaseFixture {
@@ -152,10 +155,11 @@ func setupReleaseFixtureWithOptions(t *testing.T, opts releaseFixtureOptions) *r
 			}
 		}
 		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
-			DesignID:    d.ID,
-			SourceType:  domain.DesignRevisionSourceSketchup,
-			Items:       []storage.UpdateDesignWorkingCopyItemCommand{workingItem(out.fiA), workingItem(out.fiB)},
-			ActorUserID: rlsUserA,
+			DesignID:          d.ID,
+			SourceType:        domain.DesignRevisionSourceSketchup,
+			AuthoringDefaults: opts.authoringDefaults,
+			Items:             []storage.UpdateDesignWorkingCopyItemCommand{workingItem(out.fiA), workingItem(out.fiB)},
+			ActorUserID:       rlsUserA,
 		}); err != nil {
 			return err
 		}
