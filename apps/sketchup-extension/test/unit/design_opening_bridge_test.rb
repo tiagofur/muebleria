@@ -7,6 +7,9 @@ require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/ui/bridges/design_opening_bridge'
 require_relative '../../src/granete_for_sketchup/ui/bridges/design_opening_geometry_bridge'
 require_relative '../../src/granete_for_sketchup/ui/bridges/design_opening_channel_bridge'
+require_relative '../../src/granete_for_sketchup/selection/door_actors'
+require_relative '../../src/granete_for_sketchup/metadata/store'
+require_relative '../../src/granete_for_sketchup/ui/bridges/project_furniture_bridge'
 require_relative '../../src/granete_for_sketchup/host/mutation_outcome'
 require_relative '../../src/granete_for_sketchup/host/mutation_command'
 require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
@@ -120,6 +123,7 @@ class DesignOpeningBridgeTest < Minitest::Test
     )
     logger = Struct.new(:error_handler) do
       def error(*_args); end
+      def warn(*_args); end
     end.new
     @bridge = Object.new
     @bridge.extend(Granete::SketchUpExtension::UserInterface::DesignOpeningBridge)
@@ -701,5 +705,120 @@ class DesignOpeningBridgeTest < Minitest::Test
                    'channel' => { 'status' => 'drawn', 'source' => 'asset',
                                   'heightMm' => 27, 'depthMm' => 56 } },
                  answer['geometry'])
+  end
+
+  # #1280 — the sync handler converges the design's opening after a
+  # successful sync: opening a saved project rebuilds its placed furniture
+  # AS gola. The model attribute pins the converged workingVersion so a
+  # repeated sync rebuilds nothing.
+  class FakeSyncAttributesModel
+    BINDING_DICT = 'com.granete.project'
+    BINDING_KEY = 'granete.project-binding.v1'
+
+    attr_reader :attributes, :entities
+
+    def initialize(binding_json, entities = [])
+      @binding_json = binding_json
+      @attributes = {}
+      @entities = entities
+    end
+
+    def get_attribute(dictionary, key)
+      return @binding_json if dictionary == BINDING_DICT && key == BINDING_KEY
+
+      @attributes["#{dictionary}:#{key}"]
+    end
+
+    def set_attribute(dictionary, key, value)
+      @attributes["#{dictionary}:#{key}"] = value
+    end
+  end
+
+  def test_sync_converges_design_opening_and_pins_version
+    @bridge.extend(Granete::SketchUpExtension::UserInterface::ProjectFurnitureBridge)
+    working_item = Struct.new(:furniture_instance_id, :furniture_definition_id, :parameters,
+                              :material_choices).new('fi-1280', 'mod-1280', {}, {})
+    opening_state = { 'opening' => { 'system' => 'gola', 'profileId' => 'profile.gola-l.8006' },
+                      'resolution' => { 'state' => 'resolved', 'fronts' => [] },
+                      'dimsKnown' => true,
+                      'workingVersion' => '2026-10-11T20:00:00.000000Z' }
+    service = FakeService.new(opening: opening_state,
+                              working_copy: Struct.new(:items).new([working_item]))
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(service))
+
+    root = Object.new
+    layout = Object.new
+    definition = { 'furniture_definition_id' => 'mod-1280', 'name' => 'Gabinete Gola' }
+    metadata = { root => {
+      'identity' => { 'instanceRef' => 'inst-1280', 'furnitureInstanceId' => 'fi-1280' },
+      'intent' => { 'furnitureDefinitionId' => 'mod-1280', 'parameters' => {}, 'materialChoices' => {} }
+    } }
+    provider = FakeConvergeCatalogProvider.new(definition, layout)
+    coordinator = FakeConvergeCoordinator.new(
+      Granete::SketchUpExtension::Host::MutationOutcome.new(outcome: 'committed'), apply: false
+    )
+    builder = FakeConvergeBuilder.new
+    @bridge.instance_variable_set(:@catalog_provider, provider)
+    @bridge.instance_variable_set(:@metadata_store_factory, ->(_model) { FakeMetadataStore.new(metadata) })
+    @bridge.define_singleton_method(:mutation_coordinator) { coordinator }
+    @bridge.define_singleton_method(:furniture_builder_for) { |_model| builder }
+    sync_fake = Object.new
+    sync_fake.define_singleton_method(:synchronize_design) { |**_options| { 'ok' => true } }
+    @bridge.define_singleton_method(:design_sync_synchronizer) { sync_fake }
+    @bridge.define_singleton_method(:notify_commercial_projection_synchronization) do |_scope|
+      nil # no projection refresh in test
+    end
+    @bridge.define_singleton_method(:handle_get_project_furniture) do |_dialog|
+      nil # no panel refresh in test
+    end
+    @bridge.define_singleton_method(:push_preflight_state) do |_dialog|
+      nil # no preflight push in test
+    end
+    @bridge.define_singleton_method(:mark_host_save_pending) do
+      nil # no save marking in test
+    end
+    binding_json = JSON.generate({ 'projectId' => PROJECT, 'designId' => DESIGN_A,
+                                   'baseRevisionId' => nil, 'schemaVersion' => 1 })
+    model = FakeSyncAttributesModel.new(binding_json, [root])
+    @bridge.define_singleton_method(:active_model) { model }
+
+    @bridge.handle_synchronize_design(@dialog, JSON.generate({ 'isAuto' => true }))
+
+    assert_equal 1, coordinator.batches.length, 'the sync must converge the opening once'
+    assert_equal '2026-10-11T20:00:00.000000Z',
+                 model.get_attribute(Granete::SketchUpExtension::Metadata::Store::DICTIONARY,
+                                     'openingConvergedWorkingVersion')
+
+    # A repeated sync at the SAME workingVersion rebuilds nothing.
+    @bridge.handle_synchronize_design(@dialog, JSON.generate({ 'isAuto' => true }))
+    assert_equal 1, coordinator.batches.length
+  end
+
+  def test_sync_skips_convergence_without_opening_selection
+    @bridge.extend(Granete::SketchUpExtension::UserInterface::ProjectFurnitureBridge)
+    service = FakeService.new(opening: { 'opening' => nil, 'resolution' => nil, 'dimsKnown' => false },
+                              working_copy: Struct.new(:items).new([]))
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(service))
+    sync_fake = Object.new
+    sync_fake.define_singleton_method(:synchronize_design) { |**_options| { 'ok' => true } }
+    @bridge.define_singleton_method(:design_sync_synchronizer) { sync_fake }
+    @bridge.define_singleton_method(:notify_commercial_projection_synchronization) do |_scope|
+      nil # no projection refresh in test
+    end
+    @bridge.define_singleton_method(:handle_get_project_furniture) do |_dialog|
+      nil # no panel refresh in test
+    end
+    @bridge.define_singleton_method(:push_preflight_state) do |_dialog|
+      nil # no preflight push in test
+    end
+    @bridge.define_singleton_method(:mark_host_save_pending) do
+      nil # no save marking in test
+    end
+    binding_json = JSON.generate({ 'projectId' => PROJECT, 'designId' => DESIGN_A,
+                                   'baseRevisionId' => nil, 'schemaVersion' => 1 })
+    @bridge.define_singleton_method(:active_model) { FakeSyncAttributesModel.new(binding_json) }
+
+    converged = @bridge.converge_design_opening_after_sync
+    assert_nil converged
   end
 end
