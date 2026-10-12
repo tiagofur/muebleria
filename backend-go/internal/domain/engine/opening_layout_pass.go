@@ -86,6 +86,38 @@ func boardIsOpeningFront(board *layoutBoard) bool {
 		isDoorBoard(board)
 }
 
+// OpeningMembersFromFrozenPin projects the selection's pinned member set
+// onto the layout's derived-hardware input (#1274). ONE projection feeds the
+// authoring resolve and the production release (#1305) — a copy here and a
+// copy there would drift. nil when the pin declares no members.
+func OpeningMembersFromFrozenPin(selection *domain.DesignOpeningSelection) *OpeningMembers {
+	if selection == nil || selection.ProfilePin == nil || selection.ProfilePin.BOM == nil {
+		return nil
+	}
+	var spacing int
+	if support := selection.ProfilePin.BOM.Members["supports"]; support.HardwareID != "" && support.SpacingMm != nil {
+		spacing = *support.SpacingMm
+	}
+	members := &OpeningMembers{
+		ProfileHardwareID: selection.ProfilePin.BOM.Members["profile"].HardwareID,
+		SupportHardwareID: selection.ProfilePin.BOM.Members["supports"].HardwareID,
+		CapHardwareID:     selection.ProfilePin.BOM.Members["endCaps"].HardwareID,
+		SupportSpacingMm:  spacing,
+		ProfileHeightMm:   selection.ProfilePin.ProfileHeightMm,
+		ProfileDepthMm:    selection.ProfilePin.ProfileDepthMm,
+	}
+	if dims := selection.ProfilePin.BOM.Members["supports"].DimensionsMm; dims != nil {
+		members.SupportDimsMm = &(*dims)
+	}
+	if dims := selection.ProfilePin.BOM.Members["endCaps"].DimensionsMm; dims != nil {
+		members.CapDimsMm = &(*dims)
+	}
+	if members.ProfileHardwareID == "" && members.SupportHardwareID == "" && members.CapHardwareID == "" {
+		return nil
+	}
+	return members
+}
+
 // applyOpeningFrontsToBomParts (#1305) mirrors applyOpeningFrontsToBoards
 // over the BOM expansion: every door/drawer-front part shrinks by the SAME
 // total consumption so the cut list and the machining layout can never

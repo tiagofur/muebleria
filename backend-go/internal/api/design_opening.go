@@ -490,29 +490,5 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 // existed carries zeros and the layout places nothing until the selection is
 // re-applied — never an invented constant.
 func openingMembersFromPin(selection *domain.DesignOpeningSelection) *engine.OpeningMembers {
-	if selection == nil || selection.ProfilePin == nil || selection.ProfilePin.BOM == nil {
-		return nil
-	}
-	var spacing int
-	if support := selection.ProfilePin.BOM.Members["supports"]; support.HardwareID != "" && support.SpacingMm != nil {
-		spacing = *support.SpacingMm
-	}
-	members := &engine.OpeningMembers{
-		ProfileHardwareID: selection.ProfilePin.BOM.Members["profile"].HardwareID,
-		SupportHardwareID: selection.ProfilePin.BOM.Members["supports"].HardwareID,
-		CapHardwareID:     selection.ProfilePin.BOM.Members["endCaps"].HardwareID,
-		SupportSpacingMm:  spacing,
-		ProfileHeightMm:   selection.ProfilePin.ProfileHeightMm,
-		ProfileDepthMm:    selection.ProfilePin.ProfileDepthMm,
-	}
-	if dims := selection.ProfilePin.BOM.Members["supports"].DimensionsMm; dims != nil {
-		members.SupportDimsMm = &(*dims)
-	}
-	if dims := selection.ProfilePin.BOM.Members["endCaps"].DimensionsMm; dims != nil {
-		members.CapDimsMm = &(*dims)
-	}
-	if members.ProfileHardwareID == "" && members.SupportHardwareID == "" && members.CapHardwareID == "" {
-		return nil
-	}
-	return members
+	return engine.OpeningMembersFromFrozenPin(selection)
 }
