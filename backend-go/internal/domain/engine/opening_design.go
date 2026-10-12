@@ -47,6 +47,11 @@ type DesignOpeningResolution struct {
 	// BOMEnds mirrors the end conditions the BOM was resolved with — the v1
 	// declared default is visible to the caller, never silent.
 	BOMEnds *OpeningBOMEndConditions `json:"bomEnds,omitempty"`
+	// BodyModifiers (#1287 / §13.3): the profile's declared body effects
+	// resolved over this design — the exact per-role effects the layout pass
+	// materializes (visible notch) and the machining slice will consume.
+	// Empty = the selection declares no modifiers (or the system has none).
+	BodyModifiers []ResolvedOpeningBodyModifier `json:"bodyModifiers,omitempty"`
 }
 
 // DesignOpeningBOMContext is the body context the BOM resolution needs (#1263):
@@ -121,6 +126,28 @@ func ResolveDesignOpening(
 	resolution := &DesignOpeningResolution{
 		State:  DesignOpeningStateResolved,
 		Fronts: layout.Fronts,
+	}
+	// #1287 / §13.3: the profile's declared body effects resolve ONCE here —
+	// the same definition the layout pass (visible notch) and the future
+	// machining slice consume. Invalid declared data blocks the resolve
+	// (fail-closed); profiles without declared modifiers stay resolved.
+	if selection.System == domain.OpeningGripSystemGola {
+		bodyData := make([]OpeningProfileBodyData, 0, len(profiles))
+		for _, profile := range profiles {
+			bodyData = append(bodyData, OpeningProfileBodyData{
+				ProfileID:            profile.ProfileID,
+				CompatiblePlacements: profile.CompatiblePlacements,
+				BodyModifiers:        profile.BodyModifiers,
+			})
+		}
+		modifiers, modErr := ResolveOpeningBodyModifiers(&OpeningFrontLayout{
+			Resolution: layout.Resolution,
+			Fronts:     layout.Fronts,
+		}, bodyData)
+		if modErr != nil {
+			return &DesignOpeningResolution{State: DesignOpeningStateBlocked, Reason: modErr.Code}, nil
+		}
+		resolution.BodyModifiers = modifiers
 	}
 	if bomCtx != nil && selection.System == domain.OpeningGripSystemGola {
 		resolution.BOMEnds = &bomCtx.Ends

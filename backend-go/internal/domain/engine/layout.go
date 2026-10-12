@@ -141,6 +141,22 @@ type LayoutComponent struct {
 	MaterialMetalness           *float64                   `json:"materialMetalness,omitempty"`
 	MaterialClearcoat           *float64                   `json:"materialClearcoat,omitempty"`
 	MaterialGrain               bool                       `json:"materialGrain,omitempty"`
+	// Notches (#1287 / §13.3): the opening's declared side-notch subtraction
+	// boxes in this component's LOCAL frame — the exact boxes the host
+	// geometry, the machining slice and any renderer consume from ONE
+	// resolved definition. Empty = the board carries no notch.
+	Notches []LayoutNotch `json:"notches,omitempty"`
+}
+
+// LayoutNotch is one exact local subtraction box: StartMm is the local min
+// corner, SizeMm the extents; the box removes material through the board's
+// full thickness at its furniture-top (or bottom) front corner. Provenance
+// names the profile and boundary the notch derives from.
+type LayoutNotch struct {
+	StartMm   [3]float64 `json:"startMm"`
+	SizeMm    [3]float64 `json:"sizeMm"`
+	ProfileID string     `json:"profileId"`
+	Boundary  string     `json:"boundary"`
 }
 
 // LayoutHardware is one visible hardware placement (handle, hinge, …) resolved
@@ -217,6 +233,10 @@ type layoutBoard struct {
 	thicknessMm float64 // local Y
 	lengthMm    float64 // local Z
 	hardware    []domain.HardwarePlacement
+	// notches carries the opening's DECLARED side notch subtraction boxes in
+	// the board's local frame (#1287 / §13.3) — structured data on a valid
+	// AABB, never a shrunk surrogate board.
+	notches []LayoutNotch
 	// derivedHardware holds engine-generated placements (#1274 opening
 	// members): projected with HardwarePlacementKindDerived provenance.
 	derivedHardware []domain.HardwarePlacement
@@ -249,6 +269,9 @@ type resolveOptions struct {
 	// as derived hardware placements on the constrained furniture. nil = no
 	// members (handle baseline, pre-pin rows).
 	openingMembers *OpeningMembers
+	// openingBodyModifiers (#1287 / §13.3): the resolved declared effects the
+	// notch pass materializes on the side boards. nil = nothing declared.
+	openingBodyModifiers []ResolvedOpeningBodyModifier
 }
 
 // ResolveFurnitureLayout resolves a module's full visual composition — every
@@ -332,6 +355,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			ThicknessMm:           int(math.Round(board.thicknessMm)),
 			OptionRole:            board.optionRole,
 			MaterialColorHex:      colorForOptionRole(board.optionRole),
+			Notches:               board.notches,
 		}
 		// #467: publish the direct-authoring capability the engine itself
 		// derives from the template shape; every other occurrence stays
@@ -501,6 +525,14 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 		}
 		// #1274: a furniture the opening constrained materializes the
 		// selection's member hardware in furniture space (applied downstream).
+	}
+	// #1287 / §13.3: the opening's declared body effects cut their notch
+	// boxes into the side boards — before the projection, so the published
+	// components carry the exact local subtraction.
+	if len(opts.openingBodyModifiers) > 0 {
+		if err := applyOpeningNotchesToBoards(boards, opts.openingBodyModifiers); err != nil {
+			return nil, err
+		}
 	}
 
 	// #477 final pass: authored translations are furniture-frame intent, so

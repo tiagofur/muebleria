@@ -68,11 +68,16 @@ type OpeningIntent struct {
 
 // OpeningProfileData is the library profile data the resolution consumes —
 // datasheet-backed (#1130 owns the entity); anything but "verified" blocks.
+// CompatiblePlacements/BodyModifiers (#1287 / §13.3) are the declared slice
+// the body-modifier resolution consumes; nil/empty = the slice is absent
+// (pre-#1287 pin or a profile that declares none) — never a live fallback.
 type OpeningProfileData struct {
-	ProfileID        string `json:"profileId"`
-	DatasheetStatus  string `json:"datasheetStatus"`
-	FrontReductionMm int    `json:"frontReductionMm"`
-	GripClearanceMm  int    `json:"gripClearanceMm"`
+	ProfileID            string                        `json:"profileId"`
+	DatasheetStatus      string                        `json:"datasheetStatus"`
+	FrontReductionMm     int                           `json:"frontReductionMm"`
+	GripClearanceMm      int                           `json:"gripClearanceMm"`
+	CompatiblePlacements []string                      `json:"compatiblePlacements,omitempty"`
+	BodyModifiers        []OpeningContractBodyModifier `json:"bodyModifiers,omitempty"`
 }
 
 type OpeningResolvedZone struct {

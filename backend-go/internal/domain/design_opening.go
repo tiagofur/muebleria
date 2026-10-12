@@ -50,6 +50,12 @@ type DesignOpeningProfilePin struct {
 	// selection is re-applied, the same migration rule as the BOM slice).
 	ProfileHeightMm float64 `json:"profileHeightMm,omitempty"`
 	ProfileDepthMm  float64 `json:"profileDepthMm,omitempty"`
+	// #1287 / §13.3: the frozen declared slice the modifier resolution
+	// consumes (compatible placements + body modifiers). Absent/empty means
+	// the pin predates the slice — the truthful absence (no modifiers, no
+	// notches), never a live-catalog fallback.
+	CompatiblePlacements []string              `json:"compatiblePlacements,omitempty"`
+	BodyModifiers        []OpeningBodyModifier `json:"bodyModifiers,omitempty"`
 	// BOM freezes the #1130 BOM slice the selection was validated against
 	// (#1263): the profile revision plus its declared members the historical
 	// BOM and quote resolve from — never the live catalog row. Empty members

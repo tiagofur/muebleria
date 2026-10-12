@@ -66,10 +66,12 @@ func (s *PostgresStore) deriveDesignOpeningCommercial(ctx context.Context, defau
 	bomProfiles := make([]engine.OpeningProfileBOMData, 0, len(profiles))
 	if pin := selection.ProfilePin; pin != nil {
 		profileData = []engine.OpeningProfileData{{
-			ProfileID:        selection.ProfileID,
-			DatasheetStatus:  pin.DatasheetStatus,
-			FrontReductionMm: pin.FrontReductionMm,
-			GripClearanceMm:  pin.GripClearanceMm,
+			ProfileID:            selection.ProfileID,
+			DatasheetStatus:      pin.DatasheetStatus,
+			FrontReductionMm:     pin.FrontReductionMm,
+			GripClearanceMm:      pin.GripClearanceMm,
+			CompatiblePlacements: pin.CompatiblePlacements,
+			BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
 		}}
 	} else {
 		profileData = make([]engine.OpeningProfileData, 0, len(profiles))
@@ -77,10 +79,12 @@ func (s *PostgresStore) deriveDesignOpeningCommercial(ctx context.Context, defau
 	for _, profile := range profiles {
 		if pin := selection.ProfilePin; pin == nil {
 			profileData = append(profileData, engine.OpeningProfileData{
-				ProfileID:        profile.ID,
-				DatasheetStatus:  profile.DatasheetStatus,
-				FrontReductionMm: derefOpeningInt(profile.FrontReductionMm),
-				GripClearanceMm:  derefOpeningInt(profile.GripClearanceMm),
+				ProfileID:            profile.ID,
+				DatasheetStatus:      profile.DatasheetStatus,
+				FrontReductionMm:     derefOpeningInt(profile.FrontReductionMm),
+				GripClearanceMm:      derefOpeningInt(profile.GripClearanceMm),
+				CompatiblePlacements: profile.CompatiblePlacements,
+				BodyModifiers:        engine.ContractBodyModifiersFromEntities(profile.BodyModifiers),
 			})
 		}
 		bomProfiles = append(bomProfiles, engine.OpeningProfileBOMData{

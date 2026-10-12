@@ -529,3 +529,41 @@ class FurnitureBuilderTest < Minitest::Test
     assert_equal 'hardware_hw-profile-0', meta['intent']['semanticRole']
   end
 end
+
+# #1287 / §13.3: a notched board builds as stacked segments (full sections
+# plus the front-reduced band) — the visible subtraction without booleans.
+def test_build_local_box_with_corner_notch_builds_stacked_segments
+  definition = @model.definitions.add('test-notched-board')
+  notch = {
+    'startMm' => [541.0, 0.0, 100.0], 'sizeMm' => [19.0, 18.0, 10.0],
+    'profileId' => 'profile.gola-l.8006', 'boundary' => 'top'
+  }
+
+  Granete::SketchUpExtension::Model::LocalGeometry.build_local_box(
+    definition, 560, 18, 684, notches: [notch]
+  )
+
+  assert_equal 3, definition.entities.faces.size, 'full + reduced + full segments'
+end
+
+def test_build_local_box_notch_must_run_through_thickness
+  definition = @model.definitions.add('test-bad-notch')
+  notch = { 'startMm' => [541.0, 0.0, 100.0], 'sizeMm' => [19.0, 10.0, 10.0] }
+
+  assert_raises(ArgumentError) do
+    Granete::SketchUpExtension::Model::LocalGeometry.build_local_box(
+      definition, 560, 18, 684, notches: [notch]
+    )
+  end
+end
+
+def test_build_local_box_interior_notch_fails_loud
+  definition = @model.definitions.add('test-interior-notch')
+  notch = { 'startMm' => [100.0, 0.0, 100.0], 'sizeMm' => [19.0, 18.0, 10.0] }
+
+  assert_raises(ArgumentError) do
+    Granete::SketchUpExtension::Model::LocalGeometry.build_local_box(
+      definition, 560, 18, 684, notches: [notch]
+    )
+  end
+end

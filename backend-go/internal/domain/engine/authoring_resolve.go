@@ -166,6 +166,10 @@ type AuthoringResolveInput struct {
 	// as derived hardware placements when Fronts constrained this furniture.
 	// nil = no members to place.
 	OpeningMembers *OpeningMembers
+	// OpeningBodyModifiers (#1287 / §13.3): the resolved declared body
+	// effects (the side notch) materialized on the boards by the layout
+	// pass. nil = nothing declared.
+	OpeningBodyModifiers []ResolvedOpeningBodyModifier
 }
 
 // AuthoringResolveResult carries the accepted resolve. StructuralIssues
@@ -308,6 +312,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	}
 	opts.fronts = input.Fronts
 	opts.openingMembers = input.OpeningMembers
+	opts.openingBodyModifiers = input.OpeningBodyModifiers
 	layout, boards, err := resolveFurnitureLayoutOpts(input.Module, input.Catalog, input.Dims, input.OptionChoices, opts)
 	if err != nil {
 		return nil, err

@@ -428,3 +428,40 @@ class LayoutContractTest < Minitest::Test
     assert_nil placement.mount_frame
   end
 end
+
+# #1287 / §13.3: the opening's declared subtraction boxes parse as local
+# geometry with provenance; absent = plain board; malformed fails closed.
+def test_notches_parse_as_local_subtraction_boxes
+  raw = board('lateral_izquierdo', 'notches' => [{
+                'startMm' => [541.0, 0.0, 692.0], 'sizeMm' => [19.0, 18.0, 10.0],
+                'profileId' => 'profile.gola-l.8006', 'boundary' => 'top'
+              }])
+  parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(with_contract([raw]))
+
+  notch = parsed.boards.first.notches.first
+  assert_equal [541.0, 0.0, 692.0], notch['startMm']
+  assert_equal [19.0, 18.0, 10.0], notch['sizeMm']
+  assert_equal 'profile.gola-l.8006', notch['profileId']
+  assert_equal 'top', notch['boundary']
+end
+
+def test_notches_absent_means_plain_board
+  parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(golden_layout)
+
+  assert_empty parsed.boards.first.notches
+end
+
+def test_malformed_notches_fail_safe
+  invalid = [
+    'not-an-array',
+    [{ 'startMm' => [0, 0, 0], 'sizeMm' => [19, 18, -10] }],
+    [{ 'startMm' => [0, 0], 'sizeMm' => [19, 18, 10] }]
+  ]
+  invalid.each do |notches|
+    raw = board('lateral_izquierdo', 'notches' => notches)
+    assert_raises(Granete::SketchUpExtension::Library::LayoutContract::ContractError,
+                  "notches #{notches.inspect} must fail safely") do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(with_contract([raw]))
+    end
+  end
+end
