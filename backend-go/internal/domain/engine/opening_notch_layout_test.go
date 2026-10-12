@@ -219,7 +219,7 @@ func TestResolveDesignOpeningCarriesDeclaredBodyModifiers(t *testing.T) {
 			DatasheetStatus:      "verified",
 			CompatiblePlacements: []string{"top"},
 			BodyModifiers: []domain.OpeningBodyModifier{{
-				Role: "lateral", NotchHeightMm: intPtr(10), NotchDepthMm: intPtr(19), NotchAt: "top_front",
+				Role: "lateral", NotchHeightMm: fPtr(56.5), NotchDepthMm: fPtr(27.2), NotchAt: "top_front",
 			}},
 		},
 	}
@@ -229,7 +229,7 @@ func TestResolveDesignOpeningCarriesDeclaredBodyModifiers(t *testing.T) {
 		FrontReductionMm:     40,
 		CompatiblePlacements: []string{"top"},
 		BodyModifiers: []OpeningContractBodyModifier{{
-			Role: "lateral", NotchHeightMm: intPtr(10), NotchDepthMm: intPtr(19), NotchAt: "top_front",
+			Role: "lateral", NotchHeightMm: fPtr(56.5), NotchDepthMm: fPtr(27.2), NotchAt: "top_front",
 		}},
 	}}
 	resolution, resErr := ResolveDesignOpening(width, height, selection, profiles, nil, nil)
@@ -244,7 +244,9 @@ func TestResolveDesignOpeningCarriesDeclaredBodyModifiers(t *testing.T) {
 	}
 	mod := resolution.BodyModifiers[0]
 	if mod.Effect != OpeningModifierEffectNotch || mod.Role != "lateral" ||
-		mod.NotchHeightMm != 10 || mod.NotchDepthMm != 19 {
+		mod.NotchHeightMm != 56.5 || mod.NotchDepthMm != 27.2 {
 		t.Fatalf("resolved notch = %+v", mod)
 	}
 }
+
+func fPtr(v float64) *float64 { return &v }

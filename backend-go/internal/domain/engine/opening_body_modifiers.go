@@ -65,11 +65,11 @@ const (
 // persists snake_case — openingContractBodyModifier maps one onto the other
 // so the library data feeds the resolver without a third vocabulary.
 type OpeningContractBodyModifier struct {
-	Role             string `json:"role"`
-	DepthReductionMm *int   `json:"depthReductionMm,omitempty"`
-	NotchHeightMm    *int   `json:"notchHeightMm,omitempty"`
-	NotchDepthMm     *int   `json:"notchDepthMm,omitempty"`
-	NotchAt          string `json:"notchAt,omitempty"`
+	Role             string   `json:"role"`
+	DepthReductionMm *int     `json:"depthReductionMm,omitempty"`
+	NotchHeightMm    *float64 `json:"notchHeightMm,omitempty"`
+	NotchDepthMm     *float64 `json:"notchDepthMm,omitempty"`
+	NotchAt          string   `json:"notchAt,omitempty"`
 }
 
 // openingContractBodyModifier maps the persisted entity modifier onto the
@@ -110,13 +110,13 @@ type OpeningProfileBodyData struct {
 // (effect|role|boundary), target constructive role, provenance (profile +
 // boundary) and the complete geometry the manufacturing pipeline consumes.
 type ResolvedOpeningBodyModifier struct {
-	Effect           string `json:"effect"`
-	Role             string `json:"role"`
-	ProfileID        string `json:"profileId"`
-	Boundary         string `json:"boundary"`
-	DepthReductionMm int    `json:"depthReductionMm,omitempty"`
-	NotchHeightMm    int    `json:"notchHeightMm,omitempty"`
-	NotchDepthMm     int    `json:"notchDepthMm,omitempty"`
+	Effect           string   `json:"effect"`
+	Role             string   `json:"role"`
+	ProfileID        string   `json:"profileId"`
+	Boundary         string   `json:"boundary"`
+	DepthReductionMm int      `json:"depthReductionMm,omitempty"`
+	NotchHeightMm    float64  `json:"notchHeightMm,omitempty"`
+	NotchDepthMm     float64  `json:"notchDepthMm,omitempty"`
 	// NotchOffsetMm places the notch along the front axis, measured from the
 	// start of the available region (same coordinate system as the #1131
 	// fronts' offsetMm); 0 for top_front.
