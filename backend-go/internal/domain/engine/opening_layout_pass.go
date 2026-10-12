@@ -120,9 +120,10 @@ type OpeningMembers struct {
 // member places nothing.
 // appendOpeningMemberLayoutHardware emits the derived opening hardware directly
 // in furniture space (#1274 / #1276): the profile spans the full furniture width
-// [0, dims.WidthMm], aligned at the top-front of the carcass [0, DepthMm, HeightMm],
-// the left support mounts at X = 0, and the right support mounts at X = WidthMm with
-// its X axis inverted (mirrored into the cabinet).
+// [0, dims.WidthMm], aligned at the top-front of the carcass [0, DepthMm, HeightMm].
+// #1296: supports mount on the sides' INNER faces (sideThicknessMm in from each
+// outer face), behind the profile and centered on its height; the right support
+// mirrors the left in X.
 //
 // #1283 / §13.2: every envelope comes from the pinned datasheet declaration,
 // never from engine constants. The references are explicit:
@@ -132,7 +133,7 @@ type OpeningMembers struct {
 //     support SKP must be modeled with its grip point as local origin.
 //   - Depth reference: the carcass front plane (the profile's front face is
 //     flush with it; the declared depth reaches back under the top).
-func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims, bottomBoundary bool, hostBoardID string) {
+func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims, bottomBoundary bool, hostBoardID string, sideThicknessMm float64) {
 	face := "top"
 	if bottomBoundary {
 		face = "bottom"
@@ -175,22 +176,32 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 		))
 	}
 
-	// 2. Supports: the SKP's local origin is its top mounting edge
-	// ("arista superior de montaje", the modeling convention the SU116 asset
-	// carries) — placed AT the declared height reference (the carcass top
-	// plane), the plate hangs down and its grip centers on the profile
-	// section. §13.2's height/2 rule holds through that convention; the
-	// envelope comes from the accessory's declared dims. Members without
-	// declared geometry place nothing.
+	// 2. Supports (#1296, owner convention): the bracket screws to the side
+	// panel's INNER face, sits BEHIND the profile band and centers on the
+	// profile's height. The re-modeled SU116 SKP carries its local (0,0,0) at
+	// the L's corner — the plate's mounting face (X=0, against the side),
+	// the arm's rear edge (Y=0) and the bracket's bottom (Z=0) — growing
+	// +X (into the cabinet), +Y (toward the front) and +Z (up). The engine
+	// places that origin at:
+	//   X = the side's inner face (sideThicknessMm from each outer face)
+	//   Y = profileBack − armDepth (the arm tip meets the profile's rear face)
+	//   Z = the profile section's center − bracketHeight/2 (centered in height)
+	// Members without declared geometry place nothing.
 	if members.SupportHardwareID != "" && members.SupportDimsMm != nil {
 		if hw, ok := findHardware(catalog, members.SupportHardwareID); ok && hw.Active {
 			supportDims := *members.SupportDimsMm
-			zSupport := zPos
-			// Left support: at X = 0, normal orientation
+			xLeft := sideThicknessMm
+			xRight := totalW - sideThicknessMm
+			ySupport := yPos - members.ProfileDepthMm - supportDims[1]
+			zSupport := zPos - members.ProfileHeightMm/2 - supportDims[2]/2
+			if bottomBoundary {
+				zSupport = zPos + members.ProfileHeightMm/2 - supportDims[2]/2
+			}
+			// Left support: plate against the left side's inner face.
 			layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 				hw,
 				fmt.Sprintf("opening-support-left-%s", hw.ID),
-				[3]float64{0, yPos, zSupport},
+				[3]float64{xLeft, ySupport, zSupport},
 				LayoutBasis{
 					X: [3]float64{1, 0, 0},
 					Y: [3]float64{0, 1, 0},
@@ -200,15 +211,17 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 				hostBoardID,
 				face,
 			))
-			// Intermediate supports if width exceeds spacing:
+			// Intermediate supports if width exceeds spacing: spread over the
+			// INNER span between the side plates.
 			if members.SupportSpacingMm > 0 && totalW > float64(members.SupportSpacingMm) {
 				count := int(totalW / float64(members.SupportSpacingMm))
+				innerSpan := xRight - xLeft
 				for i := 1; i <= count; i++ {
-					stepX := (totalW / float64(count+1)) * float64(i)
+					stepX := xLeft + (innerSpan/float64(count+1))*float64(i)
 					layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 						hw,
 						fmt.Sprintf("opening-support-mid-%d-%s", i, hw.ID),
-						[3]float64{stepX, yPos, zSupport},
+						[3]float64{stepX, ySupport, zSupport},
 						LayoutBasis{
 							X: [3]float64{1, 0, 0},
 							Y: [3]float64{0, 1, 0},
@@ -220,11 +233,11 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 					))
 				}
 			}
-			// Right support: at X = totalW, inverted in X!
+			// Right support: plate against the right side's inner face, mirrored in X.
 			layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 				hw,
 				fmt.Sprintf("opening-support-right-%s", hw.ID),
-				[3]float64{totalW, yPos, zSupport},
+				[3]float64{xRight, ySupport, zSupport},
 				LayoutBasis{
 					X: [3]float64{-1, 0, 0},
 					Y: [3]float64{0, 1, 0},

@@ -413,7 +413,17 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 		if hostBoardID == "" && len(boards) > 0 {
 			hostBoardID = boards[0].id
 		}
-		appendOpeningMemberLayoutHardware(&layout, catalog, *opts.openingMembers, dims, openingFrontsBottomBoundary(opts.fronts), hostBoardID)
+		// #1296: the supports mount on the sides' INNER faces — the inset is
+		// the same cabinet's real side thickness (material-resolved board),
+		// never a fixed constant.
+		sideThicknessMm := 0.0
+		for i := range boards {
+			if boardIsOpeningSide(&boards[i]) {
+				sideThicknessMm = boards[i].thicknessMm
+				break
+			}
+		}
+		appendOpeningMemberLayoutHardware(&layout, catalog, *opts.openingMembers, dims, openingFrontsBottomBoundary(opts.fronts), hostBoardID, sideThicknessMm)
 	}
 
 	if opts.manualPlacements != nil {
