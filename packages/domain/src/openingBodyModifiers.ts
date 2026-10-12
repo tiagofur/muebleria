@@ -154,6 +154,11 @@ export function resolveOpeningBodyModifiers(
     if (!profile) {
       return fail('OPENING_PROFILE_UNKNOWN', `perfil desconocido ${profileId}`);
     }
+    // #1287: an ABSENT declared slice resolves no effects and guards
+    // nothing — the truthful absence, never a blocked resolution.
+    if (profile.bodyModifiers.length === 0) {
+      continue;
+    }
     const kind = boundaryKindOf(boundary.boundary);
     if (!placementCompatible(profile.compatiblePlacements, kind)) {
       return fail(

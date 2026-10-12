@@ -57,20 +57,24 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 			var bomProfiles []engine.OpeningProfileBOMData
 			if pin := state.Opening.ProfilePin; pin != nil {
 				profileData = []engine.OpeningProfileData{{
-					ProfileID:        state.Opening.ProfileID,
-					DatasheetStatus:  pin.DatasheetStatus,
-					FrontReductionMm: pin.FrontReductionMm,
-					GripClearanceMm:  pin.GripClearanceMm,
+					ProfileID:            state.Opening.ProfileID,
+					DatasheetStatus:      pin.DatasheetStatus,
+					FrontReductionMm:     pin.FrontReductionMm,
+					GripClearanceMm:      pin.GripClearanceMm,
+					CompatiblePlacements: pin.CompatiblePlacements,
+					BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
 				}}
 			} else if profiles, err := s.Store.ListOpeningProfiles(r.Context()); err == nil {
 				profileData = make([]engine.OpeningProfileData, 0, len(profiles))
 				bomProfiles = make([]engine.OpeningProfileBOMData, 0, len(profiles))
 				for _, profile := range profiles {
 					profileData = append(profileData, engine.OpeningProfileData{
-						ProfileID:        profile.ID,
-						DatasheetStatus:  profile.DatasheetStatus,
-						FrontReductionMm: derefInt(profile.FrontReductionMm),
-						GripClearanceMm:  derefInt(profile.GripClearanceMm),
+						ProfileID:            profile.ID,
+						DatasheetStatus:      profile.DatasheetStatus,
+						FrontReductionMm:     derefInt(profile.FrontReductionMm),
+						GripClearanceMm:      derefInt(profile.GripClearanceMm),
+						CompatiblePlacements: profile.CompatiblePlacements,
+						BodyModifiers:        engine.ContractBodyModifiersFromEntities(profile.BodyModifiers),
 					})
 					bomProfiles = append(bomProfiles, engine.OpeningProfileBOMData{
 						ProfileID:  profile.ID,
@@ -305,6 +309,11 @@ func (s *Server) handleDesignOpeningPut(w http.ResponseWriter, r *http.Request, 
 					// the member hardware from these, never live values.
 					ProfileHeightMm: derefFloat(profile.ProfileHeightMm),
 					ProfileDepthMm:  derefFloat(profile.ProfileDepthMm),
+					// #1287 / §13.3: the declared modifier slice freezes too —
+					// the historical resolve materializes the notch the
+					// selection was validated against.
+					CompatiblePlacements: profile.CompatiblePlacements,
+					BodyModifiers:        profile.BodyModifiers,
 					BOM: &domain.DesignOpeningProfilePinBOM{
 						ProfileVersion: profile.Version,
 						Members:        members,
@@ -405,21 +414,21 @@ type designOpeningResolveFailure struct {
 // #1274: the selection's pinned member set rides along so the layout can
 // materialize the gola run and its companions as derived hardware — the
 // same frozen slice the BOM resolves from, never the live catalog.
-func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringResolveRequest, module *domain.Module, dims *engine.LayoutDims) ([]engine.OpeningResolvedFront, *engine.OpeningMembers, *designOpeningResolveFailure) {
+func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringResolveRequest, module *domain.Module, dims *engine.LayoutDims) ([]engine.OpeningResolvedFront, *engine.OpeningMembers, []engine.ResolvedOpeningBodyModifier, *designOpeningResolveFailure) {
 	designID := strings.TrimSpace(req.Furniture.DesignID)
 	if designID == "" {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	if !isValidUUID(designID) {
-		return nil, nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el designId no es un identificador válido"}
+		return nil, nil, nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el designId no es un identificador válido"}
 	}
 	wc, err := s.Store.GetDesignWorkingCopy(r.Context(), designID)
 	if err != nil {
-		return nil, nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el diseño no existe o no es accesible"}
+		return nil, nil, nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el diseño no existe o no es accesible"}
 	}
 	selection := wc.AuthoringDefaults.Opening
 	if selection == nil || selection.System == domain.OpeningGripSystemHandle {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	// #1274: the opening belongs to the DESIGN — every furniture of the
 	// design constrains ITS front boards at its OWN dimensions. The
@@ -433,38 +442,44 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 	var profileData []engine.OpeningProfileData
 	if pin := selection.ProfilePin; pin != nil {
 		profileData = []engine.OpeningProfileData{{
-			ProfileID:        selection.ProfileID,
-			DatasheetStatus:  pin.DatasheetStatus,
-			FrontReductionMm: pin.FrontReductionMm,
-			GripClearanceMm:  pin.GripClearanceMm,
+			ProfileID:            selection.ProfileID,
+			DatasheetStatus:      pin.DatasheetStatus,
+			FrontReductionMm:     pin.FrontReductionMm,
+			GripClearanceMm:      pin.GripClearanceMm,
+			CompatiblePlacements: pin.CompatiblePlacements,
+			BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
 		}}
 	} else {
 		profiles, listErr := s.Store.ListOpeningProfiles(r.Context())
 		if listErr != nil {
-			return nil, nil, &designOpeningResolveFailure{code: "OPENING_PROFILE_UNKNOWN", message: "el catálogo de perfiles de apertura no está disponible"}
+			return nil, nil, nil, &designOpeningResolveFailure{code: "OPENING_PROFILE_UNKNOWN", message: "el catálogo de perfiles de apertura no está disponible"}
 		}
 		profileData = make([]engine.OpeningProfileData, 0, len(profiles))
 		for _, profile := range profiles {
 			profileData = append(profileData, engine.OpeningProfileData{
-				ProfileID:        profile.ID,
-				DatasheetStatus:  profile.DatasheetStatus,
-				FrontReductionMm: derefInt(profile.FrontReductionMm),
-				GripClearanceMm:  derefInt(profile.GripClearanceMm),
+				ProfileID:            profile.ID,
+				DatasheetStatus:      profile.DatasheetStatus,
+				FrontReductionMm:     derefInt(profile.FrontReductionMm),
+				GripClearanceMm:      derefInt(profile.GripClearanceMm),
+				CompatiblePlacements: profile.CompatiblePlacements,
+				BodyModifiers:        engine.ContractBodyModifiersFromEntities(profile.BodyModifiers),
 			})
 		}
 	}
 	rule, ruleErr := s.Store.GetOpeningOverhangRule(r.Context())
 	if ruleErr != nil {
-		return nil, nil, &designOpeningResolveFailure{code: "OPENING_OVERHANG_RULE_UNAVAILABLE", message: ruleErr.Error()}
+		return nil, nil, nil, &designOpeningResolveFailure{code: "OPENING_OVERHANG_RULE_UNAVAILABLE", message: ruleErr.Error()}
 	}
 	resolution, resErr := engine.ResolveDesignOpening(widthMm, heightMm, selection, profileData, engine.OpeningOverhangRuleMm(rule), nil)
 	if resErr != nil {
-		return nil, nil, &designOpeningResolveFailure{code: resErr.Code, message: resErr.Message}
+		return nil, nil, nil, &designOpeningResolveFailure{code: resErr.Code, message: resErr.Message}
 	}
 	if resolution.State != engine.DesignOpeningStateResolved {
-		return nil, nil, &designOpeningResolveFailure{code: resolution.Reason, message: "la apertura del diseño está bloqueada"}
+		return nil, nil, nil, &designOpeningResolveFailure{code: resolution.Reason, message: "la apertura del diseño está bloqueada"}
 	}
-	return resolution.Fronts, openingMembersFromPin(selection), nil
+	// #1287 / §13.3: the resolved declared body effects ride with the fronts
+	// so the layout pass materializes the notch from the SAME definition.
+	return resolution.Fronts, openingMembersFromPin(selection), resolution.BodyModifiers, nil
 }
 
 // openingMembersFromPin projects the selection's frozen BOM slice onto the

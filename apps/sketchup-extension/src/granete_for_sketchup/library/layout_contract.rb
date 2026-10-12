@@ -26,9 +26,8 @@ module Granete
       class LayoutBoardTransform
         attr_reader :component_instance_id, :slot_id, :name, :authoring_capability
 
-        def initialize(component_instance_id:, slot_id:, name:, dims:,
-                       local_transform:, identity: {}, material: {}, aabb: {},
-                       authoring_capability: nil)
+        def initialize(component_instance_id:, slot_id:, name:, dims:, local_transform:,
+                       identity: {}, material: {}, aabb: {}, authoring_capability: nil, notches: [])
           @component_instance_id = component_instance_id
           @slot_id = slot_id
           @name = name
@@ -38,7 +37,13 @@ module Granete
           @material = material
           @aabb = aabb
           @authoring_capability = authoring_capability
+          @notches = notches
         end
+
+        # #1287 / §13.3: the opening's declared subtraction boxes in this
+        # board's LOCAL frame (startMm/sizeMm + provenance). Empty = no
+        # notch — the historical plain box.
+        attr_reader :notches
 
         # Explicit direct-authoring affordance published by the engine for
         # movable internals (#467). Nil = not directly authorable — callers
@@ -1054,9 +1059,7 @@ module Granete
                            definition_name: ContractCoercions.optional_opaque_string(
                              body['definitionName'], 'definitionName'
                            ),
-                           dimensions_mm: ContractCoercions.optional_triple(
-                             body['dimensionsMm'], 'dimensionsMm'
-                           ))
+                           dimensions_mm: ContractCoercions.optional_triple(body['dimensionsMm'], 'dimensionsMm'))
         end
 
         def parse_board(raw)
@@ -1067,8 +1070,7 @@ module Granete
 
           local = raw['localTransform']
           unless local.is_a?(Hash)
-            raise ContractError,
-                  "Componente #{id}: falta localTransform (contrato #{SUPPORTED_TRANSFORM_CONTRACT})"
+            raise ContractError, "Componente #{id}: falta localTransform (contrato #{SUPPORTED_TRANSFORM_CONTRACT})"
           end
 
           LayoutBoardTransform.new(
@@ -1088,7 +1090,8 @@ module Granete
             identity: parse_identity_fields(raw, id),
             material: parse_material_fields(raw, id),
             aabb: parse_aabb_fields(raw, id),
-            authoring_capability: parse_authoring_capability(raw['authoringCapability'], id)
+            authoring_capability: parse_authoring_capability(raw['authoringCapability'], id),
+            notches: NotchContractParsing.parse(raw['notches'], id)
           )
         end
 
@@ -1106,6 +1109,10 @@ module Granete
 
           { 'movable' => true, 'axis' => raw['axis'] }
         end
+
+        # #1287 / §13.3: the declared subtraction boxes the host geometry
+        # cuts. Absent = plain box (historical semantics). Present but
+        # malformed fails closed — the host never cuts on a guess.
 
         def parse_identity_fields(raw, id)
           IDENTITY_KEYS.to_h do |key|
@@ -1137,6 +1144,38 @@ module Granete
                                                        "AABB min de #{id}"),
             'size' => ContractCoercions.optional_triple(raw['dimensionsMm'], "AABB size de #{id}")
           }
+        end
+      end
+
+      # #1287 / §13.3: the declared subtraction boxes the host geometry cuts
+      # on an opening-notched board. Absent = plain box (historical
+      # semantics). Present but malformed fails closed — the host never
+      # cuts on a guess.
+      module NotchContractParsing
+        module_function
+
+        def parse(raw, id)
+          return [] if raw.nil?
+
+          raise ContractError, "notches de #{id} debe ser un arreglo" unless raw.is_a?(Array)
+
+          raw.map do |notch|
+            raise ContractError, "notch de #{id} inválido" unless notch.is_a?(Hash)
+
+            {
+              'startMm' => ContractCoercions.numeric_triple(notch['startMm'], "startMm del notch de #{id}"),
+              'sizeMm' => positive_size(notch['sizeMm'], id),
+              'profileId' => ContractCoercions.optional_opaque_string(notch['profileId'], 'profileId del notch'),
+              'boundary' => ContractCoercions.optional_opaque_string(notch['boundary'], 'boundary del notch')
+            }
+          end
+        end
+
+        def positive_size(raw, id)
+          size = ContractCoercions.numeric_triple(raw, "sizeMm del notch de #{id}")
+          raise ContractError, "sizeMm del notch de #{id} debe ser positivo en cada eje" unless size.all?(&:positive?)
+
+          size
         end
       end
     end

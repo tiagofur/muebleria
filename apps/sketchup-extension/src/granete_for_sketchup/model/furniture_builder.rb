@@ -106,20 +106,79 @@ module Granete
         # spans [0,width]×[0,thickness]×[0,length] on X/Y/Z (engine
         # convention the #414 basis maps onto the furniture frame). World/AABB
         # coordinates are never baked into definition geometry.
-        def build_local_box(definition, width_mm, thickness_mm, length_mm)
-          w = width_mm * MM_TO_INCHES
-          t = thickness_mm * MM_TO_INCHES
-          l = length_mm * MM_TO_INCHES
+        def build_local_box(definition, width_mm, thickness_mm, length_mm, notches: [])
+          width = width_mm * MM_TO_INCHES
+          thickness = thickness_mm * MM_TO_INCHES
+          length = length_mm * MM_TO_INCHES
 
+          local_box_segments(width, thickness, length, notches).each do |segment|
+            add_box_segment(definition, segment, thickness)
+          end
+        end
+
+        def add_box_segment(definition, segment, thickness)
           pts = [
-            Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(w, 0, 0),
-            Geom::Point3d.new(w, t, 0), Geom::Point3d.new(0, t, 0)
+            Geom::Point3d.new(segment[:x0], 0, segment[:z0]),
+            Geom::Point3d.new(segment[:x1], 0, segment[:z0]),
+            Geom::Point3d.new(segment[:x1], thickness, segment[:z0]),
+            Geom::Point3d.new(segment[:x0], thickness, segment[:z0])
           ]
           face = definition.entities.add_face(pts)
           return unless face
 
           face.reverse! if face.respond_to?(:normal) && face.normal.respond_to?(:z) && face.normal.z.negative?
-          face.pushpull(l) if l.positive?
+          face.pushpull(segment[:z1] - segment[:z0]) if (segment[:z1] - segment[:z0]).positive?
+        end
+
+        # #1287 / §13.3: a notched board builds as stacked segments along the
+        # local Z (the vertical axis of the opening notch): full cross-section
+        # below and above, and the front-reduced cross-section across the
+        # notch band — the visible subtraction without boolean operations.
+        # Only through-thickness corner notches are representable; anything
+        # else fails loudly instead of silently rendering a plain box.
+        def local_box_segments(width, thickness, length, notches)
+          return [{ x0: 0.0, x1: width, z0: 0.0, z1: length }] if notches.nil? || notches.empty?
+
+          raise ArgumentError, 'sólo se materializa una muesca por tablero' if notches.size > 1
+
+          notch = notches.first
+          unless through_thickness?(notch, thickness)
+            raise ArgumentError, 'la muesca debe atravesar todo el espesor del tablero'
+          end
+
+          band = notch_band_in_inches(notch)
+          reduced = reduced_span(band, width)
+
+          segments = []
+          segments << { x0: 0.0, x1: width, z0: 0.0, z1: band[:z0] } if band[:z0].positive?
+          segments << { x0: reduced[:x0], x1: reduced[:x1], z0: band[:z0], z1: band[:z1] }
+          segments << { x0: 0.0, x1: width, z0: band[:z1], z1: length } if band[:z1] < length - 1.0e-6
+          segments
+        end
+
+        def through_thickness?(notch, thickness)
+          (notch['sizeMm'][1] - thickness).abs < 1.0e-6
+        end
+
+        def notch_band_in_inches(notch)
+          start_mm = notch['startMm']
+          size_mm = notch['sizeMm']
+          {
+            x0: start_mm[0] * MM_TO_INCHES,
+            x1: (start_mm[0] + size_mm[0]) * MM_TO_INCHES,
+            z0: start_mm[2] * MM_TO_INCHES,
+            z1: (start_mm[2] + size_mm[2]) * MM_TO_INCHES
+          }
+        end
+
+        # The notch must reach one X edge for the two-segment construction;
+        # an interior strip is not representable and fails loudly.
+        def reduced_span(band, width)
+          touches_start = band[:x0] <= 1.0e-6
+          touches_end = band[:x1] >= width - 1.0e-6
+          raise ArgumentError, 'la muesca debe alcanzar un borde del tablero' unless touches_start || touches_end
+
+          { x0: touches_start ? band[:x1] : 0.0, x1: touches_start ? width : band[:x0] }
         end
       end
 
@@ -712,7 +771,11 @@ module Granete
           board_definition = model.definitions.add(
             "#{FurnitureBuilder::PART_DEFINITION_PREFIX}#{name} · #{board.component_instance_id}"
           )
-          LocalGeometry.build_local_box(board_definition, board.width_mm, board.thickness_mm, board.length_mm)
+          # Assembly fabricated components are plain boxes today — the notch
+          # is a body-board effect (#1287) only the layout contract carries.
+          notches = board.respond_to?(:notches) ? board.notches : []
+          LocalGeometry.build_local_box(board_definition, board.width_mm, board.thickness_mm,
+                                        board.length_mm, notches: notches)
 
           transform = placement_transform || LocalGeometry.axes_transform(board.translation, board.basis)
           instance = parent_definition.entities.add_instance(board_definition, transform)

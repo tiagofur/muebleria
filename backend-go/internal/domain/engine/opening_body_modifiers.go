@@ -84,6 +84,20 @@ func openingContractBodyModifier(entity domain.OpeningBodyModifier) OpeningContr
 	}
 }
 
+// ContractBodyModifiersFromEntities maps persisted entity modifiers onto the
+// contract shape for the api/storage projections of the frozen pin slice
+// (#1287). nil stays nil (the truthful absence).
+func ContractBodyModifiersFromEntities(entities []domain.OpeningBodyModifier) []OpeningContractBodyModifier {
+	if entities == nil {
+		return nil
+	}
+	out := make([]OpeningContractBodyModifier, 0, len(entities))
+	for _, entity := range entities {
+		out = append(out, openingContractBodyModifier(entity))
+	}
+	return out
+}
+
 // OpeningProfileBodyData is the library slice the body-modifier resolution
 // consumes (a projection of the #1130 entity — the storage layer maps it).
 type OpeningProfileBodyData struct {
@@ -174,6 +188,13 @@ func ResolveOpeningBodyModifiers(
 		if !known {
 			return nil, openingFail(OpeningErrProfileUnknown,
 				fmt.Sprintf("perfil desconocido %s", profileID))
+		}
+		// #1287: an ABSENT declared slice (pre-#1287 pin, or a profile that
+		// declares none) resolves no effects and guards nothing — the
+		// truthful absence, never a blocked resolution. Declared data still
+		// fails closed below.
+		if len(profile.BodyModifiers) == 0 {
+			continue
 		}
 		kind := openingBoundaryKind(boundary.Boundary)
 		if !openingPlacementCompatible(profile.CompatiblePlacements, kind) {
