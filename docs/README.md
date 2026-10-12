@@ -11,19 +11,19 @@ prerequisites listed below.
    and runtime evidence. A design document describes intent; it does not prove that
    every part is implemented.
 2. **Architecture and decisions:** `docs/architecture.md`, the relevant focused
-   document under `docs/architecture/`, and the applicable ADR under `docs/adr/`.
+   document under `docs/architecture/`, and the applicable ADR under [`docs/adr/`](adr/README.md).
    ADR status matters: Proposed is not an accepted implementation contract.
 3. **Task authorization and delivery:** the exact approved GitHub issue, its acceptance
    criteria/exclusions, current branch/base, and existing PR. Documentation cannot
    authorize extra scope.
 4. **Verification:** `docs/verification.md` plus the smallest domain-specific test or
    command. Use the issue's risk and the repository's proportional verification rules.
-5. **Historical material:** files under `docs/history/`, dated audit/rehearsal/plan
+5. **Historical material:** files under [`docs/history/`](history/README.md), dated audit/rehearsal/plan
    documents, and `progress/` explain provenance or past findings. They are not live
    status or current product truth unless a current canonical source explicitly adopts
    a finding. Do not load them by default.
 6. **Generated audit evidence:** files under
-   `docs/history/muebles-audit-360-20260903/audit/` are a retained evidence package.
+   [`docs/history/muebles-audit-360-20260903/audit/`](history/muebles-audit-360-20260903/audit/README.md) are a retained evidence package.
    Its JSON, bundles, screenshots, scripts, and reports are not startup context. Open
    the audit README/index and only the specific evidence needed to investigate a
    concrete claim.
@@ -33,7 +33,9 @@ prerequisites listed below.
 | Task / question | Read first | Add only when relevant |
 | --- | --- | --- |
 | Product scope, terminology, user value | [Product](PRODUCT.md), [PRD v2](prd-v2.md) | [Commercial roadmap](roadmap-comercial-v2.md), current approved issue |
-| Cross-cutting architecture or ownership | [Architecture contract](architecture.md), [Conventions](conventions.md) | Focused architecture document and applicable ADR |
+| Cross-cutting architecture or ownership | [Architecture contract](architecture.md), [Conventions](conventions.md) | Focused architecture document and applicable ADR in [ADR catalogue](adr/README.md) |
+| Architectural decisions (ADRs) and lifecycle | [ADR catalogue](adr/README.md) | Focused architecture document under `docs/architecture/` |
+| Historical records, audits, past baselines, judgment days | [Historical index](history/README.md) | Retained evidence package under [Audit 360](history/muebles-audit-360-20260903/audit/README.md) or pre-ODD log |
 | API, Go backend, DTOs, persistence, auth, tenancy, RLS | [Backend agent guide](../backend-go/AGENTS.md), [Architecture contract](architecture.md) | [Organization foundation](architecture/organization-foundation-v2.md), ADR-0005/0006/0007, OpenAPI contract and focused tests |
 | React/web UI and visual behavior | [Design contract](design.md) | [Operational UX](operational-ux.md), affected app/package instructions and UI tests |
 | SketchUp extension, host bridge, interaction, sync | [SketchUp agent guide](../apps/sketchup-extension/AGENTS.md) | [Native entity model](architecture/sketchup-native-entity-model.md), [authoring interaction contract](architecture/sketchup-authoring-interaction-contract.md), [host reconciliation](architecture/sketchup-host-reconciliation.md), relevant ADR |
@@ -51,8 +53,8 @@ prerequisites listed below.
 
 The following are useful but must not be mistaken for live operational state:
 
-- `docs/history/**`: historical baselines, audit findings, design explorations, and
-  prior implementation/review evidence.
+- [`docs/history/**`](history/README.md): historical baselines, audit findings, design explorations, and
+  prior implementation/review evidence. Consult [`docs/history/README.md`](history/README.md).
 - `docs/demo/*`: distinguish the portable G-ODD contract
   (`software-factory-human-start.md`) from status reports and dated rehearsals.
   Status reports are snapshots; verify current state against GitHub and the repository.
@@ -60,8 +62,8 @@ The following are useful but must not be mistaken for live operational state:
   treat as snapshots unless the issue explicitly asks to continue that plan.
 - `docs/architecture/audit-670-final.md` and other audit reports: evidence/findings,
   not a substitute for the focused architecture contract or current source.
-- `docs/adr/`: decision records. Read the status and the canonical detail link; do not
-  assume a Proposed ADR has been accepted.
+- [`docs/adr/`](adr/README.md): decision records. Read the status in [`docs/adr/README.md`](adr/README.md)
+  and the canonical detail link; do not assume a Proposed ADR has been accepted.
 - `odd/tasks/`: recoverable execution artifacts, not backlog or global progress.
   Read only the artifact named by the authorized issue.
 - `progress/`: historical evidence, not the work queue or current state.
