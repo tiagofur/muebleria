@@ -74,6 +74,8 @@ func setupDesignQuoteFixture(t *testing.T) *designQuoteFixture {
 
 func intPtr(v int) *int { return &v }
 
+func floatPtr(v float64) *float64 { return &v }
+
 func createDesignQuote(ctx context.Context, fx *designQuoteFixture) (*storage.CreateInitialQuoteRevisionResult, error) {
 	return fx.store.CreateInitialDesignQuoteRevision(ctx, storage.CreateInitialDesignQuoteRevisionCommand{
 		ProjectID: csProject, DesignID: fx.designID,

@@ -91,11 +91,22 @@ func boardIsOpeningFront(board *layoutBoard) bool {
 // furniture's fronts: the gola run plus its factory-declared companions.
 // The ids and the spacing come from the selection's profile pin — never
 // the live catalog — so a datasheet change never drifts a resolved model.
+//
+// #1283 / §13.2: the declared datasheet geometry rides with the pin too.
+// ProfileHeightMm/ProfileDepthMm are the profile's physical envelope
+// (8006: 56.5 tall × 27.2 deep); Support/Cap dims are each accessory's
+// declared envelope [along-run, depth, height]. Zero/nil = the pin does not
+// declare the geometry (pre-#1283 pin) and the layout places nothing — the
+// truthful absence, never an engine constant.
 type OpeningMembers struct {
 	ProfileHardwareID string
 	SupportHardwareID string
 	CapHardwareID     string
 	SupportSpacingMm  int
+	ProfileHeightMm   float64
+	ProfileDepthMm    float64
+	SupportDimsMm     *[3]float64
+	CapDimsMm         *[3]float64
 }
 
 // attachOpeningMembers appends the member placements to the FIRST
@@ -112,12 +123,27 @@ type OpeningMembers struct {
 // [0, dims.WidthMm], aligned at the top-front of the carcass [0, DepthMm, HeightMm],
 // the left support mounts at X = 0, and the right support mounts at X = WidthMm with
 // its X axis inverted (mirrored into the cabinet).
+//
+// #1283 / §13.2: every envelope comes from the pinned datasheet declaration,
+// never from engine constants. The references are explicit:
+//   - Height reference: the carcass top plane at a top-boundary gola
+//     (dims.HeightMm; the bottom plane at a bottom boundary). The support's
+//     local origin sits at profile height / 2 from that reference — the
+//     support SKP must be modeled with its grip point as local origin.
+//   - Depth reference: the carcass front plane (the profile's front face is
+//     flush with it; the declared depth reaches back under the top).
 func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims, bottomBoundary bool, hostBoardID string) {
 	face := "top"
 	if bottomBoundary {
 		face = "bottom"
 	}
 	if members.ProfileHardwareID == "" {
+		return
+	}
+	// §13.2 fail-closed: a pin without declared datasheet geometry (pre-#1283
+	// rows) places no opening hardware — an invented envelope is never a
+	// fallback for a missing declaration.
+	if members.ProfileHeightMm <= 0 || members.ProfileDepthMm <= 0 {
 		return
 	}
 	totalW := float64(dims.WidthMm)
@@ -131,7 +157,8 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 	yPos := totalD
 
 	// 1. Profile: spanning the entire furniture width from X = 0 to X = totalW,
-	// aligned at the top-front of carcass (Y = totalD, Z = zPos).
+	// front face flush with the carcass front plane, vertical envelope from
+	// the declared datasheet (8006: 56.5 tall × 27.2 deep).
 	if hw, ok := findHardware(catalog, members.ProfileHardwareID); ok && hw.Active {
 		layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 			hw,
@@ -142,26 +169,30 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 				Y: [3]float64{0, 1, 0},
 				Z: [3]float64{0, 0, 1},
 			},
-			[3]float64{totalW, 56.5, 27.2},
+			[3]float64{totalW, members.ProfileDepthMm, members.ProfileHeightMm},
 			hostBoardID,
 			face,
 		))
 	}
 
-	// 2. Supports:
-	if members.SupportHardwareID != "" {
+	// 2. Supports: vertical position = profile height / 2 from the declared
+	// height reference (§13.2); envelope from the accessory's declared dims.
+	// Members without declared geometry place nothing.
+	if members.SupportHardwareID != "" && members.SupportDimsMm != nil {
 		if hw, ok := findHardware(catalog, members.SupportHardwareID); ok && hw.Active {
-			// Left support: at X = 0, Y = totalD, Z = zPos, normal orientation
+			supportDims := *members.SupportDimsMm
+			zSupport := zPos - members.ProfileHeightMm/2
+			// Left support: at X = 0, normal orientation
 			layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 				hw,
 				fmt.Sprintf("opening-support-left-%s", hw.ID),
-				[3]float64{0, yPos, zPos},
+				[3]float64{0, yPos, zSupport},
 				LayoutBasis{
 					X: [3]float64{1, 0, 0},
 					Y: [3]float64{0, 1, 0},
 					Z: [3]float64{0, 0, 1},
 				},
-				[3]float64{20, 40, 20},
+				supportDims,
 				hostBoardID,
 				face,
 			))
@@ -173,29 +204,29 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 					layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 						hw,
 						fmt.Sprintf("opening-support-mid-%d-%s", i, hw.ID),
-						[3]float64{stepX, yPos, zPos},
+						[3]float64{stepX, yPos, zSupport},
 						LayoutBasis{
 							X: [3]float64{1, 0, 0},
 							Y: [3]float64{0, 1, 0},
 							Z: [3]float64{0, 0, 1},
 						},
-						[3]float64{20, 40, 20},
+						supportDims,
 						hostBoardID,
 						face,
 					))
 				}
 			}
-			// Right support: at X = totalW, Y = totalD, Z = zPos, inverted in X!
+			// Right support: at X = totalW, inverted in X!
 			layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 				hw,
 				fmt.Sprintf("opening-support-right-%s", hw.ID),
-				[3]float64{totalW, yPos, zPos},
+				[3]float64{totalW, yPos, zSupport},
 				LayoutBasis{
 					X: [3]float64{-1, 0, 0},
 					Y: [3]float64{0, 1, 0},
 					Z: [3]float64{0, 0, 1},
 				},
-				[3]float64{20, 40, 20},
+				supportDims,
 				hostBoardID,
 				face,
 			))
@@ -203,11 +234,12 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 	}
 
 	// 3. End Caps:
-	if members.CapHardwareID != "" {
+	if members.CapHardwareID != "" && members.CapDimsMm != nil {
 		if hw, ok := findHardware(catalog, members.CapHardwareID); ok && hw.Active {
+			capDims := *members.CapDimsMm
 			layout.Hardware = append(layout.Hardware,
-				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-left-%s", hw.ID), [3]float64{0, yPos, zPos}, LayoutBasis{X: [3]float64{1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, [3]float64{3, 58, 29}, hostBoardID, face),
-				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-right-%s", hw.ID), [3]float64{totalW, yPos, zPos}, LayoutBasis{X: [3]float64{-1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, [3]float64{3, 58, 29}, hostBoardID, face),
+				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-left-%s", hw.ID), [3]float64{0, yPos, zPos}, LayoutBasis{X: [3]float64{1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, capDims, hostBoardID, face),
+				buildDerivedHardware(hw, fmt.Sprintf("opening-cap-right-%s", hw.ID), [3]float64{totalW, yPos, zPos}, LayoutBasis{X: [3]float64{-1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1}}, capDims, hostBoardID, face),
 			)
 		}
 	}

@@ -150,6 +150,10 @@ export type OpeningBOMMember = {
   readonly rule: string;
   readonly unit?: string;
   readonly spacingMm?: number;
+  /** Declared accessory envelope [along-run, depth, height] from the pinned
+   * datasheet (#1283 / §13.2). Nil = the member declares no geometry and the
+   * layout places nothing for it (fail-closed, never an engine default). */
+  readonly dimensionsMm?: readonly [number, number, number];
 };
 
 export interface OpeningProfile {
