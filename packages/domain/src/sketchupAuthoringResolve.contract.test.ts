@@ -749,7 +749,7 @@ describe('authoringResolveFingerprint routing cuts (#1302/§13.3)', () => {
     hostComponentInstanceId: 'side',
     provenance: { sourceKind: 'openingProfile', openingProfileId: 'prof-8006', boundary: 'top' },
     holes: [],
-    routing: [{ startMm: [0, 532.8, 663.5] as [number, number, number], sizeMm: [18, 27.2, 56.5] as [number, number, number] }],
+    routingCuts: [{ startMm: [0, 532.8, 663.5] as [number, number, number], sizeMm: [18, 27.2, 56.5] as [number, number, number] }],
   };
   const fingerprint = (operations: readonly unknown[]) =>
     authoringResolveFingerprint({
@@ -759,16 +759,16 @@ describe('authoringResolveFingerprint routing cuts (#1302/§13.3)', () => {
 
   test('an absent routing key and an explicit empty array hash identically (Go parity)', () => {
     const withoutKey = fingerprint([drillOp]);
-    const withEmptyKey = fingerprint([{ ...drillOp, routing: [] }]);
+    const withEmptyKey = fingerprint([{ ...drillOp, routingCuts: [] }]);
     expect(withEmptyKey).toBe(withoutKey);
   });
 
   test('a routing cut moves the hash and is deterministic', () => {
     const withRoute = fingerprint([drillOp, routeOp]);
-    const again = fingerprint([drillOp, { ...routeOp, routing: [{ startMm: [0, 532.8, 663.5] as [number, number, number], sizeMm: [18, 27.2, 56.5] as [number, number, number] }] }]);
+    const again = fingerprint([drillOp, { ...routeOp, routingCuts: [{ startMm: [0, 532.8, 663.5] as [number, number, number], sizeMm: [18, 27.2, 56.5] as [number, number, number] }] }]);
     expect(withRoute).not.toBe(fingerprint([drillOp]));
     expect(again).toBe(withRoute);
-    const moved = fingerprint([drillOp, { ...routeOp, routing: [{ startMm: [0, 532.8, 660] as [number, number, number], sizeMm: [18, 27.2, 56.5] as [number, number, number] }] }]);
+    const moved = fingerprint([drillOp, { ...routeOp, routingCuts: [{ startMm: [0, 532.8, 660] as [number, number, number], sizeMm: [18, 27.2, 56.5] as [number, number, number] }] }]);
     expect(moved).not.toBe(withRoute);
   });
 });

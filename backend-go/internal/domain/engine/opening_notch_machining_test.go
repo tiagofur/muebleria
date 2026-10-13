@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -209,5 +210,45 @@ func TestValidateReleaseRoutingProgramRouteIntent(t *testing.T) {
 				t.Fatalf("want %q rejection, got %v", scenario.match, err)
 			}
 		})
+	}
+}
+
+// #1320: the HOST (Ruby) and the TS mirror consume the wire, not the struct:
+// routing operations must carry `holes` as a present (empty) JSON array —
+// null fails the host contract — and their cuts under `routingCuts`, the
+// same key the manufacturing snapshot serializes. The legacy `routing` key
+// must never appear.
+func TestOpeningNotchRoutingOperationWireShape(t *testing.T) {
+	notched, _ := notchMachiningFixture(t)
+
+	var notchOp *ResolvedMachiningOperation
+	for i := range notched.Machining.Operations {
+		if notched.Machining.Operations[i].Provenance.SourceKind == "openingProfile" {
+			notchOp = &notched.Machining.Operations[i]
+			break
+		}
+	}
+	if notchOp == nil {
+		t.Fatal("no openingProfile routing operation in the resolved payload")
+	}
+
+	wire, err := json.Marshal(notchOp)
+	if err != nil {
+		t.Fatalf("marshal machining operation: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(wire, &decoded); err != nil {
+		t.Fatalf("unmarshal machining operation: %v", err)
+	}
+
+	if _, ok := decoded["holes"].([]any); !ok {
+		t.Fatalf("holes must serialize as a JSON array (never null), got %v", decoded["holes"])
+	}
+	cuts, ok := decoded["routingCuts"].([]any)
+	if !ok || len(cuts) != 1 {
+		t.Fatalf("routingCuts must carry exactly one cut, got %v", decoded["routingCuts"])
+	}
+	if _, legacy := decoded["routing"]; legacy {
+		t.Fatal("the legacy `routing` key must not appear in the wire")
 	}
 }
