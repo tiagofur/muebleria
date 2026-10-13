@@ -15,7 +15,13 @@ import (
 // ONE definition — never two independent derivations.
 //
 // v1 geometry contract: only the top/bottom-boundary corner notch is
-// materializable (the 8006 datasheet's 10×19 top_front cut). A between
+// materializable, at WHATEVER dimensions the profile declares — the engine
+// never carries notch constants. (Provenance correction #1305/#1282: the
+// 10×19 figures floated in early investigation are NOT a datasheet pass-
+// through notch — on the p.42 drawing those callouts dimension the SU116
+// support-mount machining on the gable, a 19-wide relief band with 10-deep
+// notches. Whether an installation cuts the side at all is the §13.6
+// construction decision, never an engine default.) A between
 // boundary or a non-zero front offset has no geometry consumer yet and
 // fails closed; so does a notch that does not fit the board.
 

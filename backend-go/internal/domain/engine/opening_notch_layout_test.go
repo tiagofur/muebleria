@@ -7,9 +7,10 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
-// #1287 / §13.3 — the DECLARED side notch (8006 datasheet: 10 mm high ×
-// 19 mm deep at the gable's top-front corner) materializes as an exact local
-// subtraction box on every side board. The fixture verifies in FURNITURE
+// #1287 / §13.3 — the DECLARED side notch (arbitrary fixture dimensions:
+// 10 high × 19 deep — NOT datasheet values; the datasheet's 10/19 callouts
+// dimension the SU116 support-mount machining, see opening_notch_layout.go)
+// materializes as an exact local subtraction box on every side board. The fixture verifies in FURNITURE
 // coordinates — derived independently from the published AABB — so the
 // assertion proves the contract (hug the top-front corner, through the full
 // thickness) regardless of the board's local axis assignment.
