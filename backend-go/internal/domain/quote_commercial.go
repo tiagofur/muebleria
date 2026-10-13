@@ -70,6 +70,10 @@ type QuoteCommercialPricingContext struct {
 	StructureIndependent bool                        `json:"structureIndependent,omitempty"`
 	BaseClearanceMm      *int                        `json:"baseClearanceMm,omitempty"`
 	PlinthSides          *QuoteCommercialPlinthSides `json:"plinthSides,omitempty"`
+	// DimsAuthoritative (#974/#1311): the unit prices by its explicit design
+	// dimensions — measure presets are not consulted for it. Frozen so later
+	// requotes carry the same authority instead of re-deriving it.
+	DimsAuthoritative bool `json:"dimsAuthoritative,omitempty"`
 }
 
 // QuoteCommercialUnit is the frozen customer-facing descriptor of ONE physical

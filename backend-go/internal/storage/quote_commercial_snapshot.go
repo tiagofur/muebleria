@@ -70,11 +70,6 @@ func (s *PostgresStore) loadQuoteCommercialEnvelope(ctx context.Context, project
 	return &envelope, nil
 }
 
-// buildInitialQuoteCommercialSnapshot captures Q1's commercial truth from the
-// project's editable commercial state: the SAME live state the user was
-// quoted (quote lines with base mode, presets, pins and kitchen layout). The
-// existing engine computes the breakdown once; per-unit descriptors come from
-// the exact item snapshot being frozen in the same command.
 // intersectConsumableChoices applies the #826 engine intersection to one quote
 // item: only roles the definition physically consumes survive the freeze.
 // BOM-neutral (engine guarantee) and skipped for unresolvable units, which the
@@ -93,7 +88,21 @@ func intersectConsumableChoices(item CreateQuoteRevisionItemCommand, catalog dom
 	return filtered
 }
 
-func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context, projectID string, items []CreateQuoteRevisionItemCommand, intersectConsumable bool, opening *designOpeningCommercial) (*domain.QuoteCommercialSnapshot, error) {
+// buildInitialQuoteCommercialSnapshot captures Q1's commercial truth from the
+// project's editable commercial state: the SAME live state the user was
+// quoted (quote lines with base mode, presets, pins and kitchen layout). The
+// existing engine computes the breakdown once; per-unit descriptors come from
+// the exact item snapshot being frozen in the same command.
+// intersectConsumableChoices applies the #826 engine intersection to one quote
+// item: only roles the definition physically consumes survive the freeze.
+// BOM-neutral (engine guarantee) and skipped for unresolvable units, which the
+// release gate keeps guarding.
+// dimsAuthoritative (#974/#1311): the design-first Q1 prices the working
+// copy's explicit dimensions — the SketchUp surface has no preset field, so
+// the preset gate must not apply to it; the frozen contexts record that
+// authority so later requotes carry it. The project-first Q1 keeps the
+// commercial preset gate.
+func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context, projectID string, items []CreateQuoteRevisionItemCommand, intersectConsumable bool, dimsAuthoritative bool, opening *designOpeningCommercial) (*domain.QuoteCommercialSnapshot, error) {
 	envelope, err := s.loadQuoteCommercialEnvelope(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -102,6 +111,11 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 	projectItems, err := s.loadProjectItems(ctx, projectID)
 	if err != nil {
 		return nil, err
+	}
+	if dimsAuthoritative {
+		for i := range projectItems {
+			projectItems[i].DimsAuthoritative = true
+		}
 	}
 	levelChoices, err := s.loadProjectLevelChoices(ctx, projectID)
 	if err != nil {
@@ -184,6 +198,7 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 			items[i].PricingContext = &domain.QuoteCommercialPricingContext{
 				MeasurePresetID: projectItem.MeasurePresetID, BaseMode: projectItem.BaseMode,
 				StructureRevisionPin: structurePin, StructureIndependent: structureIndependent,
+				DimsAuthoritative: dimsAuthoritative,
 			}
 		}
 		baseContext, err := engine.ResolveBaseContextForItem(pricingProject, projectItem, &catalog)

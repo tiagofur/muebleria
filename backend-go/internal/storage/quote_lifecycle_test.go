@@ -804,3 +804,29 @@ func TestQuoteLifecycle_AcceptedUniquenessBackstop(t *testing.T) {
 		t.Fatalf("second accepted revision must be blocked by the unique index, got: %v", err)
 	}
 }
+
+// #1311: the project-first Q1 keeps the commercial preset gate — a
+// preset-bearing module whose quote line carries no measure_preset_id still
+// fails loudly instead of silently pricing module base dims.
+func TestCreateInitialQuoteRevision_KeepsPresetGateForPresetModules(t *testing.T) {
+	fx := setupCommercialSnapshotFixture(t)
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO structures (id, code, name, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+csStructure+`', 'CS-STRUCT-PG', 'Estructura PG', 600, 720, 560, '`+rlsOrgA+`');
+		INSERT INTO components (id, code, name, placement, length_mm, width_mm, length_formula, width_formula, thickness_mm, option_roles, organization_id)
+		VALUES ('`+csComponent+`', 'CS-PANEL-PG', 'Panel PG', 'base', 560, 600, 'D', 'W', 18, '{INTERIOR}', '`+rlsOrgA+`');
+		INSERT INTO structure_components (structure_id, component_id, quantity, organization_id)
+		VALUES ('`+csStructure+`', '`+csComponent+`', 1, '`+rlsOrgA+`');
+		UPDATE modules SET structure_id='`+csStructure+`' WHERE id='`+csModule+`';
+		INSERT INTO module_presets (id, module_id, name, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+csPreset+`', '`+csModule+`', '600x720x560', 600, 720, 560, '`+rlsOrgA+`');`)
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, txErr := fx.store.CreateInitialQuoteRevision(ctx, storage.CreateInitialQuoteRevisionCommand{
+			ProjectID: csProject, ActorUserID: rlsUserA, RequestID: "preset-gate-q1",
+		})
+		return txErr
+	})
+	if err == nil || !strings.Contains(err.Error(), "elegí un preset de medida") {
+		t.Fatalf("expected preset gate error, got: %v", err)
+	}
+}

@@ -232,7 +232,10 @@ func (s *PostgresStore) CreateInitialDesignQuoteRevision(ctx context.Context, cm
 		return nil, err
 	}
 
-	snapshot, err := s.buildInitialQuoteCommercialSnapshot(ctx, cmd.ProjectID, items, true, opening)
+	// #974/#1311: the design-first Q1 prices the working copy's explicit dims —
+	// the SketchUp surface carries no preset field, so the commercial preset
+	// gate must not block it (the projection already prices this exact truth).
+	snapshot, err := s.buildInitialQuoteCommercialSnapshot(ctx, cmd.ProjectID, items, true, true, opening)
 	if err != nil {
 		return nil, err
 	}
