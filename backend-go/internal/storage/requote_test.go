@@ -814,3 +814,214 @@ func TestRequote_ProvenanceMigration_FreshAndUpgrade(t *testing.T) {
 	}
 	assertRequoteProvenanceSchema(t, upgrade)
 }
+
+// requoteDesignFixture: a design-first Q1 (#1311 dims-authoritative) over a
+// preset-bearing module, accepted, plus the design infrastructure to publish
+// further design revisions for requote.
+type requoteDesignFixture struct {
+	*designQuoteFixture
+	acceptedQuoteID string
+	thirdInstance   string
+}
+
+func setupRequoteDesignFixture(t *testing.T) *requoteDesignFixture {
+	t.Helper()
+	fx := &requoteDesignFixture{designQuoteFixture: setupDesignQuoteFixture(t)}
+	// csModule gana estructura + presets comerciales: el Q1 design-first
+	// congela contexts dims-autoritativos (#1311) y el requote debe heredarlos.
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO structures (id, code, name, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+csStructure+`', 'CS-STRUCT-RQ', 'Estructura RQ', 800, 720, 560, '`+rlsOrgA+`');
+		INSERT INTO components (id, code, name, placement, length_mm, width_mm, length_formula, width_formula, thickness_mm, option_roles, organization_id)
+		VALUES ('`+csComponent+`', 'CS-PANEL-RQ', 'Panel RQ', 'base', 560, 600, 'D', 'W', 18, '{INTERIOR}', '`+rlsOrgA+`');
+		INSERT INTO structure_components (structure_id, component_id, quantity, organization_id)
+		VALUES ('`+csStructure+`', '`+csComponent+`', 1, '`+rlsOrgA+`');
+		UPDATE modules SET structure_id='`+csStructure+`' WHERE id='`+csModule+`';
+		INSERT INTO module_presets (id, module_id, name, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+csPreset+`', '`+csModule+`', 'Ancho 400', 400, 720, 590, '`+rlsOrgA+`');`)
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		// Working copy con dims explícitas + Q1 design-first aceptado.
+		wcItems := make([]storage.UpdateDesignWorkingCopyItemCommand, 0, len(fx.instances))
+		for _, instance := range fx.instances {
+			wcItems = append(wcItems, storage.UpdateDesignWorkingCopyItemCommand{
+				FurnitureInstanceID: instance, FurnitureDefinitionID: csModule,
+				Parameters:      map[string]any{"widthMm": 800, "heightMm": 720, "depthMm": 560},
+				MaterialChoices: map[string]string{"INTERIOR": csMaterial},
+			})
+		}
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
+			DesignID: fx.designID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA, Items: wcItems,
+		}); err != nil {
+			return err
+		}
+		projection, err := fx.store.GetDesignCommercialProjection(ctx, csProject, fx.designID)
+		if err != nil {
+			return err
+		}
+		if projection.Amounts == nil || projection.Amounts.SaleTotal == nil {
+			return errors.New("fixture projection is not priceable")
+		}
+		quote, err := fx.store.CreateInitialDesignQuoteRevision(ctx, storage.CreateInitialDesignQuoteRevisionCommand{
+			ProjectID: csProject, DesignID: fx.designID,
+			WorkingVersion: projection.WorkingVersion, WorkingFingerprint: projection.WorkingFingerprint,
+			ActorUserID: rlsUserA, RequestID: "requote-design-q1",
+		})
+		if err != nil {
+			return err
+		}
+		fx.acceptedQuoteID = quote.Revision.ID
+		if _, err := fx.store.PublishQuoteRevision(ctx, storage.QuoteRevisionLifecycleCommand{
+			ProjectID: csProject, QuoteRevisionID: quote.Revision.ID, ActorUserID: rlsUserA, RequestID: "requote-design-q1",
+		}); err != nil {
+			return err
+		}
+		if _, err := fx.store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{
+			QuoteRevisionID: quote.Revision.ID, Status: "accepted",
+		}); err != nil {
+			return err
+		}
+		// El diseño sigue vivo: tercera unidad del mismo módulo, nunca cotizada.
+		newFI, err := fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
+			ProjectID: csProject, FurnitureDefinitionID: csModule,
+			Origin: domain.FurnitureInstanceOriginDesign, ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		fx.thirdInstance = newFI.ID
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("setup requote design fixture: %v", err)
+	}
+	return fx
+}
+
+func (fx *requoteDesignFixture) publishDesignRevisionWithDims(t *testing.T, includeThird bool, thirdDefID string, thirdParams map[string]any) string {
+	t.Helper()
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		wcItems := make([]storage.UpdateDesignWorkingCopyItemCommand, 0, len(fx.instances)+1)
+		for _, instance := range fx.instances {
+			wcItems = append(wcItems, storage.UpdateDesignWorkingCopyItemCommand{
+				FurnitureInstanceID: instance, FurnitureDefinitionID: csModule,
+				Parameters:      map[string]any{"widthMm": 800, "heightMm": 720, "depthMm": 560},
+				MaterialChoices: map[string]string{"INTERIOR": csMaterial},
+			})
+		}
+		if includeThird {
+			wcItems = append(wcItems, storage.UpdateDesignWorkingCopyItemCommand{
+				FurnitureInstanceID: fx.thirdInstance, FurnitureDefinitionID: thirdDefID,
+				Parameters: thirdParams, MaterialChoices: map[string]string{"INTERIOR": csMaterial},
+			})
+		}
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
+			DesignID: fx.designID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA, Items: wcItems,
+		}); err != nil {
+			return err
+		}
+		_, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID: fx.designID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("publish design revision: %v", err)
+	}
+	var designRevID string
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT id FROM design_revisions WHERE design_id=$1 ORDER BY created_at DESC LIMIT 1`, fx.designID,
+	).Scan(&designRevID); err != nil {
+		t.Fatal(err)
+	}
+	return designRevID
+}
+
+// #1312: the canonical mixed requote — an ACCEPTED design-first base (dims
+// authority frozen by #1311) plus one modeled-not-quoted unit of a
+// preset-bearing module. The design-only unit prices by its explicit dims,
+// the carried units keep their cloned frozen contexts, and the accepted base
+// stays intact.
+func TestRequote_IncorporatesDesignOnlyUnitsOfPresetModules(t *testing.T) {
+	fx := setupRequoteDesignFixture(t)
+	designRevID := fx.publishDesignRevisionWithDims(t, true, csModule, map[string]any{"widthMm": 500, "heightMm": 720, "depthMm": 560})
+	var result *storage.RequoteProjectQuoteResult
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var txErr error
+		result, txErr = fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
+			ProjectID: csProject, BaseQuoteRevisionID: fx.acceptedQuoteID, DesignRevisionID: designRevID,
+			ActorUserID: rlsUserA, RequestID: "requote-design-only",
+		})
+		return txErr
+	})
+	if err != nil {
+		t.Fatalf("requote with design-only preset-module unit: %v", err)
+	}
+	if result.Revision.Status != "draft" || result.Revision.CommercialSnapshot == nil {
+		t.Fatalf("revision=%+v", result.Revision)
+	}
+	contextByInstance := map[string]domain.QuoteCommercialPricingContext{}
+	for _, unit := range result.Revision.CommercialSnapshot.Units {
+		if unit.PricingContext == nil {
+			t.Fatalf("unit %s has no frozen pricing context", unit.FurnitureInstanceID)
+		}
+		contextByInstance[unit.FurnitureInstanceID] = *unit.PricingContext
+	}
+	if len(contextByInstance) != len(fx.instances)+1 {
+		t.Fatalf("units=%d want %d", len(contextByInstance), len(fx.instances)+1)
+	}
+	newContext := contextByInstance[fx.thirdInstance]
+	if !newContext.DimsAuthoritative || newContext.MeasurePresetID != "" || newContext.StructureRevisionPin == nil {
+		t.Fatalf("design-only frozen context=%+v", newContext)
+	}
+	for _, carried := range fx.instances {
+		carriedContext := contextByInstance[carried]
+		if !carriedContext.DimsAuthoritative || carriedContext.StructureRevisionPin == nil {
+			t.Fatalf("carried frozen context %s=%+v", carried, carriedContext)
+		}
+	}
+	var baseStatus string
+	var baseItems int
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT status, (SELECT count(*) FROM quote_revision_items WHERE quote_revision_id=$1) FROM quote_revisions WHERE id=$1`,
+		fx.acceptedQuoteID,
+	).Scan(&baseStatus, &baseItems); err != nil {
+		t.Fatal(err)
+	}
+	if baseStatus != "accepted" || baseItems != len(fx.instances) {
+		t.Fatalf("accepted base mutated: status=%s items=%d", baseStatus, baseItems)
+	}
+}
+
+// #1312: a design unit without a module definition fails closed with the
+// unit identity — never the generic «corrupt or malformed payload».
+func TestRequote_MissingModuleDefinition_FailsClosedWithUnit(t *testing.T) {
+	fx := setupRequoteDesignFixture(t)
+	designRevID := fx.publishDesignRevisionWithDims(t, true, "", map[string]any{"widthMm": 500, "heightMm": 720, "depthMm": 560})
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, txErr := fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
+			ProjectID: csProject, BaseQuoteRevisionID: fx.acceptedQuoteID, DesignRevisionID: designRevID,
+			ActorUserID: rlsUserA, RequestID: "requote-missing-def",
+		})
+		return txErr
+	})
+	if err == nil || !strings.Contains(err.Error(), "no tiene definición de módulo") || strings.Contains(err.Error(), "corrupt or malformed") {
+		t.Fatalf("expected explicit unit error, got: %v", err)
+	}
+}
+
+// #1312: a design-only unit without priceable dims on a preset-bearing
+// module keeps refusing loudly — a preset is never inferred from dims.
+func TestRequote_PresetModuleWithoutDims_StillRejected(t *testing.T) {
+	fx := setupRequoteDesignFixture(t)
+	designRevID := fx.publishDesignRevisionWithDims(t, true, csModule, map[string]any{})
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, txErr := fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
+			ProjectID: csProject, BaseQuoteRevisionID: fx.acceptedQuoteID, DesignRevisionID: designRevID,
+			ActorUserID: rlsUserA, RequestID: "requote-no-dims",
+		})
+		return txErr
+	})
+	if err == nil || !strings.Contains(err.Error(), "no tiene un preset comercial exacto") || strings.Contains(err.Error(), "corrupt or malformed") {
+		t.Fatalf("expected explicit preset error, got: %v", err)
+	}
+}

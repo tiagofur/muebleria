@@ -148,6 +148,11 @@ func respondWithQuoteRequoteError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeVersionConflict, "La cotización base quedó desactualizada (hay una revisión más nueva): reconciliá de nuevo contra la última revisión", nil)
 	case errors.Is(err, domain.ErrQuoteCommercialSnapshotMissing):
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La cotización base no congeló todo el contexto comercial necesario para re-cotizar. Creá una revisión con el contrato actual; no se infieren presets ni bases desde datos mutables.", nil)
+	case errors.Is(err, domain.ErrQuoteUnitUnfreezable):
+		// #1312: a specific draft unit cannot get its pricing context frozen —
+		// the wrapped detail names the unit and the fix, unlike a corrupt
+		// payload. The text is server-authored Spanish, safe to surface.
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, err.Error(), nil)
 	case errors.Is(err, domain.ErrInvalidRevisionSnapshot):
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "invalid revision snapshot: corrupt or malformed payload", nil)
 	case errors.Is(err, domain.ErrRequoteInconsistentInput):
