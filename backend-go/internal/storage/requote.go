@@ -115,10 +115,19 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 	}
 	previewUnits := make([]designOpeningUnit, 0, len(inputs.Design.Items))
 	for _, designItem := range inputs.Design.Items {
+		quoteLineID := sourceLineByInstance[designItem.FurnitureInstanceID]
+		if quoteLineID == "" {
+			// #1318: a design-only unit mints its stable line id BEFORE the
+			// opening preview — the frozen opening section requires a stable
+			// line per unit regardless of which unit sorts first by
+			// furniture_instance_id. The items loop below mints the
+			// IDENTICAL deterministic id, so identity never diverges.
+			quoteLineID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("granete.quote-line:"+designItem.FurnitureInstanceID)).String()
+		}
 		previewUnits = append(previewUnits, designOpeningUnit{
 			FurnitureInstanceID:   designItem.FurnitureInstanceID,
 			FurnitureDefinitionID: designItem.FurnitureDefinitionID,
-			QuoteLineID:           sourceLineByInstance[designItem.FurnitureInstanceID],
+			QuoteLineID:           quoteLineID,
 			Parameters:            designItem.Parameters,
 		})
 	}
