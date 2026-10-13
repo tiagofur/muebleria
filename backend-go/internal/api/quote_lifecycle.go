@@ -257,6 +257,10 @@ func respondWithQuoteLifecycleError(w http.ResponseWriter, err error, command st
 		// #642 legacy recovery: modernization only applies to snapshot-less
 		// legacy rows; a modern latest revision continues through requote.
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La última revisión ya tiene autoridad comercial moderna: usá re-cotización para crear la siguiente", nil)
+	case errors.Is(err, domain.ErrQuoteUnitUnfreezable):
+		// #1312: a specific unit cannot get its pricing context frozen — the
+		// wrapped detail names the unit and the fix, unlike a corrupt payload.
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "Una unidad del borrador no puede congelarse comercialmente: corregí el diseño o el catálogo de esa unidad", map[string]any{"reason": err.Error()})
 	case errors.Is(err, domain.ErrInvalidRevisionSnapshot):
 		// Discriminates only the payload copy: the typed error carries the
 		// exact snapshot defect (missing lines, corrupt frozen payload,

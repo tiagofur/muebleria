@@ -52,6 +52,11 @@ var (
 	// ErrQuoteRevisionConflict (stale base / concurrent modification).
 	ErrQuoteRevisionInvalidTransition = errors.New("quote revision invalid transition")
 	ErrInvalidRevisionSnapshot        = errors.New("invalid revision snapshot: corrupt or malformed payload")
+	// ErrQuoteUnitUnfreezable (#1312): a specific draft unit cannot get its
+	// commercial pricing context frozen — a distinct cause from a corrupt
+	// snapshot payload, so the API surfaces the wrapped unit-level detail
+	// instead of the generic «corrupt or malformed payload» message.
+	ErrQuoteUnitUnfreezable = errors.New("no se pudo congelar el contexto comercial de una unidad del borrador")
 )
 
 // QuoteRevision represents an immutable commercial revision snapshot entity.
