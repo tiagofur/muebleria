@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -815,6 +817,30 @@ func TestRequote_ProvenanceMigration_FreshAndUpgrade(t *testing.T) {
 	assertRequoteProvenanceSchema(t, upgrade)
 }
 
+// golaOpeningSelection is the pinned gola selection the fixture's design
+// declares (mirrors the owner's real profile.gola-l.8006 v6 slice).
+func golaOpeningSelection() *domain.DesignOpeningSelection {
+	notchH, notchD := 56.5, 27.2
+	spacing := 400
+	return &domain.DesignOpeningSelection{
+		System:     "gola",
+		ProfileID:  "profile.gola-l.8006",
+		Placements: []string{"top"},
+		ProfilePin: &domain.DesignOpeningProfilePin{
+			ProfileCode: "GOLA-L-8006", FrontReductionMm: 38, GripClearanceMm: 2,
+			DatasheetStatus: "verified", ProfileHeightMm: 56.5, ProfileDepthMm: 27.2,
+			CompatiblePlacements: []string{"top"},
+			BodyModifiers: []domain.OpeningBodyModifier{{
+				Role: "lateral", NotchHeightMm: &notchH, NotchDepthMm: &notchD, NotchAt: "top_front",
+			}},
+			BOM: &domain.DesignOpeningProfilePinBOM{ProfileVersion: 6, Members: map[string]domain.OpeningBOMMember{
+				"profile":  {HardwareID: "80000000-0000-4000-8000-000000000801", Rule: "interior_width", Unit: "meter"},
+				"supports": {HardwareID: "80000000-0000-4000-8000-000000000802", Rule: "per_length", SpacingMm: &spacing, DimensionsMm: &[3]float64{17, 19.5, 39.5}},
+			}},
+		},
+	}
+}
+
 // requoteDesignFixture: a design-first Q1 (#1311 dims-authoritative) over a
 // preset-bearing module, accepted, plus the design infrastructure to publish
 // further design revisions for requote.
@@ -824,7 +850,17 @@ type requoteDesignFixture struct {
 	thirdInstance   string
 }
 
+// setupRequoteDesignFixture leaves the design-only unit sorting FIRST by
+// furniture_instance_id (low fixed UUID) — the exact order that crashed the
+// opening preview pre-#1318.
 func setupRequoteDesignFixture(t *testing.T) *requoteDesignFixture {
+	return setupRequoteDesignFixtureWithThirdUUID(t, "00000000-0000-4000-8000-0000000000a1")
+}
+
+// setupRequoteDesignFixtureWithThirdUUID lets a test pin the design-only
+// instance's UUID: a HIGH UUID makes it sort LAST, so units[0] is always a
+// carried unit and the freeze stage is reached deterministically.
+func setupRequoteDesignFixtureWithThirdUUID(t *testing.T, thirdUUID string) *requoteDesignFixture {
 	t.Helper()
 	fx := &requoteDesignFixture{designQuoteFixture: setupDesignQuoteFixture(t)}
 	// csModule gana estructura + presets comerciales: el Q1 design-first
@@ -838,7 +874,17 @@ func setupRequoteDesignFixture(t *testing.T) *requoteDesignFixture {
 		VALUES ('`+csStructure+`', '`+csComponent+`', 1, '`+rlsOrgA+`');
 		UPDATE modules SET structure_id='`+csStructure+`' WHERE id='`+csModule+`';
 		INSERT INTO module_presets (id, module_id, name, width_mm, height_mm, depth_mm, organization_id)
-		VALUES ('`+csPreset+`', '`+csModule+`', 'Ancho 400', 400, 720, 590, '`+rlsOrgA+`');`)
+		VALUES ('`+csPreset+`', '`+csModule+`', 'Ancho 400', 400, 720, 590, '`+rlsOrgA+`');
+		INSERT INTO components (id, code, name, placement, length_mm, width_mm, thickness_mm, option_roles, organization_id, construction)
+		VALUES ('71000000-0000-0000-0000-0000000000c9', 'CS-SIDE-RQ', 'Lateral RQ', 'lateral_izquierdo', 720, 590, 15, '{INTERIOR}', '`+rlsOrgA+`', '{"constructive_role": "lateral"}');
+		INSERT INTO structure_components (structure_id, component_id, quantity, organization_id)
+		VALUES ('`+csStructure+`', '71000000-0000-0000-0000-0000000000c9', 1, '`+rlsOrgA+`');
+		INSERT INTO hardwares (id, organization_id, code, name, unit, cost_per_unit, active)
+		VALUES ('80000000-0000-4000-8000-000000000801', '`+rlsOrgA+`', 'HER-GOLA-PERFIL', 'Perfil gola L 8006', 'meter', 12.5, TRUE),
+		       ('80000000-0000-4000-8000-000000000802', '`+rlsOrgA+`', 'HER-GOLA-SOPORTE', 'Soporte gola SU116', 'piece', 1.2, TRUE);`)
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO furniture_instances (id, organization_id, project_id, furniture_definition_id, origin)
+		VALUES ('`+thirdUUID+`', '`+rlsOrgA+`', '`+csProject+`', '`+csModule+`', 'design')`)
 	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 		// Working copy con dims explícitas + Q1 design-first aceptado.
 		wcItems := make([]storage.UpdateDesignWorkingCopyItemCommand, 0, len(fx.instances))
@@ -851,6 +897,7 @@ func setupRequoteDesignFixture(t *testing.T) *requoteDesignFixture {
 		}
 		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID: fx.designID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA, Items: wcItems,
+			AuthoringDefaults: &domain.DesignAuthoringDefaults{Opening: golaOpeningSelection()},
 		}); err != nil {
 			return err
 		}
@@ -880,15 +927,10 @@ func setupRequoteDesignFixture(t *testing.T) *requoteDesignFixture {
 		}); err != nil {
 			return err
 		}
-		// El diseño sigue vivo: tercera unidad del mismo módulo, nunca cotizada.
-		newFI, err := fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
-			ProjectID: csProject, FurnitureDefinitionID: csModule,
-			Origin: domain.FurnitureInstanceOriginDesign, ActorUserID: rlsUserA,
-		})
-		if err != nil {
-			return err
-		}
-		fx.thirdInstance = newFI.ID
+		// El diseño sigue vivo: tercera unidad del mismo módulo, nunca
+		// cotizada. Nació en el seed con UUID fijo (bajo o alto según el
+		// test) para un orden determinista frente al preview de apertura.
+		fx.thirdInstance = thirdUUID
 		return nil
 	})
 	if err != nil {
@@ -973,6 +1015,20 @@ func TestRequote_IncorporatesDesignOnlyUnitsOfPresetModules(t *testing.T) {
 	if !newContext.DimsAuthoritative || newContext.MeasurePresetID != "" || newContext.StructureRevisionPin == nil {
 		t.Fatalf("design-only frozen context=%+v", newContext)
 	}
+	// #1318: la sección de apertura congelada lleva línea comercial estable
+	// por unidad — la design-only mintea el id determinista aunque ordene
+	// primera por furniture_instance_id.
+	openingByID := map[string]domain.QuoteCommercialOpeningBOM{}
+	for _, entry := range result.Revision.CommercialSnapshot.OpeningBOM {
+		openingByID[entry.QuoteLineID] = entry
+	}
+	if len(openingByID) == 0 {
+		t.Fatal("frozen opening section is empty")
+	}
+	minted := uuid.NewSHA1(uuid.NameSpaceOID, []byte("granete.quote-line:"+fx.thirdInstance)).String()
+	if _, ok := openingByID[minted]; !ok {
+		t.Fatalf("design-only opening line %s missing from %d frozen entries", minted, len(openingByID))
+	}
 	for _, carried := range fx.instances {
 		carriedContext := contextByInstance[carried]
 		if !carriedContext.DimsAuthoritative || carriedContext.StructureRevisionPin == nil {
@@ -995,7 +1051,7 @@ func TestRequote_IncorporatesDesignOnlyUnitsOfPresetModules(t *testing.T) {
 // #1312: a design unit without a module definition fails closed with the
 // unit identity — never the generic «corrupt or malformed payload».
 func TestRequote_MissingModuleDefinition_FailsClosedWithUnit(t *testing.T) {
-	fx := setupRequoteDesignFixture(t)
+	fx := setupRequoteDesignFixtureWithThirdUUID(t, "ffffffff-0000-4000-8000-0000000000a1")
 	designRevID := fx.publishDesignRevisionWithDims(t, true, "", map[string]any{"widthMm": 500, "heightMm": 720, "depthMm": 560})
 	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 		_, txErr := fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
@@ -1012,7 +1068,7 @@ func TestRequote_MissingModuleDefinition_FailsClosedWithUnit(t *testing.T) {
 // #1312: a design-only unit without priceable dims on a preset-bearing
 // module keeps refusing loudly — a preset is never inferred from dims.
 func TestRequote_PresetModuleWithoutDims_StillRejected(t *testing.T) {
-	fx := setupRequoteDesignFixture(t)
+	fx := setupRequoteDesignFixtureWithThirdUUID(t, "ffffffff-0000-4000-8000-0000000000a1")
 	designRevID := fx.publishDesignRevisionWithDims(t, true, csModule, map[string]any{})
 	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 		_, txErr := fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
