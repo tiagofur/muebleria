@@ -244,6 +244,62 @@ handoffs. It does not approve, reserve, launch, merge, or create review authorit
 Receipt-driven review remains `disabled/unmanaged` unless a human explicitly enables
 it; this contract neither activates nor simulates it.
 
+## Updating the local demo environment (backend + SketchUp plugin)
+
+The Go backend and the SketchUp plugin (RBZ) must always come from the **same
+commit**. Updating only one creates silent contract skew (#1251). The backend
+exposes no version endpoint (`GET /api/health` returns only `{"status":"ok"}`),
+so the commit you built is the only proof: move both together, never one.
+
+Version policy: any change under `apps/sketchup-extension/src/` must bump
+`EXTENSION_VERSION` in `src/granete_for_sketchup/identity.rb` (the only source).
+CI enforces it with `python3 scripts/ci_extension_version.py --ci`. Locally:
+`python3 scripts/ci_extension_version.py --base origin/main` (committed work only).
+
+1. **Pick one commit.** `git switch main && git pull --ff-only`, then
+   `git rev-parse --short HEAD` and note it.
+2. **Back up the installed plugin** (paths for SketchUp 2026; adjust the year):
+
+   ```bash
+   PLUGINS="$HOME/Library/Application Support/SketchUp 2026/SketchUp/Plugins"
+   VER=$(sed -n "s/.*EXTENSION_VERSION = '\([^']*\)'.*/\1/p" "$PLUGINS/granete_for_sketchup/identity.rb")
+   BK="$PLUGINS/granete-backups/granete_for_sketchup-$VER-$(date +%Y%m%d-%H%M%S)"
+   mkdir -p "$BK" && cp -R "$PLUGINS/granete_for_sketchup" "$PLUGINS/granete_for_sketchup.rb" "$BK/"
+   ```
+
+3. **Rebuild and restart the backend** with the existing `.env.local` (stop the
+   running `./dev.sh` with Ctrl-C first; `serve` runs `go run`, so a restart
+   recompiles current sources):
+
+   ```bash
+   cd backend-go && ./dev.sh          # optional compile-only check: ./dev.sh build
+   curl -s http://localhost:8080/api/health   # {"status":"ok"}; port is PORT in .env.local
+   ```
+
+4. **Build the RBZ** from that same checkout (Apple Silicon Homebrew Ruby: export
+   the `PATH` shown in `apps/sketchup-extension/README.md` § Quick path first):
+
+   ```bash
+   cd apps/sketchup-extension && bundle exec rake build
+   shasum -a 256 dist/granete_for_sketchup.rbz   # record with the commit
+   ```
+
+5. **Install and fully quit SketchUp.** Extension Manager → Install Extension →
+   `apps/sketchup-extension/dist/granete_for_sketchup.rbz`, then quit SketchUp
+   completely (Cmd+Q, not just closing the model) and reopen it. `identity.rb`
+   guards its constants, so a running session keeps the old version until then.
+6. **Check the version.** Open Granete from the Extensions menu: the footer shows
+   `Granete para SketchUp · v<EXTENSION_VERSION>` and Extension Manager lists the
+   same number; both must equal `identity.rb` of the commit from step 1. The
+   on-disk copy can be checked with the `sed` line from step 2.
+7. **If backend and plugin seem to be different versions** (herrajes/dock, sync to
+   design or Apertura missing or failing): confirm `git rev-parse HEAD` matches
+   step 1, repeat steps 3–6 from that commit, and make sure the old backend
+   process is gone (`lsof -i :8080`). If the plugin still misbehaves, restore the
+   copy from `granete-backups` (replace `granete_for_sketchup/` and
+   `granete_for_sketchup.rb` in `Plugins`), quit and reopen SketchUp, and report
+   the commit, the footer version and the RBZ SHA-256.
+
 ## What this migration does not claim
 
 Instruction tests detect drift; they do not demonstrate autonomous agents, real
