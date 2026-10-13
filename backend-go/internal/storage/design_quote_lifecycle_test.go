@@ -326,3 +326,75 @@ func TestCreateInitialDesignQuoteRevision_RemoveWinsWhileQuoteWaitsForInstanceLo
 		t.Fatalf("remove-wins rollback revisions/lines=%d/%d", revisions, lines)
 	}
 }
+
+// #1311/#974: the design-first Q1 prices the working copy's explicit dims —
+// a preset-bearing module must not block it, and the frozen pricing contexts
+// record the dims-authoritative authority so later requotes carry it.
+func TestCreateInitialDesignQuoteRevision_PricesDesignDimsWhenModuleHasPresets(t *testing.T) {
+	fx := setupDesignQuoteFixture(t)
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO structures (id, code, name, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+csStructure+`', 'CS-STRUCT-DQ', 'Estructura DQ', 800, 720, 560, '`+rlsOrgA+`');
+		INSERT INTO components (id, code, name, placement, length_mm, width_mm, length_formula, width_formula, thickness_mm, option_roles, organization_id)
+		VALUES ('`+csComponent+`', 'CS-PANEL-DQ', 'Panel DQ', 'base', 560, 600, 'D', 'W', 18, '{INTERIOR}', '`+rlsOrgA+`');
+		INSERT INTO structure_components (structure_id, component_id, quantity, organization_id)
+		VALUES ('`+csStructure+`', '`+csComponent+`', 1, '`+rlsOrgA+`');
+		UPDATE modules SET structure_id='`+csStructure+`' WHERE id='`+csModule+`';
+		INSERT INTO module_presets (id, module_id, name, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+csPreset+`', '`+csModule+`', 'Ancho 400', 400, 720, 590, '`+rlsOrgA+`');`)
+	// Dimensiones explícitas del diseño, distintas del preset comercial (400).
+	items := make([]storage.UpdateDesignWorkingCopyItemCommand, 0, len(fx.instances))
+	for _, instance := range fx.instances {
+		items = append(items, storage.UpdateDesignWorkingCopyItemCommand{
+			FurnitureInstanceID: instance, FurnitureDefinitionID: csModule,
+			Parameters:      map[string]any{"widthMm": 800, "heightMm": 720, "depthMm": 560},
+			MaterialChoices: map[string]string{"INTERIOR": csMaterial},
+		})
+	}
+	var projectedSale float64
+	var result *storage.CreateInitialQuoteRevisionResult
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
+			DesignID: fx.designID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA, Items: items,
+		}); err != nil {
+			return err
+		}
+		projection, err := fx.store.GetDesignCommercialProjection(ctx, csProject, fx.designID)
+		if err != nil {
+			return err
+		}
+		if projection.Amounts == nil || projection.Amounts.SaleTotal == nil {
+			return errors.New("fixture projection is not priceable")
+		}
+		projectedSale = *projection.Amounts.SaleTotal
+		result, err = fx.store.CreateInitialDesignQuoteRevision(ctx, storage.CreateInitialDesignQuoteRevisionCommand{
+			ProjectID: csProject, DesignID: fx.designID,
+			WorkingVersion: projection.WorkingVersion, WorkingFingerprint: projection.WorkingFingerprint,
+			ActorUserID: rlsUserA, RequestID: "design-first-presets",
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("design-first Q1 over preset module: %v", err)
+	}
+	if result.Revision.CommercialSnapshot == nil || result.Revision.CommercialSnapshot.Breakdown.SalePrice != projectedSale {
+		t.Fatalf("Q1 sale=%v projection=%v", result.Revision.CommercialSnapshot, projectedSale)
+	}
+	if len(result.Revision.CommercialSnapshot.Units) != len(fx.instances) {
+		t.Fatalf("units=%d", len(result.Revision.CommercialSnapshot.Units))
+	}
+	for _, unit := range result.Revision.CommercialSnapshot.Units {
+		if unit.PricingContext == nil || !unit.PricingContext.DimsAuthoritative || unit.PricingContext.MeasurePresetID != "" {
+			t.Fatalf("frozen pricing context %s=%+v", unit.FurnitureInstanceID, unit.PricingContext)
+		}
+	}
+	var linesWithPreset int
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT count(*) FROM project_items WHERE project_id=$1 AND measure_preset_id IS NOT NULL`, csProject,
+	).Scan(&linesWithPreset); err != nil {
+		t.Fatal(err)
+	}
+	if linesWithPreset != 0 {
+		t.Fatalf("project items with preset: %d", linesWithPreset)
+	}
+}
