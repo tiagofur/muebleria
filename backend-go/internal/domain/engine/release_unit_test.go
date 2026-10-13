@@ -199,3 +199,55 @@ func TestResolveReleaseUnitDefaultsConditionAndMetadata(t *testing.T) {
 		t.Fatal("competing consumers accepted")
 	}
 }
+
+// #1309: relationship bindings the release derive can govern resolve; kinds
+// outside the governed ladder keep failing closed. back-panel joined the
+// governed set with #874 (2aa9cb9a) — the whitelist predating that commit
+// rejected every module carrying the binding.
+func TestResolveReleaseUnitGovernedRelationshipBindings(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		kind  string
+		valid bool
+	}{
+		{"floor-side governed", "floor-side", true},
+		{"fixed-shelf-side governed", "fixed-shelf-side", true},
+		{"back-panel governed since #874", "back-panel", true},
+		{"unknown kind rejected", "shelf", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			item, catalog := releaseUnitFixture(t)
+			// A second distinct participant mirrors the real back-panel
+			// binding (owner module MOD-BAJ-1P-IZQ, tornillosRespaldo): the
+			// #874 joinery validates faces per distinct component.
+			second := domain.Component{
+				ID: "comp-bp-second", Code: "BP-2", Name: "Second participant",
+				Placement:    domain.PlacementBase,
+				GeometryKind: "rectangular_board", ThicknessMm: 18,
+				OptionRoles: []string{"INTERIOR"}, Active: true,
+			}
+			catalog.Components = append(catalog.Components, second)
+			catalog.Modules[0].Components = append(catalog.Modules[0].Components, domain.ComponentInstance{ComponentID: second.ID, Quantity: 1})
+			catalog.Modules[0].ParameterDefinitions[0].Binding = &domain.FurnitureParameterBinding{
+				Version:     1,
+				Kind:        "structureRelationship",
+				ComponentID: catalog.Modules[0].Components[0].ComponentID,
+				Relationship: &domain.FurnitureParameterRelationshipBinding{
+					Kind:       tc.kind,
+					SourceRole: "support",
+					Targets: []domain.FurnitureParameterRelationshipTarget{
+						{ComponentID: catalog.Modules[0].Components[0].ComponentID, Role: "side", Face: "front"},
+						{ComponentID: second.ID, Role: "bottom-run", Face: "front"},
+					},
+				},
+			}
+			result, err := ResolveReleaseUnit(item, catalog)
+			if tc.valid && (err != nil || result == nil) {
+				t.Fatalf("binding %q must resolve a release unit, got err %v", tc.kind, err)
+			}
+			if !tc.valid && (err == nil || result != nil) {
+				t.Fatalf("binding %q must fail closed", tc.kind)
+			}
+		})
+	}
+}
