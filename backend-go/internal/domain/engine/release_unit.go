@@ -130,8 +130,13 @@ func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalo
 		// unrepresentable joint never silently fabricates nothing.
 		if definition.Binding != nil && definition.Binding.Relationship != nil {
 			switch definition.Binding.Relationship.Kind {
-			case "floor-side", "fixed-shelf-side":
+			case "floor-side", "fixed-shelf-side", "back-panel":
 				// Governed kinds: the frozen routing derive owns them.
+				// back-panel joined the ladder with #874 (productive J1
+				// 2026-10-04, 2aa9cb9a) — the derive resolves it through the
+				// same fixed-shelf joinery class; the whitelist predating
+				// that commit blocked every module carrying the binding
+				// (#1309 smoke finding).
 			default:
 				return nil, fmt.Errorf("release unit relationship binding %s carries ungovernable kind %q", definition.Name, definition.Binding.Relationship.Kind)
 			}
