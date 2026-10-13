@@ -33,6 +33,8 @@ jobs:
       - name: Classify exact tested merge tree (unknown means full)
         id: impact
         run: python3 scripts/ci_impact.py --ci
+      - name: Require an EXTENSION_VERSION bump when packaged SketchUp files change (#1251)
+        run: python3 scripts/ci_extension_version.py --ci
 
   validate-catalog:
     name: Validate Product Capability Catalog & Harness
