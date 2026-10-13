@@ -1242,7 +1242,7 @@ function validateResolvedMachining(
     // boxes and no holes. Historical relationship/manual operations may carry
     // zero holes (the wire always allowed it) — only the routing variant
     // carries the payload guarantee.
-    const routing = operation.routing;
+    const routing = operation.routingCuts;
     if (routing !== undefined && !Array.isArray(routing)) {
       problems.push(`${path} contains an invalid routing payload`); continue;
     }
@@ -1425,7 +1425,7 @@ export function authoringResolveFingerprint(input: {
     readonly provenance: Record<string, unknown>;
     readonly holes: readonly ResolveHoleV1[];
     /** Routing cuts (#1302 / §13.3); absent reads as empty (drill-only op). */
-    readonly routing?: readonly {
+    readonly routingCuts?: readonly {
       readonly startMm: readonly [number, number, number];
       readonly sizeMm: readonly [number, number, number];
     }[];
@@ -1482,8 +1482,10 @@ export function authoringResolveFingerprint(input: {
         })),
         // Mirrors the Go canonical body exactly: the key is ALWAYS present
         // (empty array for drill-only operations) so the byte-level
-        // Go/TS parity over the shared fixture holds.
-        routing: (operation.routing ?? []).map((cut) => ({
+        // Go/TS parity over the shared fixture holds. #1320: the wire key
+        // is routingCuts (same key the manufacturing snapshot and the host
+        // contract consume).
+        routingCuts: (operation.routingCuts ?? []).map((cut) => ({
           startMm: [...cut.startMm],
           sizeMm: [...cut.sizeMm],
         })),

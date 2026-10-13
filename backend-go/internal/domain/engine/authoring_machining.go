@@ -191,8 +191,11 @@ type ResolvedMachiningOperation struct {
 	OperationID             string                      `json:"operationId"`
 	HostComponentInstanceID string                      `json:"hostComponentInstanceId"`
 	Provenance              ResolvedMachiningProvenance `json:"provenance"`
-	Holes                   []ResolveHole               `json:"holes"`
-	Routing                 []ResolveRoutingCut         `json:"routing,omitempty"`
+	// Holes is ALWAYS a JSON array (empty for routing operations): the host
+	// contract (Ruby/TS) requires the key present as an array — a null
+	// fails the wire validation (#1320).
+	Holes   []ResolveHole       `json:"holes"`
+	Routing []ResolveRoutingCut `json:"routingCuts,omitempty"`
 }
 
 // DerivedHardwarePlacement mirrors the TS type: a hardware placement whose
@@ -389,11 +392,11 @@ func deriveAuthoringMachining(
 				Code: "CONNECTION_FACE_INVALID",
 				Message: fmt.Sprintf("el ancla %q declara la cara %q fuera de las caras de unión declaradas por su componente",
 					anchorRole, face),
-				Severity:  domain.IssueSeverityError,
-				EntityID:  relationship.RelationshipID,
-				Path:      fmt.Sprintf("furniture.relationships[relationshipId=%s]", relationship.RelationshipID),
+				Severity:    domain.IssueSeverityError,
+				EntityID:    relationship.RelationshipID,
+				Path:        fmt.Sprintf("furniture.relationships[relationshipId=%s]", relationship.RelationshipID),
 				Remediation: "Declara la cara en el componente o ancla la relación en una cara que el componente admita.",
-				Details:   map[string]any{"anchorRole": anchorRole, "face": face},
+				Details:     map[string]any{"anchorRole": anchorRole, "face": face},
 			})
 			joineryStatuses = append(joineryStatuses, JoineryRelationshipStatus{
 				RelationshipID: relationship.RelationshipID, Kind: relationship.Kind,
@@ -460,6 +463,7 @@ func deriveOpeningNotchOperations(boards []layoutBoard, operations *[]ResolvedMa
 					OpeningProfileID: notch.ProfileID,
 					Boundary:         notch.Boundary,
 				},
+				Holes:   []ResolveHole{},
 				Routing: []ResolveRoutingCut{{StartMm: notch.StartMm, SizeMm: notch.SizeMm}},
 			})
 		}
@@ -564,6 +568,9 @@ func deriveRelationshipOperations(
 		return fmt.Sprintf("%s:op-%d", relationship.RelationshipID, opIndex)
 	}
 	pushOperation := func(opID string, board *layoutBoard, holes []ResolveHole) {
+		if holes == nil {
+			holes = []ResolveHole{}
+		}
 		*operations = append(*operations, ResolvedMachiningOperation{
 			OperationID:             opID,
 			HostComponentInstanceID: board.id,
@@ -811,11 +818,11 @@ func authoringManufacturingFingerprint(
 		operationCanonical = append(operationCanonical, map[string]any{
 			"sort": o.OperationID,
 			"body": map[string]any{
-				"id":      o.OperationID,
-				"host":    o.HostComponentInstanceID,
-				"prov":    o.Provenance.canonical(),
-				"holes":   holes,
-				"routing": routing,
+				"id":          o.OperationID,
+				"host":        o.HostComponentInstanceID,
+				"prov":        o.Provenance.canonical(),
+				"holes":       holes,
+				"routingCuts": routing,
 			},
 		})
 	}
