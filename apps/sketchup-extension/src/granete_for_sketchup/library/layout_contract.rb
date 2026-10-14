@@ -26,8 +26,9 @@ module Granete
       class LayoutBoardTransform
         attr_reader :component_instance_id, :slot_id, :name, :authoring_capability
 
+        # rubocop:disable-next Metrics/ParameterLists
         def initialize(component_instance_id:, slot_id:, name:, dims:, local_transform:,
-                       identity: {}, material: {}, aabb: {}, authoring_capability: nil, notches: [])
+                       identity: {}, material: {}, aabb: {}, authoring_capability: nil, notches: [], bevels: [])
           @component_instance_id = component_instance_id
           @slot_id = slot_id
           @name = name
@@ -38,12 +39,18 @@ module Granete
           @aabb = aabb
           @authoring_capability = authoring_capability
           @notches = notches
+          @bevels = bevels
         end
 
         # #1287 / §13.3: the opening's declared subtraction boxes in this
         # board's LOCAL frame (startMm/sizeMm + provenance). Empty = no
         # notch — the historical plain box.
         attr_reader :notches
+
+        # #1327 slice 3: the opening's declared door-bevel wedges in this
+        # board's LOCAL frame (bounding prism + angle + hugged edge).
+        # Empty = no bevel — the historical plain box.
+        attr_reader :bevels
 
         # Explicit direct-authoring affordance published by the engine for
         # movable internals (#467). Nil = not directly authorable — callers
@@ -1091,7 +1098,8 @@ module Granete
             material: parse_material_fields(raw, id),
             aabb: parse_aabb_fields(raw, id),
             authoring_capability: parse_authoring_capability(raw['authoringCapability'], id),
-            notches: NotchContractParsing.parse(raw['notches'], id)
+            notches: NotchContractParsing.parse(raw['notches'], id),
+            bevels: BevelContractParsing.parse(raw['bevels'], id)
           )
         end
 
@@ -1176,6 +1184,52 @@ module Granete
           unless size.all?(&:positive?)
             raise LayoutContract::ContractError,
                   "sizeMm del notch de #{id} debe ser positivo en cada eje"
+          end
+
+          size
+        end
+      end
+
+      # #1327 slice 3: the declared door bevel wedge the host geometry cuts:
+      # the bounding prism plus the bevel angle and the hugged edge.
+      # Absent = plain box (historical semantics). Present but malformed
+      # fails closed — the host never cuts on a guess.
+      module BevelContractParsing
+        module_function
+
+        def parse(raw, id)
+          return [] if raw.nil?
+
+          raise LayoutContract::ContractError, "bevels de #{id} debe ser un arreglo" unless raw.is_a?(Array)
+
+          raw.map do |bevel|
+            raise LayoutContract::ContractError, "bevel de #{id} inválido" unless bevel.is_a?(Hash)
+
+            edge = ContractCoercions.optional_opaque_string(bevel['edge'], 'edge del bevel')
+            angle = bevel['angleDeg']
+            unless edge.nil? || %w[top_front bottom_front].include?(edge)
+              raise LayoutContract::ContractError, "edge #{edge.inspect} del bevel de #{id} no es válido"
+            end
+            unless angle.nil? || (angle.is_a?(Numeric) && angle.positive?)
+              raise LayoutContract::ContractError, "angleDeg del bevel de #{id} debe ser positivo"
+            end
+
+            {
+              'startMm' => ContractCoercions.numeric_triple(bevel['startMm'], "startMm del bevel de #{id}"),
+              'sizeMm' => positive_size(bevel['sizeMm'], id),
+              'angleDeg' => angle,
+              'edge' => edge,
+              'profileId' => ContractCoercions.optional_opaque_string(bevel['profileId'], 'profileId del bevel'),
+              'boundary' => ContractCoercions.optional_opaque_string(bevel['boundary'], 'boundary del bevel')
+            }
+          end
+        end
+
+        def positive_size(raw, id)
+          size = ContractCoercions.numeric_triple(raw, "sizeMm del bevel de #{id}")
+          unless size.all?(&:positive?)
+            raise LayoutContract::ContractError,
+                  "sizeMm del bevel de #{id} debe ser positivo en cada eje"
           end
 
           size

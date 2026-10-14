@@ -583,4 +583,73 @@ class FurnitureBuilderTest < Minitest::Test
       )
     end
   end
+
+  # #1327: a beveled board builds the full box below the wedge band plus the
+  # pentagon prism whose missing corner is the 45° hypotenuse — the visible
+  # door cut without boolean operations. Fixture mirrors the engine's bevel:
+  # door 596×15×681, wedge [596,13,13] hugging top_front.
+  def test_build_local_box_with_top_bevel_builds_pentagon_prism
+    definition = @model.definitions.add('test-beveled-door')
+    bevel = {
+      'startMm' => [0.0, 2.0, 668.0], 'sizeMm' => [596.0, 13.0, 13.0],
+      'angleDeg' => 45.0, 'edge' => 'top_front',
+      'profileId' => 'profile.gola-italiano.tira', 'boundary' => 'top'
+    }
+
+    Granete::SketchUpExtension::Model::LocalGeometry.build_local_box(
+      definition, 596, 15, 681, bevels: [bevel]
+    )
+
+    assert_equal 2, definition.entities.faces.size, 'full box + slanted band'
+    pentagon = definition.entities.faces.last
+    assert_equal 5, pentagon.points.size, 'the cut band is a pentagon'
+    zs = pentagon.points.map(&:z)
+    assert_in_delta 668.0 * MM, zs.min, 1.0e-6
+    assert_in_delta 681.0 * MM, zs.max, 1.0e-6
+    xs = pentagon.points.map(&:x)
+    assert xs.all? { |x| (x - 0.0).abs < 1.0e-6 }, 'the pentagon face stands at the through-axis start'
+  end
+
+  def test_build_local_box_bevel_requires_45_degrees
+    definition = @model.definitions.add('test-60-bevel')
+    bevel = {
+      'startMm' => [0.0, 2.0, 668.0], 'sizeMm' => [596.0, 13.0, 13.0],
+      'angleDeg' => 60.0, 'edge' => 'top_front'
+    }
+
+    assert_raises(ArgumentError) do
+      Granete::SketchUpExtension::Model::LocalGeometry.build_local_box(
+        definition, 596, 15, 681, bevels: [bevel]
+      )
+    end
+  end
+
+  def test_build_local_box_bevel_requires_equal_legs
+    definition = @model.definitions.add('test-uneven-bevel')
+    bevel = {
+      'startMm' => [0.0, 2.0, 668.0], 'sizeMm' => [596.0, 13.0, 10.0],
+      'angleDeg' => 45.0, 'edge' => 'top_front'
+    }
+
+    assert_raises(ArgumentError) do
+      Granete::SketchUpExtension::Model::LocalGeometry.build_local_box(
+        definition, 596, 15, 681, bevels: [bevel]
+      )
+    end
+  end
+
+  def test_build_local_box_notch_and_bevel_together_fail_loud
+    definition = @model.definitions.add('test-notch-plus-bevel')
+    notch = { 'startMm' => [541.0, 0.0, 100.0], 'sizeMm' => [19.0, 18.0, 10.0] }
+    bevel = {
+      'startMm' => [0.0, 2.0, 668.0], 'sizeMm' => [596.0, 13.0, 13.0],
+      'angleDeg' => 45.0, 'edge' => 'top_front'
+    }
+
+    assert_raises(ArgumentError) do
+      Granete::SketchUpExtension::Model::LocalGeometry.build_local_box(
+        definition, 596, 15, 681, notches: [notch], bevels: [bevel]
+      )
+    end
+  end
 end

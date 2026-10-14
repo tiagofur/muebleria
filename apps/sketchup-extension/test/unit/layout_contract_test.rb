@@ -464,4 +464,45 @@ class LayoutContractTest < Minitest::Test
       end
     end
   end
+
+  # #1327 slice 3: the declared door-bevel wedges parse as local geometry
+  # with angle/edge/provenance; absent = plain board; malformed fails closed.
+  def test_bevels_parse_as_local_wedge_geometry
+    raw = board('puerta', 'bevels' => [{
+                  'startMm' => [0.0, 2.0, 668.0], 'sizeMm' => [596.0, 13.0, 13.0],
+                  'angleDeg' => 45.0, 'edge' => 'top_front',
+                  'profileId' => 'profile.gola-italiano.tira', 'boundary' => 'top'
+                }])
+    parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(with_contract([raw]))
+
+    bevel = parsed.boards.first.bevels.first
+    assert_equal [0.0, 2.0, 668.0], bevel['startMm']
+    assert_equal [596.0, 13.0, 13.0], bevel['sizeMm']
+    assert_equal 45.0, bevel['angleDeg']
+    assert_equal 'top_front', bevel['edge']
+    assert_equal 'profile.gola-italiano.tira', bevel['profileId']
+    assert_equal 'top', bevel['boundary']
+  end
+
+  def test_bevels_absent_means_plain_board
+    parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(golden_layout)
+
+    assert_empty parsed.boards.first.bevels
+  end
+
+  def test_malformed_bevels_fail_safe
+    invalid = [
+      'not-an-array',
+      [{ 'startMm' => [0, 0, 0], 'sizeMm' => [596, 13, -13], 'angleDeg' => 45.0, 'edge' => 'top_front' }],
+      [{ 'startMm' => [0, 0], 'sizeMm' => [596, 13, 13], 'angleDeg' => 45.0, 'edge' => 'top_front' }],
+      [{ 'startMm' => [0, 0, 0], 'sizeMm' => [596, 13, 13], 'angleDeg' => 45.0, 'edge' => 'top_back' }]
+    ]
+    invalid.each do |bevels|
+      raw = board('puerta', 'bevels' => bevels)
+      assert_raises(Granete::SketchUpExtension::Library::LayoutContract::ContractError,
+                    "bevels #{bevels.inspect} must fail safely") do
+        Granete::SketchUpExtension::Library::LayoutContract.parse!(with_contract([raw]))
+      end
+    end
+  end
 end
