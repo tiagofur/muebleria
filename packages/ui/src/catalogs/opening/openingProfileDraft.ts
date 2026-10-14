@@ -24,6 +24,23 @@ export interface OpeningProfileBodyModifierLike {
   readonly notch_at?: string | null;
 }
 
+/** The BOM member kind (#1327): a hardware SKU or a catalog COMPONENT
+ * (panel — e.g. the italian gola strip). Exactly one reference per member. */
+export type OpeningProfileMemberKind = 'hardware' | 'component';
+
+export interface OpeningProfileMemberDraft {
+  /** Member key: profile | supports | endCaps | tira | … (stable identity). */
+  readonly key: string;
+  readonly kind: OpeningProfileMemberKind;
+  readonly hardwareId: string;
+  readonly componentId: string;
+  readonly rule: string;
+  readonly unit: string;
+  readonly spacingMm: string;
+  /** Declared envelope [along-run, depth, height]; empty strings = undeclared. */
+  readonly dims: readonly [string, string, string];
+}
+
 export interface OpeningProfileDraft {
   /** Client-named profile id (create only) — e.g. profile.gola-l.8006. */
   readonly id: string;
@@ -51,8 +68,8 @@ export interface OpeningProfileDraft {
   /** true = declare WITHOUT a value: the engine derives profile_depth_mm. */
   readonly depthReductionDerived: boolean;
   readonly depthReductionMm: string;
-  /** Preserved untouched on edit (v1 read-only BOM members). */
-  readonly bomMembers: OpeningProfileBOMMembersLike | null;
+  /** Editable BOM members (#1327): hardware SKUs and/or catalog components. */
+  readonly members: readonly OpeningProfileMemberDraft[];
 }
 
 export function emptyOpeningProfileDraft(): OpeningProfileDraft {
@@ -79,8 +96,12 @@ export function emptyOpeningProfileDraft(): OpeningProfileDraft {
     depthReductionEnabled: false,
     depthReductionDerived: true,
     depthReductionMm: '',
-    bomMembers: null,
+    members: [],
   };
+}
+
+export function emptyMemberDraft(): OpeningProfileMemberDraft {
+  return { key: '', kind: 'hardware', hardwareId: '', componentId: '', rule: 'interior_width', unit: 'piece', spacingMm: '', dims: ['', '', ''] };
 }
 
 export interface OpeningProfileRowLike {
@@ -136,8 +157,50 @@ export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfil
     depthReductionEnabled: reduction != null,
     depthReductionDerived: reduction == null || reduction.depth_reduction_mm == null,
     depthReductionMm: reduction?.depth_reduction_mm != null ? String(reduction.depth_reduction_mm) : '',
-    bomMembers: row.bomMembers,
+    members: membersOfMap(row.bomMembers),
   };
+}
+
+/** Deterministic map → ordered member drafts (sorted by key). */
+function membersOfMap(members: OpeningProfileBOMMembersLike | null): readonly OpeningProfileMemberDraft[] {
+  const byKey = members ?? {};
+  return Object.keys(byKey)
+    .sort()
+    .map((key) => {
+      const member: OpeningProfileBOMMember = byKey[key] ?? { hardware_id: '', rule: '' };
+      const kind: OpeningProfileMemberKind = member.component_id ? 'component' : 'hardware';
+      return {
+        key,
+        kind,
+        hardwareId: member.hardware_id ?? '',
+        componentId: member.component_id ?? '',
+        rule: member.rule ?? '',
+        unit: member.unit ?? '',
+        spacingMm: member.spacing_mm != null ? String(member.spacing_mm) : '',
+        dims: (member.dimensions_mm ?? [null, null, null]).map((d) => (d != null ? String(d) : '')) as [string, string, string],
+      };
+    });
+}
+
+/** The editable member drafts → the persisted snake_case map (#1327). */
+export function membersMapOfDraft(
+  members: readonly OpeningProfileMemberDraft[],
+): OpeningProfileBOMMembersLike {
+  const map: Record<string, OpeningProfileBOMMember> = {};
+  for (const member of members) {
+    const dims = member.dims.map((d) => (d.trim() !== '' ? Number(d) : null));
+    map[member.key.trim()] = {
+      // hardware_id is the required contract key; component members carry it
+      // empty and reference through component_id (#1327).
+      hardware_id: member.kind === 'component' ? '' : member.hardwareId.trim(),
+      ...(member.kind === 'component' ? { component_id: member.componentId.trim() } : {}),
+      rule: member.rule,
+      ...(member.unit.trim() !== '' ? { unit: member.unit.trim() } : {}),
+      ...(member.spacingMm.trim() !== '' ? { spacing_mm: Number(member.spacingMm) } : {}),
+      ...(dims.some((d) => d != null) ? { dimensions_mm: dims.map((d) => (d == null ? 0 : d)) } : {}),
+    };
+  }
+  return map;
 }
 
 /** Suggests the client-named id from the code (create flow): GOLA-L-8006 → profile.gola-l-8006. */

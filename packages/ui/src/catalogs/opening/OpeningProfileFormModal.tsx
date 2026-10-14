@@ -13,12 +13,15 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Modal } from '../../common';
-import type {
-  OpeningCrossSectionDraft,
-  OpeningGripTypeDraft,
-  OpeningNotchAtDraft,
-  OpeningProfileDraft,
+import {
+  emptyMemberDraft,
+  type OpeningCrossSectionDraft,
+  type OpeningGripTypeDraft,
+  type OpeningNotchAtDraft,
+  type OpeningProfileDraft,
+  type OpeningProfileMemberDraft,
 } from './openingProfileDraft';
 
 const GRIP_LABELS: readonly { readonly value: OpeningGripTypeDraft; readonly label: string }[] = [
@@ -95,6 +98,13 @@ export function OpeningProfileFormModal({
 }: OpeningProfileFormModalProps): ReactNode {
   const verified = draft.datasheetStatus === 'verified';
   const derivedPreview = Number(draft.profileDepthMm);
+
+  const setMember = (index: number, patch: Partial<OpeningProfileMemberDraft>) => {
+    setDraft((current) => ({
+      ...current,
+      members: current.members.map((member, i) => (i === index ? { ...member, ...patch } : member)),
+    }));
+  };
 
   return (
     <Modal
@@ -348,10 +358,85 @@ export function OpeningProfileFormModal({
           ) : null}
         </fieldset>
 
-        <p className="catalog-form__hint" data-testid="opening-profile-bom-note">
-          Los herrajes del perfil (perfil, soportes, tapas) viajan como referencias del catálogo y se
-          gestionan con el equipo Granete: quedan intactos al editar la ficha.
-        </p>
+        <fieldset className="catalog-form__fieldset" data-testid="opening-profile-members-editor">
+          <legend>Elementos del perfil (herrajes o componentes)</legend>
+          {draft.members.length === 0 ? (
+            <p className="catalog-form__hint">
+              Los elementos que la apertura agrega al mueble: un herraje del catálogo (perfil, soportes)
+              o un componente panel (#1327 — la tira del gola italiano, que viaja al despiece con el
+              material de la puerta).
+            </p>
+          ) : null}
+          {draft.members.map((member, index) => (
+            <div className="catalog-form__row" key={`member-${index}`} data-testid="opening-profile-member-row">
+              <label className="catalog-form__field catalog-form__field--narrow">
+                <span>Clave</span>
+                <input
+                  value={member.key}
+                  onChange={(e) => setMember(index, { key: e.target.value })}
+                  placeholder="tira, perfil…"
+                  maxLength={32}
+                  data-testid="opening-profile-member-key"
+                />
+              </label>
+              <label className="catalog-form__field catalog-form__field--narrow">
+                <span>Tipo</span>
+                <select
+                  value={member.kind}
+                  onChange={(e) => setMember(index, { kind: e.target.value as OpeningProfileMemberDraft['kind'] })}
+                  data-testid="opening-profile-member-kind"
+                >
+                  <option value="hardware">Herraje</option>
+                  <option value="component">Componente (panel)</option>
+                </select>
+              </label>
+              <label className="catalog-form__field">
+                <span>{member.kind === 'component' ? 'Componente (id)' : 'Herraje (id)'}</span>
+                <input
+                  value={member.kind === 'component' ? member.componentId : member.hardwareId}
+                  onChange={(e) =>
+                    setMember(index, member.kind === 'component'
+                      ? { componentId: e.target.value }
+                      : { hardwareId: e.target.value })
+                  }
+                  placeholder={member.kind === 'component' ? 'comp-tira-gola-it' : 'UUID del herraje'}
+                  maxLength={64}
+                  data-testid="opening-profile-member-ref"
+                />
+              </label>
+              <label className="catalog-form__field catalog-form__field--narrow">
+                <span>Regla</span>
+                <select
+                  value={member.rule}
+                  onChange={(e) => setMember(index, { rule: e.target.value })}
+                  data-testid="opening-profile-member-rule"
+                >
+                  <option value="interior_width">Ancho interior</option>
+                  <option value="per_length">Por metro</option>
+                  <option value="per_exposed_end">Por punta expuesta</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className="btn btn--small btn--ghost btn--danger"
+                aria-label={`Quitar elemento ${index + 1}`}
+                onClick={() => setDraft((current) => ({ ...current, members: current.members.filter((_, i) => i !== index) }))}
+                data-testid="opening-profile-member-remove"
+              >
+                <Trash2 size={14} strokeWidth={1.5} aria-hidden />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn btn--small"
+            onClick={() => setDraft((current) => ({ ...current, members: [...current.members, emptyMemberDraft()] }))}
+            data-testid="opening-profile-member-add"
+          >
+            <Plus size={14} strokeWidth={1.5} aria-hidden />
+            Agregar elemento
+          </button>
+        </fieldset>
       </form>
     </Modal>
   );

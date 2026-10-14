@@ -175,3 +175,54 @@ func TestOpeningProfile_doorDiscountRoundTrip(t *testing.T) {
 		return nil
 	})
 }
+
+// #1327 slice 1 — a member may reference a CATALOG COMPONENT (the italian
+// gola strip) instead of a hardware SKU; the JSONB map round-trips it and
+// the write boundary refuses a member that references BOTH.
+func TestOpeningProfile_componentMemberRoundTrip(t *testing.T) {
+	store := newMigratedRuntimeStore(t)
+	suffix := time.Now().Format("150405.000000")
+
+	withinInitialOrganization(t, store, func(txCtx context.Context) error {
+		profile := domain.OpeningProfile{
+			ID:                   "op-comp-" + suffix,
+			Code:                 "GOLA-IT-TIRA",
+			Name:                 "Gola italiano con tira",
+			GripType:             "gola",
+			CrossSectionShape:    "flat",
+			CompatiblePlacements: []string{"top"},
+			DatasheetStatus:      "verified",
+			FrontReductionMm:     openingIntPtr(30),
+			GripClearanceMm:      openingIntPtr(2),
+			ProfileHeightMm:      openingFloatPtr(40),
+			ProfileDepthMm:       openingFloatPtr(18),
+			GeometryOrigin:       "Tira de taller #1327",
+			DoorReductionMm:      openingIntPtr(32),
+			BOMMembers: map[string]domain.OpeningBOMMember{
+				"tira": {ComponentID: "comp-tira-gola-it", Rule: "interior_width", Unit: "piece"},
+			},
+			Active: true,
+		}
+		if err := store.CreateOpeningProfile(txCtx, &profile); err != nil {
+			return err
+		}
+		loaded, err := store.GetOpeningProfileByID(txCtx, profile.ID)
+		if err != nil {
+			return err
+		}
+		tira := loaded.BOMMembers["tira"]
+		if tira.ComponentID != "comp-tira-gola-it" || tira.HardwareID != "" {
+			t.Fatalf("component member drifted: %+v", tira)
+		}
+
+		// Both references at once: the ambiguity fails closed.
+		ambiguous := *loaded
+		ambiguous.BOMMembers = map[string]domain.OpeningBOMMember{
+			"tira": {HardwareID: "hw-x", ComponentID: "comp-tira-gola-it", Rule: "interior_width"},
+		}
+		if err := store.UpdateOpeningProfile(txCtx, profile.ID, loaded.Version, &ambiguous); err == nil {
+			t.Fatal("miembro con herraje Y componente debe fallar cerrado")
+		}
+		return nil
+	})
+}
