@@ -218,9 +218,16 @@ export function OpeningProfilesCatalog({
       }
     }
     if (draft.datasheetStatus === 'verified') {
-      const numbers = [draft.frontReductionMm, draft.gripClearanceMm, draft.profileHeightMm, draft.profileDepthMm];
-      if (numbers.some((value) => !Number.isFinite(Number(value)) || Number(value) <= 0)) {
-        return 'La ficha verificada exige las cuatro medidas mayores a 0';
+      // #1316: verified exige la envolvente (alto + profundo), el origen y
+      // un descuento efectivo — el número de taller o el par de ficha.
+      if (!Number.isFinite(Number(draft.profileHeightMm)) || Number(draft.profileHeightMm) <= 0 ||
+        !Number.isFinite(Number(draft.profileDepthMm)) || Number(draft.profileDepthMm) <= 0) {
+        return 'La ficha verificada exige el alto y la profundidad del perfil mayores a 0';
+      }
+      const hasDoor = draft.doorReductionMm !== '';
+      const hasPair = draft.frontReductionMm !== '' && draft.gripClearanceMm !== '';
+      if (!hasDoor && !hasPair) {
+        return 'La ficha verificada exige un descuento de puerta (o el par frontal + holgura)';
       }
       if (draft.geometryOrigin.trim() === '') {
         return 'La ficha verificada exige el origen auditable de sus valores';

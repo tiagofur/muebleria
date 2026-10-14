@@ -100,7 +100,11 @@ func (p *OpeningProfile) AuthoringReady() bool {
 	if p == nil || p.DatasheetStatus != "verified" {
 		return false
 	}
-	return p.FrontReductionMm != nil && p.GripClearanceMm != nil &&
+	// #1316: the effective discount is the declared door number or the
+	// legacy datasheet pair.
+	discount := p.DoorReductionMm != nil ||
+		(p.FrontReductionMm != nil && p.GripClearanceMm != nil)
+	return discount &&
 		p.ProfileHeightMm != nil && p.ProfileDepthMm != nil &&
 		strings.TrimSpace(p.GeometryOrigin) != ""
 }
@@ -165,8 +169,14 @@ func ValidateOpeningProfile(p OpeningProfile) error {
 		return fmt.Errorf("el estado de ficha %q no es válido", p.DatasheetStatus)
 	}
 	if p.DatasheetStatus == "verified" {
-		if p.FrontReductionMm == nil || p.GripClearanceMm == nil || p.ProfileHeightMm == nil || p.ProfileDepthMm == nil {
-			return fmt.Errorf("un perfil con ficha verificada requiere los cuatro parámetros geométricos")
+		// #1316: the workshop-facing requirement is the ENVELOPE (height,
+		// depth, origin) plus an EFFECTIVE door discount — the declared
+		// single number, or the legacy datasheet pair as documentation.
+		if p.ProfileHeightMm == nil || p.ProfileDepthMm == nil {
+			return fmt.Errorf("un perfil con ficha verificada requiere el alto y la profundidad del perfil")
+		}
+		if p.DoorReductionMm == nil && (p.FrontReductionMm == nil || p.GripClearanceMm == nil) {
+			return fmt.Errorf("un perfil con ficha verificada exige un descuento de puerta (o el par de ficha frontal + holgura)")
 		}
 		if strings.TrimSpace(p.GeometryOrigin) == "" {
 			return fmt.Errorf("un perfil con ficha verificada requiere el origen auditable de sus valores")

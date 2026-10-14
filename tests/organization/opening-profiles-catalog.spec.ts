@@ -51,8 +51,7 @@ test('opening profile: pending → verified datasheet with derived depth reducti
   await row.hover();
   await row.getByRole('button', { name: 'Editar GOLA-E2E-1325' }).click();
   await page.getByTestId('opening-profile-status-select').selectOption('verified');
-  await page.getByTestId('opening-profile-front-reduction').fill('38');
-  await page.getByTestId('opening-profile-clearance').fill('2');
+  await page.getByTestId('opening-profile-door-reduction').fill('40');
   await page.getByTestId('opening-profile-height').fill('56.5');
   await page.getByTestId('opening-profile-depth').fill('27.2');
   await page.getByTestId('opening-profile-origin-input').fill('Ficha SCILM 2022-04-01 pp. 42-45 (E2E #1325)');
@@ -72,6 +71,8 @@ test('opening profile: pending → verified datasheet with derived depth reducti
   await expect(detail).toContainText('v2');
   await expect(detail).toContainText('Verificada');
   await expect(detail).toContainText('56.5 alto × 27.2 profundo');
+  await expect(detail).toContainText('Descuento de puerta');
+  await expect(detail).toContainText('40 mm');
   await expect(detail).toContainText('Descuento de profundidad: deriva de la ficha (27.2 mm)');
   await expect(detail).toContainText('Muesca en costados: 56.5 × 27.2 mm');
   await expect(detail).toContainText('Ficha SCILM 2022-04-01 pp. 42-45 (E2E #1325)');
