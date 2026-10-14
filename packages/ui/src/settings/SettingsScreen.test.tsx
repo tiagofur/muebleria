@@ -52,15 +52,15 @@ describe('SettingsScreen (#37 / F044)', () => {
     });
   });
 
-  it('switches to engineering tab and saves engineering defaults', async () => {
+  it('switches to the machines tab and saves production defaults', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
     render(<SettingsScreen settings={base} onSave={onSave} />);
 
     // Click engineering tab
-    await user.click(screen.getByTestId('settings-tab-tab-ingenieria'));
+    await user.click(screen.getByTestId('settings-tab-tab-produccion'));
 
-    expect(screen.getByTestId('settings-section-ingenieria')).toBeTruthy();
+    expect(screen.getByTestId('settings-section-machines')).toBeTruthy();
     // El modo de empaquetado PTX ya no vive aquí: la elección explícita está en
     // Ingeniería → Optimización (un solo lugar, sin default divergente).
     expect(screen.queryByTestId('settings-ptx-mode-unified')).toBeNull();
@@ -100,7 +100,7 @@ describe('SettingsScreen (#37 / F044)', () => {
     const onSave = vi.fn();
     render(<SettingsScreen settings={base} onSave={onSave} />);
 
-    await user.click(screen.getByTestId('settings-tab-tab-ingenieria'));
+    await user.click(screen.getByTestId('settings-tab-tab-produccion'));
     expect(screen.getByTestId('settings-section-cut-strategy')).toBeTruthy();
 
     // El radio refleja el settings (sin default → sierra marcada).

@@ -45,6 +45,7 @@ import {
   BarChart3,
   Building2,
   ClipboardList,
+  DoorOpen,
   TrendingUp,
   Warehouse,
   type LucideIcon,
@@ -86,6 +87,7 @@ export type AppNavId =
   | 'edges'
   | 'hardware'
   | 'hardwareProfiles'
+  | 'openingProfiles'
   | 'finishes'
   | 'optionGroups'
   | 'settings'
@@ -324,6 +326,9 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       { id: 'edges', label: 'Cantos', icon: Minus },
       { id: 'hardware', label: 'Herrajes', icon: Settings2 },
       { id: 'hardwareProfiles', label: 'Perfiles de herrajes', icon: Layers },
+      // #1325: opening profiles are a CATALOG (versions + datasheet), not a
+      // workshop preference — they live next to their structural twin.
+      { id: 'openingProfiles', label: 'Perfiles de apertura', icon: DoorOpen },
       { id: 'finishes', label: 'Acabados', icon: Palette },
     ],
   },

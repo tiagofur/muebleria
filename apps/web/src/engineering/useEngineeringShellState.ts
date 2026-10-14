@@ -37,6 +37,7 @@ import { useComponentSideAssignments } from '../useComponentSideAssignments';
 import { useFactoryConstructionPolicy } from '../useFactoryConstructionPolicy';
 import { useOpeningCapabilities } from '../useOpeningCapabilities';
 import { useHardwareProfiles } from '../useHardwareProfiles';
+import { useOpeningProfiles } from '../useOpeningProfiles';
 import {
   useProjectWorkshopOccurrences,
   workshopOccurrenceQueryKey,
@@ -289,6 +290,12 @@ export function useEngineeringShellState({
     session === 'auth' ? authToken : null,
     navId === 'components',
   );
+  // #1325: opening profiles catalog data (org-scoped, If-Match writes).
+  const openingProfiles = useOpeningProfiles(
+    DEFAULT_API_BASE,
+    session === 'auth' ? authToken : null,
+    navId === 'openingProfiles',
+  );
   const editingComponentId =
     navId === 'components' && routeComponentEditId && routeComponentEditId !== 'new'
       ? routeComponentEditId
@@ -434,6 +441,7 @@ export function useEngineeringShellState({
     openingCapabilities,
     hardwareProfiles,
     hardwareProfilesForPicker,
+    openingProfiles,
     openInEngineeringGuarded,
     orderEngineeringState,
     projectDesignsRoute,

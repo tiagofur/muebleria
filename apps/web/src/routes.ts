@@ -32,6 +32,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   edges: '/edges',
   hardware: '/hardware',
   hardwareProfiles: '/hardware-profiles',
+  openingProfiles: '/opening-profiles',
   finishes: '/finishes',
   optionGroups: '/option-groups',
   settings: '/settings',

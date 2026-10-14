@@ -6489,6 +6489,190 @@
         }
       }
     },
+    "/catalog/opening-profiles": {
+      "get": {
+        "operationId": "listOpeningProfiles",
+        "summary": "List opening profiles for the caller's organization",
+        "responses": {
+          "200": {
+            "description": "Opening profiles (grip profiles: datasheet-backed geometry, body modifiers, BOM member references)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OpeningProfile"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createOpeningProfile",
+        "summary": "Create an opening profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpeningProfileWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Profile created; version starts at 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpeningProfile"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/catalog/opening-profiles/{profileId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/OpeningProfileId"
+        }
+      ],
+      "get": {
+        "operationId": "getOpeningProfile",
+        "summary": "Get one opening profile by id",
+        "responses": {
+          "200": {
+            "description": "The opening profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpeningProfile"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateOpeningProfile",
+        "summary": "Update an opening profile (If-Match guarded); the version increments — historical designs keep their pin",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpeningProfileWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated; version incremented",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpeningProfile"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deactivateOpeningProfile",
+        "summary": "Deactivate an opening profile (If-Match guarded); profiles in use stay rejected by the guard (#1215)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile deactivated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpeningProfile"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/furniture/definitions": {
       "get": {
         "operationId": "listFurnitureDefinitions",
@@ -6910,6 +7094,15 @@
           "type": "string",
           "format": "uuid"
         }
+      },
+      "OpeningProfileId": {
+        "name": "profileId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Opening profile id (e.g. profile.gola-l.8006)."
       },
       "ModuleId": {
         "name": "moduleId",
@@ -18169,6 +18362,301 @@
           "updatedAt"
         ],
         "description": "Hardware profile (#912/#913): a reusable application solution — catalog hardware references with quantities plus the versioned recipe that machines it."
+      },
+      "OpeningProfileBodyModifier": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "Constructive role addressed (#1052 vocabulary: horizontal | lateral | shelf | back | door | divider | custom) — never a name."
+          },
+          "effect": {
+            "type": "string",
+            "description": "Explicit effect name (#1317). depth_reduction without depth_reduction_mm derives the value from the profile's own profile_depth_mm."
+          },
+          "depth_reduction_mm": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Explicit reduction in mm; nil with effect=depth_reduction means derive from profile_depth_mm."
+          },
+          "notch_height_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "notch_depth_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "notch_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "top_front | bottom_front | front_boundary."
+          }
+        },
+        "required": [
+          "role"
+        ]
+      },
+      "OpeningProfileBOMMember": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hardware_id": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string",
+            "description": "interior_width | per_length | per_exposed_end."
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "spacing_mm": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "dimensions_mm": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "number"
+            },
+            "description": "Declared physical envelope [along-run, depth, height] (#1283)."
+          }
+        },
+        "required": [
+          "hardware_id",
+          "rule"
+        ]
+      },
+      "OpeningProfileWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Client-named profile id on create (e.g. profile.gola-l.8006); ignored on update."
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "grip_type": {
+            "type": "string",
+            "description": "gola | handle | bottom_reveal | none."
+          },
+          "cross_section_shape": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "L | C | J | flat (required for gola)."
+          },
+          "compatible_placements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "top | between | bottom."
+          },
+          "front_reduction_mm": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "grip_clearance_mm": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profile_height_mm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Datasheet decimal (8006: 56.5)."
+          },
+          "profile_depth_mm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Datasheet decimal (8006: 27.2); the depth_reduction derivation source (#1317)."
+          },
+          "geometry_origin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Auditable datasheet reference; required when datasheet_status is verified."
+          },
+          "datasheet_status": {
+            "type": "string",
+            "description": "pending | verified."
+          },
+          "body_modifiers": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/OpeningProfileBodyModifier"
+            }
+          },
+          "bom_members": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OpeningProfileBOMMember"
+            },
+            "description": "Keyed by member role (profile | supports | endCaps) — references to catalog hardware, never copies."
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "grip_type",
+          "compatible_placements",
+          "datasheet_status"
+        ],
+        "description": "Authorable fields: id/organization/version/timestamps are server-owned; verified datasheet requires the four geometry parameters plus origin."
+      },
+      "OpeningProfile": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "organization_id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "grip_type": {
+            "type": "string"
+          },
+          "cross_section_shape": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compatible_placements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "front_reduction_mm": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "grip_clearance_mm": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profile_height_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "profile_depth_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "geometry_origin": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "datasheet_status": {
+            "type": "string"
+          },
+          "body_modifiers": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/OpeningProfileBodyModifier"
+            }
+          },
+          "bom_members": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OpeningProfileBOMMember"
+            }
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Optimistic-concurrency token (#443); historical designs resolve against the version they pinned."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "organization_id",
+          "code",
+          "name",
+          "grip_type",
+          "compatible_placements",
+          "datasheet_status",
+          "active",
+          "version",
+          "created_at",
+          "updated_at"
+        ]
       },
       "HardwareProfileWrite": {
         "type": "object",

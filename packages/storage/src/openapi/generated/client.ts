@@ -101,6 +101,8 @@ import type {
   ModelBindingValidation,
   OffboardMembershipRequest,
   OffboardMembershipResponse,
+  OpeningProfile,
+  OpeningProfileWrite,
   OrganizationEntitlements,
   OrganizationLifecycleMutationRequest,
   OrganizationLifecycleMutationResponse,
@@ -364,6 +366,11 @@ export abstract class GeneratedGraneteApiClient {
   getHardwareProfile(token: string, profileId: string, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("GET", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, signal }); }
   updateHardwareProfile(token: string, profileId: string, version: number, body: HardwareProfileWrite, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("PUT", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, ifMatch: version, bodySchema: "HardwareProfileWrite", body, signal }); }
   deactivateHardwareProfile(token: string, profileId: string, version: number, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("DELETE", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, ifMatch: version, signal }); }
+  listOpeningProfiles(token: string, signal?: AbortSignal): Promise<ReadonlyArray<OpeningProfile>> { return this.request("GET", "/catalog/opening-profiles", { arrayOf: "OpeningProfile", token, signal }); }
+  createOpeningProfile(token: string, body: OpeningProfileWrite, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("POST", "/catalog/opening-profiles", { schema: "OpeningProfile", token, bodySchema: "OpeningProfileWrite", body, signal }); }
+  getOpeningProfile(token: string, profileId: string, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("GET", `/catalog/opening-profiles/${encodeURIComponent(profileId)}`, { schema: "OpeningProfile", token, signal }); }
+  updateOpeningProfile(token: string, profileId: string, version: number, body: OpeningProfileWrite, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("PUT", `/catalog/opening-profiles/${encodeURIComponent(profileId)}`, { schema: "OpeningProfile", token, ifMatch: version, bodySchema: "OpeningProfileWrite", body, signal }); }
+  deactivateOpeningProfile(token: string, profileId: string, version: number, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("DELETE", `/catalog/opening-profiles/${encodeURIComponent(profileId)}`, { schema: "OpeningProfile", token, ifMatch: version, signal }); }
   listFurnitureDefinitions(token: string, signal?: AbortSignal): Promise<WorkshopFurnitureCatalogEnvelope> { return this.request("GET", "/furniture/definitions", { schema: "WorkshopFurnitureCatalogEnvelope", token, signal }); }
   getFurnitureDefinitionLayout(token: string, definitionId: string, signal?: AbortSignal): Promise<FurnitureDefinitionLayout> { return this.request("GET", `/furniture/definitions/${encodeURIComponent(definitionId)}/layout`, { schema: "FurnitureDefinitionLayout", token, signal }); }
   resolveAuthoringLayout(token: string, body: AuthoringResolveRequest, signal?: AbortSignal): Promise<AuthoringResolveResponse> { return this.request("POST", "/furniture/authoring/resolve", { schema: "AuthoringResolveResponse", token, bodySchema: "AuthoringResolveRequest", body, signal }); }
