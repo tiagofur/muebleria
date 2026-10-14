@@ -53,7 +53,7 @@ func ResolveBom(
 	if len(measurePresetID) > 0 {
 		presetID = measurePresetID[0]
 	}
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, presetID, nil, nil, nil, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, presetID, nil, nil, nil, nil, nil, nil)
 }
 
 // ResolveBomWithContext is the #442-aware canonical variant: it carries the
@@ -70,7 +70,7 @@ func ResolveBomWithContext(
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, baseContext, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, baseContext, nil, nil, nil)
 }
 
 // ResolveBomWithDims is the F144-aware variant (#310 / P3D-7): customDims
@@ -87,7 +87,7 @@ func ResolveBomWithDims(
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, nil, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, nil, nil, nil, nil)
 }
 
 // ResolveBomForRelease resolves the BOM of an already-published design unit
@@ -108,7 +108,7 @@ func ResolveBomForRelease(
 	customDims *domain.ItemCustomDims,
 	baseContext *BaseResolutionContext,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext, nil, nil, nil)
 }
 
 // ResolveBomForReleaseWithOpening (#1305) is the release variant that feeds
@@ -128,8 +128,9 @@ func ResolveBomForReleaseWithOpening(
 	baseContext *BaseResolutionContext,
 	openingFronts []OpeningResolvedFront,
 	openingModifiers []ResolvedOpeningBodyModifier,
+	openingMembers *OpeningMembers,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext, openingFronts, openingModifiers)
+	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext, openingFronts, openingModifiers, openingMembers)
 }
 
 // ResolveBomWithPin is the #108-aware variant of ResolveBom. It accepts an
@@ -147,7 +148,7 @@ func ResolveBomWithPin(
 	measurePresetID string,
 	pin *int,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, pin, nil, nil, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, pin, nil, nil, nil, nil, nil)
 }
 
 // resolveBomCommon is the single BOM path (#442): every exported variant
@@ -165,6 +166,7 @@ func resolveBomCommon(
 	baseContext *BaseResolutionContext,
 	openingFronts []OpeningResolvedFront,
 	openingModifiers []ResolvedOpeningBodyModifier,
+	openingMembers *OpeningMembers,
 ) (domain.ResolvedBom, error) {
 	if err := ValidateModule(module); err != nil {
 		return domain.ResolvedBom{}, err
@@ -270,9 +272,31 @@ func resolveBomCommon(
 		sides,
 		optionChoices,
 	)
+	// #1327: opening component members (panels — the italian gola strip)
+	// join the cut list as REAL board parts: full furniture width, declared
+	// depth as the width, the FRENTE material role (color de puerta) — the
+	// exact board the layout places in the gola band. No depth reduction
+	// applies to them (the annotation keys on the module's own parts).
+	var stripParts []domain.BoardPart
+	if openingMembers != nil {
+		for _, strip := range openingMembers.ComponentMembers {
+			stripParts = append(stripParts, domain.BoardPart{
+				ID:                 "opening-strip-" + strip.Key,
+				Description:        "Tira " + strip.Key,
+				Quantity:           1,
+				LengthMm:           widthMm,
+				WidthMm:            int(math.Round(strip.DepthMm)),
+				OptionRole:         "FRENTE",
+				Placement:          string(domain.PlacementSuperior),
+				CatalogComponentID: strip.ComponentID,
+			})
+		}
+	}
+	partsForResolve := append(append([]domain.BoardPart{}, treatedParts...), stripParts...)
+
 	// #1078: band demand rides the same appended channel as positioned
 	// lines (after them — origin-visible, priced identically).
-	return resolveBomFromParts(module, optionChoices, catalog, treatedParts, treatedHardware, append(placementLines, bandLines...), depthReductions)
+	return resolveBomFromParts(module, optionChoices, catalog, partsForResolve, treatedHardware, append(placementLines, bandLines...), depthReductions)
 }
 
 // resolveBomFromParts resolves material/edge/hardware IDs for already-expanded
