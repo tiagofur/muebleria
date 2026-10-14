@@ -116,6 +116,26 @@ fixture smoke ganó su manguete (SMK-MAN-SUP-FRO) para que el E2E ejerza el cami
 (pinea v4) + re-sync. Swatch de bisagra en blanco = opción sin imagen de preview (cosmético,
 pre-existente).
 
+Feedback visual del owner #2 (2026-10-14): la tira blanca sobre la puerta =
+el manguete con la v3 pineada (fix v4 ya dado) + dos brechas reales:
+1. **Muesca lateral 70×15**: se declara como dato (**perfil v5** agrega
+   `{"role":"lateral","effect":"notch",70×15,top_front}`) — la convención del
+   8006 (su sección). Release v5: route ops 70×15 en ambos laterales + bevel
+   45/13 en la puerta + despiece. Sin muesca, el costado cierra la banda.
+2. **Render del bisel**: el wedge viajaba al plugin pero el Ruby lo ignoraba.
+   **PR #1339** (MERGEADO, main bf3303f0, CI 22/22): parse fail-closed de
+   `bevels` + el builder materializa la banda como **prisma pentagonal con la
+   hipotenusa a 45°** (sin booleanas, mismo canal que la muesca). v1: through-
+   edge 45° con patas iguales; muesca+bisel, otro ángulo o interior fallan
+   loud. `rake verify` verde (0 ofensas, 1446 runs; 7 tests nuevos).
+   RBZ **0.1.72** (sha256 39f05bdb…) construido del merge bf3303f0.
+
+El owner debe: instalar el RBZ 0.1.72 (Extensiones → Instalar, quit+reopen
+SketchUp), QUITAR y RE-APLICAR la apertura (**pinea v5**: bevel 13 +
+depth_reduction 15 + notch 70×15) + re-sync. Esperado: tira Moscato completa
+en la revela, laterales con el paso 70×15, puerta con descuento 35 y el corte
+45° visible arriba; despiece con tira + puerta 681.
+
 Pendiente (aceptación owner): aplicar la apertura con «Gola italiano (tira de melamina)» en un
 mueble de prueba en SketchUp — tira con color de puerta en 3D y en despiece, puerta con descuento
 35 y el corte 45°; el 8006 sigue intacto.
