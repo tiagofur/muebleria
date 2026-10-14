@@ -13,6 +13,10 @@ export type OpeningGripTypeDraft = 'gola' | 'handle' | 'bottom_reveal' | 'none';
 export type OpeningCrossSectionDraft = '' | 'L' | 'C' | 'J' | 'flat';
 export type OpeningNotchAtDraft = 'top_front' | 'bottom_front' | 'front_boundary';
 
+/** #1327 slice 3: the door bevel's edge class — front_boundary has no
+ * geometry consumer, so the editor never offers it. */
+export type OpeningBevelAtDraft = 'top_front' | 'bottom_front';
+
 export type OpeningProfileBOMMembersLike = Record<string, OpeningProfileBOMMember>;
 
 export interface OpeningProfileBodyModifierLike {
@@ -22,6 +26,9 @@ export interface OpeningProfileBodyModifierLike {
   readonly notch_height_mm?: number | null;
   readonly notch_depth_mm?: number | null;
   readonly notch_at?: string | null;
+  readonly bevel_angle_deg?: number | null;
+  readonly bevel_size_mm?: number | null;
+  readonly bevel_at?: string | null;
 }
 
 /** The BOM member kind (#1327): a hardware SKU or a catalog COMPONENT
@@ -68,6 +75,10 @@ export interface OpeningProfileDraft {
   /** true = declare WITHOUT a value: the engine derives profile_depth_mm. */
   readonly depthReductionDerived: boolean;
   readonly depthReductionMm: string;
+  // #1327 slice 3 — the declared 45° door bevel (italian gola's grip).
+  readonly bevelEnabled: boolean;
+  readonly bevelSizeMm: string;
+  readonly bevelAt: OpeningBevelAtDraft;
   /** Editable BOM members (#1327): hardware SKUs and/or catalog components. */
   readonly members: readonly OpeningProfileMemberDraft[];
 }
@@ -96,6 +107,9 @@ export function emptyOpeningProfileDraft(): OpeningProfileDraft {
     depthReductionEnabled: false,
     depthReductionDerived: true,
     depthReductionMm: '',
+    bevelEnabled: false,
+    bevelSizeMm: '',
+    bevelAt: 'top_front',
     members: [],
   };
 }
@@ -127,6 +141,7 @@ export interface OpeningProfileRowLike {
 export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfileDraft {
   const notch = row.bodyModifiers.find((m) => m.notch_at !== undefined || m.notch_height_mm !== undefined);
   const reduction = row.bodyModifiers.find((m) => m.effect === 'depth_reduction' || m.depth_reduction_mm !== undefined);
+  const bevel = row.bodyModifiers.find((m) => m.effect === 'bevel' || m.bevel_size_mm != null || m.bevel_at != null);
   return {
     id: row.id,
     code: row.code,
@@ -157,6 +172,9 @@ export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfil
     depthReductionEnabled: reduction != null,
     depthReductionDerived: reduction == null || reduction.depth_reduction_mm == null,
     depthReductionMm: reduction?.depth_reduction_mm != null ? String(reduction.depth_reduction_mm) : '',
+    bevelEnabled: bevel != null,
+    bevelSizeMm: bevel?.bevel_size_mm != null ? String(bevel.bevel_size_mm) : '',
+    bevelAt: (bevel?.bevel_at as OpeningBevelAtDraft) ?? 'top_front',
     members: membersOfMap(row.bomMembers),
   };
 }
@@ -234,6 +252,16 @@ export function bodyModifiersOfDraft(draft: OpeningProfileDraft): OpeningProfile
         ? { role: 'horizontal', effect: 'depth_reduction' }
         : { role: 'horizontal', effect: 'depth_reduction', depth_reduction_mm: Number(draft.depthReductionMm) },
     );
+  }
+  // #1327 slice 3: the 45° angle is the only consumer-backed value, so the
+  // editor declares it as a constant — the data stays explicit for the pin.
+  if (draft.bevelEnabled) {
+    modifiers.push({
+      role: 'door',
+      bevel_angle_deg: 45,
+      bevel_size_mm: Number(draft.bevelSizeMm),
+      bevel_at: draft.bevelAt,
+    });
   }
   return modifiers;
 }

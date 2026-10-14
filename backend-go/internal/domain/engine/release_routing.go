@@ -32,12 +32,17 @@ const ReleaseRoutingProgramContract = "granete.release-manufacturing-program.v1"
 // station operation at derivation time (domain part execution), never here.
 // ROUTE (#1302 / §13.3) is the material-removal intent of the opening's
 // resolved side notches — representation only until a machine profile
-// evidences routing capability (adapters refuse, never approximate).
+// evidences routing capability (adapters refuse, never approximate). BEVEL
+// (#1327 slice 3) is the angled material-removal intent of the opening's
+// resolved door bevels — the same representation-only discipline: a machine
+// profile that cannot evidence an angled cut refuses, never approximates
+// the wedge into a rectangular route.
 const (
 	ReleaseRoutingOperationCut      = "cut"
 	ReleaseRoutingOperationEdgeBand = "edge_banding"
 	ReleaseRoutingOperationDrill    = "drill"
 	ReleaseRoutingOperationRoute    = "route"
+	ReleaseRoutingOperationBevel    = "bevel"
 )
 
 // ReleaseRoutingHole is one frozen board-local machining feature (#477
@@ -59,15 +64,28 @@ type ReleaseRoutingCut struct {
 	SizeMm  [3]float64 `json:"sizeMm"`
 }
 
+// ReleaseRoutingBevel is one frozen board-local angled material removal
+// (#1327 slice 3): the resolved bevel wedge in the host part's local frame —
+// the bounding prism plus the angle and the hugged edge, never a
+// recomputation nor a rectangular approximation of the wedge.
+type ReleaseRoutingBevel struct {
+	StartMm  [3]float64 `json:"startMm"`
+	SizeMm   [3]float64 `json:"sizeMm"`
+	AngleDeg float64    `json:"angleDeg"`
+	Edge     string     `json:"edge"`
+}
+
 // ReleaseRoutingOperation is one frozen machining operation with the exact
 // provenance the #477 resolver derived it from. Exactly one payload is
-// non-empty: DRILL carries holes, ROUTE carries cuts.
+// non-empty: DRILL carries holes, ROUTE carries cuts, BEVEL carries the
+// wedge (#1327 slice 3).
 type ReleaseRoutingOperation struct {
 	OperationID string                      `json:"operationId"`
 	Provenance  ResolvedMachiningProvenance `json:"provenance"`
 	Operation   string                      `json:"operation"`
 	Holes       []ReleaseRoutingHole        `json:"holes"`
 	Routing     []ReleaseRoutingCut         `json:"routing,omitempty"`
+	Bevel       *ReleaseRoutingBevel        `json:"bevel,omitempty"`
 }
 
 // ReleaseRoutingPart is the frozen routing evidence of ONE released part.
@@ -298,22 +316,37 @@ func releaseUnitLayoutDims(module domain.Module, item domain.DesignRevisionItem)
 // releaseRoutingOperationsFromResolved freezes the authoritative authoring
 // machining operations into the neutral program vocabulary: a drilling
 // operation (holes) freezes DRILL, a routing operation (cuts, #1302/§13.3)
-// freezes ROUTE with the SAME resolved boxes. An operation with neither
-// payload never freezes an intent — it is skipped exactly like the
-// historical empty-hole skip (relationship resolutions may legitimately
-// derive zero holes); a dual-payload operation is ambiguous and errors.
+// freezes ROUTE and a bevel operation (the wedge, #1327 slice 3) freezes
+// BEVEL with the SAME resolved geometry. An operation with neither payload
+// never freezes an intent — it is skipped exactly like the historical
+// empty-hole skip (relationship resolutions may legitimately derive zero
+// holes); any dual-payload operation is ambiguous and errors.
 func releaseRoutingOperationsFromResolved(operations []ResolvedMachiningOperation) (map[string][]ReleaseRoutingOperation, error) {
 	operationsByHost := make(map[string][]ReleaseRoutingOperation, len(operations))
 	for _, operation := range operations {
+		holes, cuts, wedge := len(operation.Holes) > 0, len(operation.Routing) > 0, operation.Bevel != nil
+		payloads := 0
+		for _, set := range []bool{holes, cuts, wedge} {
+			if set {
+				payloads++
+			}
+		}
 		switch {
-		case len(operation.Holes) > 0 && len(operation.Routing) > 0:
-			return nil, fmt.Errorf("machining operation %s carries both holes and routing cuts", operation.OperationID)
-		case len(operation.Holes) == 0 && len(operation.Routing) == 0:
+		case payloads > 1:
+			switch {
+			case holes && cuts:
+				return nil, fmt.Errorf("machining operation %s carries both holes and routing cuts", operation.OperationID)
+			case holes && wedge:
+				return nil, fmt.Errorf("machining operation %s carries both holes and a bevel", operation.OperationID)
+			default:
+				return nil, fmt.Errorf("machining operation %s carries both routing cuts and a bevel", operation.OperationID)
+			}
+		case payloads == 0:
 			continue
-		case len(operation.Holes) > 0:
-			holes := make([]ReleaseRoutingHole, 0, len(operation.Holes))
+		case holes:
+			frozenHoles := make([]ReleaseRoutingHole, 0, len(operation.Holes))
 			for _, hole := range operation.Holes {
-				holes = append(holes, ReleaseRoutingHole{
+				frozenHoles = append(frozenHoles, ReleaseRoutingHole{
 					Face: hole.Face, XMm: hole.XMm, YMm: hole.YMm,
 					DiameterMm: hole.DiameterMm, DepthMm: hole.DepthMm, Type: hole.Type,
 				})
@@ -322,18 +355,30 @@ func releaseRoutingOperationsFromResolved(operations []ResolvedMachiningOperatio
 				OperationID: operation.OperationID,
 				Provenance:  operation.Provenance,
 				Operation:   ReleaseRoutingOperationDrill,
-				Holes:       holes,
+				Holes:       frozenHoles,
 			})
-		case len(operation.Routing) > 0:
-			cuts := make([]ReleaseRoutingCut, 0, len(operation.Routing))
+		case cuts:
+			frozenCuts := make([]ReleaseRoutingCut, 0, len(operation.Routing))
 			for _, cut := range operation.Routing {
-				cuts = append(cuts, ReleaseRoutingCut{StartMm: cut.StartMm, SizeMm: cut.SizeMm})
+				frozenCuts = append(frozenCuts, ReleaseRoutingCut{StartMm: cut.StartMm, SizeMm: cut.SizeMm})
 			}
 			operationsByHost[operation.HostComponentInstanceID] = append(operationsByHost[operation.HostComponentInstanceID], ReleaseRoutingOperation{
 				OperationID: operation.OperationID,
 				Provenance:  operation.Provenance,
 				Operation:   ReleaseRoutingOperationRoute,
-				Routing:     cuts,
+				Routing:     frozenCuts,
+			})
+		default:
+			operationsByHost[operation.HostComponentInstanceID] = append(operationsByHost[operation.HostComponentInstanceID], ReleaseRoutingOperation{
+				OperationID: operation.OperationID,
+				Provenance:  operation.Provenance,
+				Operation:   ReleaseRoutingOperationBevel,
+				Bevel: &ReleaseRoutingBevel{
+					StartMm:  operation.Bevel.StartMm,
+					SizeMm:   operation.Bevel.SizeMm,
+					AngleDeg: operation.Bevel.AngleDeg,
+					Edge:     operation.Bevel.Edge,
+				},
 			})
 		}
 	}
@@ -443,6 +488,30 @@ func ValidateReleaseRoutingProgram(program *ReleaseRoutingProgram, units []Resol
 							if !(extent > 0) {
 								return fmt.Errorf("routing operation %s freezes a cut without positive extents", operation.OperationID)
 							}
+						}
+					}
+				case ReleaseRoutingOperationBevel:
+					// #1327 slice 3: a frozen bevel operation IS the resolved
+					// wedge — bounding prism with positive extents, the v1 45°
+					// angle, a named edge and opening-profile provenance.
+					if operation.Bevel == nil {
+						return fmt.Errorf("bevel operation %s freezes no wedge", operation.OperationID)
+					}
+					if len(operation.Holes) > 0 || len(operation.Routing) > 0 {
+						return fmt.Errorf("bevel operation %s must not carry holes or routing cuts", operation.OperationID)
+					}
+					if operation.Provenance.SourceKind != "openingProfile" {
+						return fmt.Errorf("bevel operation %s carries provenance %q; bevel freezes only openingProfile provenance", operation.OperationID, operation.Provenance.SourceKind)
+					}
+					if operation.Bevel.AngleDeg != 45 {
+						return fmt.Errorf("bevel operation %s freezes a %g° wedge; v1 freezes only 45°", operation.OperationID, operation.Bevel.AngleDeg)
+					}
+					if operation.Bevel.Edge != "top_front" && operation.Bevel.Edge != "bottom_front" {
+						return fmt.Errorf("bevel operation %s freezes an unknown edge %q", operation.OperationID, operation.Bevel.Edge)
+					}
+					for _, extent := range operation.Bevel.SizeMm {
+						if !(extent > 0) {
+							return fmt.Errorf("bevel operation %s freezes a wedge without positive extents", operation.OperationID)
 						}
 					}
 				default:

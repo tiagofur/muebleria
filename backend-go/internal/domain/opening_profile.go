@@ -68,6 +68,14 @@ type OpeningBodyModifier struct {
 	NotchHeightMm    *float64 `json:"notch_height_mm,omitempty"`
 	NotchDepthMm     *float64 `json:"notch_depth_mm,omitempty"`
 	NotchAt          string   `json:"notch_at,omitempty"`
+	// #1327 slice 3: the italian gola's declared 45° door bevel — the wedge
+	// cut at the door's boundary edge so the strip forms the grip. BevelAt
+	// names the door edge (top_front | bottom_front); v1 resolves only a
+	// 45° angle. Additive on the JSONB slice — rows authored before #1327
+	// decode with these empty.
+	BevelAngleDeg *float64 `json:"bevel_angle_deg,omitempty"`
+	BevelSizeMm   *float64 `json:"bevel_size_mm,omitempty"`
+	BevelAt       string   `json:"bevel_at,omitempty"`
 }
 
 // OpeningBOMMember is a BOM reference/rule (exact SKU + length rule), never a

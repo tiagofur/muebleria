@@ -24,6 +24,10 @@
  *     the available-region end, front_boundary⇒between at the end of the
  *     zone below the boundary) and the profile must declare the boundary
  *     kind among its compatible placements.
+ *   - bevel (#1327 slice 3): the italian gola's declared 45° door cut —
+ *     angle + size + at complete, ONLY a 45° angle, at top_front/bottom_front
+ *     matching the boundary kind. The door is the effect's only geometry
+ *     consumer (the Go layout pass fail-closes any other role).
  *
  * The same effect on the same role+boundary applies ONCE: identical
  * duplicate declarations deduplicate; distinct values for the same target
@@ -40,7 +44,12 @@ import {
 } from './openingFront';
 import type { OpeningFrontLayout } from './openingFrontLayout';
 
-export type OpeningModifierEffect = 'depth_reduction' | 'notch';
+export type OpeningModifierEffect = 'depth_reduction' | 'notch' | 'bevel';
+
+/** #1327 slice 3: the only bevel angle with a geometry consumer — the
+ * resolver refuses any other value instead of guessing an intent the
+ * pipeline cannot materialize. */
+export const OPENING_BEVEL_ANGLE_DEG_V1 = 45;
 
 /** The position CLASS a profile declares; the resolver combines it with the
  * boundary into the exact offset. */
@@ -60,6 +69,12 @@ export type OpeningContractBodyModifier = {
   readonly notchHeightMm?: number;
   readonly notchDepthMm?: number;
   readonly notchAt?: string;
+  /** #1327 slice 3: the declared 45° door bevel (italian gola). bevelAt is
+   * the door edge class (top_front | bottom_front) and must agree with the
+   * mounted boundary kind — front_boundary has no consumer and fails closed. */
+  readonly bevelAngleDeg?: number;
+  readonly bevelSizeMm?: number;
+  readonly bevelAt?: string;
 };
 
 /** The library slice the body-modifier resolution consumes (a projection of
@@ -91,6 +106,10 @@ export type ResolvedOpeningBodyModifier = {
   /** Offset along the front axis from the available-region start (same
    * coordinate system as the #1131 fronts' offsetMm). */
   readonly notchOffsetMm?: number;
+  /** #1327 slice 3: the resolved bevel — always 45 in v1 with the wedge's
+   * equal legs in mm; the door edge comes from the carried boundary kind. */
+  readonly bevelAngleDeg?: number;
+  readonly bevelSizeMm?: number;
 };
 
 export type OpeningBodyModifierErrorCode =
@@ -135,6 +154,9 @@ const sameEffect = (
   }
   if (a.effect === 'depth_reduction') {
     return a.depthReductionMm === b.depthReductionMm && a.profileHeightMm === b.profileHeightMm;
+  }
+  if (a.effect === 'bevel') {
+    return a.bevelAngleDeg === b.bevelAngleDeg && a.bevelSizeMm === b.bevelSizeMm;
   }
   return (
     a.notchHeightMm === b.notchHeightMm &&
@@ -229,9 +251,18 @@ function resolveEffect(
     modifier.notchHeightMm !== undefined ||
     modifier.notchDepthMm !== undefined ||
     modifier.notchAt !== undefined;
+  const declaresBevel =
+    modifier.bevelAngleDeg !== undefined ||
+    modifier.bevelSizeMm !== undefined ||
+    modifier.bevelAt !== undefined;
   // The declared effect must agree with the carried fields — a contradiction
   // fails closed, never a guessed intent.
-  if (modifier.effect !== undefined && modifier.effect !== 'depth_reduction' && modifier.effect !== 'notch') {
+  if (
+    modifier.effect !== undefined &&
+    modifier.effect !== 'depth_reduction' &&
+    modifier.effect !== 'notch' &&
+    modifier.effect !== 'bevel'
+  ) {
     return fail('OPENING_BODY_MODIFIER_INVALID', `el efecto "${modifier.effect}" no es válido`);
   }
   const band = profile.profileHeightMm ?? 0;
@@ -248,6 +279,9 @@ function resolveEffect(
     }
     if (declaresNotch) {
       return fail('OPENING_BODY_MODIFIER_INVALID', 'un modifier declara reducción de profundidad y saque a la vez');
+    }
+    if (declaresBevel) {
+      return fail('OPENING_BODY_MODIFIER_INVALID', 'un modifier declara reducción de profundidad y bisel a la vez');
     }
     if (boundaryKind !== 'top' && boundaryKind !== 'bottom') {
       return fail(
@@ -275,6 +309,9 @@ function resolveEffect(
     return { ok: true, modifier: depthModifier(source) };
   }
   if (modifier.effect === 'notch' || declaresNotch) {
+    if (declaresBevel) {
+      return fail('OPENING_BODY_MODIFIER_INVALID', 'un modifier declara saque y bisel a la vez');
+    }
     if (
       modifier.notchHeightMm === undefined ||
       modifier.notchDepthMm === undefined ||
@@ -297,6 +334,43 @@ function resolveEffect(
         notchHeightMm: modifier.notchHeightMm,
         notchDepthMm: modifier.notchDepthMm,
         notchOffsetMm: offset,
+      },
+    };
+  }
+  // #1327 slice 3: the bevel declares angle + size + edge COMPLETE, and v1
+  // materializes only the italian gola's 45° cut — any other angle is a
+  // declared intent without a geometry consumer, never a default.
+  if (modifier.effect === 'bevel' || declaresBevel) {
+    if (modifier.bevelAngleDeg === undefined || modifier.bevelSizeMm === undefined || modifier.bevelAt === undefined) {
+      return fail('OPENING_BODY_MODIFIER_INVALID', 'el bisel exige ángulo, tamaño y posición completos');
+    }
+    if (modifier.bevelAngleDeg !== OPENING_BEVEL_ANGLE_DEG_V1) {
+      return fail(
+        'OPENING_BODY_MODIFIER_INVALID',
+        `el bisel a ${modifier.bevelAngleDeg}° no tiene consumidor de geometría en v1 (sólo 45°)`,
+      );
+    }
+    if (modifier.bevelSizeMm <= 0) {
+      return fail('OPENING_BODY_MODIFIER_INVALID', 'el bisel exige un tamaño mayor a 0');
+    }
+    if (modifier.bevelAt === 'top_front') {
+      if (boundaryKind !== 'top') {
+        return fail('OPENING_BODY_MODIFIER_INVALID', `el bisel top_front no aplica en la frontera ${boundaryKind}`);
+      }
+    } else if (modifier.bevelAt === 'bottom_front') {
+      if (boundaryKind !== 'bottom') {
+        return fail('OPENING_BODY_MODIFIER_INVALID', `el bisel bottom_front no aplica en la frontera ${boundaryKind}`);
+      }
+    } else {
+      return fail('OPENING_BODY_MODIFIER_INVALID', `la posición de bisel "${modifier.bevelAt}" no es válida`);
+    }
+    return {
+      ok: true,
+      modifier: {
+        effect: 'bevel',
+        role: modifier.role,
+        bevelAngleDeg: modifier.bevelAngleDeg,
+        bevelSizeMm: modifier.bevelSizeMm,
       },
     };
   }

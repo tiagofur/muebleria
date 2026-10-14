@@ -29,6 +29,8 @@ func TestOpeningProfile_roundTripAndIfMatch(t *testing.T) {
 			BodyModifiers: []domain.OpeningBodyModifier{
 				{Role: "top", DepthReductionMm: openingIntPtr(18)},
 				{Role: "side", NotchHeightMm: openingFloatPtr(56.5), NotchDepthMm: openingFloatPtr(27.2), NotchAt: "top_front"},
+				// #1327 slice 3: the declared door bevel rides the same JSONB.
+				{Role: "door", BevelAngleDeg: openingFloatPtr(45), BevelSizeMm: openingFloatPtr(18), BevelAt: "top_front"},
 			},
 			BOMMembers: map[string]domain.OpeningBOMMember{
 				"profile":  {HardwareID: "", Rule: "interior_width", Unit: "meter"},
@@ -44,8 +46,13 @@ func TestOpeningProfile_roundTripAndIfMatch(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if loaded.Code != "GOLA-L-ALU" || loaded.DatasheetStatus != "pending" || len(loaded.BodyModifiers) != 2 {
+		if loaded.Code != "GOLA-L-ALU" || loaded.DatasheetStatus != "pending" || len(loaded.BodyModifiers) != 3 {
 			t.Fatalf("round-trip drifted: %+v", loaded)
+		}
+		bevel := loaded.BodyModifiers[2]
+		if bevel.Role != "door" || bevel.BevelAngleDeg == nil || *bevel.BevelAngleDeg != 45 ||
+			bevel.BevelSizeMm == nil || *bevel.BevelSizeMm != 18 || bevel.BevelAt != "top_front" {
+			t.Fatalf("el bisel declarado no sobrevive el JSONB: %+v", bevel)
 		}
 		if loaded.AuthoringReady() {
 			t.Fatal("un perfil pending NUNCA está apto para authoring")

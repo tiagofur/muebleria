@@ -1200,6 +1200,14 @@ type ManufacturingRoutingOperation struct {
 	Operation   string                         `json:"operation"`
 	Holes       []ManufacturingRoutingHole     `json:"holes"`
 	RoutingCuts []ManufacturingRoutingCut      `json:"routingCuts,omitempty"`
+	Bevel       *ManufacturingRoutingBevel     `json:"bevel,omitempty"`
+}
+
+type ManufacturingRoutingBevel struct {
+	StartMm  []float64 `json:"startMm"`
+	SizeMm   []float64 `json:"sizeMm"`
+	AngleDeg float64   `json:"angleDeg"`
+	Edge     string    `json:"edge"`
 }
 
 type ManufacturingRoutingCut struct {
@@ -3052,6 +3060,9 @@ type OpeningProfileBodyModifier struct {
 	NotchHeightMm    *float64 `json:"notch_height_mm,omitempty"`
 	NotchDepthMm     *float64 `json:"notch_depth_mm,omitempty"`
 	NotchAt          *string  `json:"notch_at,omitempty"`
+	BevelAngleDeg    *float64 `json:"bevel_angle_deg,omitempty"`
+	BevelSizeMm      *float64 `json:"bevel_size_mm,omitempty"`
+	BevelAt          *string  `json:"bevel_at,omitempty"`
 }
 
 type OpeningProfileBOMMember struct {
