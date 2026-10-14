@@ -26,6 +26,7 @@ function toRow(profile: OpeningProfile): OpeningProfileRow {
     datasheetStatus: profile.datasheet_status,
     frontReductionMm: profile.front_reduction_mm ?? null,
     gripClearanceMm: profile.grip_clearance_mm ?? null,
+    doorReductionMm: profile.door_reduction_mm ?? null,
     profileHeightMm: profile.profile_height_mm ?? null,
     profileDepthMm: profile.profile_depth_mm ?? null,
     geometryOrigin: profile.geometry_origin ?? null,

@@ -123,3 +123,55 @@ func TestOpeningProfile_createWithoutModifiersOrMembers(t *testing.T) {
 		return nil
 	})
 }
+
+// #1316 — the workshop-facing door discount round-trips, and a profile
+// authored WITHOUT it keeps resolving the legacy pair (nil stays nil, the
+// truthful absence — the pin path consumes exactly what it froze).
+func TestOpeningProfile_doorDiscountRoundTrip(t *testing.T) {
+	store := newMigratedRuntimeStore(t)
+	suffix := time.Now().Format("150405.000000")
+
+	withinInitialOrganization(t, store, func(txCtx context.Context) error {
+		profile := domain.OpeningProfile{
+			ID:                   "op-door-" + suffix,
+			Code:                 "GOLA-DOOR",
+			Name:                 "Gola con descuento de puerta",
+			GripType:             "gola",
+			CrossSectionShape:    "L",
+			CompatiblePlacements: []string{"top"},
+			DatasheetStatus:      "verified",
+			FrontReductionMm:     openingIntPtr(38),
+			GripClearanceMm:      openingIntPtr(2),
+			ProfileHeightMm:      openingFloatPtr(56.5),
+			ProfileDepthMm:       openingFloatPtr(27.2),
+			GeometryOrigin:       "Ficha #1316",
+			DoorReductionMm:      openingIntPtr(32),
+			Active:               true,
+		}
+		if err := store.CreateOpeningProfile(txCtx, &profile); err != nil {
+			return err
+		}
+		loaded, err := store.GetOpeningProfileByID(txCtx, profile.ID)
+		if err != nil {
+			return err
+		}
+		if loaded.DoorReductionMm == nil || *loaded.DoorReductionMm != 32 {
+			t.Fatalf("door discount round-trip drifted: %+v", loaded.DoorReductionMm)
+		}
+		// Editing the discount creates the next version (If-Match).
+		thirty := 30
+		edited := *loaded
+		edited.DoorReductionMm = &thirty
+		if err := store.UpdateOpeningProfile(txCtx, profile.ID, loaded.Version, &edited); err != nil {
+			return err
+		}
+		again, err := store.GetOpeningProfileByID(txCtx, profile.ID)
+		if err != nil {
+			return err
+		}
+		if again.Version != loaded.Version+1 || again.DoorReductionMm == nil || *again.DoorReductionMm != 30 {
+			t.Fatalf("edit must bump version and persist 30: v%d %v", again.Version, again.DoorReductionMm)
+		}
+		return nil
+	})
+}

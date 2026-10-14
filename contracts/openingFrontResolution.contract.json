@@ -14,6 +14,13 @@
       "datasheetStatus": "pending_oq2",
       "frontReductionMm": 34,
       "gripClearanceMm": 5
+    },
+    {
+      "profileId": "profile.gola-l.8006",
+      "datasheetStatus": "verified",
+      "frontReductionMm": 38,
+      "gripClearanceMm": 2,
+      "doorReductionMm": 32
     }
   ],
   "resolutionCases": [
@@ -810,6 +817,102 @@
         ]
       },
       "note": "incidencia vertical: la zona z1 queda intacta (sin la clave overhangMm) — la extensión nunca se toma de la altura del cuerpo."
+    },
+    {
+      "name": "#1316 — doorReductionMm gana al par de ficha: 32 consume, no 40",
+      "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 720,
+      "positioning": "overlay",
+      "layout": {
+        "direction": "horizontal",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "hinged",
+            "ratio": 1
+          },
+          {
+            "id": "z2",
+            "access": "hinged",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [
+        {
+          "boundary": "top",
+          "profileId": "profile.gola-l.8006"
+        }
+      ],
+      "expected": {
+        "availableFrontHeightMm": 688,
+        "zones": [
+          {
+            "id": "z1",
+            "heightMm": 344,
+            "offsetFromStartMm": 0
+          },
+          {
+            "id": "z2",
+            "heightMm": 344,
+            "offsetFromStartMm": 344
+          }
+        ],
+        "boundaries": [
+          {
+            "boundary": "top",
+            "consumedMm": 32
+          }
+        ],
+        "remainderZoneId": "z2",
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 344,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [
+              {
+                "boundary": "top",
+                "side": "above",
+                "profileId": "profile.gola-l.8006",
+                "consumedMm": 32
+              }
+            ],
+            "rules": {
+              "direction": "horizontal",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": false
+            }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 344,
+            "heightMm": 720,
+            "offsetMm": 344,
+            "grips": [
+              {
+                "boundary": "top",
+                "side": "above",
+                "profileId": "profile.gola-l.8006",
+                "consumedMm": 32
+              }
+            ],
+            "rules": {
+              "direction": "horizontal",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": true
+            }
+          }
+        ]
+      },
+      "note": "#1316: doorReductionMm=32 anula el par de ficha (38+2=40); el descuento es dato del taller por perfil y el par queda como documentación."
     }
   ],
   "blockedCases": [

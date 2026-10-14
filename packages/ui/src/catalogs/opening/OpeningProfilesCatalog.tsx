@@ -58,6 +58,7 @@ export interface OpeningProfileRow {
   readonly datasheetStatus: string;
   readonly frontReductionMm: number | null;
   readonly gripClearanceMm: number | null;
+  readonly doorReductionMm: number | null;
   readonly profileHeightMm: number | null;
   readonly profileDepthMm: number | null;
   readonly geometryOrigin: string | null;
@@ -208,10 +209,25 @@ export function OpeningProfilesCatalog({
     if (!draft.top && !draft.between && !draft.bottom) {
       return 'Elegí al menos una frontera compatible';
     }
+    if (draft.doorReductionMm !== '') {
+      // #1316: the owner scoped the metal gola to 30–40 mm until SCILM
+      // confirms in writing; the contract itself only refuses nonsense.
+      const door = Number(draft.doorReductionMm);
+      if (!Number.isInteger(door) || door < 30 || door > 40) {
+        return 'El descuento de puerta debe ser un número entero entre 30 y 40 mm';
+      }
+    }
     if (draft.datasheetStatus === 'verified') {
-      const numbers = [draft.frontReductionMm, draft.gripClearanceMm, draft.profileHeightMm, draft.profileDepthMm];
-      if (numbers.some((value) => !Number.isFinite(Number(value)) || Number(value) <= 0)) {
-        return 'La ficha verificada exige las cuatro medidas mayores a 0';
+      // #1316: verified exige la envolvente (alto + profundo), el origen y
+      // un descuento efectivo — el número de taller o el par de ficha.
+      if (!Number.isFinite(Number(draft.profileHeightMm)) || Number(draft.profileHeightMm) <= 0 ||
+        !Number.isFinite(Number(draft.profileDepthMm)) || Number(draft.profileDepthMm) <= 0) {
+        return 'La ficha verificada exige el alto y la profundidad del perfil mayores a 0';
+      }
+      const hasDoor = draft.doorReductionMm !== '';
+      const hasPair = draft.frontReductionMm !== '' && draft.gripClearanceMm !== '';
+      if (!hasDoor && !hasPair) {
+        return 'La ficha verificada exige un descuento de puerta (o el par frontal + holgura)';
       }
       if (draft.geometryOrigin.trim() === '') {
         return 'La ficha verificada exige el origen auditable de sus valores';
@@ -405,9 +421,16 @@ export function OpeningProfilesCatalog({
                     </span>
                   </div>
                 ) : null}
-                {row.frontReductionMm != null ? (
+                {row.doorReductionMm != null ? (
                   <div className="catalog-row-detail__field">
-                    <span className="catalog-row-detail__label">Descuento frontal + holgura</span>
+                    <span className="catalog-row-detail__label">Descuento de puerta</span>
+                    <span className="catalog-row-detail__value">
+                      {formatNumber(row.doorReductionMm)} mm
+                    </span>
+                  </div>
+                ) : row.frontReductionMm != null ? (
+                  <div className="catalog-row-detail__field">
+                    <span className="catalog-row-detail__label">Descuento de puerta (par de ficha)</span>
                     <span className="catalog-row-detail__value">
                       {formatNumber(row.frontReductionMm)} + {formatNumber(row.gripClearanceMm ?? 0)} mm
                     </span>
@@ -542,6 +565,9 @@ export function openingProfileWriteBody(
       ...(draft.bottom ? ['bottom'] : []),
     ],
     datasheet_status: draft.datasheetStatus,
+    // #1316: the workshop-facing discount travels as ONE number; the
+    // datasheet pair round-trips untouched as documentation.
+    ...(draft.doorReductionMm !== '' ? { door_reduction_mm: Number(draft.doorReductionMm) } : {}),
     ...(draft.frontReductionMm !== '' ? { front_reduction_mm: Number(draft.frontReductionMm) } : {}),
     ...(draft.gripClearanceMm !== '' ? { grip_clearance_mm: Number(draft.gripClearanceMm) } : {}),
     ...(draft.profileHeightMm !== '' ? { profile_height_mm: Number(draft.profileHeightMm) } : {}),

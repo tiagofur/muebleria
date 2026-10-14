@@ -35,6 +35,8 @@ export interface OpeningProfileDraft {
   readonly between: boolean;
   readonly bottom: boolean;
   readonly datasheetStatus: 'pending' | 'verified';
+  /** #1316 — ONE workshop-facing number; prefilled with the legacy pair sum. */
+  readonly doorReductionMm: string;
   readonly frontReductionMm: string;
   readonly gripClearanceMm: string;
   readonly profileHeightMm: string;
@@ -64,6 +66,7 @@ export function emptyOpeningProfileDraft(): OpeningProfileDraft {
     between: false,
     bottom: false,
     datasheetStatus: 'pending',
+    doorReductionMm: '',
     frontReductionMm: '',
     gripClearanceMm: '',
     profileHeightMm: '',
@@ -90,6 +93,8 @@ export interface OpeningProfileRowLike {
   readonly datasheetStatus: string;
   readonly frontReductionMm: number | null;
   readonly gripClearanceMm: number | null;
+  /** #1316 — the workshop-facing door discount; null = legacy pair only. */
+  readonly doorReductionMm: number | null;
   readonly profileHeightMm: number | null;
   readonly profileDepthMm: number | null;
   readonly geometryOrigin: string | null;
@@ -111,6 +116,14 @@ export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfil
     between: row.placements.includes('between'),
     bottom: row.placements.includes('bottom'),
     datasheetStatus: row.datasheetStatus === 'verified' ? 'verified' : 'pending',
+    // #1316: the ONE workshop number — the declared discount, or the legacy
+    // datasheet pair sum so the edit migrates the profile transparently.
+    doorReductionMm:
+      row.doorReductionMm != null
+        ? String(row.doorReductionMm)
+        : row.frontReductionMm != null && row.gripClearanceMm != null
+          ? String(row.frontReductionMm + row.gripClearanceMm)
+          : '',
     frontReductionMm: row.frontReductionMm != null ? String(row.frontReductionMm) : '',
     gripClearanceMm: row.gripClearanceMm != null ? String(row.gripClearanceMm) : '',
     profileHeightMm: row.profileHeightMm != null ? String(row.profileHeightMm) : '',
