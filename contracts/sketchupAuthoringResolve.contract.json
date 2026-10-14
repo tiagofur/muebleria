@@ -884,6 +884,10 @@
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -933,6 +937,10 @@
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -1873,6 +1881,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -1922,6 +1934,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -2964,6 +2980,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -3013,6 +3033,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -4125,6 +4149,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -4174,6 +4202,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -4832,6 +4864,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  480
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -4881,6 +4917,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -5787,6 +5827,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     260,
@@ -7243,6 +7287,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -7292,6 +7340,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -8212,6 +8264,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -8261,6 +8317,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -9181,6 +9241,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -9230,6 +9294,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -11104,6 +11172,10 @@
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     302,
@@ -11153,6 +11225,10 @@
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     528,
@@ -12604,6 +12680,10 @@
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -12653,6 +12733,10 @@
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -13475,6 +13559,10 @@
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -13524,6 +13612,10 @@
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -14401,6 +14493,10 @@
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -14450,6 +14546,10 @@
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -15688,6 +15788,10 @@
                 "hostComponentInstanceId": "side-left-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  50,
+                  150
+                ],
                 "transform": {
                   "translationMm": [
                     18,
@@ -16646,6 +16750,10 @@
                 "hostComponentInstanceId": "side-left-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  50,
+                  500
+                ],
                 "transform": {
                   "translationMm": [
                     18,
@@ -17564,6 +17672,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  120,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     475.221629,
@@ -18518,6 +18630,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -18567,6 +18683,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -19611,6 +19731,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -19660,6 +19784,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -20706,6 +20834,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -20755,6 +20887,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -21799,6 +21935,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -21848,6 +21988,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -22840,6 +22984,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -22889,6 +23037,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -23879,6 +24031,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -23928,6 +24084,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -25060,6 +25220,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -25109,6 +25273,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -26119,6 +26287,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -26168,6 +26340,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -27365,6 +27541,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -27414,6 +27594,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,
@@ -28691,6 +28875,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  298,
+                  100
+                ],
                 "transform": {
                   "translationMm": [
                     252,
@@ -28740,6 +28928,10 @@
                 "hostComponentInstanceId": "door-01",
                 "anchorFace": "front",
                 "placementKind": "manual",
+                "offsetMm": [
+                  40,
+                  360
+                ],
                 "transform": {
                   "translationMm": [
                     478,

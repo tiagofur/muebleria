@@ -222,6 +222,79 @@ func TestResolveFurnitureLayoutHardwarePlacement(t *testing.T) {
 	if min[2] < 2 || min[2]+size[2] > 718+0.1 {
 		t.Fatalf("handle must stay within the door height [2,718], got %v + %v", min, size)
 	}
+
+	// #1322: OffsetMm carries the face-plane offset [xMm, yMm] evaluated on
+	// the host board — the exact numbers the authoring resolve consumes so
+	// host-echoed manual placements drill at the right position instead of
+	// collapsing to [0, 0].
+	if len(handle.OffsetMm) != 2 || handle.OffsetMm[0] != 40 || handle.OffsetMm[1] != 360 {
+		t.Fatalf("handle OffsetMm must evaluate to [40, 360], got %v", handle.OffsetMm)
+	}
+}
+
+// #1322: verify that hardware placements with formulas evaluate their OffsetMm
+// against the boardEnv (W, H, PW, PH, etc.) and serialize the evaluated numbers.
+func TestResolveFurnitureLayoutHardwarePlacementOffsetMmWithFormulas(t *testing.T) {
+	module, catalog := oneDoorCabinetCatalog()
+	// Override door hardware placements with formulas (similar to agregados de puertas).
+	// Door board: length = PH - 4 = 716, width = PW - 4 = 596.
+	module.Components[0].Overrides = &domain.ComponentInstanceOverrides{
+		HardwarePlacements: []domain.HardwarePlacement{
+			{
+				HardwareID: "hw-handle",
+				AnchorFace: "front",
+				RelativePosition: domain.HardwareRelPosition{
+					XMm:      30,
+					YMm:      0,
+					XFormula: "PW - 30",
+					YFormula: "PH - 30",
+				},
+			},
+			{
+				HardwareID: "hw-handle",
+				AnchorFace: "back",
+				RelativePosition: domain.HardwareRelPosition{
+					XMm: 20.5,
+					YMm: 90,
+				},
+			},
+			{
+				HardwareID: "hw-handle",
+				AnchorFace: "back",
+				RelativePosition: domain.HardwareRelPosition{
+					XMm:      20.5,
+					YMm:      50,
+					YFormula: "PH - 90",
+				},
+			},
+		},
+	}
+
+	layout, err := ResolveFurnitureLayout(module, catalog, nil, nil)
+	if err != nil {
+		t.Fatalf("resolve layout: %v", err)
+	}
+	if len(layout.Hardware) != 3 {
+		t.Fatalf("expected 3 hardware placements, got %d", len(layout.Hardware))
+	}
+
+	// Placement 0: handle on front: X = PW - 30 = 596 - 30 = 566, Y = PH - 30 = 716 - 30 = 686.
+	h0 := layout.Hardware[0]
+	if len(h0.OffsetMm) != 2 || h0.OffsetMm[0] != 566 || h0.OffsetMm[1] != 686 {
+		t.Fatalf("placement 0 offsetMm must be [566, 686], got %v", h0.OffsetMm)
+	}
+
+	// Placement 1: hinge fixed: X = 20.5, Y = 90.
+	h1 := layout.Hardware[1]
+	if len(h1.OffsetMm) != 2 || h1.OffsetMm[0] != 20.5 || h1.OffsetMm[1] != 90 {
+		t.Fatalf("placement 1 offsetMm must be [20.5, 90], got %v", h1.OffsetMm)
+	}
+
+	// Placement 2: hinge formula: X = 20.5, Y = PH - 90 = 716 - 90 = 626.
+	h2 := layout.Hardware[2]
+	if len(h2.OffsetMm) != 2 || h2.OffsetMm[0] != 20.5 || h2.OffsetMm[1] != 626 {
+		t.Fatalf("placement 2 offsetMm must be [20.5, 626], got %v", h2.OffsetMm)
+	}
 }
 
 func TestResolveFurnitureLayoutDimsOverride(t *testing.T) {

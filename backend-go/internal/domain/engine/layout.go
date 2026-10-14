@@ -183,7 +183,12 @@ type LayoutHardware struct {
 	// by option group (resolved to the chosen concrete HardwareID from the
 	// effective option choices). Empty = concrete placement. Clients use it to
 	// offer group-level model changes instead of pinning one occurrence.
-	OptionRole       string                     `json:"optionRole,omitempty"`
+	OptionRole string `json:"optionRole,omitempty"`
+	// OffsetMm is the placement's face-plane offset [xMm, yMm] on the host
+	// board — the SAME numbers the authoring resolve consumes as the manual
+	// placement's drilling origin (#1322). Absent in rows authored before
+	// the field existed; hosts must not echo fabricated [0,0] offsets.
+	OffsetMm         []float64                  `json:"offsetMm,omitempty"`
 	Transform        LayoutTransform            `json:"transform"`
 	DimensionsMm     [3]float64                 `json:"dimensionsMm"`
 	LocalTransform   LayoutLocalTransform       `json:"localTransform"`
@@ -1498,6 +1503,7 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		ProjectionMm:            projection,
 		ColorHex:                color,
 		HostComponentInstanceID: board.id,
+		OffsetMm:                []float64{xMm, yMm},
 		AnchorFace:              hp.AnchorFace,
 		PlacementKind:           kind,
 		OptionRole:              strings.TrimSpace(hp.OptionRole),
