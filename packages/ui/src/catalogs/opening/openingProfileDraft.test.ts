@@ -46,8 +46,9 @@ describe('toOpeningProfileDraft', () => {
     expect(draft.depthReductionDerived).toBe(true);
     expect(draft.depthReductionMm).toBe('');
     expect(draft.members.map((m) => m.key)).toEqual(['profile']);
-    expect(draft.members[0].kind).toBe('hardware');
-    expect(draft.members[0].rule).toBe('interior_width');
+    const profileMember = draft.members.find((m) => m.key === 'profile');
+    expect(profileMember?.kind).toBe('hardware');
+    expect(profileMember?.rule).toBe('interior_width');
   });
 
   it('recognizes an explicit reduction value', () => {
@@ -128,7 +129,7 @@ describe('#1327 — miembro tipo componente (tira del gola italiano)', () => {
     ...v7Row,
     bomMembers: {
       profile: { hardware_id: 'hw-8006', rule: 'interior_width' },
-      tira: { component_id: 'comp-tira-gola-it', rule: 'interior_width', unit: 'piece' },
+      tira: { hardware_id: '', component_id: 'comp-tira-gola-it', rule: 'interior_width', unit: 'piece' },
     },
   };
 
