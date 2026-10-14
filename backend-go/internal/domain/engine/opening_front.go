@@ -71,11 +71,15 @@ type OpeningIntent struct {
 // CompatiblePlacements/BodyModifiers (#1287 / §13.3) are the declared slice
 // the body-modifier resolution consumes; nil/empty = the slice is absent
 // (pre-#1287 pin or a profile that declares none) — never a live fallback.
+// ProfileDepthMm/ProfileHeightMm (#1317) are the declared datasheet envelope
+// the depth_reduction effect derives from; zero = the pin predates #1283.
 type OpeningProfileData struct {
 	ProfileID            string                        `json:"profileId"`
 	DatasheetStatus      string                        `json:"datasheetStatus"`
 	FrontReductionMm     int                           `json:"frontReductionMm"`
 	GripClearanceMm      int                           `json:"gripClearanceMm"`
+	ProfileDepthMm       float64                       `json:"profileDepthMm,omitempty"`
+	ProfileHeightMm      float64                       `json:"profileHeightMm,omitempty"`
 	CompatiblePlacements []string                      `json:"compatiblePlacements,omitempty"`
 	BodyModifiers        []OpeningContractBodyModifier `json:"bodyModifiers,omitempty"`
 }

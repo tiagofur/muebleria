@@ -70,7 +70,10 @@ func RequirementLinesFromResolvedBOMs(inputs []ResolvedRequirementInput, catalog
 				return nil, fmt.Errorf("board metrics exceed supported integer range: %s", part.ID)
 			}
 			area, edge := CalcBoardLineMetrics(domain.BoardPart{
-				Quantity: part.Quantity, LengthMm: part.LengthMm, WidthMm: part.WidthMm, Edges: part.Edges,
+				// #1317: the metrics helper stays in the template's integer
+				// domain; a decimal finished measure rounds here — the exact
+				// floats above bound the demand and the edge perimeter.
+				Quantity: part.Quantity, LengthMm: int(math.Round(part.LengthMm)), WidthMm: int(math.Round(part.WidthMm)), Edges: part.Edges,
 			}, input.PhysicalQuantity)
 			if !positiveFinite(area) || math.IsNaN(edge) || math.IsInf(edge, 0) || edge < 0 {
 				return nil, fmt.Errorf("invalid board metrics: %s", part.ID)

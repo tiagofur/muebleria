@@ -162,6 +162,56 @@ func bomPartIsOpeningFront(part *domain.BoardPart) bool {
 		strings.EqualFold(part.OptionRole, "FRENTE")
 }
 
+// openingDepthReductionAnnotations (#1317) is the BOM twin of the layout
+// pass's TECHO correction: every full-depth panel of the boundary's
+// canonical placement (superior at a top gola, base at a rebase) has its
+// finished WIDTH (the depth extent of a horizontal panel — widthFormula
+// "PD", the same convention the layout pose publishes) reduced by the
+// declared reduction. The manguete frontal carries its own depth (≠ PD) and
+// its correction is position-only — no annotation, the cut line is intact.
+// The map keys by part ID; nil = nothing declared. The BOM carries no pose,
+// so the annotation keys on the managed placement vocabulary plus the
+// full-depth signature — the same criterion as the layout pass over
+// canonical structures.
+func openingDepthReductionAnnotations(
+	parts []domain.BoardPart,
+	modifiers []ResolvedOpeningBodyModifier,
+	depthMm int,
+) (map[string]float64, error) {
+	var annotations map[string]float64
+	for _, modifier := range modifiers {
+		if modifier.Effect != OpeningModifierEffectDepthReduction {
+			continue
+		}
+		kind := openingBoundaryKind(modifier.Boundary)
+		if kind != "top" && kind != "bottom" {
+			return nil, fmt.Errorf(
+				"la reducción de profundidad del perfil %s sobre la frontera %q no tiene consumidor en el BOM",
+				modifier.ProfileID, kind)
+		}
+		wantedPlacement := string(domain.PlacementSuperior)
+		if kind == "bottom" {
+			wantedPlacement = string(domain.PlacementBase)
+		}
+		for i := range parts {
+			part := &parts[i]
+			if part.Placement != wantedPlacement || part.WidthMm != depthMm {
+				continue
+			}
+			if previous, seen := annotations[part.ID]; seen && previous != modifier.DepthReductionMm {
+				return nil, fmt.Errorf(
+					"la pieza %s recibe dos reducciones de profundidad distintas (%g y %g)",
+					part.ID, previous, modifier.DepthReductionMm)
+			}
+			if annotations == nil {
+				annotations = map[string]float64{}
+			}
+			annotations[part.ID] = modifier.DepthReductionMm
+		}
+	}
+	return annotations, nil
+}
+
 // OpeningMembers is the pinned member set (#1274) the layout materializes
 // as DERIVED hardware placements when the design's opening constrained a
 // furniture's fronts: the gola run plus its factory-declared companions.

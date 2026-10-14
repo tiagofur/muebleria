@@ -70,6 +70,8 @@ func (s *PostgresStore) deriveDesignOpeningCommercial(ctx context.Context, defau
 			DatasheetStatus:      pin.DatasheetStatus,
 			FrontReductionMm:     pin.FrontReductionMm,
 			GripClearanceMm:      pin.GripClearanceMm,
+			ProfileDepthMm:       pin.ProfileDepthMm,
+			ProfileHeightMm:      pin.ProfileHeightMm,
 			CompatiblePlacements: pin.CompatiblePlacements,
 			BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
 		}}
@@ -83,6 +85,8 @@ func (s *PostgresStore) deriveDesignOpeningCommercial(ctx context.Context, defau
 				DatasheetStatus:      profile.DatasheetStatus,
 				FrontReductionMm:     derefOpeningInt(profile.FrontReductionMm),
 				GripClearanceMm:      derefOpeningInt(profile.GripClearanceMm),
+				ProfileDepthMm:       derefOpeningFloat(profile.ProfileDepthMm),
+				ProfileHeightMm:      derefOpeningFloat(profile.ProfileHeightMm),
 				CompatiblePlacements: profile.CompatiblePlacements,
 				BodyModifiers:        engine.ContractBodyModifiersFromEntities(profile.BodyModifiers),
 			})
@@ -222,6 +226,13 @@ func openingQuoteMembers(members map[string]domain.OpeningBOMMember) map[string]
 }
 
 func derefOpeningInt(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func derefOpeningFloat(value *float64) float64 {
 	if value == nil {
 		return 0
 	}

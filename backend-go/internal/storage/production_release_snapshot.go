@@ -158,12 +158,14 @@ type ReleaseCuttingDemandUnitView struct {
 }
 
 type ReleaseCuttingDemandPieceView struct {
-	PartID       string
-	PartCode     string
-	Description  string
-	Quantity     int
-	LengthMm     int
-	WidthMm      int
+	PartID      string
+	PartCode    string
+	Description string
+	Quantity    int
+	// LengthMm/WidthMm are float64 (#1317): the frozen cut list carries the
+	// exact finished measure of a depth-reduced panel (580 − 27.2 = 552.8).
+	LengthMm     float64
+	WidthMm      float64
 	ThicknessMm  int
 	MaterialID   string
 	EdgeBandID   string

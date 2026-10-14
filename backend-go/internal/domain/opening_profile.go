@@ -52,7 +52,12 @@ type OpeningProfile struct {
 // #1292 / §13.3: the notch is the profile's own section passage (8006:
 // 56.5 × 27.2) — decimal by datasheet, so REAL/float64, never truncated.
 type OpeningBodyModifier struct {
-	Role             string   `json:"role"`
+	Role string `json:"role"`
+	// Effect names the declared effect explicitly; it is the channel for a
+	// depth_reduction WITHOUT an explicit value (#1317): the value then
+	// derives from the profile's own profile_depth_mm. Additive on the JSONB
+	// slice — rows authored before #1317 decode with it empty.
+	Effect           string   `json:"effect,omitempty"`
 	DepthReductionMm *int     `json:"depth_reduction_mm,omitempty"`
 	NotchHeightMm    *float64 `json:"notch_height_mm,omitempty"`
 	NotchDepthMm     *float64 `json:"notch_depth_mm,omitempty"`

@@ -157,8 +157,8 @@ func TestProductionRelease_FrozenBaseAuthority_QuotedFrozenModeWins(t *testing.T
 		if !ok {
 			t.Fatalf("unit %s BOM must carry the zócalo part the frozen mode consumes", unit.Resolved.FurnitureInstanceID)
 		}
-		if part.LengthMm != 600 || part.WidthMm != frozenBaseClearanceMm {
-			t.Fatalf("zócalo part must carry the frozen clearance (%d×%d), got %d×%d",
+		if part.LengthMm != 600 || part.WidthMm != float64(frozenBaseClearanceMm) {
+			t.Fatalf("zócalo part must carry the frozen clearance (%d×%d), got %g×%g",
 				600, frozenBaseClearanceMm, part.LengthMm, part.WidthMm)
 		}
 	}

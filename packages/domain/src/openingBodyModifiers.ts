@@ -13,7 +13,12 @@
  * Effect rules (pinned by the fixture):
  *   - depth_reduction: only at a top/bottom boundary (the horizontal panel
  *     sitting behind the profile at that edge is shortened by the exact
- *     declared value).
+ *     declared value). The value is EITHER the modifier's explicit
+ *     depthReductionMm OR — #1317, effect "depth_reduction" with no value —
+ *     the profile's own declared profileDepthMm, so the discount follows
+ *     the pinned datasheet and is never an engine constant. A depth
+ *     reduction at a between boundary is an incompatible input; so is a
+ *     valueless declaration on a profile whose datasheet depth is absent.
  *   - notch: requires height + depth + NotchAt complete; NotchAt must match
  *     the boundary kind (top_front⇒top at offset 0, bottom_front⇒bottom at
  *     the available-region end, front_boundary⇒between at the end of the
@@ -46,6 +51,11 @@ export type OpeningNotchAt = 'top_front' | 'bottom_front' | 'front_boundary';
 export type OpeningContractBodyModifier = {
   /** Constructive role, never a name (#1052). */
   readonly role: string;
+  /** Names the effect explicitly; with depthReductionMm absent it declares
+   * the DERIVED reduction (#1317): the profile's own profileDepthMm.
+   * Declared values must agree with the carried fields — a contradiction
+   * fails closed. */
+  readonly effect?: string;
   readonly depthReductionMm?: number;
   readonly notchHeightMm?: number;
   readonly notchDepthMm?: number;
@@ -53,10 +63,14 @@ export type OpeningContractBodyModifier = {
 };
 
 /** The library slice the body-modifier resolution consumes (a projection of
- * the #1130 entity — the storage layer maps it). */
+ * the #1130 entity — the storage layer maps it). profileDepthMm /
+ * profileHeightMm (#1317) are the datasheet envelope the depth reduction
+ * derives from; zero/absent = the pin predates #1283. */
 export type OpeningProfileBodyData = {
   readonly profileId: string;
   readonly compatiblePlacements: readonly string[];
+  readonly profileDepthMm?: number;
+  readonly profileHeightMm?: number;
   readonly bodyModifiers: readonly OpeningContractBodyModifier[];
 };
 
@@ -69,6 +83,9 @@ export type ResolvedOpeningBodyModifier = {
   readonly profileId: string;
   readonly boundary: string;
   readonly depthReductionMm?: number;
+  /** The profile's declared vertical envelope: the front band the layout
+   * consumer computes the reduction with (#1317). Absent on notches. */
+  readonly profileHeightMm?: number;
   readonly notchHeightMm?: number;
   readonly notchDepthMm?: number;
   /** Offset along the front axis from the available-region start (same
@@ -117,7 +134,7 @@ const sameEffect = (
     return false;
   }
   if (a.effect === 'depth_reduction') {
-    return a.depthReductionMm === b.depthReductionMm;
+    return a.depthReductionMm === b.depthReductionMm && a.profileHeightMm === b.profileHeightMm;
   }
   return (
     a.notchHeightMm === b.notchHeightMm &&
@@ -167,7 +184,7 @@ export function resolveOpeningBodyModifiers(
       );
     }
     for (const modifier of profile.bodyModifiers) {
-      const effect = resolveEffect(modifier, kind, layout.resolution.availableFrontHeightMm, layout.fronts, boundary.boundary);
+      const effect = resolveEffect(modifier, kind, layout.resolution.availableFrontHeightMm, layout.fronts, boundary.boundary, profile);
       if (!effect.ok) {
         return effect;
       }
@@ -200,6 +217,7 @@ function resolveEffect(
   availableFrontHeightMm: number,
   fronts: OpeningFrontLayout['fronts'],
   boundaryKey: string,
+  profile: OpeningProfileBodyData,
 ): { readonly ok: true; readonly modifier: Omit<ResolvedOpeningBodyModifier, 'profileId' | 'boundary'> } | { readonly ok: false; readonly errorCode: OpeningBodyModifierErrorCode; readonly message: string } {
   if (!CONSTRUCTIVE_ROLES.includes(modifier.role)) {
     return fail(
@@ -207,31 +225,56 @@ function resolveEffect(
       `el rol constructivo "${modifier.role}" no es válido (vocabulario ConstructiveRole, nunca nombres)`,
     );
   }
-  const declaresDepth = modifier.depthReductionMm !== undefined;
   const declaresNotch =
     modifier.notchHeightMm !== undefined ||
     modifier.notchDepthMm !== undefined ||
     modifier.notchAt !== undefined;
+  // The declared effect must agree with the carried fields — a contradiction
+  // fails closed, never a guessed intent.
+  if (modifier.effect !== undefined && modifier.effect !== 'depth_reduction' && modifier.effect !== 'notch') {
+    return fail('OPENING_BODY_MODIFIER_INVALID', `el efecto "${modifier.effect}" no es válido`);
+  }
+  const band = profile.profileHeightMm ?? 0;
+  // Go marshals profileHeightMm omitempty: 0 stays absent on the wire — the
+  // truthful absence of a pre-#1283 datasheet, not a zero band.
+  const depthModifier = (depthReductionMm: number): Omit<ResolvedOpeningBodyModifier, 'profileId' | 'boundary'> =>
+    band > 0
+      ? { effect: 'depth_reduction', role: modifier.role, depthReductionMm, profileHeightMm: band }
+      : { effect: 'depth_reduction', role: modifier.role, depthReductionMm };
+  const declaresDepth = modifier.depthReductionMm !== undefined || modifier.effect === 'depth_reduction';
   if (declaresDepth) {
+    if (modifier.effect !== undefined && modifier.effect !== 'depth_reduction') {
+      return fail('OPENING_BODY_MODIFIER_INVALID', `el efecto "${modifier.effect}" contradice los campos declarados del modifier`);
+    }
+    if (declaresNotch) {
+      return fail('OPENING_BODY_MODIFIER_INVALID', 'un modifier declara reducción de profundidad y saque a la vez');
+    }
     if (boundaryKind !== 'top' && boundaryKind !== 'bottom') {
       return fail(
         'OPENING_BODY_MODIFIER_INVALID',
         `la reducción de profundidad no aplica en la frontera ${boundaryKind}`,
       );
     }
-    if (modifier.depthReductionMm === undefined || modifier.depthReductionMm <= 0) {
-      return fail('OPENING_BODY_MODIFIER_INVALID', 'la reducción de profundidad debe ser mayor a 0');
+    if (modifier.depthReductionMm !== undefined) {
+      if (modifier.depthReductionMm <= 0) {
+        return fail('OPENING_BODY_MODIFIER_INVALID', 'la reducción de profundidad debe ser mayor a 0');
+      }
+      return { ok: true, modifier: depthModifier(modifier.depthReductionMm) };
     }
-    return {
-      ok: true,
-      modifier: {
-        effect: 'depth_reduction',
-        role: modifier.role,
-        depthReductionMm: modifier.depthReductionMm,
-      },
-    };
+    // #1317: the value IS the pinned datasheet depth — one source of truth,
+    // no engine constant. A profile whose datasheet depth is absent has no
+    // derivation source (fail-closed; the band's height, a geometry
+    // concern, fails closed in the layout pass).
+    const source = profile.profileDepthMm ?? 0;
+    if (source <= 0) {
+      return fail(
+        'OPENING_BODY_MODIFIER_INVALID',
+        `el perfil ${profile.profileId} no declara profile_depth_mm; la reducción derivada no tiene fuente`,
+      );
+    }
+    return { ok: true, modifier: depthModifier(source) };
   }
-  if (declaresNotch) {
+  if (modifier.effect === 'notch' || declaresNotch) {
     if (
       modifier.notchHeightMm === undefined ||
       modifier.notchDepthMm === undefined ||

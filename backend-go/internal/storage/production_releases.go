@@ -461,6 +461,8 @@ func (s *PostgresStore) releaseOpeningProfileSlices(ctx context.Context, selecti
 			DatasheetStatus:      pin.DatasheetStatus,
 			FrontReductionMm:     pin.FrontReductionMm,
 			GripClearanceMm:      pin.GripClearanceMm,
+			ProfileDepthMm:       pin.ProfileDepthMm,
+			ProfileHeightMm:      pin.ProfileHeightMm,
 			CompatiblePlacements: pin.CompatiblePlacements,
 			BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
 		}}, nil, nil
@@ -477,6 +479,8 @@ func (s *PostgresStore) releaseOpeningProfileSlices(ctx context.Context, selecti
 			DatasheetStatus:      profile.DatasheetStatus,
 			FrontReductionMm:     derefOpeningInt(profile.FrontReductionMm),
 			GripClearanceMm:      derefOpeningInt(profile.GripClearanceMm),
+			ProfileDepthMm:       derefOpeningFloat(profile.ProfileDepthMm),
+			ProfileHeightMm:      derefOpeningFloat(profile.ProfileHeightMm),
 			CompatiblePlacements: profile.CompatiblePlacements,
 			BodyModifiers:        engine.ContractBodyModifiersFromEntities(profile.BodyModifiers),
 		})

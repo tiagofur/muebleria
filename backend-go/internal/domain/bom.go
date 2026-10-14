@@ -17,8 +17,12 @@ type ResolvedBoardPart struct {
 	Code        string `json:"code,omitempty"`
 	Description string `json:"description"`
 	Quantity    int    `json:"quantity"`
-	LengthMm    int    `json:"length_mm"`
-	WidthMm     int    `json:"width_mm"`
+	// LengthMm/WidthMm are float64 (#1317): the opening's declared depth
+	// reduction is decimal by datasheet (8006: 27.2), so the finished
+	// measure of a reduced panel (580 − 27.2 = 552.8) is exact — rounding
+	// the cut line would make the BOM disagree with the machining layout.
+	LengthMm float64 `json:"length_mm"`
+	WidthMm  float64 `json:"width_mm"`
 	// ThicknessMm is the effective board thickness that produced this piece:
 	// the selected MaterialBoard.thicknessMm (#402 / MT-1), same as TS
 	// ResolvedBoardPart.thicknessMm.

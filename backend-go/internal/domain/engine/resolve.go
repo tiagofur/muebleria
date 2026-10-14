@@ -53,7 +53,7 @@ func ResolveBom(
 	if len(measurePresetID) > 0 {
 		presetID = measurePresetID[0]
 	}
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, presetID, nil, nil, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, presetID, nil, nil, nil, nil, nil)
 }
 
 // ResolveBomWithContext is the #442-aware canonical variant: it carries the
@@ -70,7 +70,7 @@ func ResolveBomWithContext(
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, baseContext, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, baseContext, nil, nil)
 }
 
 // ResolveBomWithDims is the F144-aware variant (#310 / P3D-7): customDims
@@ -87,7 +87,7 @@ func ResolveBomWithDims(
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, nil, nil, nil)
 }
 
 // ResolveBomForRelease resolves the BOM of an already-published design unit
@@ -108,7 +108,7 @@ func ResolveBomForRelease(
 	customDims *domain.ItemCustomDims,
 	baseContext *BaseResolutionContext,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext, nil)
+	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext, nil, nil)
 }
 
 // ResolveBomForReleaseWithOpening (#1305) is the release variant that feeds
@@ -116,7 +116,10 @@ func ResolveBomForRelease(
 // door/drawer-front parts shrink by the SAME consumption the machining
 // layout applies, so a gola design releases one coherent set of evidence.
 // The fronts are the server-resolved output of ResolveDesignOpening over the
-// revision's frozen selection — never client input.
+// revision's frozen selection — never client input. openingModifiers
+// (#1317) ride the same resolution: the depth reduction annotates the
+// full-depth panels so the cut list carries the exact finished measure the
+// machining layout publishes.
 func ResolveBomForReleaseWithOpening(
 	module domain.Module,
 	optionChoices map[string]string,
@@ -124,8 +127,9 @@ func ResolveBomForReleaseWithOpening(
 	customDims *domain.ItemCustomDims,
 	baseContext *BaseResolutionContext,
 	openingFronts []OpeningResolvedFront,
+	openingModifiers []ResolvedOpeningBodyModifier,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext, openingFronts)
+	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext, openingFronts, openingModifiers)
 }
 
 // ResolveBomWithPin is the #108-aware variant of ResolveBom. It accepts an
@@ -143,7 +147,7 @@ func ResolveBomWithPin(
 	measurePresetID string,
 	pin *int,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, pin, nil, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, pin, nil, nil, nil, nil)
 }
 
 // resolveBomCommon is the single BOM path (#442): every exported variant
@@ -160,6 +164,7 @@ func resolveBomCommon(
 	customDims *domain.ItemCustomDims,
 	baseContext *BaseResolutionContext,
 	openingFronts []OpeningResolvedFront,
+	openingModifiers []ResolvedOpeningBodyModifier,
 ) (domain.ResolvedBom, error) {
 	if err := ValidateModule(module); err != nil {
 		return domain.ResolvedBom{}, err
@@ -199,6 +204,13 @@ func resolveBomCommon(
 	// parts with the SAME arithmetic the layout pass applies — the cut list
 	// and the machining layout share one consumed number by construction.
 	if err := applyOpeningFrontsToBomParts(rawParts, openingFronts); err != nil {
+		return domain.ResolvedBom{}, err
+	}
+	// #1317: the depth reduction annotates the full-depth panels the
+	// profile's front band touches — the finished WIDTH carries the exact
+	// declared discount (552.8 stays 552.8), never a rounded surrogate.
+	depthReductions, err := openingDepthReductionAnnotations(rawParts, openingModifiers, depthMm)
+	if err != nil {
 		return domain.ResolvedBom{}, err
 	}
 
@@ -260,7 +272,7 @@ func resolveBomCommon(
 	)
 	// #1078: band demand rides the same appended channel as positioned
 	// lines (after them — origin-visible, priced identically).
-	return resolveBomFromParts(module, optionChoices, catalog, treatedParts, treatedHardware, append(placementLines, bandLines...))
+	return resolveBomFromParts(module, optionChoices, catalog, treatedParts, treatedHardware, append(placementLines, bandLines...), depthReductions)
 }
 
 // resolveBomFromParts resolves material/edge/hardware IDs for already-expanded
@@ -275,6 +287,9 @@ func resolveBomFromParts(
 	// #1210: POSITIONED demand lines from component-instance placements,
 	// computed by the caller together with the positions-win bulk dedupe.
 	positionedLines []domain.ResolvedHardwareLine,
+	// #1317: part-ID → depth reduction the opening's declared profile band
+	// applies to the finished width; nil = nothing declared.
+	depthReductions map[string]float64,
 ) (domain.ResolvedBom, error) {
 	boardParts := make([]domain.ResolvedBoardPart, 0, len(rawParts))
 	for _, part := range rawParts {
@@ -304,8 +319,8 @@ func resolveBomFromParts(
 			Code:         part.Code,
 			Description:  part.Description,
 			Quantity:     part.Quantity,
-			LengthMm:     part.LengthMm,
-			WidthMm:      part.WidthMm,
+			LengthMm:     float64(part.LengthMm),
+			WidthMm:      float64(part.WidthMm) - depthReductions[part.ID],
 			ThicknessMm:  material.ThicknessMm,
 			Grain:        grain,
 			Edges:        part.Edges,

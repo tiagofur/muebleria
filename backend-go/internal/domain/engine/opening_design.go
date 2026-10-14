@@ -137,6 +137,8 @@ func ResolveDesignOpening(
 			bodyData = append(bodyData, OpeningProfileBodyData{
 				ProfileID:            profile.ProfileID,
 				CompatiblePlacements: profile.CompatiblePlacements,
+				ProfileDepthMm:       profile.ProfileDepthMm,
+				ProfileHeightMm:      profile.ProfileHeightMm,
 				BodyModifiers:        profile.BodyModifiers,
 			})
 		}

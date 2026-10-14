@@ -306,6 +306,150 @@
           "notchOffsetMm": 0
         }
       ]
+    },
+    {
+      "name": "G — depth_reduction derivado (#1317): sin valor, el descuento ES el profile_depth_mm declarado, con la muesca coexistiendo",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 325, "offsetFromStartMm": 325 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.8006", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.8006", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.8006",
+          "compatiblePlacements": [ "top" ],
+          "profileDepthMm": 27.2,
+          "profileHeightMm": 56.5,
+          "bodyModifiers": [
+            { "role": "horizontal", "effect": "depth_reduction" },
+            { "role": "lateral", "notchHeightMm": 56.5, "notchDepthMm": 27.2, "notchAt": "top_front" }
+          ]
+        }
+      ],
+      "expectedModifiers": [
+        {
+          "effect": "depth_reduction",
+          "role": "horizontal",
+          "profileId": "profile.gola-l.8006",
+          "boundary": "top",
+          "depthReductionMm": 27.2,
+          "profileHeightMm": 56.5
+        },
+        {
+          "effect": "notch",
+          "role": "lateral",
+          "profileId": "profile.gola-l.8006",
+          "boundary": "top",
+          "notchHeightMm": 56.5,
+          "notchDepthMm": 27.2,
+          "notchOffsetMm": 0
+        }
+      ],
+      "note": "#1317: el modifier declara el efecto sin valor — el descuento 27.2 sale de la declaración pineada del perfil (profileDepthMm), nunca de una constante del engine; la banda (profileHeightMm 56.5) viaja en el efecto para el consumidor de layout. La muesca coexiste sin doble aplicación."
+    },
+    {
+      "name": "H — dos perfiles con datasheets distintas: cada descuento derivado sigue SU declaración (nunca un valor fijo)",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 642,
+          "zones": [
+            { "id": "z1", "heightMm": 321, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 321, "offsetFromStartMm": 321 }
+          ],
+          "boundaries": [
+            { "boundary": "top", "consumedMm": 70 },
+            { "boundary": "bottom", "consumedMm": 8 }
+          ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 321,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.8006", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 321,
+            "heightMm": 720,
+            "offsetMm": 321,
+            "grips": [ { "boundary": "bottom", "side": "below", "profileId": "profile.gola-c.rebase", "consumedMm": 8 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.8006",
+          "compatiblePlacements": [ "top" ],
+          "profileDepthMm": 27.2,
+          "profileHeightMm": 56.5,
+          "bodyModifiers": [
+            { "role": "horizontal", "effect": "depth_reduction" }
+          ]
+        },
+        {
+          "profileId": "profile.gola-c.rebase",
+          "compatiblePlacements": [ "bottom" ],
+          "profileDepthMm": 19,
+          "profileHeightMm": 42,
+          "bodyModifiers": [
+            { "role": "horizontal", "effect": "depth_reduction" }
+          ]
+        }
+      ],
+      "expectedModifiers": [
+        {
+          "effect": "depth_reduction",
+          "role": "horizontal",
+          "profileId": "profile.gola-l.8006",
+          "boundary": "top",
+          "depthReductionMm": 27.2,
+          "profileHeightMm": 56.5
+        },
+        {
+          "effect": "depth_reduction",
+          "role": "horizontal",
+          "profileId": "profile.gola-c.rebase",
+          "boundary": "bottom",
+          "depthReductionMm": 19,
+          "profileHeightMm": 42
+        }
+      ],
+      "note": "#1317: dos perfiles pineados con profile_depth_mm distinto producen descuentos distintos — 27.2 arriba, 19 abajo — la prueba de que el descuento nunca es una constante del engine."
     }
   ],
   "blockedCases": [
@@ -592,6 +736,78 @@
           "compatiblePlacements": [ "top" ],
           "bodyModifiers": [
             { "role": "lateral", "notchHeightMm": 66, "notchDepthMm": 12, "notchAt": "left_front" }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    },
+    {
+      "name": "depth_reduction derivado sin profile_depth_mm: la derivación no tiene fuente (#1317)",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-sindato.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-sindato.alu",
+          "compatiblePlacements": [ "top" ],
+          "bodyModifiers": [
+            { "role": "horizontal", "effect": "depth_reduction" }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    },
+    {
+      "name": "efecto declarado contradice los campos («notch» con depthReductionMm): fail-closed",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-contradice.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-contradice.alu",
+          "compatiblePlacements": [ "top" ],
+          "profileDepthMm": 27.2,
+          "profileHeightMm": 56.5,
+          "bodyModifiers": [
+            { "role": "horizontal", "effect": "notch", "depthReductionMm": 20 }
           ]
         }
       ],

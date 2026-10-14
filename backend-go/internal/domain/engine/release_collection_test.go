@@ -44,7 +44,7 @@ func TestResolveReleaseCollectionIdentityAndDemand(t *testing.T) {
 		if unit.FurnitureInstanceID != items[i].FurnitureInstanceID || unit.FurnitureDefinitionID != items[i].FurnitureDefinitionID {
 			t.Fatal("physical order and shared definition identity must survive assembly")
 		}
-		if len(unit.BOM.BoardParts) != []int{2, 5}[i] || unit.BOM.BoardParts[0].LengthMm != []int{750, 800}[i] || unit.BOM.BoardParts[0].WidthMm != []int{500, 520}[i] {
+		if len(unit.BOM.BoardParts) != []int{2, 5}[i] || unit.BOM.BoardParts[0].LengthMm != float64([]int{750, 800}[i]) || unit.BOM.BoardParts[0].WidthMm != float64([]int{500, 520}[i]) {
 			t.Fatalf("unit %d lost its independent dimensions or typed quantity: %+v", i, unit)
 		}
 	}

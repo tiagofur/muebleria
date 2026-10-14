@@ -341,8 +341,8 @@ func loadFixture(t *testing.T) *fixture {
 	return &f
 }
 
-func partKey(description string, length, width int, materialID string) string {
-	return fmt.Sprintf("%s|%d|%d|%s", description, length, width, materialID)
+func partKey(description string, length, width float64, materialID string) string {
+	return fmt.Sprintf("%s|%g|%g|%s", description, length, width, materialID)
 }
 
 func almostEqual(a, b float64) bool {
@@ -391,7 +391,7 @@ func TestDesignBomPriceContract(t *testing.T) {
 			}
 			want := map[string]int{}
 			for _, p := range sc.Expected.Parts {
-				want[partKey(p.Description, p.LengthMm, p.WidthMm, p.MaterialID)] += p.Count
+				want[partKey(p.Description, float64(p.LengthMm), float64(p.WidthMm), p.MaterialID)] += p.Count
 			}
 			if len(got) != len(want) {
 				t.Fatalf("part signatures divergen:\n got: %v\nwant: %v", got, want)

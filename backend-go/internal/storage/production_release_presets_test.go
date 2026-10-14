@@ -114,7 +114,7 @@ func TestProductionRelease_ExplicitDimensionsPresetModule(t *testing.T) {
 		}
 		for _, part := range unit.Resolved.BOM.BoardParts {
 			if part.LengthMm != 560 || part.WidthMm != 600 {
-				t.Fatalf("BOM part %s must derive from the item dimensions (560×600), got %d×%d — preset leaked?",
+				t.Fatalf("BOM part %s must derive from the item dimensions (560×600), got %g×%g — preset leaked?",
 					part.ID, part.LengthMm, part.WidthMm)
 			}
 		}

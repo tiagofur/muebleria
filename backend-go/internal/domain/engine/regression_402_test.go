@@ -170,7 +170,7 @@ func TestResolveBom_EffectiveThickness_SelectedMaterialWins(t *testing.T) {
 		t.Fatalf("lateral nominal 15 with BODY=16mm material must resolve thickness 16, got %d", lateral.ThicknessMm)
 	}
 	if lateral.LengthMm != 688 {
-		t.Fatalf("lateral PH-2*T must use T=16 (688), got %d", lateral.LengthMm)
+		t.Fatalf("lateral PH-2*T must use T=16 (688), got %g", lateral.LengthMm)
 	}
 
 	// Nominal 18 base → 16 (PW - 2*T = 568 and PD - T = 544, both with T=16).
@@ -182,10 +182,10 @@ func TestResolveBom_EffectiveThickness_SelectedMaterialWins(t *testing.T) {
 		t.Fatalf("base nominal 18 with BODY=16mm material must resolve thickness 16, got %d", base.ThicknessMm)
 	}
 	if base.LengthMm != 568 {
-		t.Fatalf("base PW-2*T must use T=16 (568), got %d", base.LengthMm)
+		t.Fatalf("base PW-2*T must use T=16 (568), got %g", base.LengthMm)
 	}
 	if base.WidthMm != 544 {
-		t.Fatalf("base PD-T must use T=16 (544), got %d", base.WidthMm)
+		t.Fatalf("base PD-T must use T=16 (544), got %g", base.WidthMm)
 	}
 
 	// Mixed roles isolate: FRONT keeps its own 18, BACK its own 6.
@@ -201,7 +201,7 @@ func TestResolveBom_EffectiveThickness_SelectedMaterialWins(t *testing.T) {
 		t.Fatalf("back (BACK=back6) must resolve thickness 6, got %d", backPart.ThicknessMm)
 	}
 	if backPart.LengthMm != 708 || backPart.WidthMm != 588 {
-		t.Fatalf("back formulas must use T=6 (708x588), got %dx%d", backPart.LengthMm, backPart.WidthMm)
+		t.Fatalf("back formulas must use T=6 (708x588), got %gx%g", backPart.LengthMm, backPart.WidthMm)
 	}
 }
 
@@ -263,7 +263,7 @@ func TestResolveBom_EffectiveThickness_AgregadoFronts(t *testing.T) {
 			t.Errorf("drawer front nominal 15 with FRONT=18mm material must resolve 18, got %d", part.ThicknessMm)
 		}
 		if part.WidthMm != 564 {
-			t.Errorf("drawer front PW-2*T must use T=18 (564), got %d", part.WidthMm)
+			t.Errorf("drawer front PW-2*T must use T=18 (564), got %g", part.WidthMm)
 		}
 	}
 	if fronts != 3 {
