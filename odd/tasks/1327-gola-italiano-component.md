@@ -69,3 +69,41 @@ Lane: Delegated Direct — 3 slices, un PR cada una. Este artifact es la memoria
   - Verificación: engine+domain Go verdes; storage round-trip JSONB del bisel en suite completa
     (backend-test.sh, contenedor efímero); vitest domain 1977 + ui 2248 + web export-pack 16;
     typecheck workspace; check_openapi_drift OK; rake verify plugin verde (extensión sin cambios).
+- Slice 3: **MERGEADO** (PR #1335, main 4d6c24dc, CI 22/22).
+
+## Restante — perfil de fábrica + aceptación (2026-10-14, misma sesión)
+
+Datos del owner (verbales, 2026-10-14): descuento **35** («como el metal, puede variar por
+fábrica»), tira **70 mm de alto × espesor del frente (no fijo; 15 hoy)**, bisel 45° =
+**espesor − 2** (13 en puerta 15). Creado en dev vía API: componente **TIRA-GOLA-ITA**
+(b0000004-…-13270001, placement superior, rol FRENTE) y perfil **profile.gola-italiano.tira** v3
+(verificado; par 33+2 documentado — ver brecha #1337).
+
+Dos paredes encontradas en el E2E y arregladas en **PR #1336** (MERGEADO, main cc6b414d, CI 22/22):
+1. `OPENING_BOM_INVALID` bloqueaba la cotización: el member componente (tira) no es demanda de
+   herraje — la resolución del BOM de apertura ahora saltea members con component_id (clave
+   desconocida SIN component_id sigue siendo corrupción fail-closed).
+2. La tira quedaba sin material con el catálogo real (grupo frontal legacy FRENTES, anterior a
+   #403): FRENTE canónico ahora hereda la choice FRENTES y la familia frontal cascada
+   FRENTE → FRENTES (fixture compartido actualizado).
+
+Tercera pared del mismo E2E, arreglada en **PR #1338** (MERGEADO, main 898b566a, CI 22/22): el DTO
+wire del snapshot (#1304) no mapeaba el payload `bevel` — el release congelaba el wedge y la API
+lo servía sin él. Test de DTO pinnea el wedge completo en el wire.
+
+Nota de fixture dev: el módulo SMK-PUERTA del smoke pasó a rol FRENTES (v2) — fiel a los módulos
+reales del taller, cuya elección de frente vive en FRENTES; sin una parte frontal el filtro de
+choices del working-copy descarta FRENTES y el release no puede materializar la tira.
+
+**E2E LIMPIO FINAL (post-#1336+#1338, backend main)**: diseño desechable con choices SOLO
+FRENTES → apertura resolved con bomReason LIMPIO + bevel resuelto (45/13) → cotización → release
+cfef2001 → snapshot sirve la op `…130504-copy-0:bevel-0` CON wedge (45°, top_front,
+[396,13,13], provenance profile.gola-italiano.tira). Despiece congelado: `opening-strip-tira`
+400×15 con material ARA-MOS-15 (color de puerta vía alias FRENTES); puerta 681×396 (720 − 35 − 4
+holgura). Regresión 8006: fila v8/30 byte a byte intacta (muesca + depth_reduction + herrajes).
+
+Brecha menor fileada: **#1337** (pin exige el par legacy; door_reduction-only no puede pinearse).
+
+Pendiente (aceptación owner): aplicar la apertura con «Gola italiano (tira de melamina)» en un
+mueble de prueba en SketchUp — tira con color de puerta en 3D y en despiece, puerta con descuento
+35 y el corte 45°; el 8006 sigue intacto.
