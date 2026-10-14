@@ -46,7 +46,8 @@ Lane: Delegated Direct — 3 slices, un PR cada una. Este artifact es la memoria
   ausente/inactivo. Proyección: OpeningMembers.ComponentMembers desde el pin. NOTA de proceso:
   había trabajo SIN commitear de otro agente en el checkout compartido (authoring_fixed_shelf.go,
   joinery_system_contract_test.go) — se dejó intacto, commit solo con rutas explícitas.
-- Slice 3 (bevel 45°): **IMPLEMENTADO** — rama `feat/1327-door-bevel` sobre main b494072f.
+- Slice 3 (bevel 45°): **EN PR #1335** (rama `feat/1327-door-bevel`, HEAD 58896945, base main b494072f,
+  `Refs #1327 + Delivery: partial` — restante: perfil de fábrica + aceptación E2E del owner).
   - Declaración: `bevel_angle_deg`/`bevel_size_mm`/`bevel_at` en `OpeningBodyModifier` (JSONB
     aditivo) + contrato camelCase + esquema OpenAPI (`OpeningProfileBodyModifier`,
     `ManufacturingRoutingBevel` nuevo) + regeneración + editor React (sección «Bisel 45° en la
