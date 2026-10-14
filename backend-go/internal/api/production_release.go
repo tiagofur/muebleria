@@ -561,12 +561,22 @@ func toManufacturingSnapshotDTO(snapshot *storage.ReleaseManufacturingSnapshot) 
 		for _, part := range unit.Parts {
 			operations := make([]openapi.ManufacturingRoutingOperation, 0, len(part.Operations))
 			for _, operation := range part.Operations {
+				var bevel *openapi.ManufacturingRoutingBevel
+				if operation.Bevel != nil {
+					bevel = &openapi.ManufacturingRoutingBevel{
+						StartMm:  operation.Bevel.StartMm[:],
+						SizeMm:   operation.Bevel.SizeMm[:],
+						AngleDeg: operation.Bevel.AngleDeg,
+						Edge:     operation.Bevel.Edge,
+					}
+				}
 				operations = append(operations, openapi.ManufacturingRoutingOperation{
 					OperationId: operation.OperationID,
 					Provenance:  routingProvenanceDTO(operation.Provenance),
 					Operation:   operation.Operation,
 					Holes:       routingHolesDTO(operation.Holes),
 					RoutingCuts: routingCutsDTO(operation.Routing),
+					Bevel:       bevel,
 				})
 			}
 			parts = append(parts, openapi.ManufacturingRoutingPart{
