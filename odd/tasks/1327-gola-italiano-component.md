@@ -47,4 +47,27 @@ Lane: Delegated Direct — 3 slices, un PR cada una. Este artifact es la memoria
   pin. NOTA de proceso: había trabajo SIN commitear de otro agente en el checkout compartido
   (authoring_fixed_shelf.go, joinery_system_contract_test.go) — se dejó intacto, commit solo con
   rutas explícitas.
-- Slice 3 (bevel 45°): pendiente.
+- Slice 3 (bevel 45°): pendiente — **diseño de ejecución completo abajo** (sesión fresca).
+
+### Slice 3 — diseño de ejecución (listo para implementar)
+
+**3a. Declaración (resolver, Go + TS paridad + fixture):**
+- `OpeningContractBodyModifier`/entity ganan `bevel_mm *float64` (pierna del triángulo 45°, mm).
+- Reglas: sólo frontera `top`; sólo rol `door` (el frente, como la muesca usa `lateral`);
+  `bevel_mm > 0`; debe caber en el espesor de la puerta (fallar si `bevel_mm >= thickness`).
+- Efecto resuelto: `ResolvedOpeningBodyModifier{Effect: "bevel", BevelMm, ProfileHeightMm?}` —
+  identidad `bevel|door|top`, dedupe/conflicto como la muesca.
+- Fail-closed: bevel en bottom/between, rol fuera de vocabulario, size inválida.
+
+**3b. Consumidor (routing, pipeline #1304 reusado):**
+- v1 NO modifica la geometría 3D de la puerta (el borde superior queda tapado por la tira) —
+  el corte viaja como **op de routing estructurada** en el release program, exactamente como las
+  route ops de la muesca (`release_routing.go`): op `bevel_45` sobre la pieza puerta, lado top,
+  `size_mm = bevel_mm`, a lo ancho de la pieza, provenance perfil+versión.
+- El CNC adapter (KDT/BHX) traduce la op en su formato — misma frontera que las muescas.
+
+**3c. Aceptación:**
+- Perfil con bevel → resolve lo lleva → release routing program congela la op sobre la puerta con
+  provenance → fail-closed (bottom, rol equivocado, size ≥ espesor).
+- Paridad TS + fixture (`openingBodyModifiers.contract.json` caso bevel + inválidos).
+- El 8006 metálico sin bevel queda byte a byte (regresión).
