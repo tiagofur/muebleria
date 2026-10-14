@@ -22,8 +22,17 @@ import (
 // Effect rules (pinned by the fixture):
 //   - depth_reduction: only at a top/bottom boundary (the horizontal panel
 //     sitting behind the profile at that edge is shortened by the exact
-//     declared value). A depth reduction at a between boundary is an
-//     incompatible input.
+//     declared value). The value is EITHER the modifier's explicit
+//     depth_reduction_mm OR — #1317, effect "depth_reduction" with no value —
+//     the profile's own declared profile_depth_mm, so the discount follows
+//     the pinned datasheet and is never an engine constant. A depth
+//     reduction at a between boundary is an incompatible input; so is a
+//     valueless declaration on a profile whose datasheet depth is absent.
+//   - notch: requires height + depth + NotchAt complete; NotchAt must match
+//     the boundary kind (top_front⇒top at offset 0, bottom_front⇒bottom at
+//     the available-region end, front_boundary⇒between at the end of the
+//     zone below the boundary) and the profile must declare the boundary
+//     kind among its compatible placements.
 //   - notch: requires height + depth + NotchAt complete; NotchAt must match
 //     the boundary kind (top_front⇒top at offset 0, bottom_front⇒bottom at
 //     the available-region end, front_boundary⇒between at the end of the
@@ -65,7 +74,12 @@ const (
 // persists snake_case — openingContractBodyModifier maps one onto the other
 // so the library data feeds the resolver without a third vocabulary.
 type OpeningContractBodyModifier struct {
-	Role             string   `json:"role"`
+	Role string `json:"role"`
+	// Effect names the effect explicitly; with depthReductionMm absent it
+	// declares the DERIVED reduction (#1317): the profile's own
+	// profileDepthMm. Declared values must agree with the carried fields —
+	// a contradiction fails closed.
+	Effect           string   `json:"effect,omitempty"`
 	DepthReductionMm *int     `json:"depthReductionMm,omitempty"`
 	NotchHeightMm    *float64 `json:"notchHeightMm,omitempty"`
 	NotchDepthMm     *float64 `json:"notchDepthMm,omitempty"`
@@ -77,6 +91,7 @@ type OpeningContractBodyModifier struct {
 func openingContractBodyModifier(entity domain.OpeningBodyModifier) OpeningContractBodyModifier {
 	return OpeningContractBodyModifier{
 		Role:             entity.Role,
+		Effect:           entity.Effect,
 		DepthReductionMm: entity.DepthReductionMm,
 		NotchHeightMm:    entity.NotchHeightMm,
 		NotchDepthMm:     entity.NotchDepthMm,
@@ -100,9 +115,14 @@ func ContractBodyModifiersFromEntities(entities []domain.OpeningBodyModifier) []
 
 // OpeningProfileBodyData is the library slice the body-modifier resolution
 // consumes (a projection of the #1130 entity — the storage layer maps it).
+// ProfileDepthMm/ProfileHeightMm are the datasheet envelope the depth
+// reduction derives from and computes its band with (#1317); zero = the pin
+// predates #1283 and a derived reduction has no source (fail-closed).
 type OpeningProfileBodyData struct {
 	ProfileID            string                        `json:"profileId"`
 	CompatiblePlacements []string                      `json:"compatiblePlacements"`
+	ProfileDepthMm       float64                       `json:"profileDepthMm,omitempty"`
+	ProfileHeightMm      float64                       `json:"profileHeightMm,omitempty"`
 	BodyModifiers        []OpeningContractBodyModifier `json:"bodyModifiers"`
 }
 
@@ -110,13 +130,17 @@ type OpeningProfileBodyData struct {
 // (effect|role|boundary), target constructive role, provenance (profile +
 // boundary) and the complete geometry the manufacturing pipeline consumes.
 type ResolvedOpeningBodyModifier struct {
-	Effect           string   `json:"effect"`
-	Role             string   `json:"role"`
-	ProfileID        string   `json:"profileId"`
-	Boundary         string   `json:"boundary"`
-	DepthReductionMm int      `json:"depthReductionMm,omitempty"`
-	NotchHeightMm    float64  `json:"notchHeightMm,omitempty"`
-	NotchDepthMm     float64  `json:"notchDepthMm,omitempty"`
+	Effect           string  `json:"effect"`
+	Role             string  `json:"role"`
+	ProfileID        string  `json:"profileId"`
+	Boundary         string  `json:"boundary"`
+	DepthReductionMm float64 `json:"depthReductionMm,omitempty"`
+	// ProfileHeightMm is the profile's declared vertical envelope: the
+	// front band the layout consumer computes the reduction with (#1317).
+	// Zero for notch effects (they carry their own section).
+	ProfileHeightMm float64 `json:"profileHeightMm,omitempty"`
+	NotchHeightMm   float64 `json:"notchHeightMm,omitempty"`
+	NotchDepthMm    float64 `json:"notchDepthMm,omitempty"`
 	// NotchOffsetMm places the notch along the front axis, measured from the
 	// start of the available region (same coordinate system as the #1131
 	// fronts' offsetMm); 0 for top_front.
@@ -136,7 +160,8 @@ func (m ResolvedOpeningBodyModifier) sameEffect(other ResolvedOpeningBodyModifie
 		return false
 	}
 	if m.Effect == OpeningModifierEffectDepthReduction {
-		return m.DepthReductionMm == other.DepthReductionMm
+		return m.DepthReductionMm == other.DepthReductionMm &&
+			m.ProfileHeightMm == other.ProfileHeightMm
 	}
 	return m.NotchHeightMm == other.NotchHeightMm &&
 		m.NotchDepthMm == other.NotchDepthMm &&
@@ -203,7 +228,7 @@ func ResolveOpeningBodyModifiers(
 		}
 		for _, modifier := range profile.BodyModifiers {
 			effect, resErr := resolveOpeningBodyModifierEffect(modifier, kind,
-				layout.Resolution.AvailableFrontHeightMm, layout.Fronts, boundary.Boundary)
+				layout.Resolution.AvailableFrontHeightMm, layout.Fronts, boundary.Boundary, profile)
 			if resErr != nil {
 				return nil, resErr
 			}
@@ -226,13 +251,16 @@ func ResolveOpeningBodyModifiers(
 
 // resolveOpeningBodyModifierEffect validates one declared modifier against
 // its boundary and produces the exact effect (identity/provenance fields are
-// set by the caller).
+// set by the caller). The profile declaration carries the derivation source
+// (#1317): a valueless depth_reduction resolves to the profile's own
+// profile_depth_mm — never to an engine constant.
 func resolveOpeningBodyModifierEffect(
 	modifier OpeningContractBodyModifier,
 	boundaryKind string,
 	availableFrontHeightMm int,
 	fronts []OpeningResolvedFront,
 	boundaryKey string,
+	profile OpeningProfileBodyData,
 ) (ResolvedOpeningBodyModifier, *OpeningResolutionError) {
 	role := modifier.Role
 	if !componentConstructiveRoles[role] {
@@ -240,21 +268,48 @@ func resolveOpeningBodyModifierEffect(
 			fmt.Sprintf("el rol constructivo %q no es válido (vocabulario #1052, nunca nombres)", role))
 	}
 	switch {
-	case modifier.DepthReductionMm != nil:
+	case modifier.DepthReductionMm != nil || modifier.Effect == OpeningModifierEffectDepthReduction:
+		if modifier.Effect != "" && modifier.Effect != OpeningModifierEffectDepthReduction {
+			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+				fmt.Sprintf("el efecto %q contradice los campos declarados del modifier", modifier.Effect))
+		}
 		if boundaryKind != "top" && boundaryKind != "bottom" {
 			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
 				fmt.Sprintf("la reducción de profundidad no aplica en la frontera %s", boundaryKind))
 		}
-		if *modifier.DepthReductionMm <= 0 {
+		if modifier.NotchHeightMm != nil || modifier.NotchDepthMm != nil || modifier.NotchAt != "" {
 			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
-				"la reducción de profundidad debe ser mayor a 0")
+				"un modifier declara reducción de profundidad y saque a la vez")
+		}
+		var reduction float64
+		if modifier.DepthReductionMm != nil {
+			if *modifier.DepthReductionMm <= 0 {
+				return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+					"la reducción de profundidad debe ser mayor a 0")
+			}
+			reduction = float64(*modifier.DepthReductionMm)
+		} else {
+			// #1317: the value IS the pinned datasheet depth — one source of
+			// truth, no engine constant. A profile whose datasheet depth is
+			// absent has no derivation source (fail-closed here; the band's
+			// height, a geometry concern, fails closed in the layout pass).
+			if profile.ProfileDepthMm <= 0 {
+				return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+					fmt.Sprintf("el perfil %s no declara profile_depth_mm; la reducción derivada no tiene fuente", profile.ProfileID))
+			}
+			reduction = profile.ProfileDepthMm
 		}
 		return ResolvedOpeningBodyModifier{
 			Effect:           OpeningModifierEffectDepthReduction,
 			Role:             role,
-			DepthReductionMm: *modifier.DepthReductionMm,
+			DepthReductionMm: reduction,
+			ProfileHeightMm:  profile.ProfileHeightMm,
 		}, nil
-	case modifier.NotchHeightMm != nil || modifier.NotchDepthMm != nil || modifier.NotchAt != "":
+	case modifier.Effect == OpeningModifierEffectNotch || modifier.NotchHeightMm != nil || modifier.NotchDepthMm != nil || modifier.NotchAt != "":
+		if modifier.Effect != "" && modifier.Effect != OpeningModifierEffectNotch {
+			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+				fmt.Sprintf("el efecto %q no es válido", modifier.Effect))
+		}
 		if modifier.NotchHeightMm == nil || modifier.NotchDepthMm == nil || modifier.NotchAt == "" {
 			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
 				"el saque exige alto, profundidad y posición completos")
@@ -275,6 +330,9 @@ func resolveOpeningBodyModifierEffect(
 			NotchDepthMm:  *modifier.NotchDepthMm,
 			NotchOffsetMm: offset,
 		}, nil
+	case modifier.Effect != "":
+		return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+			fmt.Sprintf("el efecto %q no es válido", modifier.Effect))
 	default:
 		return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
 			"el modifier no declara ningún efecto")

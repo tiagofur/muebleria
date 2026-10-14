@@ -356,8 +356,8 @@ func pbPartMatches(part domain.ResolvedBoardPart, exp pbExpectedPart) bool {
 		return false
 	}
 	return part.Description == exp.Description &&
-		part.LengthMm == exp.LengthMm &&
-		part.WidthMm == exp.WidthMm &&
+		part.LengthMm == float64(exp.LengthMm) &&
+		part.WidthMm == float64(exp.WidthMm) &&
 		part.OptionRole == exp.OptionRole &&
 		pbEnabledEdges(part.Edges) == pbExpectedEdgesKey(exp.Edges) &&
 		part.MaterialID == exp.MaterialID

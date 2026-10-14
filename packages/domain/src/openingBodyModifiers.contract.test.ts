@@ -28,6 +28,8 @@ interface FixtureModifier {
 interface FixtureProfile {
   readonly profileId: string;
   readonly compatiblePlacements: readonly string[];
+  readonly profileDepthMm?: number;
+  readonly profileHeightMm?: number;
   readonly bodyModifiers: readonly FixtureModifier[];
 }
 
@@ -57,6 +59,8 @@ const profilesOf = (testCase: FixtureCase): OpeningProfileBodyData[] =>
   (testCase.profiles ?? []).map((profile) => ({
     profileId: profile.profileId,
     compatiblePlacements: profile.compatiblePlacements,
+    profileDepthMm: profile.profileDepthMm,
+    profileHeightMm: profile.profileHeightMm,
     bodyModifiers: profile.bodyModifiers.map(
       (modifier): OpeningContractBodyModifier => ({ ...modifier }),
     ),

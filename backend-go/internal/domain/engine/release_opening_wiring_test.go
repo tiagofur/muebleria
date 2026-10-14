@@ -73,7 +73,7 @@ func TestReleaseOpeningConstrainsBOMDoorAndAddsMembers(t *testing.T) {
 		t.Fatalf("fixture lost its door part")
 	}
 	if door.LengthMm != 716 {
-		t.Fatalf("baseline door must stay at the definition dimension 716, got %d", door.LengthMm)
+		t.Fatalf("baseline door must stay at the definition dimension 716, got %g", door.LengthMm)
 	}
 
 	resolution := releaseOpeningResolution()
@@ -83,7 +83,7 @@ func TestReleaseOpeningConstrainsBOMDoorAndAddsMembers(t *testing.T) {
 	}
 	door = doorPart(with.BOM)
 	if door.LengthMm != 676 {
-		t.Fatalf("gola door must shrink by the consumed 40 mm (716→676), got %d", door.LengthMm)
+		t.Fatalf("gola door must shrink by the consumed 40 mm (716→676), got %g", door.LengthMm)
 	}
 
 	memberIDs := map[string]float64{}

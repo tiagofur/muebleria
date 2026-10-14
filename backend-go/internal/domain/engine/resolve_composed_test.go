@@ -132,7 +132,7 @@ func TestResolveBom_ComposedModule(t *testing.T) {
 		t.Fatal("missing puerta part")
 	}
 	if puerta.LengthMm != 717 || puerta.WidthMm != 298 {
-		t.Fatalf("puerta dims %dx%d want 717x298", puerta.LengthMm, puerta.WidthMm)
+		t.Fatalf("puerta dims %gx%g want 717x298", puerta.LengthMm, puerta.WidthMm)
 	}
 	if puerta.MaterialID != "mat-1" {
 		t.Fatalf("material %s", puerta.MaterialID)

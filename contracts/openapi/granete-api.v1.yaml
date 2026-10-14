@@ -11350,12 +11350,12 @@
             "minimum": 1
           },
           "length_mm": {
-            "type": "integer",
+            "type": "number",
             "minimum": 1,
-            "description": "Finished measure convention (same as the optimizer cut list): edge-band deduction is an optimization input, never pre-applied here."
+            "description": "Finished measure convention (same as the optimizer cut list): edge-band deduction is an optimization input, never pre-applied here. Decimal since #1317 — the opening's declared depth reduction (580 − 27.2 = 552.8) is exact."
           },
           "width_mm": {
-            "type": "integer",
+            "type": "number",
             "minimum": 1
           },
           "thickness_mm": {

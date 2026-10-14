@@ -242,7 +242,7 @@ func TestRequirementLinesResolvedRejectsInvalidTotals(t *testing.T) {
 		"unsafe edge total": func(in []ResolvedRequirementInput, c *domain.Catalog) {
 			for i := range in {
 				part := &in[i].BOM.BoardParts[0]
-				part.LengthMm, part.WidthMm = (i+2)*1000000000000000, 1
+				part.LengthMm, part.WidthMm = float64((i+2)*1000000000000000), 1
 				part.Edges = []domain.EdgeAssignment{{Side: "L1", Enabled: true}, {Side: "L2", Enabled: true}}
 			}
 		},

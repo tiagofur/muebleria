@@ -61,6 +61,8 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 					DatasheetStatus:      pin.DatasheetStatus,
 					FrontReductionMm:     pin.FrontReductionMm,
 					GripClearanceMm:      pin.GripClearanceMm,
+					ProfileDepthMm:       pin.ProfileDepthMm,
+					ProfileHeightMm:      pin.ProfileHeightMm,
 					CompatiblePlacements: pin.CompatiblePlacements,
 					BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
 				}}
@@ -73,6 +75,8 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 						DatasheetStatus:      profile.DatasheetStatus,
 						FrontReductionMm:     derefInt(profile.FrontReductionMm),
 						GripClearanceMm:      derefInt(profile.GripClearanceMm),
+						ProfileDepthMm:       derefFloat(profile.ProfileDepthMm),
+						ProfileHeightMm:      derefFloat(profile.ProfileHeightMm),
 						CompatiblePlacements: profile.CompatiblePlacements,
 						BodyModifiers:        engine.ContractBodyModifiersFromEntities(profile.BodyModifiers),
 					})
@@ -446,6 +450,8 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 			DatasheetStatus:      pin.DatasheetStatus,
 			FrontReductionMm:     pin.FrontReductionMm,
 			GripClearanceMm:      pin.GripClearanceMm,
+			ProfileDepthMm:       pin.ProfileDepthMm,
+			ProfileHeightMm:      pin.ProfileHeightMm,
 			CompatiblePlacements: pin.CompatiblePlacements,
 			BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
 		}}
@@ -461,6 +467,8 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 				DatasheetStatus:      profile.DatasheetStatus,
 				FrontReductionMm:     derefInt(profile.FrontReductionMm),
 				GripClearanceMm:      derefInt(profile.GripClearanceMm),
+				ProfileDepthMm:       derefFloat(profile.ProfileDepthMm),
+				ProfileHeightMm:      derefFloat(profile.ProfileHeightMm),
 				CompatiblePlacements: profile.CompatiblePlacements,
 				BodyModifiers:        engine.ContractBodyModifiersFromEntities(profile.BodyModifiers),
 			})

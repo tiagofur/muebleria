@@ -125,7 +125,7 @@ func TestMaterialThicknessParityScenarioA_BOMAndLayout(t *testing.T) {
 		t.Fatalf("ResolveBom: %v", err)
 	}
 	assert405BomRoles(t, bom.BoardParts, scenario.ExpectedRoles)
-	if got := findPartByDescription(bom.BoardParts, "Lateral"); got == nil || got.LengthMm != int(scenario.ExpectedFormulaResults["Lateral.lengthMm"]) {
+	if got := findPartByDescription(bom.BoardParts, "Lateral"); got == nil || got.LengthMm != float64(scenario.ExpectedFormulaResults["Lateral.lengthMm"]) {
 		t.Fatalf("Lateral PH-2*T did not use selected 16mm: %+v", got)
 	}
 	if got := findPartByDescription(bom.BoardParts, "Piso"); got == nil || got.LengthMm != 568 || got.WidthMm != 544 {

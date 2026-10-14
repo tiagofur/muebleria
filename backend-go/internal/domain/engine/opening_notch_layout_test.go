@@ -184,26 +184,31 @@ func TestOpeningNotchFailsClosedWhenItDoesNotFit(t *testing.T) {
 }
 
 // Without declared modifiers nothing is cut — the historical layout stays
-// byte-identical (and a depth-reduction effect never cuts).
+// byte-identical. A depth-reduction modifier without the profile band the
+// consumer needs fails closed (#1317): the resolve never invents geometry.
 func TestOpeningNotchAbsentSliceCutsNothing(t *testing.T) {
 	module, catalog := oneDoorCabinetCatalog()
 	dims := &LayoutDims{WidthMm: 600, HeightMm: 720, DepthMm: 560}
+
+	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{})
+	if err != nil {
+		t.Fatalf("resolve without modifiers: %v", err)
+	}
+	for _, component := range layout.Components {
+		if len(component.Notches) != 0 {
+			t.Fatalf("no modifier declared: %s must not carry notches", component.ComponentInstanceID)
+		}
+	}
 
 	depthReduction := []ResolvedOpeningBodyModifier{{
 		Effect: OpeningModifierEffectDepthReduction, Role: "horizontal", ProfileID: "p", Boundary: "top",
 		DepthReductionMm: 27,
 	}}
-	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
+	if _, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
 		fronts:               openingPassFront("top", 40),
 		openingBodyModifiers: depthReduction,
-	})
-	if err != nil {
-		t.Fatalf("resolve with depth-reduction only: %v", err)
-	}
-	for _, component := range layout.Components {
-		if len(component.Notches) != 0 {
-			t.Fatalf("no notch modifier declared: %s must not carry notches", component.ComponentInstanceID)
-		}
+	}); err == nil || !strings.Contains(err.Error(), "banda del perfil") {
+		t.Fatalf("a band-less depth reduction must fail closed, got %v", err)
 	}
 }
 

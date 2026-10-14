@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -291,13 +292,16 @@ func CalcProjectBreakdownWithProfileDemand(
 				edgeBand = &edge
 			}
 			// Cost math reuses BoardPart shape (dims/edges/qty only).
+			// #1317: the finished measure can be decimal (a reduced panel),
+			// the cost helper stays in the template's integer domain — the
+			// nearest-millimetre rounding happens here, at one boundary.
 			raw := domain.BoardPart{
 				ID:          part.ID,
 				Code:        part.Code,
 				Description: part.Description,
 				Quantity:    part.Quantity,
-				LengthMm:    part.LengthMm,
-				WidthMm:     part.WidthMm,
+				LengthMm:    int(math.Round(part.LengthMm)),
+				WidthMm:     int(math.Round(part.WidthMm)),
 				Edges:       part.Edges,
 				OptionRole:  part.OptionRole,
 			}

@@ -226,18 +226,22 @@ type FurnitureLayout struct {
 
 // layoutBoard is the intermediate resolved board before AABB projection.
 type layoutBoard struct {
-	id          string
-	defID       string // stable authoring-definition ID (#346/#415), shared by all copies of one component
-	name        string
-	placement   string
-	optionRole  string
-	x, y, z     float64 // workshop min corner of the AABB
-	rotX, rotY  float64
-	rotZ        float64
-	widthMm     float64 // local X
-	thicknessMm float64 // local Y
-	lengthMm    float64 // local Z
-	hardware    []domain.HardwarePlacement
+	id         string
+	defID      string // stable authoring-definition ID (#346/#415), shared by all copies of one component
+	name       string
+	placement  string
+	optionRole string
+	// constructiveRole (#1052 vocabulary, #1317): the DECLARED constructive
+	// role the opening body modifiers address — the depth-reduction pass
+	// selects its boards by it, never by name. Empty on legacy flat parts.
+	constructiveRole string
+	x, y, z          float64 // workshop min corner of the AABB
+	rotX, rotY       float64
+	rotZ             float64
+	widthMm          float64 // local X
+	thicknessMm      float64 // local Y
+	lengthMm         float64 // local Z
+	hardware         []domain.HardwarePlacement
 	// notches carries the opening's DECLARED side notch subtraction boxes in
 	// the board's local frame (#1287 / §13.3) — structured data on a valid
 	// AABB, never a shrunk surrogate board.
@@ -582,6 +586,17 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 		if err := applyOpeningNotchesToBoards(boards, opts.openingBodyModifiers); err != nil {
 			return nil, err
 		}
+		// #1317 / §13.6: the depth reduction corrects the horizontal panels
+		// the profile band touches (the techo's measure, the front manguete's
+		// Y). Corrected boards join the fronts in the authored-translation
+		// exemption: the front band's placement is the opening's.
+		depthAffected, passErr := applyOpeningDepthReductionToBoards(boards, opts.openingBodyModifiers, dims)
+		if passErr != nil {
+			return nil, passErr
+		}
+		for i := range depthAffected {
+			openingConstrained[i] = true
+		}
 	}
 
 	// #477 final pass: authored translations are furniture-frame intent, so
@@ -841,6 +856,7 @@ func expandLayoutInstances(
 				name:               comp.Name,
 				placement:          placement,
 				optionRole:         optionRole,
+				constructiveRole:   constructionConstructiveRole(comp),
 				x:                  x,
 				y:                  y,
 				z:                  z,

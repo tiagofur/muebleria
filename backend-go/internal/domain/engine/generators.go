@@ -81,6 +81,9 @@ func GenerateCutRows(project domain.Project, catalog domain.Catalog) ([]domain.P
 				labelRef = module.Code + "/" + part.ID
 			}
 			desc := FormatOptimizerPartDescription(module.Code, part.Description, part.Code)
+			// #1317: the optimizer export is the workshop's integer-millimetre
+			// convention — a decimal finished measure (reduced panel) rounds
+			// here, at the export boundary; the frozen snapshot stays exact.
 			sortable = append(sortable, sortableCutRow{
 				moduleCode:  module.Code,
 				partCode:    part.Code,
@@ -88,8 +91,8 @@ func GenerateCutRows(project domain.Project, catalog domain.Catalog) ([]domain.P
 				description: part.Description,
 				row: domain.ProductionCutRow{
 					Quantity:     part.Quantity * item.Quantity,
-					LengthMm:     part.LengthMm,
-					WidthMm:      part.WidthMm,
+					LengthMm:     int(math.Round(part.LengthMm)),
+					WidthMm:      int(math.Round(part.WidthMm)),
 					Description:  desc,
 					MaterialName: material.Name,
 					Grain:        part.Grain,

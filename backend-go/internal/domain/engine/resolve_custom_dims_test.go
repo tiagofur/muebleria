@@ -69,16 +69,16 @@ func TestResolveBomWithDimsOverrideChangesParts(t *testing.T) {
 	}
 
 	if got := presetBom.BoardParts[0].LengthMm; got != 720 {
-		t.Errorf("preset length = %d, want 720 (H)", got)
+		t.Errorf("preset length = %g, want 720 (H)", got)
 	}
 	if got := presetBom.BoardParts[0].WidthMm; got != 600 {
-		t.Errorf("preset width = %d, want 600 (W)", got)
+		t.Errorf("preset width = %g, want 600 (W)", got)
 	}
 	if got := customBom.BoardParts[0].LengthMm; got != 800 {
-		t.Errorf("custom length = %d, want 800 (H)", got)
+		t.Errorf("custom length = %g, want 800 (H)", got)
 	}
 	if got := customBom.BoardParts[0].WidthMm; got != 900 {
-		t.Errorf("custom width = %d, want 900 (W)", got)
+		t.Errorf("custom width = %g, want 900 (W)", got)
 	}
 }
 

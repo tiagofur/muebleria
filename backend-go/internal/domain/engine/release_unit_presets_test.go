@@ -48,7 +48,7 @@ func TestResolveReleaseUnitPresetModuleUsesExplicitDimensions(t *testing.T) {
 	// item's 770×510 must appear, proving no preset dimension leaked.
 	for _, part := range unit.BOM.BoardParts {
 		if part.LengthMm != 770 || part.WidthMm != 510 {
-			t.Fatalf("BOM part %s must use the item's explicit dimensions (770×510), got %d×%d",
+			t.Fatalf("BOM part %s must use the item's explicit dimensions (770×510), got %g×%g",
 				part.ID, part.LengthMm, part.WidthMm)
 		}
 	}
@@ -74,7 +74,7 @@ func TestResolveReleaseCollectionPresetModuleUsesExplicitDimensions(t *testing.T
 	for _, unit := range result.Units {
 		for _, part := range unit.BOM.BoardParts {
 			if part.LengthMm != 770 || part.WidthMm != 510 {
-				t.Fatalf("unit %s: BOM must use explicit dimensions 770×510, got %d×%d",
+				t.Fatalf("unit %s: BOM must use explicit dimensions 770×510, got %g×%g",
 					unit.FurnitureInstanceID, part.LengthMm, part.WidthMm)
 			}
 		}

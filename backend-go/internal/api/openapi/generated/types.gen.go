@@ -1259,8 +1259,8 @@ type ReleaseCuttingDemandPiece struct {
 	PartCode     *string `json:"part_code,omitempty"`
 	Description  string  `json:"description"`
 	Quantity     int64   `json:"quantity"`
-	LengthMm     int64   `json:"length_mm"`
-	WidthMm      int64   `json:"width_mm"`
+	LengthMm     float64 `json:"length_mm"`
+	WidthMm      float64 `json:"width_mm"`
 	ThicknessMm  int64   `json:"thickness_mm"`
 	MaterialID   string  `json:"material_id"`
 	MaterialCode *string `json:"material_code,omitempty"`
