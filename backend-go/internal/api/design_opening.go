@@ -453,6 +453,7 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 			DatasheetStatus:      pin.DatasheetStatus,
 			FrontReductionMm:     pin.FrontReductionMm,
 			GripClearanceMm:      pin.GripClearanceMm,
+			DoorReductionMm:      pin.DoorReductionMm,
 			ProfileDepthMm:       pin.ProfileDepthMm,
 			ProfileHeightMm:      pin.ProfileHeightMm,
 			CompatiblePlacements: pin.CompatiblePlacements,

@@ -141,6 +141,33 @@ func TestAuthoringResolveDesignOpeningConstrainsFronts(t *testing.T) {
 	}
 }
 
+// #1316 — the pin's declared door_reduction_mm WINS over the datasheet pair
+// in the AUTHORING resolve (the path the plugin's insert/sync consumes):
+// 716 − 30 = 686. This branch was the one that missed the field on the first
+// #1316 pass — the state snapshot resolved 30 while every placed mueble kept
+// 40 — so the pin-with-door shape is pinned here verbatim.
+func TestAuthoringResolveDesignOpeningPinDoorDiscountWins(t *testing.T) {
+	server, token, store := openingAuthoringServer(t)
+	const designID = "d1316000-0000-0000-0000-000000000031"
+	wc := openingDesignWC(designID, true)
+	thirty := 30
+	wc.AuthoringDefaults.Opening.ProfilePin.DoorReductionMm = &thirty
+	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{designID: wc}
+
+	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
+		FurnitureDefinitionID: authoringFixtureModuleID,
+		DesignID:              designID,
+		Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0},
+	}))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	length, _ := openingResolvedDoor(t, rec)
+	if length != 686 {
+		t.Fatalf("door length = %d, want 686 (716 − 30 door discount, not the 40 pair)", length)
+	}
+}
+
 // A blocked opening (datasheet flipped pending) rejects the resolve — a
 // design that DECLARES an opening never renders a degraded layout.
 func TestAuthoringResolveDesignOpeningFailsClosedWhenBlocked(t *testing.T) {
