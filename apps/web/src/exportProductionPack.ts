@@ -134,7 +134,7 @@ export function composeFrozenDrilling(
               type: hole.type as HoleDefinition['type'],
             });
           }
-        } else {
+        } else if (operation.operation === 'route') {
           // A route operation IS the resolved subtraction box (#1302/§13.3);
           // all of a part's cuts share the opening provenance (one profile
           // notches a side panel — multi-profile sides are not resolved yet).
@@ -146,6 +146,13 @@ export function composeFrozenDrilling(
           }
           openingProfileId = openingProfileId ?? operation.provenance.openingProfileId;
           boundary = boundary ?? operation.provenance.boundary;
+        } else {
+          // #1327 slice 3: a frozen bevel operation has NO pack representation
+          // yet — explicit refusal, never a silent drop of the door's grip cut
+          // (the machine adapters own the angled-cut capability verdict).
+          throw new Error(
+            `OPERATION_NOT_REPRESENTABLE: la operación ${operation.operation} (${operation.operationId}) del programa congelado no es representable en el pack de producción`,
+          );
         }
       }
       holesByPart.set(part.partId, holes);

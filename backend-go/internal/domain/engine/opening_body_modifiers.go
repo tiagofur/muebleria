@@ -33,11 +33,10 @@ import (
 //     the available-region end, front_boundary⇒between at the end of the
 //     zone below the boundary) and the profile must declare the boundary
 //     kind among its compatible placements.
-//   - notch: requires height + depth + NotchAt complete; NotchAt must match
-//     the boundary kind (top_front⇒top at offset 0, bottom_front⇒bottom at
-//     the available-region end, front_boundary⇒between at the end of the
-//     zone below the boundary) and the profile must declare the boundary
-//     kind among its compatible placements.
+//   - bevel (#1327 slice 3): the italian gola's declared 45° door cut —
+//     angle + size + at complete, ONLY a 45° angle, at top_front/bottom_front
+//     matching the boundary kind. The door is the effect's only geometry
+//     consumer (the layout pass fail-closes any other role).
 //
 // The same effect on the same role+boundary applies ONCE: identical
 // duplicate declarations deduplicate; distinct values for the same target
@@ -59,7 +58,15 @@ const (
 const (
 	OpeningModifierEffectDepthReduction = "depth_reduction"
 	OpeningModifierEffectNotch          = "notch"
+	// #1327 slice 3: the italian gola's door bevel — the declared 45° wedge
+	// cut at the door's boundary edge that forms the grip with the strip.
+	OpeningModifierEffectBevel = "bevel"
 )
+
+// OpeningBevelAngleDegV1 is the only bevel angle with a geometry consumer
+// (the italian gola's datasheet cut): the resolver refuses any other value
+// instead of guessing an intent the pipeline cannot materialize.
+const OpeningBevelAngleDegV1 = 45.0
 
 // OpeningNotchAt values — the position CLASS the profile declares; the
 // resolver combines it with the boundary to produce the exact offset.
@@ -84,6 +91,12 @@ type OpeningContractBodyModifier struct {
 	NotchHeightMm    *float64 `json:"notchHeightMm,omitempty"`
 	NotchDepthMm     *float64 `json:"notchDepthMm,omitempty"`
 	NotchAt          string   `json:"notchAt,omitempty"`
+	// #1327 slice 3: the declared 45° door bevel (italian gola). bevelAt is
+	// the door edge class (top_front | bottom_front) and must agree with the
+	// mounted boundary kind — front_boundary has no consumer and fails closed.
+	BevelAngleDeg *float64 `json:"bevelAngleDeg,omitempty"`
+	BevelSizeMm   *float64 `json:"bevelSizeMm,omitempty"`
+	BevelAt       string   `json:"bevelAt,omitempty"`
 }
 
 // openingContractBodyModifier maps the persisted entity modifier onto the
@@ -96,6 +109,9 @@ func openingContractBodyModifier(entity domain.OpeningBodyModifier) OpeningContr
 		NotchHeightMm:    entity.NotchHeightMm,
 		NotchDepthMm:     entity.NotchDepthMm,
 		NotchAt:          entity.NotchAt,
+		BevelAngleDeg:    entity.BevelAngleDeg,
+		BevelSizeMm:      entity.BevelSizeMm,
+		BevelAt:          entity.BevelAt,
 	}
 }
 
@@ -145,6 +161,12 @@ type ResolvedOpeningBodyModifier struct {
 	// start of the available region (same coordinate system as the #1131
 	// fronts' offsetMm); 0 for top_front.
 	NotchOffsetMm int `json:"notchOffsetMm,omitempty"`
+	// #1327 slice 3: the resolved bevel — always 45 in v1 (the resolver
+	// refuses any other angle) with the wedge's equal legs in mm; the door
+	// edge comes from the carried boundary kind (top⇒top_front,
+	// bottom⇒bottom_front), so no separate position field exists.
+	BevelAngleDeg float64 `json:"bevelAngleDeg,omitempty"`
+	BevelSizeMm   float64 `json:"bevelSizeMm,omitempty"`
 }
 
 // identity is the dedupe/conflict key: the same effect on the same
@@ -162,6 +184,10 @@ func (m ResolvedOpeningBodyModifier) sameEffect(other ResolvedOpeningBodyModifie
 	if m.Effect == OpeningModifierEffectDepthReduction {
 		return m.DepthReductionMm == other.DepthReductionMm &&
 			m.ProfileHeightMm == other.ProfileHeightMm
+	}
+	if m.Effect == OpeningModifierEffectBevel {
+		return m.BevelAngleDeg == other.BevelAngleDeg &&
+			m.BevelSizeMm == other.BevelSizeMm
 	}
 	return m.NotchHeightMm == other.NotchHeightMm &&
 		m.NotchDepthMm == other.NotchDepthMm &&
@@ -281,6 +307,10 @@ func resolveOpeningBodyModifierEffect(
 			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
 				"un modifier declara reducción de profundidad y saque a la vez")
 		}
+		if modifier.BevelAngleDeg != nil || modifier.BevelSizeMm != nil || modifier.BevelAt != "" {
+			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+				"un modifier declara reducción de profundidad y bisel a la vez")
+		}
 		var reduction float64
 		if modifier.DepthReductionMm != nil {
 			if *modifier.DepthReductionMm <= 0 {
@@ -318,6 +348,10 @@ func resolveOpeningBodyModifierEffect(
 			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
 				"el saque exige alto y profundidad mayores a 0")
 		}
+		if modifier.BevelAngleDeg != nil || modifier.BevelSizeMm != nil || modifier.BevelAt != "" {
+			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+				"un modifier declara saque y bisel a la vez")
+		}
 		offset, resErr := resolveOpeningNotchOffset(modifier.NotchAt, boundaryKind,
 			availableFrontHeightMm, fronts, boundaryKey)
 		if resErr != nil {
@@ -329,6 +363,55 @@ func resolveOpeningBodyModifierEffect(
 			NotchHeightMm: *modifier.NotchHeightMm,
 			NotchDepthMm:  *modifier.NotchDepthMm,
 			NotchOffsetMm: offset,
+		}, nil
+	case modifier.Effect == OpeningModifierEffectBevel || modifier.BevelAngleDeg != nil || modifier.BevelSizeMm != nil || modifier.BevelAt != "":
+		if modifier.Effect != "" && modifier.Effect != OpeningModifierEffectBevel {
+			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+				fmt.Sprintf("el efecto %q contradice los campos declarados del modifier", modifier.Effect))
+		}
+		if modifier.DepthReductionMm != nil {
+			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+				"un modifier declara reducción de profundidad y bisel a la vez")
+		}
+		if modifier.NotchHeightMm != nil || modifier.NotchDepthMm != nil || modifier.NotchAt != "" {
+			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+				"un modifier declara saque y bisel a la vez")
+		}
+		// #1327 slice 3: the bevel declares angle + size + edge COMPLETE, and
+		// v1 materializes only the italian gola's 45° cut — any other angle is
+		// a declared intent without a geometry consumer, never a default.
+		if modifier.BevelAngleDeg == nil || modifier.BevelSizeMm == nil || modifier.BevelAt == "" {
+			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+				"el bisel exige ángulo, tamaño y posición completos")
+		}
+		if *modifier.BevelAngleDeg != OpeningBevelAngleDegV1 {
+			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+				fmt.Sprintf("el bisel a %g° no tiene consumidor de geometría en v1 (sólo 45°)", *modifier.BevelAngleDeg))
+		}
+		if *modifier.BevelSizeMm <= 0 {
+			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+				"el bisel exige un tamaño mayor a 0")
+		}
+		switch modifier.BevelAt {
+		case OpeningNotchAtTopFront:
+			if boundaryKind != "top" {
+				return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+					fmt.Sprintf("el bisel top_front no aplica en la frontera %s", boundaryKind))
+			}
+		case OpeningNotchAtBottomFront:
+			if boundaryKind != "bottom" {
+				return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+					fmt.Sprintf("el bisel bottom_front no aplica en la frontera %s", boundaryKind))
+			}
+		default:
+			return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+				fmt.Sprintf("la posición de bisel %q no es válida", modifier.BevelAt))
+		}
+		return ResolvedOpeningBodyModifier{
+			Effect:        OpeningModifierEffectBevel,
+			Role:          role,
+			BevelAngleDeg: *modifier.BevelAngleDeg,
+			BevelSizeMm:   *modifier.BevelSizeMm,
 		}, nil
 	case modifier.Effect != "":
 		return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,

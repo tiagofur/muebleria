@@ -41,10 +41,30 @@ Lane: Delegated Direct — 3 slices, un PR cada una. Este artifact es la memoria
 ## Estado
 
 - Slice 1: **MERGEADO** (PR #1333).
-- Slice 2: **EN PR #1334 — CI 22/22 verde** (HEAD a15aa455, rama feat/1327-strip-board): board en
-  la banda del gola (ancho completo × profundidad × alto, rol FRENTE) + espejo BOM como BoardPart +
-  fail-closed por componente ausente/inactivo. Proyección: OpeningMembers.ComponentMembers desde el
-  pin. NOTA de proceso: había trabajo SIN commitear de otro agente en el checkout compartido
-  (authoring_fixed_shelf.go, joinery_system_contract_test.go) — se dejó intacto, commit solo con
-  rutas explícitas.
-- Slice 3 (bevel 45°): pendiente.
+- Slice 2: **MERGEADO** (PR #1334, main b494072f): board en la banda del gola (ancho completo ×
+  profundidad × alto, rol FRENTE) + espejo BOM como BoardPart + fail-closed por componente
+  ausente/inactivo. Proyección: OpeningMembers.ComponentMembers desde el pin. NOTA de proceso:
+  había trabajo SIN commitear de otro agente en el checkout compartido (authoring_fixed_shelf.go,
+  joinery_system_contract_test.go) — se dejó intacto, commit solo con rutas explícitas.
+- Slice 3 (bevel 45°): **IMPLEMENTADO** — rama `feat/1327-door-bevel` sobre main b494072f.
+  - Declaración: `bevel_angle_deg`/`bevel_size_mm`/`bevel_at` en `OpeningBodyModifier` (JSONB
+    aditivo) + contrato camelCase + esquema OpenAPI (`OpeningProfileBodyModifier`,
+    `ManufacturingRoutingBevel` nuevo) + regeneración + editor React (sección «Bisel 45° en la
+    puerta», ángulo 45 constante) con round-trip que PRESERVA un bisel declarado por API.
+  - Resolver: efecto `bevel` — ángulo+tamaño+posición completos, SÓLO 45° (v1), top_front/bottom_front
+    coherente con la frontera; rechaza mezclas depth+bevel y notch+bevel (hueco cerrado: un modifier
+    con campos de saque Y de bisel sin `effect` entraba al caso notch y tragaba el bisel en silencio).
+  - Fixture compartido: casos I/J (resolución top/bottom) + 5 inválidos; Go y TS en verde (una autoridad).
+  - Layout: `LayoutBevel` (prisma bounding + ángulo + edge) materializado en las puertas por
+    `applyOpeningBevelsToBoards` (rol `door` único consumidor, fail-closed en rol/between/no-cabe;
+    el ancho del wedge es estricto — la puerta de 18 mm no admite patas de 18).
+  - Mecanizado: op `<board>:bevel-<n>` con payload `bevel` (nunca caja rectangular) y provenance
+    openingProfile; mueve el fingerprint y es determinista.
+  - Release routing: intent neutral `bevel` congelado + validación fail-closed (wedge presente,
+    sin holes/routing, 45°, edge conocido, extents positivos, provenance openingProfile).
+  - Consumidor externo honesto: `composeFrozenDrilling` (pack web) RECHAZA explícito
+    (`OPERATION_NOT_REPRESENTABLE`) una op bevel — nunca la dropea en silencio; CNC real queda para
+    el adaptador que evidencie corte angular («estructura primero, CNC después»).
+  - Verificación: engine+domain Go verdes; storage round-trip JSONB del bisel en suite completa
+    (backend-test.sh, contenedor efímero); vitest domain 1977 + ui 2248 + web export-pack 16;
+    typecheck workspace; check_openapi_drift OK; rake verify plugin verde (extensión sin cambios).

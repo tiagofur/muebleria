@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "contract": "granete.opening-front.v1",
-  "description": "#1132 — resolución de body modifiers por rol constructivo: los modifiers declarados por los Opening Profiles (datos, no lógica) se aplican sobre la resolución de layout de #1131 para producir los efectos exactos por rol (reducción de profundidad del panel horizontal en la frontera del perfil; saques/notches en laterales con posición resuelta). Consumido IDÉNTICAMENTE por TS (packages/domain vitest) y Go (backend-go engine go test). El input 'layout' es la salida del resolver de apertura (#1131, fixture openingFrontResolution.contract.json) y 'profiles' trae CompatiblePlacements + BodyModifiers de la entidad de catálogo. Reglas: el rol objetivo es vocabulario ConstructiveRole real (horizontal|lateral|shelf|back|door|divider|custom) — un rol desconocido falla cerrado (prohibido inferir de nombres); depth_reduction sólo en fronteras top/bottom (el panel horizontal de ese borde se acorta EXACTAMENTE lo declarado); notch exige height+depth+NotchAt completos, con NotchAt compatible con la frontera (top_front⇒top con offset 0; bottom_front⇒bottom con offset = alto disponible; front_boundary⇒between con offset = fin de la zona debajo de la frontera) y el perfil debe declarar compatible la frontera donde está montado. El mismo efecto sobre el mismo rol+frontera se aplica UNA vez (valores idénticos duplicados en un perfil se deduplican; valores distintos son OPENING_BODY_MODIFIER_CONFLICT — L superior + C intermedia nunca duplican la reducción). Baseline sin grips ⇒ cero modifiers. Los saques son features de maquinado con geometría board-local y proveniencia (perfil+frontera): identidad estable 'effect|role|boundary', listos para el pipeline de fabricación. Los valores son placeholders declarados que fijan la matemática, no datos de proveedor (OQ-2).",
+  "description": "#1132 — resolución de body modifiers por rol constructivo: los modifiers declarados por los Opening Profiles (datos, no lógica) se aplican sobre la resolución de layout de #1131 para producir los efectos exactos por rol (reducción de profundidad del panel horizontal en la frontera del perfil; saques/notches en laterales con posición resuelta). Consumido IDÉNTICAMENTE por TS (packages/domain vitest) y Go (backend-go engine go test). El input 'layout' es la salida del resolver de apertura (#1131, fixture openingFrontResolution.contract.json) y 'profiles' trae CompatiblePlacements + BodyModifiers de la entidad de catálogo. Reglas: el rol objetivo es vocabulario ConstructiveRole real (horizontal|lateral|shelf|back|door|divider|custom) — un rol desconocido falla cerrado (prohibido inferir de nombres); depth_reduction sólo en fronteras top/bottom (el panel horizontal de ese borde se acorta EXACTAMENTE lo declarado); notch exige height+depth+NotchAt completos, con NotchAt compatible con la frontera (top_front⇒top con offset 0; bottom_front⇒bottom con offset = alto disponible; front_boundary⇒between con offset = fin de la zona debajo de la frontera) y el perfil debe declarar compatible la frontera donde está montado. El mismo efecto sobre el mismo rol+frontera se aplica UNA vez (valores idénticos duplicados en un perfil se deduplican; valores distintos son OPENING_BODY_MODIFIER_CONFLICT — L superior + C intermedia nunca duplican la reducción). Baseline sin grips ⇒ cero modifiers. Los saques son features de maquinado con geometría board-local y proveniencia (perfil+frontera): identidad estable 'effect|role|boundary', listos para el pipeline de fabricación. Los valores son placeholders declarados que fijan la matemática, no datos de proveedor (OQ-2). Bisel (#1327 slice 3): el corte 45° de la puerta declara ángulo+tamaño+posición COMPLETOS, sólo 45°, en top_front/bottom_front coherente con la frontera montada; el rol door es su único consumidor de geometría (el pass de layout falla cerrado con otro rol).",
   "resolutionCases": [
     {
       "name": "A — gola L en top: reducción de profundidad + saque superior en laterales",
@@ -450,6 +450,96 @@
         }
       ],
       "note": "#1317: dos perfiles pineados con profile_depth_mm distinto producen descuentos distintos — 27.2 arriba, 19 abajo — la prueba de que el descuento nunca es una constante del engine."
+    },
+{
+      "name": "I — gola italiano en top: bisel 45° en la puerta (rol door, #1327 slice 3)",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 325, "offsetFromStartMm": 325 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-italiano", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-italiano", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-italiano",
+          "compatiblePlacements": [ "top" ],
+          "bodyModifiers": [
+            { "role": "door", "bevelAngleDeg": 45, "bevelSizeMm": 18, "bevelAt": "top_front" }
+          ]
+        }
+      ],
+      "expectedModifiers": [ { "effect": "bevel", "role": "door", "profileId": "profile.gola-italiano", "boundary": "top", "bevelAngleDeg": 45, "bevelSizeMm": 18 } ]
+    },
+{
+      "name": "J — gola italiano en bottom: bisel 45° bottom_front en la puerta",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 681,
+          "zones": [
+            { "id": "z1", "heightMm": 340, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 341, "offsetFromStartMm": 340 }
+          ],
+          "boundaries": [ { "boundary": "bottom", "consumedMm": 39 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 340,
+            "offsetMm": 0,
+            "grips": [  ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 341,
+            "offsetMm": 340,
+            "grips": [ { "boundary": "bottom", "side": "below", "profileId": "profile.gola-italiano.rebaje", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-italiano.rebaje",
+          "compatiblePlacements": [ "bottom" ],
+          "bodyModifiers": [
+            { "role": "door", "bevelAngleDeg": 45, "bevelSizeMm": 18, "bevelAt": "bottom_front" }
+          ]
+        }
+      ],
+      "expectedModifiers": [ { "effect": "bevel", "role": "door", "profileId": "profile.gola-italiano.rebaje", "boundary": "bottom", "bevelAngleDeg": 45, "bevelSizeMm": 18 } ]
     }
   ],
   "blockedCases": [
@@ -808,6 +898,246 @@
           "profileHeightMm": 56.5,
           "bodyModifiers": [
             { "role": "horizontal", "effect": "notch", "depthReductionMm": 20 }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    },
+{
+      "name": "bisel a 60° no tiene consumidor en v1 (sólo 45°)",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 325, "offsetFromStartMm": 325 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.bisel-60", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.bisel-60", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.bisel-60",
+          "compatiblePlacements": [
+            "top",
+            "bottom"
+          ],
+          "bodyModifiers": [
+            { "role": "door", "bevelAngleDeg": 60, "bevelSizeMm": 18, "bevelAt": "top_front" }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    },
+{
+      "name": "bisel incompleto (ángulo y tamaño sin posición) no se inventa",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 325, "offsetFromStartMm": 325 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.bisel-mitad", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.bisel-mitad", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.bisel-mitad",
+          "compatiblePlacements": [
+            "top",
+            "bottom"
+          ],
+          "bodyModifiers": [
+            { "role": "door", "bevelAngleDeg": 45, "bevelSizeMm": 18 }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    },
+{
+      "name": "bisel top_front no aplica en la frontera bottom",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 681,
+          "zones": [
+            { "id": "z1", "heightMm": 340, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 341, "offsetFromStartMm": 340 }
+          ],
+          "boundaries": [ { "boundary": "bottom", "consumedMm": 39 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 340,
+            "offsetMm": 0,
+            "grips": [  ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 341,
+            "offsetMm": 340,
+            "grips": [ { "boundary": "bottom", "side": "below", "profileId": "profile.bisel-cruzado", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.bisel-cruzado",
+          "compatiblePlacements": [
+            "top",
+            "bottom"
+          ],
+          "bodyModifiers": [
+            { "role": "door", "bevelAngleDeg": 45, "bevelSizeMm": 18, "bevelAt": "top_front" }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    },
+{
+      "name": "un modifier declara saque y bisel a la vez",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 325, "offsetFromStartMm": 325 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.bisel-saque", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.bisel-saque", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.bisel-saque",
+          "compatiblePlacements": [
+            "top",
+            "bottom"
+          ],
+          "bodyModifiers": [
+            { "role": "door", "notchHeightMm": 10, "notchDepthMm": 5, "notchAt": "top_front", "bevelAngleDeg": 45, "bevelSizeMm": 18, "bevelAt": "top_front" }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    },
+{
+      "name": "posición de bisel front_boundary sin consumidor",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 325, "offsetFromStartMm": 325 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.bisel-entre", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.bisel-entre", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.bisel-entre",
+          "compatiblePlacements": [
+            "top",
+            "bottom"
+          ],
+          "bodyModifiers": [
+            { "role": "door", "bevelAngleDeg": 45, "bevelSizeMm": 18, "bevelAt": "front_boundary" }
           ]
         }
       ],

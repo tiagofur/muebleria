@@ -146,6 +146,11 @@ type LayoutComponent struct {
 	// geometry, the machining slice and any renderer consume from ONE
 	// resolved definition. Empty = the board carries no notch.
 	Notches []LayoutNotch `json:"notches,omitempty"`
+	// Bevels (#1327 slice 3): the opening's declared door-bevel wedges in
+	// this component's LOCAL frame — the same ONE-definition channel as the
+	// notches: host geometry, machining derivation and renderers consume the
+	// resolved prism, never a second derivation. Empty = no bevel.
+	Bevels []LayoutBevel `json:"bevels,omitempty"`
 }
 
 // LayoutNotch is one exact local subtraction box: StartMm is the local min
@@ -155,6 +160,20 @@ type LayoutComponent struct {
 type LayoutNotch struct {
 	StartMm   [3]float64 `json:"startMm"`
 	SizeMm    [3]float64 `json:"sizeMm"`
+	ProfileID string     `json:"profileId"`
+	Boundary  string     `json:"boundary"`
+}
+
+// LayoutBevel is one exact local bevel wedge (#1327 slice 3): StartMm is the
+// local min corner of the wedge's BOUNDING prism, SizeMm its extents — the
+// removed material is the triangle prism between the AngleDeg hypotenuse and
+// the named Edge corner (top_front | bottom_front), never the full box.
+// Provenance names the profile and boundary the bevel derives from.
+type LayoutBevel struct {
+	StartMm   [3]float64 `json:"startMm"`
+	SizeMm    [3]float64 `json:"sizeMm"`
+	AngleDeg  float64    `json:"angleDeg"`
+	Edge      string     `json:"edge"`
 	ProfileID string     `json:"profileId"`
 	Boundary  string     `json:"boundary"`
 }
@@ -246,6 +265,9 @@ type layoutBoard struct {
 	// the board's local frame (#1287 / §13.3) — structured data on a valid
 	// AABB, never a shrunk surrogate board.
 	notches []LayoutNotch
+	// bevels carries the opening's DECLARED door-bevel wedges in the board's
+	// local frame (#1327 slice 3) — the same structured-subtraction channel.
+	bevels []LayoutBevel
 	// derivedHardware holds engine-generated placements (#1274 opening
 	// members): projected with HardwarePlacementKindDerived provenance.
 	derivedHardware []domain.HardwarePlacement
@@ -397,6 +419,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			OptionRole:            board.optionRole,
 			MaterialColorHex:      colorForOptionRole(board.optionRole),
 			Notches:               board.notches,
+			Bevels:                board.bevels,
 		}
 		// #467: publish the direct-authoring capability the engine itself
 		// derives from the template shape; every other occurrence stays
@@ -616,6 +639,13 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 	// components carry the exact local subtraction.
 	if len(opts.openingBodyModifiers) > 0 {
 		if err := applyOpeningNotchesToBoards(boards, opts.openingBodyModifiers); err != nil {
+			return nil, err
+		}
+		// #1327 slice 3: the opening's declared door bevels cut their wedge
+		// prisms into the front boards — the same before-projection slot as
+		// the notches, so the published components carry the exact local
+		// wedge and the machining derivation consumes it unchanged.
+		if err := applyOpeningBevelsToBoards(boards, opts.openingBodyModifiers); err != nil {
 			return nil, err
 		}
 		// #1317 / §13.6: the depth reduction corrects the horizontal panels

@@ -103,6 +103,51 @@ describe('bodyModifiersOfDraft', () => {
   });
 });
 
+describe('#1327 slice 3 — bisel 45° de la puerta (gola italiano)', () => {
+  it('lee el bisel declarado por API y lo preserva en el draft', () => {
+    const draft = toOpeningProfileDraft({
+      ...v7Row,
+      bodyModifiers: [...v7Row.bodyModifiers, { role: 'door', bevel_angle_deg: 45, bevel_size_mm: 18, bevel_at: 'top_front' }],
+    });
+    expect(draft.bevelEnabled).toBe(true);
+    expect(draft.bevelSizeMm).toBe('18');
+    expect(draft.bevelAt).toBe('top_front');
+  });
+
+  it('el write body reconstruye el bisel completo sin perder los otros efectos', () => {
+    const draft = toOpeningProfileDraft({
+      ...v7Row,
+      bodyModifiers: [...v7Row.bodyModifiers, { role: 'door', bevel_angle_deg: 45, bevel_size_mm: 18, bevel_at: 'top_front' }],
+    });
+    expect(bodyModifiersOfDraft(draft)).toEqual([
+      { role: 'lateral', notch_height_mm: 56.5, notch_depth_mm: 27.2, notch_at: 'top_front' },
+      { role: 'horizontal', effect: 'depth_reduction' },
+      { role: 'door', bevel_angle_deg: 45, bevel_size_mm: 18, bevel_at: 'top_front' },
+    ]);
+  });
+
+  it('emite el bisel declarado desde cero con el ángulo constante 45', () => {
+    const modifiers = bodyModifiersOfDraft({
+      ...emptyOpeningProfileDraft(),
+      bevelEnabled: true,
+      bevelSizeMm: '18',
+      bevelAt: 'bottom_front',
+    });
+    expect(modifiers).toEqual([
+      { role: 'door', bevel_angle_deg: 45, bevel_size_mm: 18, bevel_at: 'bottom_front' },
+    ]);
+  });
+
+  it('un perfil sin bisel no emite ninguno', () => {
+    const draft = toOpeningProfileDraft(v7Row);
+    expect(draft.bevelEnabled).toBe(false);
+    expect(bodyModifiersOfDraft(draft)).toEqual([
+      { role: 'lateral', notch_height_mm: 56.5, notch_depth_mm: 27.2, notch_at: 'top_front' },
+      { role: 'horizontal', effect: 'depth_reduction' },
+    ]);
+  });
+});
+
 describe('#1316 — descuento de puerta como un solo número', () => {
   it('el par de ficha legacy (38+2) se prefill como 40 en el draft', () => {
     const draft = toOpeningProfileDraft(v7Row);

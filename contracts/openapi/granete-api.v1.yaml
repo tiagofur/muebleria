@@ -11269,7 +11269,7 @@
           },
           "operation": {
             "type": "string",
-            "description": "cut | edge_banding | drill | route (neutral intent)."
+            "description": "cut | edge_banding | drill | route | bevel (neutral intent)."
           },
           "holes": {
             "type": "array",
@@ -11283,6 +11283,48 @@
             "items": {
               "$ref": "#/components/schemas/ManufacturingRoutingCut"
             }
+          },
+          "bevel": {
+            "$ref": "#/components/schemas/ManufacturingRoutingBevel",
+            "description": "#1327 slice 3: the payload of a bevel operation — the resolved 45° door cut with its provenance."
+          }
+        }
+      },
+      "ManufacturingRoutingBevel": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "startMm",
+          "sizeMm",
+          "angleDeg",
+          "edge"
+        ],
+        "properties": {
+          "startMm": {
+            "type": "array",
+            "description": "Local min corner of the bevel's bounding prism.",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "sizeMm": {
+            "type": "array",
+            "description": "Extents of the bounding prism; the removed wedge is the triangle prism between the 45° hypotenuse and the named edge corner.",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "angleDeg": {
+            "type": "number",
+            "description": "Bevel angle in degrees; v1 freezes only 45."
+          },
+          "edge": {
+            "type": "string",
+            "description": "The part edge the wedge hugs: top_front | bottom_front."
           }
         }
       },
@@ -18400,6 +18442,27 @@
               "null"
             ],
             "description": "top_front | bottom_front | front_boundary."
+          },
+          "bevel_angle_deg": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "#1327 slice 3: the declared door bevel angle; v1 resolves only 45."
+          },
+          "bevel_size_mm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "#1327 slice 3: the bevel's wedge leg in mm (equal legs at 45°)."
+          },
+          "bevel_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "top_front | bottom_front — the door edge the bevel hugs."
           }
         },
         "required": [

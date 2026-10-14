@@ -17,6 +17,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { Modal } from '../../common';
 import {
   emptyMemberDraft,
+  type OpeningBevelAtDraft,
   type OpeningCrossSectionDraft,
   type OpeningGripTypeDraft,
   type OpeningNotchAtDraft,
@@ -42,6 +43,11 @@ const NOTCH_AT_LABELS: readonly { readonly value: OpeningNotchAtDraft; readonly 
   { value: 'top_front', label: 'Frente superior' },
   { value: 'bottom_front', label: 'Frente inferior' },
   { value: 'front_boundary', label: 'Frontera entre zonas' },
+];
+
+const BEVEL_AT_LABELS: readonly { readonly value: OpeningBevelAtDraft; readonly label: string }[] = [
+  { value: 'top_front', label: 'Borde superior de la puerta' },
+  { value: 'bottom_front', label: 'Borde inferior de la puerta' },
 ];
 
 export interface OpeningProfileFormModalProps {
@@ -355,6 +361,37 @@ export function OpeningProfileFormModal({
                   'opening-profile-reduction-mm')
                 : null}
             </>
+          ) : null}
+
+          <label className="settings-checkbox" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            <input
+              type="checkbox"
+              checked={draft.bevelEnabled}
+              onChange={(e) => setDraft((current) => ({ ...current, bevelEnabled: e.target.checked }))}
+              data-testid="opening-profile-bevel-toggle"
+            />
+            <span>
+              <strong>Bisel 45° en la puerta</strong> — el corte del agarre del gola italiano (#1327)
+            </span>
+          </label>
+          {draft.bevelEnabled ? (
+            <div className="catalog-form__row">
+              {numberField('opening-profile-bevel-size', 'Tamaño (mm)', draft.bevelSizeMm,
+                (value) => setDraft((current) => ({ ...current, bevelSizeMm: value })), undefined,
+                'opening-profile-bevel-size')}
+              <label className="catalog-form__field">
+                <span>Posición</span>
+                <select
+                  value={draft.bevelAt}
+                  onChange={(e) => setDraft((current) => ({ ...current, bevelAt: e.target.value as OpeningBevelAtDraft }))}
+                  data-testid="opening-profile-bevel-at"
+                >
+                  {BEVEL_AT_LABELS.map((at) => (
+                    <option key={at.value} value={at.value}>{at.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
           ) : null}
         </fieldset>
 

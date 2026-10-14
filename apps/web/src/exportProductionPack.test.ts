@@ -295,6 +295,24 @@ describe('composeFrozenDrilling (#995 export bridge K1)', () => {
     expect(routing).toBeUndefined();
   });
 
+  it('fails closed on a frozen bevel operation instead of dropping the grip cut (#1327 slice 3)', () => {
+    const withBevel = frozen();
+    (
+      withBevel as unknown as {
+        snapshot: { routing: { units: { parts: { operations: { operationId: string; provenance: Record<string, unknown>; operation: string; holes: unknown[]; bevel?: Record<string, unknown> }[] }[] }[] } };
+      }
+    ).snapshot.routing.units[0]!.parts[0]!.operations.push({
+      operationId: 'part-1:bevel-0',
+      provenance: { sourceKind: 'openingProfile', openingProfileId: 'prof-gola-italiano', boundary: 'top' },
+      operation: 'bevel',
+      holes: [],
+      bevel: { startMm: [0, 562, 702], sizeMm: [600, 18, 18], angleDeg: 45, edge: 'top_front' },
+    });
+    expect(() => composeFrozenDrilling(project, withBevel, legacyResolved())).toThrow(
+      /OPERATION_NOT_REPRESENTABLE.*bevel-0/,
+    );
+  });
+
   it('fails closed on a covered-parts count mismatch', () => {
     const broken = frozen() as unknown as {
       releaseId: string;

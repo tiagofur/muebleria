@@ -129,6 +129,20 @@ type ResolveRoutingCut struct {
 	SizeMm  [3]float64 `json:"sizeMm"`
 }
 
+// ResolveRoutingBevel is one board-local angled material removal
+// (#1327 slice 3): the EXACT bevel wedge the resolved layout already carries
+// (LayoutBevel in the host board's local frame) — the bounding prism plus
+// the angle and the hugged edge, never a rectangular approximation of the
+// wedge. Machine-neutral: adapters and machine profiles decide
+// representability from their OWN evidenced capabilities, and an unsupported
+// machine refuses instead of approximating.
+type ResolveRoutingBevel struct {
+	StartMm  [3]float64 `json:"startMm"`
+	SizeMm   [3]float64 `json:"sizeMm"`
+	AngleDeg float64    `json:"angleDeg"`
+	Edge     string     `json:"edge"`
+}
+
 // ResolvedMachiningProvenance carries exactly one source variant
 // (relationship | manualHardwarePlacement | openingProfile); the wire shape
 // matches the TS discriminated union of the same name. Recipe operations pin
@@ -184,18 +198,20 @@ func (p ResolvedMachiningProvenance) canonical() map[string]any {
 }
 
 // ResolvedMachiningOperation is one derived machining operation with the
-// board-local detail the host piece drills (Holes) or routes (Routing).
-// Exactly one payload is non-empty: a drilling operation carries holes, a
-// routing operation carries cuts (#1302 / §13.3).
+// board-local detail the host piece drills (Holes), routes (Routing,
+// #1302 / §13.3) or bevels (Bevel, #1327 slice 3). Exactly one payload is
+// non-empty: a drilling operation carries holes, a routing operation
+// carries cuts, a bevel operation carries the wedge.
 type ResolvedMachiningOperation struct {
 	OperationID             string                      `json:"operationId"`
 	HostComponentInstanceID string                      `json:"hostComponentInstanceId"`
 	Provenance              ResolvedMachiningProvenance `json:"provenance"`
-	// Holes is ALWAYS a JSON array (empty for routing operations): the host
-	// contract (Ruby/TS) requires the key present as an array — a null
+	// Holes is ALWAYS a JSON array (empty for routing/bevel operations): the
+	// host contract (Ruby/TS) requires the key present as an array — a null
 	// fails the wire validation (#1320).
-	Holes   []ResolveHole       `json:"holes"`
-	Routing []ResolveRoutingCut `json:"routingCuts,omitempty"`
+	Holes   []ResolveHole        `json:"holes"`
+	Routing []ResolveRoutingCut  `json:"routingCuts,omitempty"`
+	Bevel   *ResolveRoutingBevel `json:"bevel,omitempty"`
 }
 
 // DerivedHardwarePlacement mirrors the TS type: a hardware placement whose
@@ -435,6 +451,13 @@ func deriveAuthoringMachining(
 	// opening designs from freezing a production release until the release
 	// resolve consumes the opening.
 	deriveOpeningNotchOperations(boards, &operations)
+	// #1327 slice 3: the opening's declared door bevels become bevel
+	// operations derived from the SAME resolved wedges the visible geometry
+	// consumes. Representation only: machine output selection still refuses
+	// a machine whose evidenced capabilities cannot express an angled cut,
+	// and the production pack export fails closed rather than silently
+	// dropping the wedge.
+	deriveOpeningBevelOperations(boards, &operations)
 
 	detectHoleCollisions(operations, &issues)
 	joineryStatuses = reconcileJoineryStatusesWithCollisions(joineryStatuses, operations, issues)
@@ -465,6 +488,35 @@ func deriveOpeningNotchOperations(boards []layoutBoard, operations *[]ResolvedMa
 				},
 				Holes:   []ResolveHole{},
 				Routing: []ResolveRoutingCut{{StartMm: notch.StartMm, SizeMm: notch.SizeMm}},
+			})
+		}
+	}
+}
+
+// deriveOpeningBevelOperations emits one bevel operation per resolved door
+// bevel (#1327 slice 3): the wedge IS the resolved LayoutBevel (bounding
+// prism + angle + hugged edge), the host is the beveled door and the
+// provenance names the opening profile and grip boundary. Board and bevel
+// order are the resolver's deterministic order, so the operation ids and the
+// manufacturing fingerprint are stable across repeated resolves.
+func deriveOpeningBevelOperations(boards []layoutBoard, operations *[]ResolvedMachiningOperation) {
+	for i := range boards {
+		for b, bevel := range boards[i].bevels {
+			*operations = append(*operations, ResolvedMachiningOperation{
+				OperationID:             fmt.Sprintf("%s:bevel-%d", boards[i].id, b),
+				HostComponentInstanceID: boards[i].id,
+				Provenance: ResolvedMachiningProvenance{
+					SourceKind:       "openingProfile",
+					OpeningProfileID: bevel.ProfileID,
+					Boundary:         bevel.Boundary,
+				},
+				Holes: []ResolveHole{},
+				Bevel: &ResolveRoutingBevel{
+					StartMm:  bevel.StartMm,
+					SizeMm:   bevel.SizeMm,
+					AngleDeg: bevel.AngleDeg,
+					Edge:     bevel.Edge,
+				},
 			})
 		}
 	}
