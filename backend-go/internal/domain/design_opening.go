@@ -41,7 +41,10 @@ type DesignOpeningProfilePin struct {
 	ProfileCode      string `json:"profileCode"`
 	FrontReductionMm int    `json:"frontReductionMm"`
 	GripClearanceMm  int    `json:"gripClearanceMm"`
-	DatasheetStatus  string `json:"datasheetStatus"`
+	// #1316: the workshop-facing door discount frozen with the slice; nil in
+	// pins authored before the field — those keep consuming the legacy pair.
+	DoorReductionMm *int   `json:"doorReductionMm,omitempty"`
+	DatasheetStatus string `json:"datasheetStatus"`
 	// #1283 / §13.2: the datasheet physical envelope frozen with the rest of
 	// the pin (8006: 56.5 tall × 27.2 deep). The historical layout places the
 	// member hardware from these values — never the live catalog row and

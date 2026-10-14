@@ -20,6 +20,7 @@ const openingProfileColumns = `
 	id, organization_id, code, name, grip_type, cross_section_shape,
 	compatible_placements, datasheet_status, geometry_origin,
 	front_reduction_mm, grip_clearance_mm, profile_height_mm, profile_depth_mm,
+	door_reduction_mm,
 	body_modifiers, bom_members, active, version, created_at, updated_at
 `
 
@@ -29,6 +30,7 @@ func scanOpeningProfile(row pgx.Row) (*domain.OpeningProfile, error) {
 		&p.ID, &p.OrganizationID, &p.Code, &p.Name, &p.GripType, &p.CrossSectionShape,
 		&p.CompatiblePlacements, &p.DatasheetStatus, &p.GeometryOrigin,
 		&p.FrontReductionMm, &p.GripClearanceMm, &p.ProfileHeightMm, &p.ProfileDepthMm,
+		&p.DoorReductionMm,
 		&p.BodyModifiers, &p.BOMMembers, &p.Active, &p.Version, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -103,14 +105,16 @@ func (s *PostgresStore) CreateOpeningProfile(ctx context.Context, profile *domai
 			id, organization_id, code, name, grip_type, cross_section_shape,
 			compatible_placements, datasheet_status, geometry_origin,
 			front_reduction_mm, grip_clearance_mm, profile_height_mm, profile_depth_mm,
+			door_reduction_mm,
 			body_modifiers, bom_members, active, version
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,1)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,1)
 		RETURNING ` + openingProfileColumns + `;
 	`
 	row := s.db(ctx).QueryRow(ctx, query,
 		profile.ID, OrgFromCtx(ctx), profile.Code, profile.Name, profile.GripType, profile.CrossSectionShape,
 		profile.CompatiblePlacements, profile.DatasheetStatus, profile.GeometryOrigin,
 		profile.FrontReductionMm, profile.GripClearanceMm, profile.ProfileHeightMm, profile.ProfileDepthMm,
+		profile.DoorReductionMm,
 		bodyModifiers, bomMembers, profile.Active,
 	)
 	created, err := scanOpeningProfile(row)
@@ -134,15 +138,17 @@ func (s *PostgresStore) UpdateOpeningProfile(ctx context.Context, id string, exp
 			code = $3, name = $4, grip_type = $5, cross_section_shape = $6,
 			compatible_placements = $7, datasheet_status = $8, geometry_origin = $9,
 			front_reduction_mm = $10, grip_clearance_mm = $11, profile_height_mm = $12, profile_depth_mm = $13,
-			body_modifiers = $14, bom_members = $15, active = $16,
+			door_reduction_mm = $14,
+			body_modifiers = $15, bom_members = $16, active = $17,
 			version = version + 1, updated_at = NOW()
-		WHERE id = $1 AND organization_id = $2 AND version = $17
+		WHERE id = $1 AND organization_id = $2 AND version = $18
 		RETURNING ` + openingProfileColumns + `;
 	`
 	row := s.db(ctx).QueryRow(ctx, query,
 		id, OrgFromCtx(ctx), profile.Code, profile.Name, profile.GripType, profile.CrossSectionShape,
 		profile.CompatiblePlacements, profile.DatasheetStatus, profile.GeometryOrigin,
 		profile.FrontReductionMm, profile.GripClearanceMm, profile.ProfileHeightMm, profile.ProfileDepthMm,
+		profile.DoorReductionMm,
 		bodyModifiers, bomMembers, profile.Active,
 		expectedVersion,
 	)

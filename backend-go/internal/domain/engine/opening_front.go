@@ -74,10 +74,15 @@ type OpeningIntent struct {
 // ProfileDepthMm/ProfileHeightMm (#1317) are the declared datasheet envelope
 // the depth_reduction effect derives from; zero = the pin predates #1283.
 type OpeningProfileData struct {
-	ProfileID            string                        `json:"profileId"`
-	DatasheetStatus      string                        `json:"datasheetStatus"`
-	FrontReductionMm     int                           `json:"frontReductionMm"`
-	GripClearanceMm      int                           `json:"gripClearanceMm"`
+	ProfileID        string `json:"profileId"`
+	DatasheetStatus  string `json:"datasheetStatus"`
+	FrontReductionMm int    `json:"frontReductionMm"`
+	GripClearanceMm  int    `json:"gripClearanceMm"`
+	// #1316: the workshop-facing door discount as ONE number; present wins
+	// over the legacy datasheet pair (front + clearance), which stays as
+	// documentation. Nil = legacy arithmetic, so every pin authored before
+	// this field keeps its frozen consumption.
+	DoorReductionMm      *int                          `json:"doorReductionMm,omitempty"`
 	ProfileDepthMm       float64                       `json:"profileDepthMm,omitempty"`
 	ProfileHeightMm      float64                       `json:"profileHeightMm,omitempty"`
 	CompatiblePlacements []string                      `json:"compatiblePlacements,omitempty"`
@@ -194,7 +199,13 @@ func ResolveOpeningFront(
 			return nil, openingFail(OpeningErrDatasheetPending,
 				fmt.Sprintf("el perfil %s espera ficha técnica", grip.ProfileID))
 		}
+		// #1316: the declared door discount wins; the datasheet pair is the
+		// legacy fallback (and the documentation of where the number comes
+		// from). One arithmetic for every boundary of the grip.
 		take := profile.FrontReductionMm + profile.GripClearanceMm
+		if profile.DoorReductionMm != nil {
+			take = *profile.DoorReductionMm
+		}
 		consumed += take
 		boundaries = append(boundaries, OpeningResolvedBoundary{Boundary: key, ConsumedMm: take})
 	}

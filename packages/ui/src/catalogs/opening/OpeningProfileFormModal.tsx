@@ -236,14 +236,10 @@ export function OpeningProfileFormModal({
               Verificada exige las cuatro medidas y su origen auditable; sin eso el perfil no participa en authoring.
             </small>
           </label>
-          <div className="catalog-form__row">
-            {numberField('opening-profile-front-reduction', 'Descuento frontal (mm)', draft.frontReductionMm,
-              (value) => setDraft((current) => ({ ...current, frontReductionMm: value })), undefined,
-              'opening-profile-front-reduction')}
-            {numberField('opening-profile-clearance', 'Holgura de agarre (mm)', draft.gripClearanceMm,
-              (value) => setDraft((current) => ({ ...current, gripClearanceMm: value })), undefined,
-              'opening-profile-clearance')}
-          </div>
+          {numberField('opening-profile-door-reduction', 'Descuento de puerta (mm)', draft.doorReductionMm,
+            (value) => setDraft((current) => ({ ...current, doorReductionMm: value })),
+            'Cuánto baja la puerta para crear el agarre (H − descuento). Gola metálico: 30 a 40 mm hasta confirmación SCILM. Vacío = usa el par de ficha (frontal + holgura).',
+            'opening-profile-door-reduction')}
           <div className="catalog-form__row">
             {numberField('opening-profile-height', 'Alto del perfil (mm)', draft.profileHeightMm,
               (value) => setDraft((current) => ({ ...current, profileHeightMm: value })), 'Decimal de ficha (8006: 56.5).',

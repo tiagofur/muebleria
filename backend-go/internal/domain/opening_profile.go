@@ -35,6 +35,12 @@ type OpeningProfile struct {
 	// would be the silent invention the contract forbids.
 	ProfileHeightMm *float64 `json:"profile_height_mm,omitempty"`
 	ProfileDepthMm  *float64 `json:"profile_depth_mm,omitempty"`
+	// #1316: the workshop-facing DOOR DISCOUNT as ONE number (30–40 mm for
+	// the metal gola per the owner). Nil = the profile resolves the legacy
+	// datasheet pair (FrontReductionMm + GripClearanceMm); present = it wins
+	// over the pair, which stays as documentation. Editing it creates a new
+	// version — pinned designs keep their frozen arithmetic.
+	DoorReductionMm *int `json:"door_reduction_mm,omitempty"`
 	// Auditable origin of the geometry values (supplier datasheet reference).
 	// Required when DatasheetStatus is "verified".
 	GeometryOrigin  string                      `json:"geometry_origin,omitempty"`
@@ -165,6 +171,11 @@ func ValidateOpeningProfile(p OpeningProfile) error {
 		if strings.TrimSpace(p.GeometryOrigin) == "" {
 			return fmt.Errorf("un perfil con ficha verificada requiere el origen auditable de sus valores")
 		}
+	}
+	// #1316: the workshop-facing door discount is a positive measure — the
+	// UI scopes 30–40 for the metal gola, the contract only refuses nonsense.
+	if p.DoorReductionMm != nil && *p.DoorReductionMm <= 0 {
+		return fmt.Errorf("el descuento de puerta debe ser mayor a 0")
 	}
 	return nil
 }

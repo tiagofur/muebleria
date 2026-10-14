@@ -23,6 +23,7 @@ const v7Row: OpeningProfileRowLike = {
   datasheetStatus: 'verified',
   frontReductionMm: 38,
   gripClearanceMm: 2,
+  doorReductionMm: null,
   profileHeightMm: 56.5,
   profileDepthMm: 27.2,
   geometryOrigin: 'docs/fichas/perfil_gola_l_ficha_tecnica.pdf',
@@ -96,6 +97,27 @@ describe('bodyModifiersOfDraft', () => {
     expect(modifiers).toEqual([
       { role: 'lateral', notch_height_mm: 56.5, notch_depth_mm: 27.2, notch_at: 'top_front' },
     ]);
+  });
+});
+
+describe('#1316 — descuento de puerta como un solo número', () => {
+  it('el par de ficha legacy (38+2) se prefill como 40 en el draft', () => {
+    const draft = toOpeningProfileDraft(v7Row);
+    expect(draft.doorReductionMm).toBe('40');
+  });
+
+  it('el descuento declarado gana al par', () => {
+    const draft = toOpeningProfileDraft({ ...v7Row, doorReductionMm: 32 });
+    expect(draft.doorReductionMm).toBe('32');
+  });
+
+  it('el write body lleva door_reduction_mm y el par intacto como documentación', async () => {
+    const { openingProfileWriteBody } = await import('./OpeningProfilesCatalog');
+    const draft = { ...toOpeningProfileDraft(v7Row), doorReductionMm: '32' };
+    const body = openingProfileWriteBody(draft) as unknown as Record<string, unknown>;
+    expect(body.door_reduction_mm).toBe(32);
+    expect(body.front_reduction_mm).toBe(38);
+    expect(body.grip_clearance_mm).toBe(2);
   });
 });
 

@@ -18503,6 +18503,13 @@
             ],
             "description": "Datasheet decimal (8006: 27.2); the depth_reduction derivation source (#1317)."
           },
+          "door_reduction_mm": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "#1316 — the workshop-facing DOOR DISCOUNT as one number (30–40 mm for the metal gola); present wins over front_reduction_mm + grip_clearance_mm, which stay as documentation. Nil = legacy pair arithmetic."
+          },
           "geometry_origin": {
             "type": [
               "string",
@@ -18598,6 +18605,12 @@
           "profile_depth_mm": {
             "type": [
               "number",
+              "null"
+            ]
+          },
+          "door_reduction_mm": {
+            "type": [
+              "integer",
               "null"
             ]
           },

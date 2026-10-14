@@ -78,6 +78,10 @@ export type OpeningProfileData = {
   readonly datasheetStatus: 'verified' | `pending_${string}`;
   readonly frontReductionMm: number;
   readonly gripClearanceMm: number;
+  /** #1316 — the workshop-facing door discount as ONE number; present wins
+   * over the legacy datasheet pair (front + clearance), which stays as
+   * documentation. Undefined = legacy arithmetic. */
+  readonly doorReductionMm?: number;
 };
 
 export type OpeningResolvedZone = {
@@ -210,7 +214,12 @@ export function resolveOpeningFront(
         `el perfil ${grip.profileId} espera ficha técnica`,
       );
     }
-    const take = profile.frontReductionMm + profile.gripClearanceMm;
+    // #1316: the declared door discount wins; the datasheet pair is the
+    // legacy fallback (and the documentation of where the number comes from).
+    const take =
+      profile.doorReductionMm !== undefined
+        ? profile.doorReductionMm
+        : profile.frontReductionMm + profile.gripClearanceMm;
     consumed += take;
     resolvedBoundaries.push({ boundary: key, consumedMm: take });
   }

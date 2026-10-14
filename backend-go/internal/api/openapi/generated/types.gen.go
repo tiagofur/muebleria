@@ -3073,6 +3073,7 @@ type OpeningProfileWrite struct {
 	GripClearanceMm      *int64                              `json:"grip_clearance_mm,omitempty"`
 	ProfileHeightMm      *float64                            `json:"profile_height_mm,omitempty"`
 	ProfileDepthMm       *float64                            `json:"profile_depth_mm,omitempty"`
+	DoorReductionMm      *int64                              `json:"door_reduction_mm,omitempty"`
 	GeometryOrigin       *string                             `json:"geometry_origin,omitempty"`
 	DatasheetStatus      string                              `json:"datasheet_status"`
 	BodyModifiers        []OpeningProfileBodyModifier        `json:"body_modifiers,omitempty"`
@@ -3092,6 +3093,7 @@ type OpeningProfile struct {
 	GripClearanceMm      *int64                              `json:"grip_clearance_mm,omitempty"`
 	ProfileHeightMm      *float64                            `json:"profile_height_mm,omitempty"`
 	ProfileDepthMm       *float64                            `json:"profile_depth_mm,omitempty"`
+	DoorReductionMm      *int64                              `json:"door_reduction_mm,omitempty"`
 	GeometryOrigin       *string                             `json:"geometry_origin,omitempty"`
 	DatasheetStatus      string                              `json:"datasheet_status"`
 	BodyModifiers        []OpeningProfileBodyModifier        `json:"body_modifiers,omitempty"`
