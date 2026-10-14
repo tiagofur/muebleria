@@ -45,7 +45,9 @@ describe('toOpeningProfileDraft', () => {
     // #1317: the v7 profile declares the effect WITHOUT a value.
     expect(draft.depthReductionDerived).toBe(true);
     expect(draft.depthReductionMm).toBe('');
-    expect(draft.bomMembers).toEqual(v7Row.bomMembers);
+    expect(draft.members.map((m) => m.key)).toEqual(['profile']);
+    expect(draft.members[0].kind).toBe('hardware');
+    expect(draft.members[0].rule).toBe('interior_width');
   });
 
   it('recognizes an explicit reduction value', () => {
@@ -118,6 +120,37 @@ describe('#1316 — descuento de puerta como un solo número', () => {
     expect(body.door_reduction_mm).toBe(32);
     expect(body.front_reduction_mm).toBe(38);
     expect(body.grip_clearance_mm).toBe(2);
+  });
+});
+
+describe('#1327 — miembro tipo componente (tira del gola italiano)', () => {
+  const tiraRow = {
+    ...v7Row,
+    bomMembers: {
+      profile: { hardware_id: 'hw-8006', rule: 'interior_width' },
+      tira: { component_id: 'comp-tira-gola-it', rule: 'interior_width', unit: 'piece' },
+    },
+  };
+
+  it('el member componente se lee con kind component y su referencia', () => {
+    const draft = toOpeningProfileDraft(tiraRow);
+    const tira = draft.members.find((m) => m.key === 'tira');
+    expect(tira?.kind).toBe('component');
+    expect(tira?.componentId).toBe('comp-tira-gola-it');
+    const profile = draft.members.find((m) => m.key === 'profile');
+    expect(profile?.kind).toBe('hardware');
+  });
+
+  it('el write body reconstruye el mapa con component_id y sin perder el herraje', async () => {
+    const { openingProfileWriteBody } = await import('./OpeningProfilesCatalog');
+    const body = openingProfileWriteBody({ ...toOpeningProfileDraft(tiraRow), doorReductionMm: '35' }) as unknown as Record<string, Record<string, unknown>>;
+    expect(body.bom_members).toEqual({
+      profile: expect.objectContaining({ hardware_id: 'hw-8006' }),
+      tira: expect.objectContaining({ component_id: 'comp-tira-gola-it', rule: 'interior_width', unit: 'piece' }),
+    });
+    // hardware_id stays as the required contract key, EMPTY for component members.
+    expect((body.bom_members as Record<string, unknown>).tira).toHaveProperty('hardware_id', '');
+    expect(body.door_reduction_mm).toBe(35);
   });
 });
 

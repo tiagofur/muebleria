@@ -74,9 +74,14 @@ type OpeningBodyModifier struct {
 // second BOM resolver.
 type OpeningBOMMember struct {
 	HardwareID string `json:"hardware_id"`
-	Rule       string `json:"rule"`
-	Unit       string `json:"unit,omitempty"`
-	SpacingMm  *int   `json:"spacing_mm,omitempty"`
+	// #1327: the CATALOG COMPONENT reference — a panel (e.g. the italian gola
+	// strip, a real board that travels to the despiece) the profile places as
+	// its gola element INSTEAD of a hardware SKU. Empty for hardware members;
+	// exactly one reference per member.
+	ComponentID string `json:"component_id,omitempty"`
+	Rule        string `json:"rule"`
+	Unit        string `json:"unit,omitempty"`
+	SpacingMm   *int   `json:"spacing_mm,omitempty"`
 	// DimensionsMm is the accessory's declared physical envelope
 	// [length-along-run, depth, height] from the same verified datasheet as
 	// the profile (#1283 / §13.1: herrajes conservan dimensiones aunque sean
@@ -186,6 +191,13 @@ func ValidateOpeningProfile(p OpeningProfile) error {
 	// UI scopes 30–40 for the metal gola, the contract only refuses nonsense.
 	if p.DoorReductionMm != nil && *p.DoorReductionMm <= 0 {
 		return fmt.Errorf("el descuento de puerta debe ser mayor a 0")
+	}
+	// #1327: a member references exactly ONE thing — a hardware SKU or a
+	// catalog component, never both.
+	for key, member := range p.BOMMembers {
+		if member.HardwareID != "" && member.ComponentID != "" {
+			return fmt.Errorf("el miembro %q no puede referenciar herraje y componente a la vez", key)
+		}
 	}
 	return nil
 }

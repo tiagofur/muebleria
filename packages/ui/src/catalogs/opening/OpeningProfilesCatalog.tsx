@@ -37,6 +37,7 @@ import { OpeningProfileFormModal } from './OpeningProfileFormModal';
 import {
   bodyModifiersOfDraft,
   emptyOpeningProfileDraft,
+  membersMapOfDraft,
   suggestOpeningProfileId,
   toOpeningProfileDraft,
   type OpeningProfileBodyModifierLike,
@@ -208,6 +209,19 @@ export function OpeningProfilesCatalog({
     }
     if (!draft.top && !draft.between && !draft.bottom) {
       return 'Elegí al menos una frontera compatible';
+    }
+    // #1327: members reference exactly one thing each, with unique keys.
+    const seenKeys = new Set<string>();
+    for (const [index, member] of draft.members.entries()) {
+      if (member.key.trim() === '') return `La clave del elemento ${index + 1} es obligatoria`;
+      if (seenKeys.has(member.key.trim())) return `La clave "${member.key.trim()}" está repetida`;
+      seenKeys.add(member.key.trim());
+      if (member.kind === 'component' && member.componentId.trim() === '') {
+        return `El componente del elemento ${index + 1} no fue indicado`;
+      }
+      if (member.kind === 'hardware' && member.hardwareId.trim() === '') {
+        return `El herraje del elemento ${index + 1} no fue indicado`;
+      }
     }
     if (draft.doorReductionMm !== '') {
       // #1316: the owner scoped the metal gola to 30–40 mm until SCILM
@@ -574,7 +588,7 @@ export function openingProfileWriteBody(
     ...(draft.profileDepthMm !== '' ? { profile_depth_mm: Number(draft.profileDepthMm) } : {}),
     ...(draft.geometryOrigin.trim() !== '' ? { geometry_origin: draft.geometryOrigin.trim() } : {}),
     body_modifiers: bodyModifiersOfDraft(draft),
-    bom_members: draft.bomMembers ?? undefined,
+    bom_members: membersMapOfDraft(draft.members),
     active: true,
   };
 }

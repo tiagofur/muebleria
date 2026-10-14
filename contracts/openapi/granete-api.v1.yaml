@@ -18413,6 +18413,13 @@
           "hardware_id": {
             "type": "string"
           },
+          "component_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#1327 — the CATALOG COMPONENT reference (a panel, e.g. the italian gola strip) INSTEAD of a hardware SKU; exactly one reference per member."
+          },
           "rule": {
             "type": "string",
             "description": "interior_width | per_length | per_exposed_end."

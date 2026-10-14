@@ -3056,6 +3056,7 @@ type OpeningProfileBodyModifier struct {
 
 type OpeningProfileBOMMember struct {
 	HardwareID   string    `json:"hardware_id"`
+	ComponentID  *string   `json:"component_id,omitempty"`
 	Rule         string    `json:"rule"`
 	Unit         *string   `json:"unit,omitempty"`
 	SpacingMm    *int64    `json:"spacing_mm,omitempty"`
