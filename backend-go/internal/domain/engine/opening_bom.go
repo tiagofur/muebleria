@@ -35,8 +35,10 @@ import (
 // boundary, rule.
 //
 // Fail-closed: OPENING_BOM_INVALID for unknown member keys (data corruption
-// is never silently dropped), rule/member mismatch or unknown rule, missing
-// unit on the run line, per_length without spacing, empty hardwareId
+// is never silently dropped — component members with a declared component_id
+// are the #1327 exception: deliberate panel data the despiece mirror owns,
+// never opening hardware demand), rule/member mismatch or unknown rule,
+// missing unit on the run line, per_length without spacing, empty hardwareId
 // (a BOM line without a SKU does not exist), version ≤ 0 (a reference
 // without a revision), non-positive interior width or unknown end
 // conditions; OPENING_PROFILE_UNKNOWN propagates for profiles the catalog
@@ -66,19 +68,25 @@ const (
 // persists snake_case — openingContractBOMMember maps one onto the other.
 type OpeningContractBOMMember struct {
 	HardwareID string `json:"hardwareId"`
-	Rule       string `json:"rule"`
-	Unit       string `json:"unit,omitempty"`
-	SpacingMm  *int   `json:"spacingMm,omitempty"`
+	// #1327: the catalog COMPONENT reference (a panel — the italian gola
+	// strip). Component members are NOT opening hardware demand: they ride
+	// the despiece as board parts, so this resolution skips them instead of
+	// failing them as unknown keys.
+	ComponentID string `json:"componentId,omitempty"`
+	Rule        string `json:"rule"`
+	Unit        string `json:"unit,omitempty"`
+	SpacingMm   *int   `json:"spacingMm,omitempty"`
 }
 
 // openingContractBOMMember maps the persisted entity member onto the
 // contract shape.
 func openingContractBOMMember(entity domain.OpeningBOMMember) OpeningContractBOMMember {
 	return OpeningContractBOMMember{
-		HardwareID: entity.HardwareID,
-		Rule:       entity.Rule,
-		Unit:       entity.Unit,
-		SpacingMm:  entity.SpacingMm,
+		HardwareID:  entity.HardwareID,
+		ComponentID: entity.ComponentID,
+		Rule:        entity.Rule,
+		Unit:        entity.Unit,
+		SpacingMm:   entity.SpacingMm,
 	}
 }
 
@@ -170,13 +178,16 @@ func ResolveOpeningBOM(
 				fmt.Sprintf("el perfil %s no tiene revisión referenciable", profileID))
 		}
 		// Unknown member keys fail closed: silently dropping declared
-		// hardware would under-quote the BOM. Sorted for deterministic
-		// reporting when several keys are corrupt.
+		// hardware would under-quote the BOM. Component members (#1327) are
+		// deliberate panel data the despiece mirror consumes — they are not
+		// opening hardware demand and never a corruption signal here. Sorted
+		// for deterministic reporting when several keys are corrupt.
 		unknownKeys := []string{}
-		for key := range profile.BOMMembers {
-			if !openingBOMMemberKeyKnown(key) {
-				unknownKeys = append(unknownKeys, key)
+		for key, member := range profile.BOMMembers {
+			if openingBOMMemberKeyKnown(key) || member.ComponentID != "" {
+				continue
 			}
+			unknownKeys = append(unknownKeys, key)
 		}
 		sort.Strings(unknownKeys)
 		if len(unknownKeys) > 0 {

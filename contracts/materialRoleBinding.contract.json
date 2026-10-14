@@ -1,7 +1,7 @@
 {
   "schemaId": "granete.materialRoleBinding.v1",
   "contract": "#403 / MT-2 — single material binding role per board + explicit legacy alias precedence. Identical semantics required in TS (packages/domain), Go (backend-go engine), web editors and the SketchUp catalog projection. Both stacks test against THIS file; a divergence here is a contract break, not a styling difference.",
-  "aliasPrecedence": "direct role choice wins; otherwise ZOCLO, PUERTA, PUERTA_* and FRENTE_CAJON may inherit the FRENTE choice; never infer by name/color/texture/manufacturer",
+  "aliasPrecedence": "direct role choice wins; otherwise ZOCLO, PUERTA, PUERTA_* and FRENTE_CAJON may inherit the FRENTE choice, cascading to the legacy plural front group FRENTES; a canonical FRENTE piece (e.g. the #1327 opening strip) inherits the workshop's legacy FRENTES choice when no direct FRENTE choice exists; never infer by name/color/texture/manufacturer",
   "aliasCases": [
     {
       "name": "direct choice wins",
@@ -68,6 +68,18 @@
       "role": "FRENTE",
       "choices": { "FRENTE": "   " },
       "expectedChoiceId": null
+    },
+    {
+      "name": "canonical FRENTE inherits the workshop's legacy FRENTES choice (#1327 opening strip)",
+      "role": "FRENTE",
+      "choices": { "FRENTES": "mat-oak18" },
+      "expectedChoiceId": "mat-oak18"
+    },
+    {
+      "name": "ZOCLO cascades FRENTE then the legacy FRENTES choice",
+      "role": "ZOCLO",
+      "choices": { "FRENTES": "mat-oak18" },
+      "expectedChoiceId": "mat-oak18"
     }
   ],
   "bindingCases": [

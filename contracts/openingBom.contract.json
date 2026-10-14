@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "contract": "granete.opening-front.v1",
-  "description": "#1133 — BOM de perfiles y accesorios desde el resultado resuelto: por cada frontera del layout de apertura (#1131) el perfil montado produce sus líneas según las reglas DECLARADAS en sus bom_members (#1130), sin segundo motor geométrico. Consumido IDÉNTICAMENTE por TS (packages/domain vitest) y Go (backend-go engine go test). Reglas canónicas: la regla 'interior_width' produce la corrida con longitud EXACTA = interior del gabinete (input del cuerpo, nunca derivado aquí) presentada en metros (unidad definida v1: 'meter', con CutLengthMm exacto en mm); 'per_length' deriva soportes con la MISMA convención de estaciones del sistema (#1219): cantidad = ceil(longitud/spacing)+1 — el spacing SIEMPRE viene de la ficha (per_length sin spacing falla cerrado, no se inventa); 'per_exposed_end' produce tapas según la condición de extremo RESUELTA declarada por el llamador (left/right ∈ exposed|closed; una tapa por extremo expuesto). Claves de miembro válidas: profile|supports|endCaps — una clave desconocida falla cerrado (la corrupción de datos no se descarta en silencio); la regla debe corresponder a su miembro; hardwareId vacío o version ≤ 0 (referencia sin revisión) fallan cerrado. Cada línea lleva identidad determinista 'boundary|memberKey', proveniencia completa (perfil + version + frontera + regla) y salida en orden de fronteras del ledger con miembros en orden canónico profile→supports→endCaps: re-resolver produce EXACTAMENTE la misma lista (idempotente, sin acumulación). Los SKUs y parámetros del fixture son placeholders declarados que fijan la matemática, no datos de proveedor (OQ-2).",
+  "description": "#1133 — BOM de perfiles y accesorios desde el resultado resuelto: por cada frontera del layout de apertura (#1131) el perfil montado produce sus líneas según las reglas DECLARADAS en sus bom_members (#1130), sin segundo motor geométrico. Consumido IDÉNTICAMENTE por TS (packages/domain vitest) y Go (backend-go engine go test). Reglas canónicas: la regla 'interior_width' produce la corrida con longitud EXACTA = interior del gabinete (input del cuerpo, nunca derivado aquí) presentada en metros (unidad definida v1: 'meter', con CutLengthMm exacto en mm); 'per_length' deriva soportes con la MISMA convención de estaciones del sistema (#1219): cantidad = ceil(longitud/spacing)+1 — el spacing SIEMPRE viene de la ficha (per_length sin spacing falla cerrado, no se inventa); 'per_exposed_end' produce tapas según la condición de extremo RESUELTA declarada por el llamador (left/right ∈ exposed|closed; una tapa por extremo expuesto). Claves de miembro válidas: profile|supports|endCaps — una clave desconocida falla cerrado (la corrupción de datos no se descarta en silencio); la regla debe corresponder a su miembro; hardwareId vacío o version ≤ 0 (referencia sin revisión) fallan cerrado. Cada línea lleva identidad determinista 'boundary|memberKey', proveniencia completa (perfil + version + frontera + regla) y salida en orden de fronteras del ledger con miembros en orden canónico profile→supports→endCaps: re-resolver produce EXACTAMENTE la misma lista (idempotente, sin acumulación). Los SKUs y parámetros del fixture son placeholders declarados que fijan la matemática, no datos de proveedor (OQ-2). El member componente (#1327) declara component_id y NUNCA es demanda de herraje: esta resolución lo saltea (su demanda es el board part del despiece); una clave desconocida SIN component_id sigue siendo corrupción que falla cerrado.",
   "resolutionCases": [
     {
       "name": "A — gola L en top: corrida en metros, soportes por ficha, tapas por extremos expuestos",
@@ -440,6 +440,54 @@
         }
       ],
       "note": "cada frontera es una corrida física independiente: las líneas NO se agregan entre fronteras (la fusión comercial aditiva es del consumidor, no del resolver)"
+    },
+{
+      "name": "G — gola italiano (#1327): el member componente (tira) no es demanda de herraje; sólo la corrida metálica linéa",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 325, "offsetFromStartMm": 325 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-italiano", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-italiano", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-italiano",
+          "version": 2,
+          "bomMembers": {
+            "tira": { "componentId": "comp-tira-gola-it", "rule": "interior_width" },
+            "profile": { "hardwareId": "328.160", "rule": "interior_width", "unit": "meter" }
+          }
+        }
+      ],
+      "expectedLines": [ { "lineId": "top|profile", "memberKey": "profile", "hardwareId": "328.160", "profileId": "profile.gola-italiano", "profileVersion": 2, "boundary": "top", "rule": "interior_width", "quantity": 0.564, "unit": "meter", "cutLengthMm": 564 } ]
     }
   ],
   "blockedCases": [],

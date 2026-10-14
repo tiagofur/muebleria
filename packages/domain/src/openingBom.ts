@@ -25,8 +25,10 @@
  * carries full provenance: profile id + version, boundary, rule.
  *
  * Fail-closed: OPENING_BOM_INVALID for unknown member keys (data corruption
- * is never silently dropped), rule/member mismatch or unknown rule, missing
- * unit on the run line, per_length without spacing, empty hardwareId,
+ * is never silently dropped — component members with a declared componentId
+ * are the #1327 exception: deliberate panel data the despiece mirror owns,
+ * never opening hardware demand), rule/member mismatch or unknown rule,
+ * missing unit on the run line, per_length without spacing, empty hardwareId,
  * version ≤ 0, non-positive interior width or unknown end conditions;
  * OPENING_PROFILE_UNKNOWN propagates. Nothing is invented.
  */
@@ -50,6 +52,11 @@ export type OpeningEndCondition = 'exposed' | 'closed';
  * this — one vocabulary, no third shape). */
 export type OpeningContractBOMMember = {
   readonly hardwareId: string;
+  /** #1327: the catalog COMPONENT reference (a panel — the italian gola
+   * strip). Component members are NOT opening hardware demand: they ride
+   * the despiece as board parts, so this resolution skips them instead of
+   * failing them as unknown keys. */
+  readonly componentId?: string;
   readonly rule: string;
   readonly unit?: string;
   readonly spacingMm?: number;
@@ -223,9 +230,12 @@ export function resolveOpeningBOM(
       return fail('OPENING_BOM_INVALID', `el perfil ${profileId} no tiene revisión referenciable`);
     }
     // Unknown member keys fail closed: silently dropping declared hardware
-    // would under-quote the BOM. Sorted for deterministic reporting.
+    // would under-quote the BOM. Component members (#1327) are deliberate
+    // panel data the despiece mirror consumes — they are not opening
+    // hardware demand and never a corruption signal here. Sorted for
+    // deterministic reporting.
     const unknownKeys = Object.keys(profile.bomMembers)
-      .filter((key) => !MEMBER_KEYS.includes(key as OpeningBOMMemberKey))
+      .filter((key) => !MEMBER_KEYS.includes(key as OpeningBOMMemberKey) && !profile.bomMembers[key]?.componentId)
       .sort();
     if (unknownKeys.length > 0) {
       return fail(

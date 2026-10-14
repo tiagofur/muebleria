@@ -26,6 +26,12 @@ import type { Component } from './types';
 /** Legacy alias target: the front finish role (see plinth.ts constants). */
 const FRONT_ROLE = 'FRENTE';
 
+/** The workshop-facing front group code catalogs authored before #403 carry
+ * (their parts declare it directly and design choices speak it). Canonical
+ * FRENTE pieces — e.g. the #1327 opening strip — inherit that selection when
+ * no direct FRENTE choice exists. Mirrors Go legacyFrontGroupRole. */
+const LEGACY_FRONT_GROUP_ROLE = 'FRENTES';
+
 /**
  * Normalize a component's optionRoles: trim entries, drop empty ones and
  * exact duplicates (first-seen order preserved). Identical repeated entries
@@ -90,14 +96,17 @@ export function materialBindingRole(
 /**
  * Legacy alias precedence, shared verbatim with Go. Direct role choice wins;
  * otherwise ZOCLO, PUERTA, PUERTA_* and FRENTE_CAJON may inherit the FRENTE
- * choice. This is the ONLY alias behavior allowed — never extend it by
- * name/color/texture matching.
+ * choice (and through it the legacy plural front group), and a canonical
+ * FRENTE piece inherits the legacy front group's choice (#1327 — the opening
+ * strip on catalogs authored before #403). This is the ONLY alias behavior
+ * allowed — never extend it by name/color/texture matching.
  */
 export function legacyFrontAliasTargets(role: string): string[] {
   const upper = role.trim().toUpperCase();
-  if (upper === 'ZOCLO') return [FRONT_ROLE];
+  if (upper === 'ZOCLO') return [FRONT_ROLE, LEGACY_FRONT_GROUP_ROLE];
   if (upper === 'PUERTA' || upper.startsWith('PUERTA_') || upper === 'FRENTE_CAJON') {
-    return [FRONT_ROLE];
+    return [FRONT_ROLE, LEGACY_FRONT_GROUP_ROLE];
   }
+  if (upper === FRONT_ROLE) return [LEGACY_FRONT_GROUP_ROLE];
   return [];
 }

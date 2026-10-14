@@ -29,6 +29,12 @@ const (
 	zocloBoardRole = "ZOCLO"
 	// frontRole mirrors TS ZOCLO_BOARD_FALLBACK_ROLE — the front finish role.
 	frontRole = "FRENTE"
+	// legacyFrontGroupRole is the workshop-facing front group code catalogs
+	// authored before #403 carry (their parts declare it directly and the
+	// design choices speak it). Canonical FRENTE pieces — e.g. the #1327
+	// opening strip — inherit that selection when no direct FRENTE choice
+	// exists, or the real catalog could never satisfy their material.
+	legacyFrontGroupRole = "FRENTES"
 )
 
 // distinctOptionRoles normalizes a component's OptionRoles: trims entries,
@@ -81,9 +87,14 @@ func legacyFrontAliasTargets(role string) []string {
 	upper := strings.ToUpper(strings.TrimSpace(role))
 	switch {
 	case upper == zocloBoardRole:
-		return []string{frontRole}
+		return []string{frontRole, legacyFrontGroupRole}
 	case upper == "PUERTA" || strings.HasPrefix(upper, "PUERTA_") || upper == "FRENTE_CAJON":
-		return []string{frontRole}
+		return []string{frontRole, legacyFrontGroupRole}
+	case upper == frontRole:
+		// #1327: a canonical FRENTE piece (the opening strip) inherits the
+		// workshop's legacy plural front selection when the catalog predates
+		// #403 and carries no direct FRENTE choice.
+		return []string{legacyFrontGroupRole}
 	default:
 		return nil
 	}
