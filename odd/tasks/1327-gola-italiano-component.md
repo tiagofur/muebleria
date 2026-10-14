@@ -104,6 +104,18 @@ holgura). Regresión 8006: fila v8/30 byte a byte intacta (muesca + depth_reduct
 
 Brecha menor fileada: **#1337** (pin exige el par legacy; door_reduction-only no puede pinearse).
 
+Corrección tras la primera prueba visual del owner (2026-10-14, «astilla fina» en el 3D): el
+módulo real trae MANGUETE superior frontal (COM-MAN-BAJO-FRO: PW-2T×150 en y=PD-W, rol horizontal)
+que tapaba/z-fighteaba la tira — el perfil italiano no declaraba `depth_reduction` (el metal lo
+tiene desde #1317). Fix de DATOS, sin código: **perfil v4** agrega
+`{"role":"horizontal","effect":"depth_reduction"}` (derivado = 15); el pass de #1317 recorta el
+panel horizontal de fondo completo y corre el manguete Y, dejando la tira como única superficie
+frontal de la revela. Probe engine: techo 300→285, strip [400,15,70] intacto en y 285-300. El
+fixture smoke ganó su manguete (SMK-MAN-SUP-FRO) para que el E2E ejerza el camino completo
+(sin él, el pass falla cerrado — correcto). El owner debe QUITAR y RE-APLICAR la apertura
+(pinea v4) + re-sync. Swatch de bisagra en blanco = opción sin imagen de preview (cosmético,
+pre-existente).
+
 Pendiente (aceptación owner): aplicar la apertura con «Gola italiano (tira de melamina)» en un
 mueble de prueba en SketchUp — tira con color de puerta en 3D y en despiece, puerta con descuento
 35 y el corte 45°; el 8006 sigue intacto.
