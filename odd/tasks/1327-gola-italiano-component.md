@@ -136,6 +136,23 @@ depth_reduction 15 + notch 70×15) + re-sync. Esperado: tira Moscato completa
 en la revela, laterales con el paso 70×15, puerta con descuento 35 y el corte
 45° visible arriba; despiece con tira + puerta 681.
 
+Feedback visual del owner #3 (2026-10-14, captura 3: «geometría blanca empalmada
+en la puerta + no hace el 45 en la parte superior»):dos causas SEPARADAS:
+1. El plugin instalado en SketchUp es la **0.1.71** (grep en Plugins:
+   identity.rb = 0.1.71, 0 ocurrencias de «bevel» en furniture_builder.rb) —
+   el owner NUNCA instaló el RBZ 0.1.72. El backend sí sirve bevels (op
+   congelada verificada) pero el host sin el código de #1339 dibuja la caja
+   lisa: la puerta sale rectangular y el 45° «no se hace». Requiere instalar
+   el RBZ correcto + quit completo + reopen (el footer debe decir v0.1.72).
+2. El manguete «empalmado» sale de la tira fuera de su banda: el diseño del
+   owner tiene profundidad **590** (Princeton KDT low-poly K4R low; y=PD−W =
+   440 para un manguete de 150). El **recede Y −15 del pass #1317** mueve ese
+   manguete a y=425 con su medida intacta — la superposición visible nace de
+   que el boceto del dueño venía del INSERT discreto (la línea marrón detrás
+   es su borde anterior no re-generado), no de la aritmética del pass
+   (verificada: techo/manguete 590−15=575, strip [400,15,70] en y 575-590).
+   Re-aplicar limpia la geometría host stale: el pin v5 gobierna el resolve.
+
 Pendiente (aceptación owner): aplicar la apertura con «Gola italiano (tira de melamina)» en un
 mueble de prueba en SketchUp — tira con color de puerta en 3D y en despiece, puerta con descuento
 35 y el corte 45°; el 8006 sigue intacto.
