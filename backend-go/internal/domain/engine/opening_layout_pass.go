@@ -112,7 +112,23 @@ func OpeningMembersFromFrozenPin(selection *domain.DesignOpeningSelection) *Open
 	if dims := selection.ProfilePin.BOM.Members["endCaps"].DimensionsMm; dims != nil {
 		members.CapDimsMm = &(*dims)
 	}
-	if members.ProfileHardwareID == "" && members.SupportHardwareID == "" && members.CapHardwareID == "" {
+	// #1327: component members (panels) freeze with the BOM slice — the key
+	// is the member identity, component_id the reference, dims [along-run,
+	// depth, height] the placed envelope. Without declared dims the member
+	// places nothing (truthful absence, never an invented envelope).
+	for key, member := range selection.ProfilePin.BOM.Members {
+		if member.ComponentID == "" || member.DimensionsMm == nil {
+			continue
+		}
+		depth, height := (*member.DimensionsMm)[1], (*member.DimensionsMm)[2]
+		if depth <= 0 || height <= 0 {
+			continue
+		}
+		members.ComponentMembers = append(members.ComponentMembers, OpeningComponentMember{
+			Key: key, ComponentID: member.ComponentID, DepthMm: depth, HeightMm: height,
+		})
+	}
+	if members.ProfileHardwareID == "" && members.SupportHardwareID == "" && members.CapHardwareID == "" && len(members.ComponentMembers) == 0 {
 		return nil
 	}
 	return members
@@ -233,6 +249,21 @@ type OpeningMembers struct {
 	ProfileDepthMm    float64
 	SupportDimsMm     *[3]float64
 	CapDimsMm         *[3]float64
+	// #1327: component members (panels — the italian gola strip) the profile
+	// places as BOARDS, not hardware. Declared dims [along-run, depth,
+	// height]: the layout uses depth as the furniture-depth extent and height
+	// as the vertical extent; members without declared dims place nothing
+	// (truthful absence, never an invented envelope).
+	ComponentMembers []OpeningComponentMember
+}
+
+// OpeningComponentMember is one component reference the profile places as a
+// board (#1327).
+type OpeningComponentMember struct {
+	Key         string
+	ComponentID string
+	DepthMm     float64
+	HeightMm    float64
 }
 
 // attachOpeningMembers appends the member placements to the FIRST

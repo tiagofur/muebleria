@@ -200,7 +200,7 @@ func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalo
 	}
 	var bom domain.ResolvedBom
 	if unitOpening != nil {
-		bom, err = ResolveBomForReleaseWithOpening(prepared, item.MaterialChoices, catalog, dims, baseCtx, unitOpening.Fronts, unitOpening.Modifiers)
+		bom, err = ResolveBomForReleaseWithOpening(prepared, item.MaterialChoices, catalog, dims, baseCtx, unitOpening.Fronts, unitOpening.Modifiers, unitOpening.Members)
 	} else {
 		bom, err = ResolveBomForRelease(prepared, item.MaterialChoices, catalog, dims, baseCtx)
 	}

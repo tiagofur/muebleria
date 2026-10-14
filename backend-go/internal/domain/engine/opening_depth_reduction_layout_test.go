@@ -323,7 +323,7 @@ func TestReleaseBOMCarriesExactDepthReduction(t *testing.T) {
 		}},
 	}
 	dims := &domain.ItemCustomDims{WidthMm: 600, HeightMm: 720, DepthMm: 580}
-	bom, err := ResolveBomForReleaseWithOpening(module, item.MaterialChoices, catalog, dims, nil, resolution.Fronts, resolution.Modifiers)
+	bom, err := ResolveBomForReleaseWithOpening(module, item.MaterialChoices, catalog, dims, nil, resolution.Fronts, resolution.Modifiers, nil)
 	if err != nil {
 		t.Fatalf("release BOM with depth reduction: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestReleaseBOMCarriesExactDepthReduction(t *testing.T) {
 	}
 
 	// The same unit without modifiers keeps every authored measure.
-	plain, err := ResolveBomForReleaseWithOpening(module, item.MaterialChoices, catalog, dims, nil, resolution.Fronts, nil)
+	plain, err := ResolveBomForReleaseWithOpening(module, item.MaterialChoices, catalog, dims, nil, resolution.Fronts, nil, nil)
 	if err != nil {
 		t.Fatalf("release BOM without modifiers: %v", err)
 	}

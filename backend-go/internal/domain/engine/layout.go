@@ -338,6 +338,38 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 		return FurnitureLayout{}, nil, err
 	}
 
+	// #1327: opening component members (panels — the italian gola strip)
+	// materialize as REAL boards in the gola band: full furniture width at
+	// the top front, declared depth (furniture Y) and height (vertical), the
+	// door's material role (FRENTE → color de puerta). A declared component
+	// missing or inactive in the catalog fails closed — never a silently
+	// absent board.
+	if opts.openingMembers != nil {
+		for _, strip := range opts.openingMembers.ComponentMembers {
+			comp, found := findComponent(catalog, strip.ComponentID)
+			if !found || !comp.Active {
+				return FurnitureLayout{}, nil, fmt.Errorf(
+					"el componente %s del elemento %q de la apertura no existe o está inactivo",
+					strip.ComponentID, strip.Key)
+			}
+			boards = append(boards, layoutBoard{
+				id:                 "opening-strip-" + strip.Key,
+				defID:              "opening-strip-" + strip.Key,
+				name:               strip.Key,
+				placement:          string(domain.PlacementSuperior),
+				optionRole:         "FRENTE",
+				x:                  0,
+				y:                  float64(dims.DepthMm) - strip.DepthMm,
+				z:                  float64(dims.HeightMm) - strip.HeightMm,
+				rotY:               90,
+				widthMm:            strip.DepthMm,
+				thicknessMm:        strip.HeightMm,
+				lengthMm:           float64(dims.WidthMm),
+				catalogComponentID: strip.ComponentID,
+			})
+		}
+	}
+
 	for i := range boards {
 		board := &boards[i]
 		// #414: the authoritative local→furniture transform is computed from
