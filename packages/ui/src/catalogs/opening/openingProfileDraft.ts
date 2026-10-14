@@ -121,7 +121,7 @@ export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfil
     notchDepthMm: notch?.notch_depth_mm != null ? String(notch.notch_depth_mm) : '',
     notchAt: (notch?.notch_at as OpeningNotchAtDraft) ?? 'top_front',
     depthReductionEnabled: reduction != null,
-    depthReductionDerived: reduction != null && reduction.depth_reduction_mm == null,
+    depthReductionDerived: reduction == null || reduction.depth_reduction_mm == null,
     depthReductionMm: reduction?.depth_reduction_mm != null ? String(reduction.depth_reduction_mm) : '',
     bomMembers: row.bomMembers,
   };

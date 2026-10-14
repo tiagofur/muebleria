@@ -71,7 +71,7 @@ async function loginToA(page: Page): Promise<void> {
 
 async function openEngineeringSettings(page: Page): Promise<void> {
   await page.goto('/settings');
-  await page.getByTestId('settings-tab-tab-ingenieria').click();
+  await page.getByTestId('settings-tab-tab-produccion').click();
   await expect(page.getByTestId('machine-output-cutting')).toBeVisible();
 }
 
@@ -143,7 +143,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
 
     // Reload: exact tuple survives.
     await page.reload();
-    await page.getByTestId('settings-tab-tab-ingenieria').click();
+    await page.getByTestId('settings-tab-tab-produccion').click();
     await expect(page.getByTestId('machine-output-cutting-status')).toHaveText('Candidato — no validado en máquina');
     await expect(page.getByTestId('machine-output-cutting-readiness')).toHaveText('Configurada');
     await page.getByText('Detalle técnico').click();
@@ -222,7 +222,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
       .toBe('kdt-flexdrill-1200');
 
     await page.reload();
-    await page.getByTestId('settings-tab-tab-ingenieria').click();
+    await page.getByTestId('settings-tab-tab-produccion').click();
     await expect(page.getByTestId('machine-output-machining-status')).toHaveText('Candidato — no validado en máquina');
     // #1005 K3: the per-piece serializer is implemented — the settings probe
     // filters PROGRAM_GRANULARITY_UNSUPPORTED, so the card reads Configurada
@@ -244,7 +244,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     // Switching is an explicit user action — never an automatic fallback.
     await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 4 · r5', 'ptx-cadmatic-4');
     await page.reload();
-    await page.getByTestId('settings-tab-tab-ingenieria').click();
+    await page.getByTestId('settings-tab-tab-produccion').click();
 
     // Settings confirms the exact tuple is configured. The candidate copy
     // (#793 §24) never claims compatibility/validation/production readiness.
@@ -342,7 +342,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
       route.request().method() === 'GET' && !retry ? route.fulfill({ status: 500, body: '{}' }) : route.continue());
     await loginToA(page);
     await page.goto('/settings');
-    await page.getByTestId('settings-tab-tab-ingenieria').click();
+    await page.getByTestId('settings-tab-tab-produccion').click();
     await expect(page.getByTestId('machine-output-load-error')).toBeVisible();
     retry = true;
     await page.getByTestId('machine-output-retry').click();
@@ -420,7 +420,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     // Org B's own settings UI still shows ITS exact pinned selection (the
     // org A late response never substituted it).
     await page.goto('/settings');
-    await page.getByTestId('settings-tab-tab-ingenieria').click();
+    await page.getByTestId('settings-tab-tab-produccion').click();
     await expect(page.getByTestId('machine-output-cutting-profile')).toHaveValue(
       `ptx-cadmatic-4@r5#${CUTTING_CADMATIC4_CANDIDATE.outputProfileDigest}`,
     );

@@ -77,10 +77,27 @@ func (s *PostgresStore) GetOpeningProfileByID(ctx context.Context, id string) (*
 	return profile, nil
 }
 
+// openingProfileJSONColumns normalizes the declared JSONB slices for the
+// NOT NULL columns (#1325): a profile authored WITHOUT body modifiers or
+// BOM members writes their empty JSON — the truthful absence — never a NULL
+// that the constraint (and every honest create) rejects.
+func openingProfileJSONColumns(profile *domain.OpeningProfile) ([]domain.OpeningBodyModifier, map[string]domain.OpeningBOMMember) {
+	bodyModifiers := profile.BodyModifiers
+	if bodyModifiers == nil {
+		bodyModifiers = []domain.OpeningBodyModifier{}
+	}
+	bomMembers := profile.BOMMembers
+	if bomMembers == nil {
+		bomMembers = map[string]domain.OpeningBOMMember{}
+	}
+	return bodyModifiers, bomMembers
+}
+
 func (s *PostgresStore) CreateOpeningProfile(ctx context.Context, profile *domain.OpeningProfile) error {
 	if err := domain.ValidateOpeningProfile(*profile); err != nil {
 		return err
 	}
+	bodyModifiers, bomMembers := openingProfileJSONColumns(profile)
 	query := `
 		INSERT INTO opening_profiles (
 			id, organization_id, code, name, grip_type, cross_section_shape,
@@ -94,7 +111,7 @@ func (s *PostgresStore) CreateOpeningProfile(ctx context.Context, profile *domai
 		profile.ID, OrgFromCtx(ctx), profile.Code, profile.Name, profile.GripType, profile.CrossSectionShape,
 		profile.CompatiblePlacements, profile.DatasheetStatus, profile.GeometryOrigin,
 		profile.FrontReductionMm, profile.GripClearanceMm, profile.ProfileHeightMm, profile.ProfileDepthMm,
-		profile.BodyModifiers, profile.BOMMembers, profile.Active,
+		bodyModifiers, bomMembers, profile.Active,
 	)
 	created, err := scanOpeningProfile(row)
 	if err != nil {
@@ -111,6 +128,7 @@ func (s *PostgresStore) UpdateOpeningProfile(ctx context.Context, id string, exp
 	if err := domain.ValidateOpeningProfile(*profile); err != nil {
 		return err
 	}
+	bodyModifiers, bomMembers := openingProfileJSONColumns(profile)
 	query := `
 		UPDATE opening_profiles SET
 			code = $3, name = $4, grip_type = $5, cross_section_shape = $6,
@@ -125,7 +143,7 @@ func (s *PostgresStore) UpdateOpeningProfile(ctx context.Context, id string, exp
 		id, OrgFromCtx(ctx), profile.Code, profile.Name, profile.GripType, profile.CrossSectionShape,
 		profile.CompatiblePlacements, profile.DatasheetStatus, profile.GeometryOrigin,
 		profile.FrontReductionMm, profile.GripClearanceMm, profile.ProfileHeightMm, profile.ProfileDepthMm,
-		profile.BodyModifiers, profile.BOMMembers, profile.Active,
+		bodyModifiers, bomMembers, profile.Active,
 		expectedVersion,
 	)
 	updated, err := scanOpeningProfile(row)

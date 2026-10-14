@@ -87,6 +87,13 @@ const GRIP_SHORT: Readonly<Record<string, string>> = {
   none: '—',
 };
 
+function formatNumber(v: number | null | undefined): string {
+  if (v == null) return '?';
+  // Round to 2 decimal places to avoid IEEE-754 float printing like 27.200000762939453.
+  const rounded = Math.round(v * 100) / 100;
+  return String(rounded);
+}
+
 /** Plain-workshop description of one declared effect (detail view). */
 function modifierLabel(
   modifier: OpeningProfileBodyModifierLike,
@@ -94,12 +101,12 @@ function modifierLabel(
 ): string {
   if (modifier.effect === 'depth_reduction' || modifier.depth_reduction_mm !== undefined) {
     if (modifier.depth_reduction_mm != null) {
-      return `Descuento de profundidad: ${modifier.depth_reduction_mm} mm`;
+      return `Descuento de profundidad: ${formatNumber(modifier.depth_reduction_mm)} mm`;
     }
-    return `Descuento de profundidad: deriva de la ficha (${datasheetDepth != null ? datasheetDepth : '?'} mm)`;
+    return `Descuento de profundidad: deriva de la ficha (${formatNumber(datasheetDepth)} mm)`;
   }
   if (modifier.notch_at !== undefined || modifier.notch_height_mm !== undefined) {
-    return `Muesca en costados: ${modifier.notch_height_mm ?? '?'} × ${modifier.notch_depth_mm ?? '?'} mm`;
+    return `Muesca en costados: ${formatNumber(modifier.notch_height_mm)} × ${formatNumber(modifier.notch_depth_mm)} mm`;
   }
   return `Efecto sobre ${modifier.role}`;
 }
@@ -384,11 +391,17 @@ export function OpeningProfilesCatalog({
                     v{row.version}
                   </span>
                 </div>
+                <div className="catalog-row-detail__field">
+                  <span className="catalog-row-detail__label">Ficha técnica</span>
+                  <span className="catalog-row-detail__value">
+                    {row.datasheetStatus === 'verified' ? 'Verificada' : 'Pendiente'}
+                  </span>
+                </div>
                 {row.profileHeightMm != null && row.profileDepthMm != null ? (
                   <div className="catalog-row-detail__field">
                     <span className="catalog-row-detail__label">Sección de ficha</span>
                     <span className="catalog-row-detail__value">
-                      {row.profileHeightMm} alto × {row.profileDepthMm} profundo
+                      {formatNumber(row.profileHeightMm)} alto × {formatNumber(row.profileDepthMm)} profundo
                     </span>
                   </div>
                 ) : null}
@@ -396,7 +409,7 @@ export function OpeningProfilesCatalog({
                   <div className="catalog-row-detail__field">
                     <span className="catalog-row-detail__label">Descuento frontal + holgura</span>
                     <span className="catalog-row-detail__value">
-                      {row.frontReductionMm} + {row.gripClearanceMm ?? 0} mm
+                      {formatNumber(row.frontReductionMm)} + {formatNumber(row.gripClearanceMm ?? 0)} mm
                     </span>
                   </div>
                 ) : null}
