@@ -40,6 +40,11 @@ Lane: Delegated Direct — 3 slices, un PR cada una. Este artifact es la memoria
 
 ## Estado
 
-- Slice 1: **EN PR #1333 — CI 22/22 verde** (HEAD 4b3dca13; nota: la CI typechequea los archivos
-  *.test.ts con noUncheckedIndexedAccess — el tsc local sin -p no alcanza, usar `pnpm typecheck`).
-- Slices 2-3: pendientes.
+- Slice 1: **MERGEADO** (PR #1333).
+- Slice 2: **EN PR #1334 — CI 22/22 verde** (HEAD a15aa455, rama feat/1327-strip-board): board en
+  la banda del gola (ancho completo × profundidad × alto, rol FRENTE) + espejo BOM como BoardPart +
+  fail-closed por componente ausente/inactivo. Proyección: OpeningMembers.ComponentMembers desde el
+  pin. NOTA de proceso: había trabajo SIN commitear de otro agente en el checkout compartido
+  (authoring_fixed_shelf.go, joinery_system_contract_test.go) — se dejó intacto, commit solo con
+  rutas explícitas.
+- Slice 3 (bevel 45°): pendiente.
