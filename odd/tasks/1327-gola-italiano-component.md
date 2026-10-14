@@ -40,5 +40,6 @@ Lane: Delegated Direct — 3 slices, un PR cada una. Este artifact es la memoria
 
 ## Estado
 
-- Slice 1: EN CURSO (rama feat/1327-gola-italiano-component, base main 9a0d3e2e).
+- Slice 1: **EN PR #1333 — CI 22/22 verde** (HEAD 4b3dca13; nota: la CI typechequea los archivos
+  *.test.ts con noUncheckedIndexedAccess — el tsc local sin -p no alcanza, usar `pnpm typecheck`).
 - Slices 2-3: pendientes.
