@@ -75,7 +75,7 @@ module Granete
       # #415). Pure host mechanics: build the definition-local box at origin
       # and turn the contract basis/translation into a Geom::Transformation.
       # Never world/AABB coordinates, never a mirror, never a scale.
-      module LocalGeometry
+      module LocalGeometry # rubocop:disable Metrics/ModuleLength
         MM_TO_INCHES = 1.0 / 25.4
 
         module_function
@@ -106,11 +106,15 @@ module Granete
         # spans [0,width]×[0,thickness]×[0,length] on X/Y/Z (engine
         # convention the #414 basis maps onto the furniture frame). World/AABB
         # coordinates are never baked into definition geometry.
-        def build_local_box(definition, width_mm, thickness_mm, length_mm, notches: [])
+        def build_local_box(definition, width_mm, thickness_mm, length_mm, notches: [], bevels: [])
           extents = [width_mm, thickness_mm, length_mm].map { |value| value * MM_TO_INCHES }
 
-          local_box_segments(extents, notches).each do |segment|
-            add_box_segment(definition, segment)
+          local_box_segments(extents, notches, bevels).each do |segment|
+            if segment[:slanted]
+              add_slanted_segment(definition, segment)
+            else
+              add_box_segment(definition, segment)
+            end
           end
         end
 
@@ -132,6 +136,26 @@ module Granete
           face.pushpull(segment[:z1] - segment[:z0]) if (segment[:z1] - segment[:z0]).positive?
         end
 
+        # Adds a segment whose cross-section is the v1 bevel pentagon: the
+        # face IS the (x, y, z) 3D pentagon (one right angle lost to the 45°
+        # hypotenuse), pushpulled through the wedge's THROUGH-axis span.
+        # SketchUp's pushpull follows the face normal — the face must be
+        # built facing the through axis or the solid extrudes sideways and
+        # fails the shape contract of the tests. Anything degenerate fails
+        # loudly rather than rendering a silently broken solid.
+        def add_slanted_segment(definition, segment)
+          pts = segment[:points].map do |p|
+            Geom::Point3d.new(p[0], p[1], p[2])
+          end
+          face = definition.entities.add_face(pts)
+          return unless face
+
+          face.reverse! if face.respond_to?(:normal) && face.normal.respond_to?(:z) && face.normal.z.negative?
+          raise ArgumentError, 'el bisel no tiene extensión de extrusión' unless segment[:extrude].positive?
+
+          face.pushpull(segment[:extrude])
+        end
+
         # #1287 / §13.3: a notched board builds as stacked segments along the
         # local Z (the vertical axis of the opening notch): full cross-section
         # below and above, and the front-reduced cross-section across the
@@ -142,11 +166,27 @@ module Granete
         # covers FULLY. Only a through corner notch with its height band on
         # the local Z is representable; anything else fails loudly instead
         # of silently rendering a plain box.
-        def local_box_segments(extents, notches)
+        # #1327 / §13.3 twin: a beveled board (#1327: the italian gola's
+        # 45° door cut) builds as the plain-box stack PLUS a slanted capped
+        # solid over the wedge band — the removed triangle prism leaves a
+        # visible 45° shoulder instead of a plain front face. Representable
+        # only as a through-edge wedge on local Z with its two legs equal
+        # (the v1 45° cut); anything else fails loudly like the notch.
+        # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        def local_box_segments(extents, notches, bevels = [])
           full = { x0: 0.0, x1: extents[0], y0: 0.0, y1: extents[1], z0: 0.0, z1: extents[2] }
-          return [full] if notches.nil? || notches.empty?
+          return [full] if (bevels.nil? || bevels.empty?) && (notches.nil? || notches.empty?)
+
+          raise ArgumentError, 'sólo se materializa un bisel por tablero' if !bevels.nil? && bevels.size > 1
+
+          if notches.nil? || notches.empty?
+            return [full] if bevels.nil? || bevels.empty?
+
+            return bevel_box_segments(full, bevels.first, extents)
+          end
 
           raise ArgumentError, 'sólo se materializa una muesca por tablero' if notches.size > 1
+          raise ArgumentError, 'un tablero no combina muesca y bisel en v1' if !bevels.nil? && !bevels.empty?
 
           band = notch_band_in_inches(notches.first, extents)
           reduced = reduced_cross_section(band, extents)
@@ -187,6 +227,154 @@ module Granete
 
         def raise_full_thickness
           raise ArgumentError, 'la muesca debe atravesar todo el espesor del tablero'
+        end
+
+        # #1327: the wedge band sits at the boundary end of local Z, covers
+        # ONE full horizontal axis (the through span), meets one cross edge
+        # of the other horizontal axis, and runs only PART of Z — otherwise it
+        # is not the v1 bevel and fails loudly. The slanted segment keeps the
+        # 3D pentagon of the cut band: the rectangle minus the 45° corner
+        # triangle, extruded along the through axis.
+        def bevel_box_segments(full, bevel, extents)
+          band = bevel_band_in_inches(bevel, extents)
+          through, _edge_axis = bevel_axes(band)
+
+          segments = []
+          segments << full.merge(z0: 0.0, z1: band[:z0]) if band[:z0].positive?
+          segments << {
+            slanted: true,
+            points: bevel_pentagon(band, extents, through),
+            extrude: through == :x ? (band[:x1] - band[:x0]) : (band[:y1] - band[:y0])
+          }
+          segments << full.merge(z0: band[:z1], z1: extents[2]) if band[:z1] < extents[2] - 1.0e-6
+          segments
+        end
+
+        # rubocop:disable-next Metrics/AbcSize
+        def bevel_band_in_inches(bevel, extents)
+          start_mm = bevel['startMm']
+          size_mm = bevel['sizeMm']
+          band = {
+            x0: start_mm[0] * MM_TO_INCHES, x1: (start_mm[0] + size_mm[0]) * MM_TO_INCHES,
+            y0: start_mm[1] * MM_TO_INCHES, y1: (start_mm[1] + size_mm[1]) * MM_TO_INCHES,
+            z0: start_mm[2] * MM_TO_INCHES, z1: (start_mm[2] + size_mm[2]) * MM_TO_INCHES,
+            angle: bevel['angleDeg'],
+            edge: bevel['edge']
+          }
+          angle_ok = (band[:angle] - 45.0).abs < 1.0e-6
+          raise ArgumentError, 'sólo se materializa el bisel a 45° en v1' unless angle_ok
+          unless %w[top_front bottom_front].include?(band[:edge])
+            raise ArgumentError, 'el bisel no declara un borde válido'
+          end
+
+          through_x = ((band[:x1] - band[:x0]) - extents[0]).abs < 1.0e-6
+          through_y = ((band[:y1] - band[:y0]) - extents[1]).abs < 1.0e-6
+          unless through_x ^ through_y
+            raise ArgumentError,
+                  'el bisel debe atravesar exactamente un eje horizontal del tablero'
+          end
+
+          z_span = band[:z1] - band[:z0]
+          edge_span = through_x ? (band[:y1] - band[:y0]) : (band[:x1] - band[:x0])
+          raise ArgumentError, 'el bisel debe ser más bajo que el tablero' unless z_span < extents[2] - 1.0e-6
+          unless (z_span - edge_span).abs < 1.0e-6
+            raise ArgumentError, 'el bisel a 45° exige patas iguales sobre Z y el borde'
+          end
+
+          touches_z_top = (band[:z1] - extents[2]).abs < 1.0e-6
+          touches_z_bottom = band[:z0] <= 1.0e-6
+          edge_ok = (band[:edge] == 'top_front' && touches_z_top) ||
+                    (band[:edge] == 'bottom_front' && touches_z_bottom)
+          raise ArgumentError, 'el borde del bisel no coincide con la banda vertical' unless edge_ok
+
+          band.merge(through: through_x ? :x : :y)
+        end
+
+        # The pentagon keeps the cut band's Z-heavy rectangle MINUS the
+        # right triangle the 45° wedge removes from the corner the band
+        # names: the missing right angle at the corner, the hypotenuse
+        # joining the two leg tips. The section lives in the (edge-axis, Z)
+        # plane; pushpull extrudes it along the through axis. top_front cuts
+        # the FRONT-TOP corner; bottom_front mirrors it to FRONT-BOTTOM.
+        def bevel_axes(band)
+          through = band[:through]
+          raise ArgumentError, 'el bisel no declaró un eje through' if through.nil?
+
+          [through, through == :x ? :y : :x]
+        end
+
+        def bevel_pentagon(band, extents, through)
+          leg = band[:z1] - band[:z0]
+          through == :x ? bevel_pentagon_x_through(band, extents, leg) : bevel_pentagon_y_through(band, extents, leg)
+        end
+
+        # Through = local X (the door convention): the pentagon stands at
+        # x=band start, spanning the band's (Y, Z) rectangle minus the 45°
+        # triangle at the named corner; front = the Y edge the band's edge
+        # span touches. Winding follows the rectangle (start corner first).
+        def bevel_pentagon_x_through(band, extents, leg)
+          front = bevel_edge_side(band[:y0], band[:y1], extents[1])
+          x0 = band[:x0]
+          z_lo = band[:z0]
+          z_hi = band[:z1]
+          y_lo = band[:y0]
+          y_hi = band[:y1]
+          if band[:edge] == 'top_front'
+            if front == :start
+              [[x0, y_lo, z_lo], [x0, y_hi, z_lo], [x0, y_hi, z_hi - leg],
+               [x0, y_hi - leg, z_hi], [x0, y_lo, z_hi]]
+            else
+              [[x0, y_lo, z_lo], [x0, y_hi, z_lo], [x0, y_hi, z_hi],
+               [x0, y_lo + leg, z_hi], [x0, y_lo, z_hi - leg]]
+            end
+          elsif front == :start
+            # bottom_front: the triangle bites the FRONT-BOTTOM corner.
+            [[x0, y_lo + leg, z_lo], [x0, y_hi, z_lo], [x0, y_hi, z_hi],
+             [x0, y_lo, z_hi], [x0, y_lo, z_lo + leg]]
+          else
+            [[x0, y_hi - leg, z_lo], [x0, y_lo, z_lo], [x0, y_lo, z_hi],
+             [x0, y_hi, z_hi], [x0, y_hi, z_lo + leg]]
+          end
+        end
+
+        # Through = local Y (the mirrored convention): same pentagon with
+        # X and Y roles swapped.
+        def bevel_pentagon_y_through(band, extents, leg)
+          front = bevel_edge_side(band[:x0], band[:x1], extents[0])
+          y0 = band[:y0]
+          z_lo = band[:z0]
+          z_hi = band[:z1]
+          x_lo = band[:x0]
+          x_hi = band[:x1]
+          if band[:edge] == 'top_front'
+            if front == :start
+              [[x_lo, y0, z_lo], [x_hi, y0, z_lo], [x_hi, y0, z_hi - leg],
+               [x_hi - leg, y0, z_hi], [x_lo, y0, z_hi]]
+            else
+              [[x_lo, y0, z_lo], [x_hi, y0, z_lo], [x_hi, y0, z_hi],
+               [x_lo + leg, y0, z_hi], [x_lo, y0, z_hi - leg]]
+            end
+          elsif front == :start
+            # bottom_front, mirrored.
+            [[x_lo + leg, y0, z_lo], [x_hi, y0, z_lo], [x_hi, y0, z_hi],
+             [x_lo, y0, z_hi], [x_lo, y0, z_lo + leg]]
+          else
+            [[x_hi - leg, y0, z_lo], [x_lo, y0, z_lo], [x_lo, y0, z_hi],
+             [x_hi, y0, z_hi], [x_hi, y0, z_lo + leg]]
+          end
+        end
+
+        # The band's edge span must reach exactly one board edge (start or
+        # end); an interior strip or a full-span band is not the v1 bevel.
+        def bevel_edge_side(span_lo, span_hi, extent)
+          touches_start = span_lo <= 1.0e-6
+          touches_end = span_hi >= extent - 1.0e-6
+          unless touches_start ^ touches_end
+            raise ArgumentError,
+                  'el bisel debe alcanzar exactamente un borde del tablero'
+          end
+
+          touches_end ? :end : :start
         end
 
         # The cross-section complement of the notch band is representable as
@@ -803,8 +991,11 @@ module Granete
           # Assembly fabricated components are plain boxes today — the notch
           # is a body-board effect (#1287) only the layout contract carries.
           notches = board.respond_to?(:notches) ? board.notches : []
+          # #1327: the door bevel wedge rides the same local-geometry channel
+          # (absent on everything the layout contract did not decorate).
+          bevels = board.respond_to?(:bevels) ? board.bevels : []
           LocalGeometry.build_local_box(board_definition, board.width_mm, board.thickness_mm,
-                                        board.length_mm, notches: notches)
+                                        board.length_mm, notches: notches, bevels: bevels)
 
           transform = placement_transform || LocalGeometry.axes_transform(board.translation, board.basis)
           instance = parent_definition.entities.add_instance(board_definition, transform)
