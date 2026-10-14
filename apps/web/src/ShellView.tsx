@@ -74,6 +74,7 @@ import {
   EdgesCatalog,
   HardwareCatalog,
   HardwareProfilesCatalog,
+  OpeningProfilesCatalog,
   AmbientMaterialsCatalog,
   MaterialsCatalog,
   LibraryDraftContextLine,
@@ -878,6 +879,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     openingCapabilities,
     hardwareProfiles,
     hardwareProfilesForPicker,
+    openingProfiles,
     openInEngineeringGuarded,
     orderEngineeringState,
     projectDesignsRoute,
@@ -2018,6 +2020,15 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onCreate={hardwareProfiles.create}
           onUpdate={hardwareProfiles.update}
           onDeactivate={hardwareProfiles.deactivate}
+          canMutate={canMutateCatalog}
+        />
+      ) : null}
+      {navId === 'openingProfiles' ? (
+        <OpeningProfilesCatalog
+          profiles={openingProfiles.profiles}
+          onCreate={openingProfiles.create}
+          onUpdate={openingProfiles.update}
+          onDeactivate={openingProfiles.deactivate}
           canMutate={canMutateCatalog}
         />
       ) : null}

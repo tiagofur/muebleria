@@ -620,6 +620,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
       'edges',
       'hardware',
       'hardwareProfiles',
+      'openingProfiles',
       'finishes',
       'optionGroups',
       'settings',
@@ -645,6 +646,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
     ids.add('edges');
     ids.add('hardware');
     ids.add('hardwareProfiles');
+    ids.add('openingProfiles');
     ids.add('optionGroups');
   }
   if (roleCanAccessSettings(role)) ids.add('settings');

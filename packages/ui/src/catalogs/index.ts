@@ -66,6 +66,20 @@ export type {
 } from './hardware/hardwareProfileDraft';
 
 export {
+  OpeningProfilesCatalog,
+  openingProfileWriteBody,
+  type OpeningProfilesCatalogProps,
+  type OpeningProfileRow,
+} from './opening/OpeningProfilesCatalog';
+export {
+  toOpeningProfileDraft,
+  suggestOpeningProfileId,
+  emptyOpeningProfileDraft,
+  type OpeningProfileDraft,
+  type OpeningProfileBodyModifierLike,
+} from './opening/openingProfileDraft';
+
+export {
   AmbientMaterialsCatalog,
   type AmbientCategoryDraft,
   type AmbientMaterialDraft,

@@ -509,7 +509,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     // Configure the exact output tuple through the real Settings UI (#591).
     await login(page);
     await page.goto('/settings');
-    await page.getByTestId('settings-tab-tab-ingenieria').click();
+    await page.getByTestId('settings-tab-tab-produccion').click();
     await expect(page.getByTestId('machine-output-cutting')).toBeVisible();
     await page.getByTestId('machine-output-cutting-machine').selectOption({ label: 'HOLZMA (HOMAG) HPP 250' });
     await page.getByTestId('machine-output-cutting-profile').selectOption({ label: 'PTX · CADmatic 4 · r5' });

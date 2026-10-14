@@ -6,7 +6,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import type { WorkshopSettings, FactoryConstructionPolicy } from '@granete/domain';
 import type { LibraryOverlayDetail, LibraryReleaseSummary } from '@granete/storage';
-import { Network, Settings, SlidersHorizontal, Wrench } from 'lucide-react';
+import { DraftingCompass, Factory, Network, Settings, SlidersHorizontal } from 'lucide-react';
 import { PageHeader, submitBusyLabel, WorkspaceTabs, type TabDefinition } from '../common';
 import { SalesNetworkSection } from './SalesNetworkSection';
 import '../catalogs/catalogs.css';
@@ -50,7 +50,7 @@ export type SettingsScreenProps = {
   readonly openingCapabilitiesConfig?: OpeningSettingsSectionProps | null;
 };
 
-type SettingsTabId = 'general' | 'ingenieria' | 'red';
+type SettingsTabId = 'general' | 'diseno' | 'produccion' | 'red';
 
 const SETTINGS_TABS: readonly TabDefinition<SettingsTabId>[] = [
   {
@@ -59,9 +59,14 @@ const SETTINGS_TABS: readonly TabDefinition<SettingsTabId>[] = [
     icon: <SlidersHorizontal size={14} aria-hidden style={{ marginRight: 6 }} />,
   },
   {
-    id: 'ingenieria',
-    label: 'Ingeniería y Producción',
-    icon: <Wrench size={14} aria-hidden style={{ marginRight: 6 }} />,
+    id: 'diseno',
+    label: 'Diseño e Ingeniería',
+    icon: <DraftingCompass size={14} aria-hidden style={{ marginRight: 6 }} />,
+  },
+  {
+    id: 'produccion',
+    label: 'Producción y Máquinas',
+    icon: <Factory size={14} aria-hidden style={{ marginRight: 6 }} />,
   },
   {
     id: 'red',
@@ -398,8 +403,8 @@ export function SettingsScreen({
           />
         ) : null}
 
-        {/* TAB 2: INGENIERÍA Y PRODUCCIÓN */}
-        {activeTab === 'ingenieria' ? (
+        {/* TAB: PRODUCCIÓN Y MÁQUINAS — cómo corta el taller (#1325 IA) */}
+        {activeTab === 'produccion' ? (
           <>
             <fieldset className="catalog-form__section" data-testid="settings-section-cut-strategy">
               <legend className="catalog-form__section-title">
@@ -437,7 +442,7 @@ export function SettingsScreen({
               </div>
             </fieldset>
 
-            <fieldset className="catalog-form__section" data-testid="settings-section-ingenieria">
+            <fieldset className="catalog-form__section" data-testid="settings-section-machines">
               <legend className="catalog-form__section-title">
                 Seccionadoras de Corte (PTX)
               </legend>
@@ -553,6 +558,12 @@ export function SettingsScreen({
               </div>
             </fieldset>
 
+          </>
+        ) : null}
+
+        {/* TAB: DISEÑO E INGENIERÍA — cómo se construye lo que se diseña (#1325 IA) */}
+        {activeTab === 'diseno' ? (
+          <>
             {constructionPolicyConfig ? (
               <ConstructionSettingsSection {...constructionPolicyConfig} />
             ) : null}

@@ -3045,6 +3045,63 @@ type HardwareProfile struct {
 	UpdatedAt   string                `json:"updatedAt"`
 }
 
+type OpeningProfileBodyModifier struct {
+	Role             string   `json:"role"`
+	Effect           *string  `json:"effect,omitempty"`
+	DepthReductionMm *int64   `json:"depth_reduction_mm,omitempty"`
+	NotchHeightMm    *float64 `json:"notch_height_mm,omitempty"`
+	NotchDepthMm     *float64 `json:"notch_depth_mm,omitempty"`
+	NotchAt          *string  `json:"notch_at,omitempty"`
+}
+
+type OpeningProfileBOMMember struct {
+	HardwareID   string    `json:"hardware_id"`
+	Rule         string    `json:"rule"`
+	Unit         *string   `json:"unit,omitempty"`
+	SpacingMm    *int64    `json:"spacing_mm,omitempty"`
+	DimensionsMm []float64 `json:"dimensions_mm,omitempty"`
+}
+
+type OpeningProfileWrite struct {
+	ID                   *string                             `json:"id,omitempty"`
+	Code                 string                              `json:"code"`
+	Name                 string                              `json:"name"`
+	GripType             string                              `json:"grip_type"`
+	CrossSectionShape    *string                             `json:"cross_section_shape,omitempty"`
+	CompatiblePlacements []string                            `json:"compatible_placements"`
+	FrontReductionMm     *int64                              `json:"front_reduction_mm,omitempty"`
+	GripClearanceMm      *int64                              `json:"grip_clearance_mm,omitempty"`
+	ProfileHeightMm      *float64                            `json:"profile_height_mm,omitempty"`
+	ProfileDepthMm       *float64                            `json:"profile_depth_mm,omitempty"`
+	GeometryOrigin       *string                             `json:"geometry_origin,omitempty"`
+	DatasheetStatus      string                              `json:"datasheet_status"`
+	BodyModifiers        []OpeningProfileBodyModifier        `json:"body_modifiers,omitempty"`
+	BomMembers           *map[string]OpeningProfileBOMMember `json:"bom_members,omitempty"`
+	Active               *bool                               `json:"active,omitempty"`
+}
+
+type OpeningProfile struct {
+	ID                   string                              `json:"id"`
+	OrganizationID       string                              `json:"organization_id"`
+	Code                 string                              `json:"code"`
+	Name                 string                              `json:"name"`
+	GripType             string                              `json:"grip_type"`
+	CrossSectionShape    *string                             `json:"cross_section_shape,omitempty"`
+	CompatiblePlacements []string                            `json:"compatible_placements"`
+	FrontReductionMm     *int64                              `json:"front_reduction_mm,omitempty"`
+	GripClearanceMm      *int64                              `json:"grip_clearance_mm,omitempty"`
+	ProfileHeightMm      *float64                            `json:"profile_height_mm,omitempty"`
+	ProfileDepthMm       *float64                            `json:"profile_depth_mm,omitempty"`
+	GeometryOrigin       *string                             `json:"geometry_origin,omitempty"`
+	DatasheetStatus      string                              `json:"datasheet_status"`
+	BodyModifiers        []OpeningProfileBodyModifier        `json:"body_modifiers,omitempty"`
+	BomMembers           *map[string]OpeningProfileBOMMember `json:"bom_members,omitempty"`
+	Active               bool                                `json:"active"`
+	Version              int64                               `json:"version"`
+	CreatedAt            string                              `json:"created_at"`
+	UpdatedAt            string                              `json:"updated_at"`
+}
+
 type HardwareProfileWrite struct {
 	Code        string                `json:"code"`
 	Name        string                `json:"name"`

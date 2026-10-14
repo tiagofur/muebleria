@@ -134,6 +134,7 @@ describe('AppShell nav model (F017)', () => {
       'edges',
       'hardware',
       'hardwareProfiles',
+      'openingProfiles',
       'finishes',
     ]);
 
@@ -187,6 +188,7 @@ describe('AppShell nav model (F017)', () => {
       'edges',
       'hardware',
       'hardwareProfiles',
+      'openingProfiles',
       'finishes',
     ]);
   });

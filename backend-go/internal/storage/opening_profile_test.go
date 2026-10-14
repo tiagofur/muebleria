@@ -19,19 +19,19 @@ func TestOpeningProfile_roundTripAndIfMatch(t *testing.T) {
 
 	withinInitialOrganization(t, store, func(txCtx context.Context) error {
 		profile := domain.OpeningProfile{
-			ID:     "op-rt-" + suffix,
-			Code:   "GOLA-L-ALU",
-			Name:   "Gola L aluminio (superior)",
-			GripType: "gola",
-			CrossSectionShape: "L",
+			ID:                   "op-rt-" + suffix,
+			Code:                 "GOLA-L-ALU",
+			Name:                 "Gola L aluminio (superior)",
+			GripType:             "gola",
+			CrossSectionShape:    "L",
 			CompatiblePlacements: []string{"top"},
-			DatasheetStatus: "pending",
+			DatasheetStatus:      "pending",
 			BodyModifiers: []domain.OpeningBodyModifier{
 				{Role: "top", DepthReductionMm: openingIntPtr(18)},
 				{Role: "side", NotchHeightMm: openingFloatPtr(56.5), NotchDepthMm: openingFloatPtr(27.2), NotchAt: "top_front"},
 			},
 			BOMMembers: map[string]domain.OpeningBOMMember{
-				"profile": {HardwareID: "", Rule: "interior_width", Unit: "meter"},
+				"profile":  {HardwareID: "", Rule: "interior_width", Unit: "meter"},
 				"supports": {HardwareID: "", Rule: "per_length", SpacingMm: openingIntPtr(300)},
 			},
 			Active: true,
@@ -77,3 +77,49 @@ func TestOpeningProfile_roundTripAndIfMatch(t *testing.T) {
 func openingIntPtr(v int) *int { return &v }
 
 func openingFloatPtr(v float64) *float64 { return &v }
+
+// #1325 — a profile authored WITHOUT body modifiers or BOM members (the
+// browser editor's create flow) writes their empty JSON, never NULL: the
+// NOT NULL JSONB columns rejected nil maps with a 500 (the create path was
+// only ever exercised with full members before the UI existed).
+func TestOpeningProfile_createWithoutModifiersOrMembers(t *testing.T) {
+	store := newMigratedRuntimeStore(t)
+	suffix := time.Now().Format("150405.000000")
+
+	withinInitialOrganization(t, store, func(txCtx context.Context) error {
+		profile := domain.OpeningProfile{
+			ID:                   "op-empty-" + suffix,
+			Code:                 "GOLA-E2E-EMPTY",
+			Name:                 "Gola sin efectos ni herrajes",
+			GripType:             "gola",
+			CrossSectionShape:    "L",
+			CompatiblePlacements: []string{"top"},
+			DatasheetStatus:      "pending",
+			Active:               true,
+		}
+		if err := store.CreateOpeningProfile(txCtx, &profile); err != nil {
+			return err
+		}
+
+		loaded, err := store.GetOpeningProfileByID(txCtx, profile.ID)
+		if err != nil {
+			return err
+		}
+		if len(loaded.BodyModifiers) != 0 || len(loaded.BOMMembers) != 0 {
+			t.Fatalf("un perfil sin declaración debe leerse vacío, got modifiers=%v members=%v", loaded.BodyModifiers, loaded.BOMMembers)
+		}
+
+		// And the empty profile updates fine (the editor edit flow).
+		edited := *loaded
+		edited.DatasheetStatus = "verified"
+		edited.FrontReductionMm = openingIntPtr(38)
+		edited.GripClearanceMm = openingIntPtr(2)
+		edited.ProfileHeightMm = openingFloatPtr(56.5)
+		edited.ProfileDepthMm = openingFloatPtr(27.2)
+		edited.GeometryOrigin = "Ficha E2E #1325"
+		if err := store.UpdateOpeningProfile(txCtx, profile.ID, loaded.Version, &edited); err != nil {
+			return err
+		}
+		return nil
+	})
+}
