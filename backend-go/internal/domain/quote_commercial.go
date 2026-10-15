@@ -191,6 +191,11 @@ type QuoteCommercialOpeningBOMLine struct {
 	MemberKey      string  `json:"memberKey"`
 	HardwareID     string  `json:"hardwareId"`
 	ProfileID      string  `json:"profileId"`
+	// ProfileCode (#1330) is the pin's frozen human-readable code so the
+	// quote can name the profile without joining the live catalog (the code
+	// is editable and the join could lie). Absent in snapshots frozen before
+	// #1330 — the truthful absence, never a live-catalog lookup.
+	ProfileCode    string  `json:"profileCode,omitempty"`
 	ProfileVersion int64   `json:"profileVersion"`
 	Boundary       string  `json:"boundary"`
 	Rule           string  `json:"rule"`

@@ -134,10 +134,26 @@ func (s *PostgresStore) deriveDesignOpeningCommercial(ctx context.Context, defau
 
 	lines := make([]domain.QuoteCommercialOpeningBOMLine, 0, len(resolution.BOM))
 	demand := make([]engine.HardwareProfileDemandLine, 0, len(resolution.BOM))
+	// #1330: the pin's frozen identity names the profile in the quote — the
+	// live catalog code is editable and a join could lie about what was
+	// quoted. The version is the PIN's frozen revision too (the engine
+	// resolution consumes live BOM data; the quoted PROVENANCE is the pin).
+	pinCode := ""
+	var pinVersion int64
+	if pin := selection.ProfilePin; pin != nil {
+		pinCode = pin.ProfileCode
+		if pin.BOM != nil {
+			pinVersion = pin.BOM.ProfileVersion
+		}
+	}
 	for _, line := range resolution.BOM {
+		lineVersion := line.ProfileVersion
+		if pinVersion > 0 {
+			lineVersion = pinVersion
+		}
 		lines = append(lines, domain.QuoteCommercialOpeningBOMLine{
 			LineID: line.LineID, MemberKey: line.MemberKey, HardwareID: line.HardwareID,
-			ProfileID: line.ProfileID, ProfileVersion: line.ProfileVersion,
+			ProfileID: line.ProfileID, ProfileCode: pinCode, ProfileVersion: lineVersion,
 			Boundary: line.Boundary, Rule: line.Rule, Quantity: line.Quantity,
 			Unit: line.Unit, CutLengthMm: line.CutLengthMm,
 		})

@@ -11819,9 +11819,161 @@
               "type": "string"
             },
             "description": "Preferred inherited choice per material binding role (option group code → material id) for this Design. Roles the definitions do not support are ignored honestly — never coerced or aliased."
+          },
+          "opening": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DesignOpeningSelection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "#1137 durable opening selection with its frozen profile pin (#1330). Null = the design declares no opening. The pin is read-only provenance: it never edits — re-applying the opening is the only way it changes."
           }
         },
         "description": "#784 durable Design-scoped authoring defaults. Canonical empty state is {\"materialChoices\":{}} — never a bare {} nor null. Changing a default never mutates existing items; materialization happens only through the explicit rollout or per-item intent."
+      },
+      "DesignOpeningSelection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "system"
+        ],
+        "properties": {
+          "system": {
+            "type": "string",
+            "description": "handle | gola | bottom_overhang."
+          },
+          "profileId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Exact opening-profile catalog id; required by gola, forbidden otherwise."
+          },
+          "placements": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Declared mounting (top | bottom in the v1 single-zone layout); absent = the profile's own compatible placements govern."
+          },
+          "profilePin": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DesignOpeningProfilePin"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Datasheet slice frozen at authoring time; absent only in rows authored before the pin existed (they resolve against the live catalog until re-applied)."
+          }
+        },
+        "description": "#1137 durable design-scoped opening intent. Declared data only: every dimension and BOM line is a resolver output over the pin, never stored client-side."
+      },
+      "DesignOpeningProfilePin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "profileCode",
+          "frontReductionMm",
+          "gripClearanceMm",
+          "datasheetStatus"
+        ],
+        "properties": {
+          "profileCode": {
+            "type": "string",
+            "description": "The profile's frozen human-readable code (the live code is editable — provenance names the pin, never a catalog join)."
+          },
+          "frontReductionMm": {
+            "type": "integer"
+          },
+          "gripClearanceMm": {
+            "type": "integer"
+          },
+          "doorReductionMm": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "#1316 workshop-facing door discount frozen with the slice; null in pins authored before the field."
+          },
+          "datasheetStatus": {
+            "type": "string"
+          },
+          "profileHeightMm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "#1283 frozen datasheet envelope; 0/absent = pin authored before the fields existed."
+          },
+          "profileDepthMm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "compatiblePlacements": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "#1287 frozen placements slice; absent = pin predates the slice."
+          },
+          "bodyModifiers": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/OpeningProfileBodyModifier"
+            },
+            "description": "#1287 frozen declared effects (the notch lives here); absent/empty = the truthful absence."
+          },
+          "bom": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DesignOpeningProfilePinBOM"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "#1263 frozen BOM slice (profile revision + declared members); null only in pins authored before #1263."
+          }
+        },
+        "description": "The pinned datasheet slice of one opening selection: the historical resolution and every provenance surface consume these values, never the live catalog."
+      },
+      "DesignOpeningProfilePinBOM": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "profileVersion",
+          "members"
+        ],
+        "properties": {
+          "profileVersion": {
+            "type": "integer",
+            "description": "The profile revision the selection was validated against (> 0)."
+          },
+          "members": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OpeningProfileBOMMember"
+            },
+            "description": "The declared members frozen with the selection; empty = the datasheet declares none."
+          }
+        },
+        "description": "#1263 the frozen BOM slice of the pin."
       },
       "DesignWorkingCopy": {
         "type": "object",
@@ -13538,6 +13690,13 @@
           "profileId": {
             "type": "string",
             "minLength": 1
+          },
+          "profileCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#1330 the pin's frozen human-readable code; absent in snapshots frozen before #1330 — never a live-catalog lookup."
           },
           "profileVersion": {
             "type": "integer",

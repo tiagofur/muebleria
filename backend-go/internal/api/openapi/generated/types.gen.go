@@ -1319,7 +1319,33 @@ const (
 )
 
 type DesignAuthoringDefaults struct {
-	MaterialChoices map[string]string `json:"materialChoices"`
+	MaterialChoices map[string]string       `json:"materialChoices"`
+	Opening         *DesignOpeningSelection `json:"opening,omitempty"`
+}
+
+type DesignOpeningSelection struct {
+	System     string                   `json:"system"`
+	ProfileId  *string                  `json:"profileId,omitempty"`
+	Placements []string                 `json:"placements,omitempty"`
+	ProfilePin *DesignOpeningProfilePin `json:"profilePin,omitempty"`
+}
+
+type DesignOpeningProfilePin struct {
+	ProfileCode          string                       `json:"profileCode"`
+	FrontReductionMm     int64                        `json:"frontReductionMm"`
+	GripClearanceMm      int64                        `json:"gripClearanceMm"`
+	DoorReductionMm      *int64                       `json:"doorReductionMm,omitempty"`
+	DatasheetStatus      string                       `json:"datasheetStatus"`
+	ProfileHeightMm      *float64                     `json:"profileHeightMm,omitempty"`
+	ProfileDepthMm       *float64                     `json:"profileDepthMm,omitempty"`
+	CompatiblePlacements []string                     `json:"compatiblePlacements,omitempty"`
+	BodyModifiers        []OpeningProfileBodyModifier `json:"bodyModifiers,omitempty"`
+	Bom                  *DesignOpeningProfilePinBOM  `json:"bom,omitempty"`
+}
+
+type DesignOpeningProfilePinBOM struct {
+	ProfileVersion int64                              `json:"profileVersion"`
+	Members        map[string]OpeningProfileBOMMember `json:"members"`
 }
 
 type DesignWorkingCopy struct {
@@ -1777,6 +1803,7 @@ type QuoteCommercialOpeningBomLine struct {
 	MemberKey      string  `json:"memberKey"`
 	HardwareId     string  `json:"hardwareId"`
 	ProfileId      string  `json:"profileId"`
+	ProfileCode    *string `json:"profileCode,omitempty"`
 	ProfileVersion int64   `json:"profileVersion"`
 	Boundary       string  `json:"boundary"`
 	Rule           string  `json:"rule"`
