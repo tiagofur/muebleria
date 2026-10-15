@@ -45,6 +45,15 @@ type OpeningGripCapability struct {
 	// (exact library ids). Absent/empty = curation pending; never a
 	// wildcard — the consumer resolves against exact ids only.
 	Profiles []string `json:"profiles,omitempty"`
+	// StandardProfiles (#1329) marks the workshop's STANDARD profile per
+	// gola section (L | C | J | flat → exact profile id) so two same-section
+	// profiles of different makers stay distinguishable at selection time.
+	// Parser-enforced: gola only, one per section (map keys), and each value
+	// must be part of Profiles — the workshop cannot standardize what it
+	// does not offer. A standard whose profile later deactivates/disappears
+	// resolves to NO standard on the consumer (fail-closed, never an
+	// invented fallback).
+	StandardProfiles map[string]string `json:"standardProfiles,omitempty"`
 }
 
 // OpeningFurnitureTypeCapabilities is one furniture type's restrictions and
