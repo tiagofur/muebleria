@@ -930,6 +930,7 @@ export type {
   OpeningGripSystem,
   FurnitureTypeKey,
   OpeningPlacementKey,
+  OpeningGolaSectionKey,
   OpeningGripCapability,
   OpeningFurnitureTypeGrip,
   OpeningFurnitureTypeCapabilities,

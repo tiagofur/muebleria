@@ -2177,6 +2177,17 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                   onSave: () => openingCapabilities.saveCapabilities(openingCapabilities.capabilities),
                   saving: openingCapabilities.saving,
                   error: openingCapabilities.error,
+                  // #1329: the live catalog names the curated ids and drives
+                  // the per-section standard radios (fail-closed on dead rows).
+                  profiles: openingProfiles.profiles.map((profile) => ({
+                    id: profile.id,
+                    code: profile.code,
+                    name: profile.name,
+                    manufacturer: profile.manufacturer,
+                    crossSection: profile.crossSection,
+                    active: profile.active,
+                    datasheetStatus: profile.datasheetStatus,
+                  })),
                 }
               : null
           }
