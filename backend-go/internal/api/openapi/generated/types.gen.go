@@ -3078,6 +3078,7 @@ type OpeningProfileWrite struct {
 	ID                   *string                             `json:"id,omitempty"`
 	Code                 string                              `json:"code"`
 	Name                 string                              `json:"name"`
+	Manufacturer         *string                             `json:"manufacturer,omitempty"`
 	GripType             string                              `json:"grip_type"`
 	CrossSectionShape    *string                             `json:"cross_section_shape,omitempty"`
 	CompatiblePlacements []string                            `json:"compatible_placements"`
@@ -3098,6 +3099,7 @@ type OpeningProfile struct {
 	OrganizationID       string                              `json:"organization_id"`
 	Code                 string                              `json:"code"`
 	Name                 string                              `json:"name"`
+	Manufacturer         *string                             `json:"manufacturer,omitempty"`
 	GripType             string                              `json:"grip_type"`
 	CrossSectionShape    *string                             `json:"cross_section_shape,omitempty"`
 	CompatiblePlacements []string                            `json:"compatible_placements"`

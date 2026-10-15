@@ -44,6 +44,9 @@
     profiles: [], // the org's opening profile catalog
     draft: null, // { system, profileId, placements[] } — local, unsaved
     draftError: null, // { reason, message } — the last refused apply
+    // #1329: a NON-standard profile choice demands an explicit confirmation
+    // before the ONE write goes out (first click only arms the warning).
+    confirmNonStandard: false,
     errorReason: null, // why the authoritative READ failed (transport/credential)
     saving: false,
     laneActive: false,
@@ -121,6 +124,44 @@
     return null;
   }
 
+  // #1329: the workshop's STANDARD profile per gola section — org overlay
+  // data, read-only here. "" = no standard for the section (or no data);
+  // a dead standard (profile inactive/removed) never reaches this module
+  // as a choice because selectableProfiles() filters non-verified rows and
+  // the preselection only arms on ids that are selectable right now.
+  function standardForSection(section) {
+    var grips = state.capabilities && state.capabilities.grips;
+    var standards = grips && grips.gola && grips.gola.standardProfiles;
+    if (!section || !standards) {
+      return "";
+    }
+    return standards[section] || "";
+  }
+
+  // The unique selectable standard across the curated sections, or "": with
+  // several sections' standards marked the card cannot guess one, and the
+  // honest absence beats an arbitrary pick. Fail-closed: a standard whose
+  // profile is not selectable right now (pending datasheet, deactivated,
+  // removed) is NO candidate — never an invented fallback.
+  function uniqueSelectableStandardId() {
+    var candidates = {};
+    var selectable = selectableProfiles();
+    for (var i = 0; i < selectable.length; i++) {
+      var standardId = standardForSection(selectable[i].cross_section_shape);
+      if (!standardId) {
+        continue;
+      }
+      for (var j = 0; j < selectable.length; j++) {
+        if (selectable[j].id === standardId) {
+          candidates[standardId] = true;
+          break;
+        }
+      }
+    }
+    var ids = Object.keys(candidates);
+    return ids.length === 1 ? ids[0] : "";
+  }
+
   function placementsFor(profileId) {
     if (!profileId) {
       return [];
@@ -139,6 +180,47 @@
       }
     }
     return id;
+  }
+
+  // #1329: the option names the maker too — two same-section profiles of
+  // different manufacturers are distinguishable BEFORE selecting.
+  function profileOptionLabel(profile) {
+    var label = profile.name || profile.id;
+    if (profile.manufacturer) {
+      label += " (" + profile.manufacturer + ")";
+    }
+    return label;
+  }
+
+  // #1329: the profile's own declared consequences, computed ONLY from the
+  // profile entity the server sent (no derived-output guesswork): the door
+  // discount (H − N), the declared notch envelope and the maker.
+  function profileConsequences(profile) {
+    if (!profile) {
+      return "";
+    }
+    var parts = [];
+    var discount = null;
+    if (profile.door_reduction_mm != null) {
+      discount = profile.door_reduction_mm;
+    } else if (profile.front_reduction_mm != null && profile.grip_clearance_mm != null) {
+      discount = profile.front_reduction_mm + profile.grip_clearance_mm;
+    }
+    if (discount != null) {
+      parts.push("Puertas H−" + discount);
+    }
+    var modifiers = profile.body_modifiers || [];
+    for (var i = 0; i < modifiers.length; i++) {
+      var modifier = modifiers[i];
+      if (modifier && modifier.notch_height_mm != null && modifier.notch_depth_mm != null) {
+        parts.push("Muesca " + modifier.notch_height_mm + " × " + modifier.notch_depth_mm + " mm");
+        break;
+      }
+    }
+    if (profile.manufacturer) {
+      parts.push(profile.manufacturer);
+    }
+    return parts.join(" · ");
   }
 
   function clearChildren(node) {
@@ -299,7 +381,7 @@
       profileSelect.disabled = state.saving;
       profileSelect.appendChild(makeOption("", profiles.length ? "—" : "sin perfiles verificados", !draftProfileId()));
       for (var p = 0; p < profiles.length; p++) {
-        profileSelect.appendChild(makeOption(profiles[p].id, profiles[p].name || profiles[p].id, draftProfileId() === profiles[p].id));
+        profileSelect.appendChild(makeOption(profiles[p].id, profileOptionLabel(profiles[p]), draftProfileId() === profiles[p].id));
       }
       profileSelect.onchange = function () {
         setDraftProfile(profileSelect.value);
@@ -307,6 +389,29 @@
       profileField.appendChild(profileLabel);
       profileField.appendChild(profileSelect);
       body.appendChild(profileField);
+
+      // #1329: the chosen profile's declared consequences BEFORE any
+      // confirm — and whether it is the workshop's standard.
+      var chosen = profileById(draftProfileId());
+      var consequences = profileConsequences(chosen);
+      if (consequences) {
+        var consequencesLine = document.createElement("p");
+        consequencesLine.className = "subhead";
+        consequencesLine.style.cssText = "font-size: var(--text-xs); margin: var(--space-1) 0 0;";
+        consequencesLine.setAttribute("data-testid", "opening-consequences");
+        consequencesLine.textContent = consequences;
+        body.appendChild(consequencesLine);
+      }
+      var chosenStandardId = chosen ? standardForSection(chosen.cross_section_shape) : "";
+      if (chosen && chosenStandardId && chosen.id === chosenStandardId) {
+        var standardNote = document.createElement("p");
+        standardNote.className = "subhead";
+        standardNote.style.cssText = "font-size: var(--text-xs); margin: var(--space-1) 0 0;";
+        standardNote.setAttribute("data-testid", "opening-standard-note");
+        standardNote.textContent = "Perfil estándar de tu taller" +
+          (chosen.cross_section_shape ? " (sección " + chosen.cross_section_shape + ")" : "") + ".";
+        body.appendChild(standardNote);
+      }
 
       var placements = placementsFor(draftProfileId());
       // #1261: Si el perfil solo tiene una posición (ej. Gola L es fija Superior),
@@ -360,6 +465,23 @@
     renderGeometryOutcome(body);
 
     if (state.draft) {
+      // #1329: the non-standard warning rides BEFORE the actions — the
+      // effect is visible and the confirmation is explicit, never silent.
+      var pendingProfile = profileById(draftProfileId());
+      var pendingStandardId = pendingProfile ? standardForSection(pendingProfile.cross_section_shape) : "";
+      var isNonStandard = pendingProfile && pendingStandardId && pendingProfile.id !== pendingStandardId;
+      if (isNonStandard && state.confirmNonStandard) {
+        var standardProfile = profileById(pendingStandardId);
+        var warning = document.createElement("p");
+        warning.className = "subhead";
+        warning.style.cssText = "font-size: var(--text-xs); margin: var(--space-2) 0 0; color: var(--danger, #b00020);";
+        warning.setAttribute("data-testid", "opening-nonstandard-warning");
+        warning.setAttribute("role", "alert");
+        warning.textContent = "El perfil elegido no es el estándar de tu taller" +
+          (standardProfile ? " (estándar: " + (standardProfile.name || standardProfile.id) + ")" : "") +
+          ". Confirmá si querés usarlo igualmente.";
+        body.appendChild(warning);
+      }
       var actions = document.createElement("div");
       actions.style.cssText = "display: flex; gap: var(--space-2); margin-top: var(--space-2);";
       var discard = document.createElement("button");
@@ -371,13 +493,16 @@
       discard.onclick = function () {
         state.draft = null;
         state.draftError = null;
+        state.confirmNonStandard = false;
         render();
       };
       var apply = document.createElement("button");
       apply.className = "btn btn-primary";
       apply.style.flex = "1";
       apply.setAttribute("data-testid", "opening-apply");
-      apply.textContent = state.saving ? "Guardando…" : "Aplicar apertura";
+      apply.textContent = state.saving
+        ? "Guardando…"
+        : (isNonStandard && state.confirmNonStandard ? "Confirmar perfil no estándar" : "Aplicar apertura");
       apply.disabled = state.saving;
       apply.onclick = function () {
         applyDraft();
@@ -498,8 +623,19 @@
     if (system !== "gola") {
       draft.profileId = "";
       draft.placements = [];
+    } else if (!draft.profileId) {
+      // #1329: a fresh gola choice preselects the workshop's standard —
+      // only when exactly ONE section's standard is selectable (with
+      // several marked sections the card cannot guess and shows "—").
+      var standardId = uniqueSelectableStandardId();
+      if (standardId) {
+        draft.profileId = standardId;
+        var preselected = placementsFor(standardId);
+        draft.placements = preselected.length === 1 ? [preselected[0]] : [];
+      }
     }
     state.draftError = null;
+    state.confirmNonStandard = false;
     render();
   }
 
@@ -509,6 +645,7 @@
     var placements = placementsFor(profileId);
     draft.placements = placements.length === 1 ? [placements[0]] : [];
     state.draftError = null;
+    state.confirmNonStandard = false;
     render();
   }
 
@@ -516,11 +653,25 @@
     var draft = ensureDraft();
     draft.placements = placement ? [placement] : [];
     state.draftError = null;
+    state.confirmNonStandard = false;
     render();
   }
 
   function applyDraft() {
     if (!deps.sketchup || !state.draft || state.saving) return;
+    // #1329: a NON-standard choice (a marked standard exists for its
+    // section and the choice differs) needs an explicit confirmation — the
+    // first click only arms the warning; the second one applies.
+    var chosen = profileById(state.draft.profileId || "");
+    if (state.draft.system === "gola" && chosen && !state.confirmNonStandard) {
+      var chosenStandardId = standardForSection(chosen.cross_section_shape);
+      if (chosenStandardId && chosenStandardId !== chosen.id) {
+        state.confirmNonStandard = true;
+        render();
+        return;
+      }
+    }
+    state.confirmNonStandard = false;
     var placements = state.draft.placements;
     if ((!placements || placements.length === 0) && draftProfileId()) {
       var autoPlacements = placementsFor(draftProfileId());
@@ -585,6 +736,7 @@
     if (answer.status === "ok") {
       state.draft = null;
       state.draftError = null;
+      state.confirmNonStandard = false;
       // The server answered with the fresh authoritative state — render it
       // verbatim instead of guessing, and adopt the advanced token.
       state.persisted = extractPersisted(answer.state);
@@ -711,6 +863,7 @@
       state.requestId += 1;
       state.draft = null;
       state.draftError = null;
+      state.confirmNonStandard = false;
       render();
       deps.sketchup.get_design_opening(JSON.stringify({
         requestId: state.requestId,

@@ -38,6 +38,18 @@ var openingPlacementVocabulary = map[string]bool{
 	"top": true, "between": true, "bottom": true,
 }
 
+// openingStandardSectionKnown: the standard-profile map is keyed by the
+// profile's own cross-section vocabulary (domain.OpeningCrossSections) —
+// gola only, so a stray key fails closed instead of hiding a section typo.
+func openingStandardSectionKnown(section string) bool {
+	for _, known := range domain.OpeningCrossSections {
+		if known == section {
+			return true
+		}
+	}
+	return false
+}
+
 // ParseOpeningCapabilities decodes the opening capabilities from an
 // organization overlay's overrides JSON. nil, nil = no overlay decision.
 func ParseOpeningCapabilities(overrides json.RawMessage) (*domain.OpeningCapabilities, error) {
@@ -114,8 +126,42 @@ func ParseOpeningCapabilities(overrides json.RawMessage) (*domain.OpeningCapabil
 					profiles = append(profiles, profileID)
 				}
 				capability.Profiles = profiles
+			case "standardProfiles":
+				if system != domain.OpeningGripSystemGola {
+					return nil, fmt.Errorf("%s.grips.%s.standardProfiles sólo aplica al sistema gola", openingCapabilitiesBlobKey, system)
+				}
+				standardsRaw, ok := value.(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("%s.grips.%s.standardProfiles debe ser un objeto por sección", openingCapabilitiesBlobKey, system)
+				}
+				standards := map[string]string{}
+				for section, idRaw := range standardsRaw {
+					if !openingStandardSectionKnown(section) {
+						return nil, fmt.Errorf("%s.grips.%s.standardProfiles.%s no es una sección conocida", openingCapabilitiesBlobKey, system, section)
+					}
+					profileID, ok := idRaw.(string)
+					if !ok || profileID == "" {
+						return nil, fmt.Errorf("%s.grips.%s.standardProfiles exige ids exactos no vacíos", openingCapabilitiesBlobKey, system)
+					}
+					standards[section] = profileID
+				}
+				capability.StandardProfiles = standards
 			default:
 				return nil, fmt.Errorf("%s.grips.%s.%s no es una clave conocida", openingCapabilitiesBlobKey, system, key)
+			}
+		}
+		// #1329: a standard must be one of the curated profiles — the
+		// workshop cannot standardize what it does not offer.
+		for section, standardID := range capability.StandardProfiles {
+			curated := false
+			for _, id := range capability.Profiles {
+				if id == standardID {
+					curated = true
+					break
+				}
+			}
+			if !curated {
+				return nil, fmt.Errorf("%s.grips.%s.standardProfiles.%s debe ser parte de la curaduría de perfiles", openingCapabilitiesBlobKey, system, section)
 			}
 		}
 		if capability.Default {

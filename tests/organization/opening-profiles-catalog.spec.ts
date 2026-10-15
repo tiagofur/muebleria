@@ -37,6 +37,8 @@ test('opening profile: pending → verified datasheet with derived depth reducti
   await page.getByTestId('opening-profile-id-input').fill('profile.gola-e2e-1325');
   await page.getByTestId('opening-profile-code-input').fill('GOLA-E2E-1325');
   await page.getByTestId('opening-profile-name-input').fill('Gola E2E #1325');
+  // #1329: the informational manufacturer rides the create and the readback.
+  await page.getByTestId('opening-profile-manufacturer-input').fill('SCILM');
   await page.getByTestId('opening-profile-form-submit-btn').click();
 
   // The modal's exit timer (350ms) is throttled in the gate's hidden window:
@@ -70,6 +72,7 @@ test('opening profile: pending → verified datasheet with derived depth reducti
   const detail = page.locator('.catalog-row-detail');
   await expect(detail).toContainText('v2');
   await expect(detail).toContainText('Verificada');
+  await expect(detail).toContainText('SCILM');
   await expect(detail).toContainText('56.5 alto × 27.2 profundo');
   await expect(detail).toContainText('Descuento de puerta');
   await expect(detail).toContainText('40 mm');

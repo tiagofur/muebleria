@@ -184,6 +184,20 @@ export function OpeningProfileFormModal({
           />
         </label>
 
+        <label className="catalog-form__field">
+          <span>Fabricante</span>
+          <input
+            value={draft.manufacturer}
+            onChange={(e) => setDraft((current) => ({ ...current, manufacturer: e.target.value }))}
+            placeholder="SCILM"
+            maxLength={120}
+            data-testid="opening-profile-manufacturer-input"
+          />
+          <small className="catalog-form__hint">
+            Informativo: distingue dos perfiles iguales de fabricantes distintos en el picker. El código sigue siendo la identidad.
+          </small>
+        </label>
+
         <div className="catalog-form__row">
           <label className="catalog-form__field">
             <span>Tipo de agarre</span>

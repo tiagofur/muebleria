@@ -98,6 +98,53 @@ describe('openingCapabilities — fail-closed y available ≠ valid (#1134)', ()
     }).ok).toBe(false);
   });
 
+  it('#1329 — estándar del taller: sólo gola, sección conocida, valor ∈ curaduría', () => {
+    expect(parseOpeningCapabilities({
+      'opening.capabilities': {
+        version: 1,
+        grips: { handle: { enabled: true, standardProfiles: { L: 'profile.x' } } },
+      },
+    }).ok).toBe(false);
+    expect(parseOpeningCapabilities({
+      'opening.capabilities': {
+        version: 1,
+        grips: {
+          gola: { enabled: true, profiles: ['profile.gola-l.alu'], standardProfiles: { Z: 'profile.gola-l.alu' } },
+        },
+      },
+    }).ok).toBe(false);
+    expect(parseOpeningCapabilities({
+      'opening.capabilities': {
+        version: 1,
+        grips: {
+          gola: { enabled: true, profiles: ['profile.gola-l.alu'], standardProfiles: { L: 'profile.other-maker' } },
+        },
+      },
+    }).ok).toBe(false);
+    // El estándar curado lee exacto: una marca por sección.
+    expect(parseOpeningCapabilities({
+      'opening.capabilities': {
+        version: 1,
+        grips: {
+          gola: {
+            enabled: true,
+            profiles: ['profile.gola-l.alu', 'profile.gola-c.alu'],
+            standardProfiles: { L: 'profile.gola-l.alu', C: 'profile.gola-c.alu' },
+          },
+        },
+      },
+    })).toMatchObject({
+      ok: true,
+      capabilities: {
+        grips: {
+          gola: {
+            standardProfiles: { L: 'profile.gola-l.alu', C: 'profile.gola-c.alu' },
+          },
+        },
+      },
+    });
+  });
+
   it('tipo de mueble y placement desconocidos fallan cerrado', () => {
     expect(parseOpeningCapabilities({
       'opening.capabilities': {

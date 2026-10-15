@@ -20,6 +20,7 @@ function toRow(profile: OpeningProfile): OpeningProfileRow {
     id: profile.id,
     code: profile.code,
     name: profile.name,
+    manufacturer: profile.manufacturer ?? null,
     gripType: profile.grip_type,
     crossSection: profile.cross_section_shape ?? null,
     placements: profile.compatible_placements,

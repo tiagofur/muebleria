@@ -42,12 +42,27 @@ func TestOpeningProfilesRBACAndCRUD(t *testing.T) {
 		t.Fatalf("vendedor POST status = %d, want 403", rr.Code)
 	}
 
-	// Write: ingeniero creates; the pending profile persists.
-	req = withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/opening-profiles", strings.NewReader(`{"id":"op-2","code":"GOLA-C-ALU","name":"Gola C aluminio","grip_type":"gola","cross_section_shape":"C","compatible_placements":["between"],"datasheet_status":"pending","active":true}`)), "eng", string(domain.RoleIngeniero))
+	// Write: ingeniero creates; the pending profile persists. #1329: the
+	// informational manufacturer rides the create and the readback.
+	req = withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/opening-profiles", strings.NewReader(`{"id":"op-2","code":"GOLA-C-ALU","name":"Gola C aluminio","manufacturer":"SCILM","grip_type":"gola","cross_section_shape":"C","compatible_placements":["between"],"datasheet_status":"pending","active":true}`)), "eng", string(domain.RoleIngeniero))
 	rr = httptest.NewRecorder()
 	srv.HandleOpeningProfiles(rr, req)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want 201 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"manufacturer":"SCILM"`) {
+		t.Fatalf("create readback must expose the manufacturer: %s", rr.Body.String())
+	}
+
+	// #1329: a manufacturer beyond the 120-char bound fails closed at the
+	// write boundary instead of storing an unreadable picker line.
+	tooLong := strings.Repeat("x", 121)
+	body := `{"id":"op-3","code":"GOLA-LONG","name":"Gola larga","manufacturer":"` + tooLong + `","grip_type":"gola","cross_section_shape":"L","compatible_placements":["top"],"datasheet_status":"pending","active":true}`
+	req = withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/opening-profiles", strings.NewReader(body)), "eng", string(domain.RoleIngeniero))
+	rr = httptest.NewRecorder()
+	srv.HandleOpeningProfiles(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("manufacturer-too-long status = %d, want 500 (domain validation rejects)", rr.Code)
 	}
 }
 

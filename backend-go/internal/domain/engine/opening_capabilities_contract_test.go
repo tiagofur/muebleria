@@ -124,6 +124,46 @@ func TestOpeningCapabilitiesFailClosed(t *testing.T) {
 		t.Fatal("profiles outside gola must fail closed")
 	}
 
+	// #1329 — the workshop's standard profile: gola-only, known sections,
+	// and each standard must be part of the curation.
+	standardsOnHandle := map[string]any{
+		"version": 1,
+		"grips": map[string]any{
+			"handle": map[string]any{"enabled": true, "standardProfiles": map[string]any{"L": "profile.x"}},
+		},
+	}
+	if err := parse(t, standardsOnHandle); err == nil {
+		t.Fatal("standardProfiles outside gola must fail closed")
+	}
+
+	unknownSection := map[string]any{
+		"version": 1,
+		"grips": map[string]any{
+			"gola": map[string]any{
+				"enabled":          true,
+				"profiles":         []any{"profile.gola-l.alu"},
+				"standardProfiles": map[string]any{"Z": "profile.gola-l.alu"},
+			},
+		},
+	}
+	if err := parse(t, unknownSection); err == nil || !strings.Contains(err.Error(), "sección") {
+		t.Fatalf("unknown standard section: err = %v", err)
+	}
+
+	standardOutsideCuration := map[string]any{
+		"version": 1,
+		"grips": map[string]any{
+			"gola": map[string]any{
+				"enabled":          true,
+				"profiles":         []any{"profile.gola-l.alu"},
+				"standardProfiles": map[string]any{"L": "profile.other-maker"},
+			},
+		},
+	}
+	if err := parse(t, standardOutsideCuration); err == nil || !strings.Contains(err.Error(), "curaduría") {
+		t.Fatalf("standard outside the curated list: err = %v", err)
+	}
+
 	unknownType := map[string]any{
 		"version": 1,
 		"grips":   base["grips"],

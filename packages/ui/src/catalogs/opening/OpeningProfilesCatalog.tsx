@@ -53,6 +53,8 @@ export interface OpeningProfileRow {
   readonly id: string;
   readonly code: string;
   readonly name: string;
+  /** #1329 — nullable: not declared yet is the truthful absence. */
+  readonly manufacturer: string | null;
   readonly gripType: string;
   readonly crossSection: string | null;
   readonly placements: readonly string[];
@@ -309,6 +311,11 @@ export function OpeningProfilesCatalog({
       },
       { key: 'name', header: 'Nombre', render: (r) => r.name },
       {
+        key: 'manufacturer',
+        header: 'Fabricante',
+        render: (r) => r.manufacturer ?? '—',
+      },
+      {
         key: 'grip',
         header: 'Agarre',
         render: (r) =>
@@ -421,6 +428,12 @@ export function OpeningProfilesCatalog({
                     v{row.version}
                   </span>
                 </div>
+                {row.manufacturer ? (
+                  <div className="catalog-row-detail__field">
+                    <span className="catalog-row-detail__label">Fabricante</span>
+                    <span className="catalog-row-detail__value">{row.manufacturer}</span>
+                  </div>
+                ) : null}
                 <div className="catalog-row-detail__field">
                   <span className="catalog-row-detail__label">Ficha técnica</span>
                   <span className="catalog-row-detail__value">
@@ -569,6 +582,8 @@ export function openingProfileWriteBody(
   return {
     code: draft.code.trim(),
     name: draft.name.trim(),
+    // #1329: informational maker name; absent stays absent (never "").
+    ...(draft.manufacturer.trim() !== '' ? { manufacturer: draft.manufacturer.trim() } : {}),
     grip_type: draft.gripType,
     ...(draft.gripType === 'gola' && draft.crossSection !== ''
       ? { cross_section_shape: draft.crossSection }

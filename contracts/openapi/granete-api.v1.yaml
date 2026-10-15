@@ -18529,6 +18529,14 @@
           "name": {
             "type": "string"
           },
+          "manufacturer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120,
+            "description": "Optional short maker name (e.g. SCILM); informational only — the code stays the identity (#1329)."
+          },
           "grip_type": {
             "type": "string",
             "description": "gola | handle | bottom_reveal | none."
@@ -18638,6 +18646,14 @@
           },
           "name": {
             "type": "string"
+          },
+          "manufacturer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120,
+            "description": "Who makes the physical profile (e.g. SCILM) so two same-section profiles of different makers are distinguishable (#1329). Informational: the code is the identity."
           },
           "grip_type": {
             "type": "string"

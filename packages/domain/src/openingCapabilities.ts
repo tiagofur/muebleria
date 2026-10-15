@@ -26,6 +26,10 @@ export type FurnitureTypeKey = 'inferior' | 'superior' | 'alto';
 
 export type OpeningPlacementKey = 'top' | 'between' | 'bottom';
 
+/** The gola profile's own cross-section vocabulary — the standard-profile
+ * map is keyed by it (#1329). */
+export type OpeningGolaSectionKey = 'L' | 'C' | 'J' | 'flat';
+
 export type OpeningGripCapability = {
   readonly enabled: boolean;
   /** Preselected system for new authoring; at most one (parser-enforced). */
@@ -33,6 +37,11 @@ export type OpeningGripCapability = {
   /** Curated profile ids for gola (exact library ids; absent/empty =
    * curation pending — never a wildcard). */
   readonly profiles?: readonly string[];
+  /** #1329 — the workshop's STANDARD profile per gola section (gola only,
+   * one per section, each value part of `profiles`). A standard whose
+   * profile deactivates/disappears resolves to NO standard on the consumer
+   * (fail-closed, never an invented fallback). */
+  readonly standardProfiles?: Readonly<Partial<Record<OpeningGolaSectionKey, string>>>;
 };
 
 export type OpeningFurnitureTypeGrip = {
@@ -60,6 +69,7 @@ export type OpeningCapabilitiesParseResult =
 const GRIP_SYSTEMS: readonly OpeningGripSystem[] = ['handle', 'gola', 'bottom_overhang'];
 const FURNITURE_TYPES: readonly FurnitureTypeKey[] = ['inferior', 'superior', 'alto'];
 const PLACEMENTS: readonly OpeningPlacementKey[] = ['top', 'between', 'bottom'];
+const GOLA_SECTIONS: readonly OpeningGolaSectionKey[] = ['L', 'C', 'J', 'flat'];
 
 /** The library default offering (mirrors the pilot matrix §6): jaladera
  * available and default, gola available without curation, rebase available.
@@ -121,7 +131,7 @@ export function parseOpeningCapabilities(overrides: unknown): OpeningCapabilitie
     if (!isRecord(entry)) {
       return { ok: false, message: `${OPENING_CAPABILITIES_BLOB_KEY}.grips.${system} debe ser un objeto` };
     }
-    const capability: { enabled: boolean; default?: boolean; profiles?: string[] } = { enabled: false };
+    const capability: { enabled: boolean; default?: boolean; profiles?: string[]; standardProfiles?: Record<string, string> } = { enabled: false };
     for (const [key, value] of Object.entries(entry)) {
       if (key === 'enabled') {
         if (typeof value !== 'boolean') {
@@ -154,7 +164,37 @@ export function parseOpeningCapabilities(overrides: unknown): OpeningCapabilitie
         capability.profiles = profiles;
         continue;
       }
+      if (key === 'standardProfiles') {
+        if (system !== 'gola') {
+          return { ok: false, message: `${OPENING_CAPABILITIES_BLOB_KEY}.grips.${system}.standardProfiles sólo aplica al sistema gola` };
+        }
+        if (!isRecord(value)) {
+          return { ok: false, message: `${OPENING_CAPABILITIES_BLOB_KEY}.grips.${system}.standardProfiles debe ser un objeto por sección` };
+        }
+        const standardProfiles: Record<string, string> = {};
+        for (const [section, id] of Object.entries(value)) {
+          if (!GOLA_SECTIONS.includes(section as OpeningGolaSectionKey)) {
+            return { ok: false, message: `${OPENING_CAPABILITIES_BLOB_KEY}.grips.${system}.standardProfiles.${section} no es una sección conocida` };
+          }
+          if (typeof id !== 'string' || id === '') {
+            return { ok: false, message: `${OPENING_CAPABILITIES_BLOB_KEY}.grips.${system}.standardProfiles exige ids exactos no vacíos` };
+          }
+          standardProfiles[section] = id;
+        }
+        capability.standardProfiles = standardProfiles;
+        continue;
+      }
       return { ok: false, message: `${OPENING_CAPABILITIES_BLOB_KEY}.grips.${system}.${key} no es una clave conocida` };
+    }
+    // #1329: a standard must be one of the curated profiles — the workshop
+    // cannot standardize what it does not offer.
+    for (const [section, standardId] of Object.entries(capability.standardProfiles ?? {})) {
+      if (!(capability.profiles ?? []).includes(standardId)) {
+        return {
+          ok: false,
+          message: `${OPENING_CAPABILITIES_BLOB_KEY}.grips.${system}.standardProfiles.${section} debe ser parte de la curaduría de perfiles`,
+        };
+      }
     }
     if (capability.default) {
       defaults += 1;

@@ -291,10 +291,12 @@ export function useEngineeringShellState({
     navId === 'components',
   );
   // #1325: opening profiles catalog data (org-scoped, If-Match writes).
+  // #1329: also fetched on settings — the standard mark names the curated
+  // profiles from the live catalog.
   const openingProfiles = useOpeningProfiles(
     DEFAULT_API_BASE,
     session === 'auth' ? authToken : null,
-    navId === 'openingProfiles',
+    navId === 'openingProfiles' || navId === 'settings',
   );
   const editingComponentId =
     navId === 'components' && routeComponentEditId && routeComponentEditId !== 'new'

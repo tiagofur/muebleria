@@ -17,6 +17,7 @@ const v7Row: OpeningProfileRowLike = {
   id: 'profile.gola-l.8006',
   code: 'GOLA-L-8006',
   name: 'Gola L Cymisa 8006',
+  manufacturer: 'SCILM',
   gripType: 'gola',
   crossSection: 'L',
   placements: ['top'],
@@ -205,5 +206,27 @@ describe('suggestOpeningProfileId', () => {
     expect(suggestOpeningProfileId('GOLA-L-8006')).toBe('profile.gola-l-8006');
     expect(suggestOpeningProfileId('  perfil cymisa 900 ')).toBe('profile.perfil-cymisa-900');
     expect(suggestOpeningProfileId('///')).toBe('');
+  });
+});
+
+describe('#1329 — fabricante informativo del perfil', () => {
+  it('el fabricante declarado viaja al draft', () => {
+    const draft = toOpeningProfileDraft(v7Row);
+    expect(draft.manufacturer).toBe('SCILM');
+  });
+
+  it('la ausencia viaja como cadena vacía y el write body omite la clave', async () => {
+    const { openingProfileWriteBody } = await import('./OpeningProfilesCatalog');
+    const draft = toOpeningProfileDraft({ ...v7Row, manufacturer: null });
+    expect(draft.manufacturer).toBe('');
+    const body = openingProfileWriteBody(draft) as unknown as Record<string, unknown>;
+    expect(body).not.toHaveProperty('manufacturer');
+  });
+
+  it('el write body lleva el fabricante recortado cuando está declarado', async () => {
+    const { openingProfileWriteBody } = await import('./OpeningProfilesCatalog');
+    const draft = { ...toOpeningProfileDraft(v7Row), manufacturer: '  SCILM  ' };
+    const body = openingProfileWriteBody(draft) as unknown as Record<string, unknown>;
+    expect(body.manufacturer).toBe('SCILM');
   });
 });

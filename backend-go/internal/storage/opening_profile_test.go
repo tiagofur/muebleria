@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -178,6 +179,80 @@ func TestOpeningProfile_doorDiscountRoundTrip(t *testing.T) {
 		}
 		if again.Version != loaded.Version+1 || again.DoorReductionMm == nil || *again.DoorReductionMm != 30 {
 			t.Fatalf("edit must bump version and persist 30: v%d %v", again.Version, again.DoorReductionMm)
+		}
+		return nil
+	})
+}
+
+// #1329 — the informational MANUFACTURER round-trips (two gola L of
+// different makers stay distinguishable), and the write boundary bounds it
+// so the picker line stays readable. Optional: absent stays absent.
+func TestOpeningProfile_manufacturerRoundTrip(t *testing.T) {
+	store := newMigratedRuntimeStore(t)
+	suffix := time.Now().Format("150405.000000")
+
+	withinInitialOrganization(t, store, func(txCtx context.Context) error {
+		profile := domain.OpeningProfile{
+			ID:                   "op-mfr-" + suffix,
+			Code:                 "GOLA-L-SCILM-8006",
+			Name:                 "Gola L SCILM 8006",
+			Manufacturer:         "SCILM",
+			GripType:             "gola",
+			CrossSectionShape:    "L",
+			CompatiblePlacements: []string{"top"},
+			DatasheetStatus:      "verified",
+			FrontReductionMm:     openingIntPtr(38),
+			GripClearanceMm:      openingIntPtr(2),
+			ProfileHeightMm:      openingFloatPtr(56.5),
+			ProfileDepthMm:       openingFloatPtr(27.2),
+			GeometryOrigin:       "Ficha SCILM 2022-04-01 p.42",
+			DoorReductionMm:      openingIntPtr(35),
+			Active:               true,
+		}
+		if err := store.CreateOpeningProfile(txCtx, &profile); err != nil {
+			return err
+		}
+		loaded, err := store.GetOpeningProfileByID(txCtx, profile.ID)
+		if err != nil {
+			return err
+		}
+		if loaded.Manufacturer != "SCILM" {
+			t.Fatalf("manufacturer round-trip drifted: %q", loaded.Manufacturer)
+		}
+
+		edited := *loaded
+		edited.Manufacturer = "Otro Fabricante"
+		if err := store.UpdateOpeningProfile(txCtx, profile.ID, loaded.Version, &edited); err != nil {
+			return err
+		}
+		again, err := store.GetOpeningProfileByID(txCtx, profile.ID)
+		if err != nil {
+			return err
+		}
+		if again.Manufacturer != "Otro Fabricante" {
+			t.Fatalf("edit must persist the new manufacturer: %q", again.Manufacturer)
+		}
+
+		// Sin fabricante declarado: la ausencia veraz persiste (el picker
+		// simplemente no muestra la parte informativa).
+		bare := *again
+		bare.Manufacturer = ""
+		if err := store.UpdateOpeningProfile(txCtx, profile.ID, again.Version, &bare); err != nil {
+			return err
+		}
+		final, err := store.GetOpeningProfileByID(txCtx, profile.ID)
+		if err != nil {
+			return err
+		}
+		if final.Manufacturer != "" {
+			t.Fatalf("la ausencia de fabricante debe persistir vacía: %q", final.Manufacturer)
+		}
+
+		// Fuera de límite: el write falla cerrado.
+		tooLong := *final
+		tooLong.Manufacturer = strings.Repeat("x", 121)
+		if err := store.UpdateOpeningProfile(txCtx, profile.ID, final.Version, &tooLong); err == nil {
+			t.Fatal("un fabricante de 121 caracteres debe fallar cerrado")
 		}
 		return nil
 	})
