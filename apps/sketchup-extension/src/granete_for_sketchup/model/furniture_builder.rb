@@ -385,13 +385,19 @@ module Granete
           dot.negative? ? ring.reverse : ring
         end
 
+        # Newell's method (the SUMS cross-pairing): for a planar ring this is
+        # the right-hand-rule area normal. The previous version multiplied
+        # consecutive DELTAS component-wise (Δy·Δz, Δz·Δx, Δx·Δy), which is
+        # not a normal at all — it collapses to near-zero garbage on quads
+        # and flips sign on triangles, so orient_ring!'s dot test fired on
+        # noise and the wedge shipped ALL-INWARD (#1342: the inverted cut).
         def ring_normal(ring)
           nx = ny = nz = 0.0
           ring.each_with_index do |point, index|
             next_point = ring[(index + 1) % ring.size]
-            nx += (point[1] - next_point[1]) * (point[2] - next_point[2])
-            ny += (point[2] - next_point[2]) * (point[0] - next_point[0])
-            nz += (point[0] - next_point[0]) * (point[1] - next_point[1])
+            nx += (point[1] - next_point[1]) * (point[2] + next_point[2])
+            ny += (point[2] - next_point[2]) * (point[0] + next_point[0])
+            nz += (point[0] - next_point[0]) * (point[1] + next_point[1])
           end
           [nx, ny, nz]
         end
