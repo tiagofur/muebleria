@@ -162,6 +162,17 @@ CI success): fórmulas corregidas + dedupe fail-loud + stub add_face host-faithf
 bug no vuelve a escapar) + test del caso exacto del owner. **RBZ 0.1.73** (sha256 c6e5a409…) +
 watcher de instalación automática al cierre de SketchUp.
 
+Iteración #5 (2026-10-15, «geometría blanca más grande que el mueble + sin 45»,
+mueble nuevo insertado): el render #1340 dibujaba el bisel pero el PRISMA salía
+FUERA de la puerta (larguero blanco gigante). Estudio del mecanismo real del
+host (lo que pidió el owner): add_face toma la normal del winding y pushpull
+extruye hacia esa normal — el render asumía la dirección. Además la esquina del
+corte se infería de la banda y no de la basis publicada. **PR #1341**
+(MERGEADO, main e258eaf3, CI success): wedge emitido como 5 caras explícitas
+con anillos orientados hacia afuera (Newell-vs-centroide, sin pushpull),
+esquina+span derivados de la basis publicada, stub add_face host-fiel.
+**RBZ 0.1.74** (sha256 074f11ac…) + watcher de instalación al cierre.
+
 Pendiente (aceptación owner): aplicar la apertura con «Gola italiano (tira de melamina)» en un
 mueble de prueba en SketchUp — tira con color de puerta en 3D y en despiece, puerta con descuento
 35 y el corte 45°; el 8006 sigue intacto.
