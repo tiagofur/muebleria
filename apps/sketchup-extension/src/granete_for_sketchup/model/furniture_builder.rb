@@ -105,13 +105,17 @@ module Granete
         # Builds the LOCAL solid box at the definition origin: the local box
         # spans [0,width]×[0,thickness]×[0,length] on X/Y/Z (engine
         # convention the #414 basis maps onto the furniture frame). World/AABB
-        # coordinates are never baked into definition geometry.
-        def build_local_box(definition, width_mm, thickness_mm, length_mm, notches: [], bevels: [])
+        # coordinates are never baked into definition geometry. The bevel
+        # wedge consumes the board's PUBLISHED basis: the cut corner and the
+        # prism span derive from where furniture-front/top actually land in
+        # local coordinates — inferring them from the band's own extents is
+        # the guess that mirrored/flipped doors proved wrong.
+        def build_local_box(definition, width_mm, thickness_mm, length_mm, notches: [], bevels: [], basis: nil)
           extents = [width_mm, thickness_mm, length_mm].map { |value| value * MM_TO_INCHES }
 
-          local_box_segments(extents, notches, bevels).each do |segment|
-            if segment[:slanted]
-              add_slanted_segment(definition, segment)
+          local_box_segments(extents, notches, bevels, basis).each do |segment|
+            if segment[:faces]
+              add_prism_faces(definition, segment)
             else
               add_box_segment(definition, segment)
             end
@@ -136,24 +140,17 @@ module Granete
           face.pushpull(segment[:z1] - segment[:z0]) if (segment[:z1] - segment[:z0]).positive?
         end
 
-        # Adds a segment whose cross-section is the v1 bevel pentagon: the
-        # face IS the (x, y, z) 3D pentagon (one right angle lost to the 45°
-        # hypotenuse), pushpulled through the wedge's THROUGH-axis span.
-        # SketchUp's pushpull follows the face normal — the face must be
-        # built facing the through axis or the solid extrudes sideways and
-        # fails the shape contract of the tests. Anything degenerate fails
-        # loudly rather than rendering a silently broken solid.
-        def add_slanted_segment(definition, segment)
-          pts = segment[:points].map do |p|
-            Geom::Point3d.new(p[0], p[1], p[2])
+        # Adds a segment whose solid is given EXPLICITLY as faces with
+        # outward-wound point rings: no add_face-normal guessing, no
+        # pushpull direction guessing — the two host behaviors that put the
+        # bevel prism outside the door (#1327 feedback 5). Each face is
+        # added independently; a degenerate ring fails loudly.
+        def add_prism_faces(definition, segment)
+          segment[:faces].each do |ring|
+            pts = ring.map { |p| Geom::Point3d.new(p[0], p[1], p[2]) }
+            face = definition.entities.add_face(pts)
+            raise ArgumentError, 'el bisel generó una cara degenerada' unless face
           end
-          face = definition.entities.add_face(pts)
-          return unless face
-
-          face.reverse! if face.respond_to?(:normal) && face.normal.respond_to?(:z) && face.normal.z.negative?
-          raise ArgumentError, 'el bisel no tiene extensión de extrusión' unless segment[:extrude].positive?
-
-          face.pushpull(segment[:extrude])
         end
 
         # #1287 / §13.3: a notched board builds as stacked segments along the
@@ -173,7 +170,7 @@ module Granete
         # only as a through-edge wedge on local Z with its two legs equal
         # (the v1 45° cut); anything else fails loudly like the notch.
         # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-        def local_box_segments(extents, notches, bevels = [])
+        def local_box_segments(extents, notches, bevels = [], basis = nil)
           full = { x0: 0.0, x1: extents[0], y0: 0.0, y1: extents[1], z0: 0.0, z1: extents[2] }
           return [full] if (bevels.nil? || bevels.empty?) && (notches.nil? || notches.empty?)
 
@@ -182,7 +179,7 @@ module Granete
           if notches.nil? || notches.empty?
             return [full] if bevels.nil? || bevels.empty?
 
-            return bevel_box_segments(full, bevels.first, extents)
+            return bevel_box_segments(full, bevels.first, extents, basis)
           end
 
           raise ArgumentError, 'sólo se materializa una muesca por tablero' if notches.size > 1
@@ -231,21 +228,18 @@ module Granete
 
         # #1327: the wedge band sits at the boundary end of local Z, covers
         # ONE full horizontal axis (the through span), meets one cross edge
-        # of the other horizontal axis, and runs only PART of Z — otherwise it
-        # is not the v1 bevel and fails loudly. The slanted segment keeps the
-        # 3D pentagon of the cut band: the rectangle minus the 45° corner
-        # triangle, extruded along the through axis.
-        def bevel_box_segments(full, bevel, extents)
+        # of the other horizontal axis, and runs only PART of Z — otherwise
+        # it is not the v1 bevel and fails loudly. The solid is emitted as
+        # EXPLICIT faces with outward-wound rings (never add_face-normal +
+        # pushpull guessing: that pair put the prism outside the door when
+        # the host wound the section against the guess). The cut corner and
+        # the prism's span derive from the PUBLISHED basis.
+        def bevel_box_segments(full, bevel, extents, basis)
           band = bevel_band_in_inches(bevel, extents)
-          through, _edge_axis = bevel_axes(band)
 
           segments = []
           segments << full.merge(z0: 0.0, z1: band[:z0]) if band[:z0].positive?
-          segments << {
-            slanted: true,
-            points: bevel_pentagon(band, extents, through),
-            extrude: through == :x ? (band[:x1] - band[:x0]) : (band[:y1] - band[:y0])
-          }
+          segments << { faces: bevel_wedge_faces(band, extents, basis) }
           segments << full.merge(z0: band[:z1], z1: extents[2]) if band[:z1] < extents[2] - 1.0e-6
           segments
         end
@@ -290,129 +284,116 @@ module Granete
           band.merge(through: through_x ? :x : :y)
         end
 
-        # The pentagon keeps the cut band's Z-heavy rectangle MINUS the
-        # right triangle the 45° wedge removes from the corner the band
-        # names: the missing right angle at the corner, the hypotenuse
-        # joining the two leg tips. The section lives in the (edge-axis, Z)
-        # plane; pushpull extrudes it along the through axis. top_front cuts
-        # the FRONT-TOP corner; bottom_front mirrors it to FRONT-BOTTOM.
-        def bevel_axes(band)
+        # The wedge's 5 faces (2 section triangles + 3 side quads), each with
+        # an outward-wound ring. The section is the band rectangle minus the
+        # 45° corner triangle at the corner the PUBLISHED BASIS derives —
+        # in v1 (patas iguales) la sección siempre es un TRIÁNGULO.
+        # rubocop:disable-next Metrics/AbcSize
+        def bevel_wedge_faces(band, extents, basis)
           through = band[:through]
           raise ArgumentError, 'el bisel no declaró un eje through' if through.nil?
 
-          [through, through == :x ? :y : :x]
-        end
+          edge_axis = through == :x ? :y : :x
+          edge_extent = through == :x ? extents[1] : extents[0]
+          front_local_end = published_axis_end(basis, 1, edge_axis, edge_extent)
+          top_local_end = published_axis_end(basis, 2, :z, extents[2])
+          z_end = band[:edge] == 'top_front' ? top_local_end : opposite_end(top_local_end)
 
-        def bevel_pentagon(band, extents, through)
-          leg = band[:z1] - band[:z0]
-          raw = if through == :x
-                  bevel_pentagon_x_through(band, extents, leg)
-                else
-                  bevel_pentagon_y_through(band, extents, leg)
-                end
-          dedupe_polygon_points(raw)
-        end
-
-        # Host-faithful shape: SketchUp's add_face fails on repeated or
-        # collinear-collapsed vertices. A 45° cut whose leg equals a band
-        # span legitimately collapses the pentagon into a TRIANGLE (the
-        # owner's door: 13 mm bevel over a 13 mm band) — emit the distinct
-        # vertices only; fewer than three is not a face and fails loudly.
-        # rubocop:disable-next Metrics/AbcSize
-        def dedupe_polygon_points(points)
-          distinct = [points.first]
-          points.drop(1).each do |point|
-            last = distinct.last
-            next if (point[0] - last[0]).abs < 1.0e-9 &&
-                    (point[1] - last[1]).abs < 1.0e-9 &&
-                    (point[2] - last[2]).abs < 1.0e-9
-
-            distinct << point
-          end
-          if distinct.size > 2 && (distinct.first[0] - distinct.last[0]).abs < 1.0e-9 &&
-             (distinct.first[1] - distinct.last[1]).abs < 1.0e-9 &&
-             (distinct.first[2] - distinct.last[2]).abs < 1.0e-9
-            distinct.pop
-          end
-          raise ArgumentError, 'el bisel degenera en menos de tres vértices' if distinct.size < 3
-
-          distinct
-        end
-
-        # Through = local X (the door convention): the polygon stands at
-        # x=band start, spanning the band's (Y, Z) rectangle minus the 45°
-        # triangle at the named corner; front = the Y edge the band's edge
-        # span touches. The cut corner's two leg tips replace the corner,
-        # joined by the hypotenuse.
-        def bevel_pentagon_x_through(band, extents, leg)
-          front = bevel_edge_side(band[:y0], band[:y1], extents[1])
-          x0 = band[:x0]
+          e_lo = band[edge_axis == :y ? :y0 : :x0]
+          e_hi = band[edge_axis == :y ? :y1 : :x1]
           z_lo = band[:z0]
           z_hi = band[:z1]
-          y_lo = band[:y0]
-          y_hi = band[:y1]
-          if band[:edge] == 'top_front'
-            if front == :start
-              # Cut corner (y_lo, z_hi): tips (y_lo, z_hi−leg) and (y_lo+leg, z_hi).
-              [[x0, y_lo, z_lo], [x0, y_hi, z_lo], [x0, y_hi, z_hi],
-               [x0, y_lo + leg, z_hi], [x0, y_lo, z_hi - leg]]
-            else
-              # Cut corner (y_hi, z_hi): tips (y_hi, z_hi−leg) and (y_hi−leg, z_hi).
-              [[x0, y_lo, z_lo], [x0, y_hi, z_lo], [x0, y_hi, z_hi - leg],
-               [x0, y_hi - leg, z_hi], [x0, y_lo, z_hi]]
-            end
-          elsif front == :start
-            # bottom_front: cut corner (y_lo, z_lo).
-            [[x0, y_lo + leg, z_lo], [x0, y_hi, z_lo], [x0, y_hi, z_hi],
-             [x0, y_lo, z_hi], [x0, y_lo, z_lo + leg]]
-          else
-            # bottom_front: cut corner (y_hi, z_lo).
-            [[x0, y_hi - leg, z_lo], [x0, y_lo, z_lo], [x0, y_lo, z_hi],
-             [x0, y_hi, z_hi], [x0, y_hi, z_lo + leg]]
+          t_lo = band[through == :x ? :x0 : :y0]
+          t_hi = band[through == :x ? :x1 : :y1]
+
+          section = remaining_section(e_lo, e_hi, z_lo, z_hi, front_local_end, z_end)
+          to_point = ->(t, e, z) { through == :x ? [t, e, z] : [e, t, z] }
+
+          section_lo = section.map { |(e, z)| to_point.call(t_lo, e, z) }
+          section_hi = section.map { |(e, z)| to_point.call(t_hi, e, z) }
+          faces = [section_lo, section_hi]
+          section.each_with_index do |(e1, z1), index|
+            e2, z2 = section[(index + 1) % section.size]
+            faces << [to_point.call(t_lo, e1, z1), to_point.call(t_hi, e1, z1),
+                      to_point.call(t_hi, e2, z2), to_point.call(t_lo, e2, z2)]
+          end
+
+          centroid = wedge_centroid(faces)
+          faces.map { |ring| orient_ring!(ring, centroid) }
+        end
+
+        # The local end (start|end) of `axis` whose published image points at
+        # furniture axis `furniture_axis`: the basis column of the local axis
+        # carries the furniture image of that local direction (≈ +1 ⇒ the
+        # local END faces furniture-positive; ≈ −1 ⇒ the local START does).
+        def published_axis_end(basis, furniture_axis, axis, extent)
+          _ = extent
+          column = basis_local_column(basis, axis_index(axis))
+          raise ArgumentError, 'el tablero no publica base para ubicar el bisel' if column.nil?
+
+          image = column[furniture_axis]
+          raise ArgumentError, 'la base no alinea el eje del bisel con el mueble' if image.abs < 0.999
+
+          image.positive? ? :end : :start
+        end
+
+        def basis_local_column(basis, local_axis)
+          return nil if basis.nil?
+
+          key = %w[x y z][local_axis]
+          column = basis.is_a?(Hash) ? basis[key] : nil
+          return nil unless column.is_a?(Array) && column.size == 3 && column.all?(Numeric)
+
+          column.map(&:to_f)
+        end
+
+        def axis_index(axis)
+          { x: 0, y: 1, z: 2 }[axis]
+        end
+
+        def opposite_end(end_sym)
+          end_sym == :end ? :start : :end
+        end
+
+        # The band rectangle's three surviving corners once the 45° corner
+        # triangle (edge_end, z_end) is removed.
+        def remaining_section(e_lo, e_hi, z_lo, z_hi, edge_end, z_end)
+          corners = {
+            a: [e_lo, z_lo], b: [e_hi, z_lo], c: [e_hi, z_hi], d: [e_lo, z_hi]
+          }
+          cut = { %i[end end] => :c, %i[end start] => :b,
+                  %i[start end] => :d, %i[start start] => :a }[[edge_end, z_end]]
+          raise ArgumentError, 'esquina de corte del bisel no clasificable' if cut.nil?
+
+          corners.reject { |key, _corner| key == cut }.values
+        end
+
+        def wedge_centroid(faces)
+          points = faces.flatten(1)
+          [0, 1, 2].map do |axis|
+            points.map { |point| point[axis] }.sum / points.size.to_f
           end
         end
 
-        # Through = local Y (the mirrored convention): same polygon with
-        # X and Y roles swapped.
-        def bevel_pentagon_y_through(band, extents, leg)
-          front = bevel_edge_side(band[:x0], band[:x1], extents[0])
-          y0 = band[:y0]
-          z_lo = band[:z0]
-          z_hi = band[:z1]
-          x_lo = band[:x0]
-          x_hi = band[:x1]
-          if band[:edge] == 'top_front'
-            if front == :start
-              # Cut corner (x_lo, z_hi).
-              [[x_lo, y0, z_lo], [x_hi, y0, z_lo], [x_hi, y0, z_hi],
-               [x_lo + leg, y0, z_hi], [x_lo, y0, z_hi - leg]]
-            else
-              # Cut corner (x_hi, z_hi).
-              [[x_lo, y0, z_lo], [x_hi, y0, z_lo], [x_hi, y0, z_hi - leg],
-               [x_hi - leg, y0, z_hi], [x_lo, y0, z_hi]]
-            end
-          elsif front == :start
-            # bottom_front: cut corner (x_lo, z_lo).
-            [[x_lo + leg, y0, z_lo], [x_hi, y0, z_lo], [x_hi, y0, z_hi],
-             [x_lo, y0, z_hi], [x_lo, y0, z_lo + leg]]
-          else
-            # bottom_front: cut corner (x_hi, z_lo).
-            [[x_hi - leg, y0, z_lo], [x_lo, y0, z_lo], [x_lo, y0, z_hi],
-             [x_hi, y0, z_hi], [x_hi, y0, z_lo + leg]]
-          end
+        # Newell normal of the ring; reversed when it points into the solid
+        # (toward the centroid) — outward winding without hand-derived tables.
+        def orient_ring!(ring, centroid)
+          normal = ring_normal(ring)
+          center = ring.transpose.map { |axis| axis.sum / ring.size.to_f }
+          outward = center.zip(centroid).map { |f, c| f - c }
+          dot = normal.zip(outward).sum { |n, o| (n * o).to_f }
+          dot.negative? ? ring.reverse : ring
         end
 
-        # The band's edge span must reach exactly one board edge (start or
-        # end); an interior strip or a full-span band is not the v1 bevel.
-        def bevel_edge_side(span_lo, span_hi, extent)
-          touches_start = span_lo <= 1.0e-6
-          touches_end = span_hi >= extent - 1.0e-6
-          unless touches_start ^ touches_end
-            raise ArgumentError,
-                  'el bisel debe alcanzar exactamente un borde del tablero'
+        def ring_normal(ring)
+          nx = ny = nz = 0.0
+          ring.each_with_index do |point, index|
+            next_point = ring[(index + 1) % ring.size]
+            nx += (point[1] - next_point[1]) * (point[2] - next_point[2])
+            ny += (point[2] - next_point[2]) * (point[0] - next_point[0])
+            nz += (point[0] - next_point[0]) * (point[1] - next_point[1])
           end
-
-          touches_end ? :end : :start
+          [nx, ny, nz]
         end
 
         # The cross-section complement of the notch band is representable as
@@ -1030,10 +1011,13 @@ module Granete
           # is a body-board effect (#1287) only the layout contract carries.
           notches = board.respond_to?(:notches) ? board.notches : []
           # #1327: the door bevel wedge rides the same local-geometry channel
-          # (absent on everything the layout contract did not decorate).
+          # (absent on everything the layout contract did not decorate). The
+          # published basis decides WHERE the cut lands and WHICH way the
+          # prism spans — never a guess from the band's own coordinates.
           bevels = board.respond_to?(:bevels) ? board.bevels : []
           LocalGeometry.build_local_box(board_definition, board.width_mm, board.thickness_mm,
-                                        board.length_mm, notches: notches, bevels: bevels)
+                                        board.length_mm, notches: notches, bevels: bevels,
+                                                         basis: board.respond_to?(:basis) ? board.basis : nil)
 
           transform = placement_transform || LocalGeometry.axes_transform(board.translation, board.basis)
           instance = parent_definition.entities.add_instance(board_definition, transform)
