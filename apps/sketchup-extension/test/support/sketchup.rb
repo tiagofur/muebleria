@@ -367,10 +367,28 @@ module SketchupStub
     attr_accessor :normal, :material
     attr_reader :points
 
+    # Host-faithful (#1342 lesson 3, again): the real add_face derives the
+    # face's normal FROM THE WINDING (right-hand rule). The fixed +Z normal
+    # let the all-inward bevel wedge escape every suite — a stub that cannot
+    # see orientation cannot catch orientation bugs.
     def initialize(points = [])
-      @normal = Geom::Vector3d.new(0, 0, 1)
+      @normal = Geom::Vector3d.new(*FaceStub.winding_normal(points))
       @material = nil
       @points = points
+    end
+
+    def self.winding_normal(points)
+      nx = ny = nz = 0.0
+      points.each_with_index do |point, index|
+        nxt = points[(index + 1) % points.size]
+        nx += (point.y - nxt.y) * (point.z + nxt.z)
+        ny += (point.z - nxt.z) * (point.x + nxt.x)
+        nz += (point.x - nxt.x) * (point.y + nxt.y)
+      end
+      length = Math.sqrt((nx * nx) + (ny * ny) + (nz * nz))
+      return [0.0, 0.0, 1.0] if length < 1.0e-12
+
+      [nx / length, ny / length, nz / length]
     end
 
     def reverse!

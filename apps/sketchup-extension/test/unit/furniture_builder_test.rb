@@ -625,6 +625,55 @@ class FurnitureBuilderTest < Minitest::Test
     refute cut_present, 'la esquina frente-superior debe estar cortada a 45°'
   end
 
+  # #1342 — regression: the wedge's EVERY face must be wound OUTWARD (the
+  # normal points away from the wedge's centroid). The previous ring_normal
+  # (consecutive-delta products, not Newell) returned garbage normals, the
+  # dot test fired on noise, and the wedge shipped ALL-INWARD — the real
+  # host rendered the inverted white prism the owner photographed.
+  def test_build_local_box_bevel_wedge_faces_are_wound_outward
+    definition = @model.definitions.add('test-beveled-door-outward')
+    bevel = {
+      'startMm' => [0.0, 2.0, 668.0], 'sizeMm' => [396.0, 13.0, 13.0],
+      'angleDeg' => 45.0, 'edge' => 'top_front',
+      'profileId' => 'profile.gola-italiano.tira', 'boundary' => 'top'
+    }
+    Granete::SketchUpExtension::Model::LocalGeometry.build_local_box(
+      definition, 396, 15, 681, bevels: [bevel], basis: IDENTITY_BASIS
+    )
+
+    # Sólo las 5 caras del WEDGE (todas dentro de la banda 668..681): la caja
+    # inferior usa el canal add_face+pushpull cuya normal sigue la convención
+    # del host, no el contrato outward del wedge.
+    wedge_faces = definition.entities.faces.select do |face|
+      face.points.all? { |p| p.z >= (668.0 - 1.0) * MM }
+    end
+    assert_equal 5, wedge_faces.size
+    points = wedge_faces.flat_map { |face| face.points.map { |pt| [pt.x, pt.y, pt.z] } }
+    centroid = points.transpose.map { |axis| axis.sum / points.size.to_f }
+    wedge_faces.each_with_index do |face, index|
+      ring = face.points.map { |p| [p.x, p.y, p.z] }
+      center = ring.transpose.map { |axis| axis.sum / ring.size.to_f }
+      outward = center.zip(centroid).map { |f, c| f - c }
+      normal = [face.normal.x, face.normal.y, face.normal.z]
+      dot = normal.zip(outward).sum { |n, o| (n * o).to_f }
+      assert dot.positive?,
+             "la cara #{index} del bisel quedó INWARD (dot=#{dot.round(3)}): prisma invertido"
+    end
+
+    # The RAMP face specifically: its normal must point UP-FRONT (+y +z) —
+    # the visible 45° shoulder of the grip.
+    ramp = wedge_faces.find do |face|
+      ring = face.points.map { |p| [p.x / MM, p.y / MM, p.z / MM] }
+      ys = ring.map { |p| p[1] }.sort
+      zs = ring.map { |p| p[2] }.sort
+      ring.size == 4 && (ys.first - 2.0).abs < 0.01 && (ys.last - 15.0).abs < 0.01 &&
+        (zs.first - 668.0).abs < 0.01 && (zs.last - 681.0).abs < 0.01
+    end
+    refute_nil ramp, 'la cara rampa (hipotenusa 45°) debe existir'
+    assert ramp.normal.y.positive?, 'la rampa debe mirar al frente (+y)'
+    assert ramp.normal.z.positive?, 'la rampa debe mirar hacia arriba (+z)'
+  end
+
   def test_build_local_box_bevel_follows_mirrored_basis
     definition = @model.definitions.add('test-beveled-door-mirrored')
     bevel = {
