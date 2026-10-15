@@ -103,6 +103,30 @@ describe('quoteRevisionPresentation', () => {
       ],
     };
 
+    // #1330: frozen opening provenance joined strictly by quoteLineId.
+    const snapshotWithOpening = (): QuoteCommercialSnapshot => ({
+      ...sampleSnapshot,
+      openingBom: [
+        {
+          quoteLineId: 'line-1',
+          unitQuantity: 1,
+          lines: [
+            { lineId: 'ol-1', memberKey: 'profile', hardwareId: 'hw-8006', profileId: 'profile.gola-l.8006', profileCode: 'GOLA-L-8006', profileVersion: 8, boundary: 'top', rule: 'interior_width', quantity: 0.764, unit: 'meter', cutLengthMm: 764 },
+            { lineId: 'ol-2', memberKey: 'supports', hardwareId: 'hw-su116', profileId: 'profile.gola-l.8006', profileCode: 'GOLA-L-8006', profileVersion: 8, boundary: 'top', rule: 'per_length', quantity: 3, unit: 'piece' },
+            { lineId: 'ol-3', memberKey: 'endCaps', hardwareId: 'hw-cap', profileId: 'profile.gola-l.8006', profileCode: 'GOLA-L-8006', profileVersion: 8, boundary: 'top', rule: 'per_exposed_end', quantity: 2, unit: 'piece' },
+          ],
+        },
+        // A legacy entry frozen before #1330: no profileCode at all.
+        {
+          quoteLineId: 'line-2',
+          unitQuantity: 1,
+          lines: [
+            { lineId: 'ol-4', memberKey: 'profile', hardwareId: 'hw-8006', profileId: 'profile.gola-l.8006', profileVersion: 7, boundary: 'top', rule: 'interior_width', quantity: 0.5, unit: 'meter' },
+          ],
+        },
+      ],
+    });
+
     const sampleItems: QuoteRevisionItem[] = [
       {
         furnitureInstanceId: 'fi-1',
@@ -206,6 +230,29 @@ describe('quoteRevisionPresentation', () => {
       expect(line.units).toHaveLength(1);
       expect(line.units[0]!.lifecycleStatus).toBe('removed');
       expect(line.units[0]!.dimensionsFormatted).toBe('500×720×400 mm');
+    });
+
+    it('#1330 une la procedencia de apertura congelada por quoteLineId', () => {
+      const result = buildRevisionLines(snapshotWithOpening());
+      const withOpening = result.find((l) => l.quoteLineId === 'line-1')!;
+      expect(withOpening.openingProvenance).toEqual({
+        profileCode: 'GOLA-L-8006',
+        profileVersion: 8,
+        membersSummary: 'perfil + 3 soportes + tapas',
+      });
+
+      // Legacy snapshot entry: no frozen code — the version still shows.
+      const legacy = result.find((l) => l.quoteLineId === 'line-2')!;
+      expect(legacy.openingProvenance).toEqual({
+        profileCode: null,
+        profileVersion: 7,
+        membersSummary: 'perfil',
+      });
+    });
+
+    it('#1330 una línea sin apertura del snapshot no inventa procedencia', () => {
+      const result = buildRevisionLines(sampleSnapshot);
+      expect(result.map((l) => l.openingProvenance)).toEqual([null, null]);
     });
   });
 
