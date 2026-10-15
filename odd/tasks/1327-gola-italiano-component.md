@@ -173,6 +173,16 @@ con anillos orientados hacia afuera (Newell-vs-centroide, sin pushpull),
 esquina+span derivados de la basis publicada, stub add_face host-fiel.
 **RBZ 0.1.74** (sha256 074f11ac…) + watcher de instalación al cierre.
 
+Iteración #6 — decisión del owner (2026-10-15): **quitamos el corte 45 para tener
+una prueba bien hecha aunque incompleta**. El owner reporta el corte INVERTIDO
+(sale hacia afuera-arriba en vez de rebajar hacia abajo por detrás) y la
+geometría blanca sobrante es ese prisma. **Perfil v6**: SIN bevel (quedan
+depth_reduction + notch 70×15). E2E v6 verde: sin ops de bevel, tira + muesca +
+recorte intactos. Brecha fileada: **#1342** (orientación del wedge; sospecha:
+doble espejo entre published_axis_end y la banda local que ya trae el engine).
+El código de render #1341 queda mergeado pero inerte (el plugin sólo dibuja lo
+que el layout declara).
+
 Pendiente (aceptación owner): aplicar la apertura con «Gola italiano (tira de melamina)» en un
 mueble de prueba en SketchUp — tira con color de puerta en 3D y en despiece, puerta con descuento
 35 y el corte 45°; el 8006 sigue intacto.
