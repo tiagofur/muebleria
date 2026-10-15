@@ -584,16 +584,18 @@ class FurnitureBuilderTest < Minitest::Test
     end
   end
 
-  # #1327: a beveled board builds the full box below the wedge band plus the
-  # pentagon prism whose missing corner is the 45° hypotenuse — the visible
-  # door cut without boolean operations. Fixture mirrors the engine's bevel:
-  # door 596×15×681, wedge [596,13,13] hugging top_front.
-  def test_build_local_box_with_top_bevel_builds_cut_band_prism
+  # #1327 — el render del bisel, host-fiel al estudio de SketchUp:
+  # add_face toma la normal del winding y pushpull extruye hacia esa
+  # normal, así que el prisma se construye POR VÉRTICES con anillos
+  # orientados hacia afuera (Newell vs centroide), y la esquina del corte
+  # + el eje de extrusión salen de la BASIS publicada del tablero — nunca
+  # inferidos de la banda. Fixture: el caso real del owner (puerta
+  # 596×15×681, bisel 13/13, basis identidad).
+  IDENTITY_BASIS = { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }.freeze
+  MIRRORED_BASIS = { 'x' => [1, 0, 0], 'y' => [0, -1, 0], 'z' => [0, 0, 1] }.freeze
+
+  def test_build_local_box_with_top_bevel_builds_basis_aware_wedge
     definition = @model.definitions.add('test-beveled-door')
-    # El caso REAL del owner (#1327): pata 13 sobre banda de 13 de ancho —
-    # el corte consume la esquina completa y el material de la banda es un
-    # TRIÁNGULO (antes esta forma salía con vértices duplicados y el host
-    # abortaba el rebuild entero: «el mueble no cambia»).
     bevel = {
       'startMm' => [0.0, 2.0, 668.0], 'sizeMm' => [596.0, 13.0, 13.0],
       'angleDeg' => 45.0, 'edge' => 'top_front',
@@ -601,20 +603,65 @@ class FurnitureBuilderTest < Minitest::Test
     }
 
     Granete::SketchUpExtension::Model::LocalGeometry.build_local_box(
-      definition, 596, 15, 681, bevels: [bevel]
+      definition, 596, 15, 681, bevels: [bevel], basis: IDENTITY_BASIS
     )
 
-    assert_equal 2, definition.entities.faces.size, 'full box + slanted band'
-    band = definition.entities.faces.last
-    assert_equal 3, band.points.size, 'la banda 13/13 colapsa en triángulo (sin vértices duplicados)'
-    zs = band.points.map(&:z)
-    assert_in_delta 668.0 * MM, zs.min, 1.0e-6
-    assert_in_delta 681.0 * MM, zs.max, 1.0e-6
-    xs = band.points.map(&:x)
-    assert xs.all? { |x| (x - 0.0).abs < 1.0e-6 }, 'la cara cortada arranca en el eje through'
-    ys = band.points.map(&:y)
-    assert_in_delta 2.0 * MM, ys.min, 1.0e-6
-    assert_in_delta 15.0 * MM, ys.max, 1.0e-6
+    # Caja completa debajo de la banda + el prisma del bisel de 5 caras.
+    assert_equal 6, definition.entities.faces.size, 'full box + wedge (2 secciones + 3 lados)'
+    # La sección del wedge (cara triangular en x=0): basis identidad ⇒ el
+    # frente local es el final del eje Y ⇒ esquina cortada (y=15, z=681) y
+    # el material queda con el ángulo recto en (y=2, z=668).
+    section = definition.entities.faces
+                        .select { |f| f.points.size == 3 }
+                        .find { |f| f.points.all? { |p| (p.x - 0.0).abs < 1.0e-6 } }
+    refute_nil section, 'la sección triangular del bisel debe existir en x=0'
+    pts = section.points.map { |p| [p.x, p.y, p.z] }
+    assert_in_delta 2.0 * MM, pts.map { |p| p[1] }.min, 1.0e-6
+    assert_in_delta 15.0 * MM, pts.map { |p| p[1] }.max, 1.0e-6
+    assert_in_delta 668.0 * MM, pts.map { |p| p[2] }.min, 1.0e-6
+    assert_in_delta 681.0 * MM, pts.map { |p| p[2] }.max, 1.0e-6
+    # La esquina CORTADA (y=15, z=681) NO puede existir en la sección.
+    cut_present = pts.any? { |p| (p[1] - (15.0 * MM)).abs < 1.0e-6 && (p[2] - (681.0 * MM)).abs < 1.0e-6 }
+    refute cut_present, 'la esquina frente-superior debe estar cortada a 45°'
+  end
+
+  def test_build_local_box_bevel_follows_mirrored_basis
+    definition = @model.definitions.add('test-beveled-door-mirrored')
+    bevel = {
+      'startMm' => [0.0, 2.0, 668.0], 'sizeMm' => [596.0, 13.0, 13.0],
+      'angleDeg' => 45.0, 'edge' => 'top_front',
+      'profileId' => 'profile.gola-italiano.tira', 'boundary' => 'top'
+    }
+
+    Granete::SketchUpExtension::Model::LocalGeometry.build_local_box(
+      definition, 596, 15, 681, bevels: [bevel], basis: MIRRORED_BASIS
+    )
+
+    section = definition.entities.faces
+                        .select { |f| f.points.size == 3 }
+                        .find { |f| f.points.all? { |p| (p.x - 0.0).abs < 1.0e-6 } }
+    refute_nil section
+    pts = section.points.map { |p| [p.x, p.y, p.z] }
+    # Basis espejada: el frente local es el INICIO del eje Y ⇒ la esquina
+    # cortada es (y=2, z=681); el material queda en (y=15, z=668).
+    cut_present = pts.any? { |p| (p[1] - (2.0 * MM)).abs < 1.0e-6 && (p[2] - (681.0 * MM)).abs < 1.0e-6 }
+    refute cut_present, 'con basis espejada la esquina cortada es la de inicio de Y'
+    keep_present = pts.any? { |p| (p[1] - (15.0 * MM)).abs < 1.0e-6 && (p[2] - (668.0 * MM)).abs < 1.0e-6 }
+    assert keep_present, 'la esquina trasera-inferior siempre queda'
+  end
+
+  def test_build_local_box_bevel_requires_published_basis
+    definition = @model.definitions.add('test-beveled-door-no-basis')
+    bevel = {
+      'startMm' => [0.0, 2.0, 668.0], 'sizeMm' => [596.0, 13.0, 13.0],
+      'angleDeg' => 45.0, 'edge' => 'top_front'
+    }
+
+    assert_raises(ArgumentError) do
+      Granete::SketchUpExtension::Model::LocalGeometry.build_local_box(
+        definition, 596, 15, 681, bevels: [bevel], basis: nil
+      )
+    end
   end
 
   def test_build_local_box_bevel_smaller_leg_builds_trapezoid_band
