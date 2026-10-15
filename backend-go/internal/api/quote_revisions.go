@@ -235,6 +235,12 @@ func toQuoteCommercialSnapshotDTO(snapshot *domain.QuoteCommercialSnapshot) *ope
 					Boundary: line.Boundary, Rule: line.Rule, Quantity: line.Quantity,
 					Unit: line.Unit,
 				}
+				// #1330: the pin's frozen code names the profile — absent on
+				// revisions frozen before the field existed.
+				if line.ProfileCode != "" {
+					code := line.ProfileCode
+					mapped.ProfileCode = &code
+				}
 				if line.CutLengthMm > 0 {
 					cut := int64(line.CutLengthMm)
 					mapped.CutLengthMm = &cut

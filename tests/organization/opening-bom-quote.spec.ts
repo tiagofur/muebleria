@@ -35,7 +35,15 @@ interface OpeningBomLine {
 }
 
 interface DesignOpeningPayload {
-  readonly opening?: { readonly system: string; readonly profileId?: string } | null;
+  readonly opening?: {
+    readonly system: string;
+    readonly profileId?: string;
+    readonly profilePin?: {
+      readonly profileCode: string;
+      readonly doorReductionMm?: number | null;
+      readonly bom?: { readonly profileVersion: number } | null;
+    } | null;
+  } | null;
   readonly resolution?: {
     readonly state: string;
     readonly reason?: string;
@@ -254,6 +262,10 @@ test('1263: gola selection resolves its BOM and the quote freezes it with exact 
   expect(quoteByMember.endCaps?.quantity).toBe(2);
   expect(opening?.quoteLineId).toBe(snapshot?.lines?.[0]?.quoteLineId);
   expect(snapshot?.breakdown?.hardwareTotal).toBeCloseTo(96.4, 6);
+  // #1330: the frozen lines name the pin's code — no live-catalog join.
+  expect(quoteByMember.profile?.profileCode).toBe('GOLA-L-8006');
+  const pinVersion = applied.opening?.profilePin?.bom?.profileVersion;
+  expect(quoteByMember.profile?.profileVersion).toBe(pinVersion);
 
   // The reader shows the quoted project (the price the gola joined).
   await page.goto('/');
@@ -268,4 +280,92 @@ test('1263: gola selection resolves its BOM and the quote freezes it with exact 
   await expect(card).toBeVisible();
   await expect(card).toContainText(PROJECT_NAME);
   await expect(card.getByTestId('commercial-status-badge')).toContainText('Q1');
+
+  // #1330 (web): the quote line names the pinned profile code+version and
+  // the plain-workshop member summary.
+  await page.goto(`/quotes/${projectId}`);
+  const quoteLine = page.getByTestId(`quote-line-${opening?.quoteLineId}`);
+  await expect(quoteLine).toBeVisible({ timeout: 15_000 });
+  await expect(quoteLine.getByTestId(`quote-opening-provenance-${opening?.quoteLineId}`)).toContainText(
+    `Apertura: GOLA-L-8006 v${pinVersion} · perfil + 3 soportes + tapas`,
+  );
+
+  // #1330 (web): the furniture drawer reads the same pin from the working
+  // copy — one truth with the quote.
+  const furniturePath = `/quotes/${projectId}/muebles`;
+  await page.goto(furniturePath);
+  const row = page.getByTestId(`pf-row-${furniture.id}`);
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.getByRole('button', { name: /detalle/i }).click();
+  const drawer = page.getByTestId('pf-detail-modal');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByTestId('pf-detail-opening-provenance')).toContainText(
+    `GOLA-L-8006 v${pinVersion} · puertas H−40`,
+  );
+  await drawer.getByRole('button', { name: 'Cerrar' }).click();
+  await expect(drawer).not.toBeVisible();
+
+  // #1330 (acceptance): editing the profile in the catalog does NOT move the
+  // pin — the design keeps quoting and showing the frozen slice.
+  const profiles = await client.listOpeningProfiles(token);
+  const target = profiles.find((p) => p.id === OPENING_PROFILE_ID);
+  expect(target).toBeTruthy();
+  await client.updateOpeningProfile(token, OPENING_PROFILE_ID, target!.version, {
+    id: OPENING_PROFILE_ID,
+    code: 'GOLA-L-8006',
+    name: 'Gola L Cymisa 8006',
+    grip_type: 'gola',
+    cross_section_shape: 'L',
+    compatible_placements: ['top'],
+    door_reduction_mm: 35,
+    front_reduction_mm: 38,
+    grip_clearance_mm: 2,
+    profile_height_mm: 27,
+    profile_depth_mm: 56,
+    geometry_origin: 'docs/fichas/perfil_gola_l_ficha_tecnica.pdf (Cymisa 8006)',
+    datasheet_status: 'verified',
+    body_modifiers: [],
+    bom_members: {
+      profile: { hardware_id: HW_PROFILE_8006, rule: 'interior_width', unit: 'meter' },
+      supports: { hardware_id: HW_SUPPORT_SU116, rule: 'per_length', spacing_mm: spacingMm },
+      endCaps: { hardware_id: HW_CAPS_CF8006TP, rule: 'per_exposed_end' },
+    },
+    active: true,
+  });
+
+  await page.goto(furniturePath);
+  const rowAfterEdit = page.getByTestId(`pf-row-${furniture.id}`);
+  await expect(rowAfterEdit).toBeVisible({ timeout: 15_000 });
+  await rowAfterEdit.getByRole('button', { name: /detalle/i }).click();
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByTestId('pf-detail-opening-provenance')).toContainText(
+    `GOLA-L-8006 v${pinVersion} · puertas H−40`,
+    'the pin is frozen: the catalog edit must not leak into the design',
+  );
+  await drawer.getByRole('button', { name: 'Cerrar' }).click();
+
+  // Re-applying the opening is the ONLY way the pin moves — and the drawer
+  // shows the new frozen slice immediately.
+  const workingCopy = await client.getDesignWorkingCopy(token, designId);
+  const reapplied = await client.request<DesignOpeningPayload>('PUT', `/designs/${designId}/opening`, {
+    token,
+    body: {
+      system: 'gola',
+      profileId: OPENING_PROFILE_ID,
+      placements: ['top'],
+      expectedWorkingVersion: workingCopy.updated_at,
+    },
+  });
+  const newPinVersion = reapplied.opening?.profilePin?.bom?.profileVersion;
+  expect(newPinVersion).toBe((pinVersion ?? 0) + 1);
+  expect(reapplied.opening?.profilePin?.doorReductionMm).toBe(35);
+
+  await page.goto(furniturePath);
+  const rowAfterReapply = page.getByTestId(`pf-row-${furniture.id}`);
+  await expect(rowAfterReapply).toBeVisible({ timeout: 15_000 });
+  await rowAfterReapply.getByRole('button', { name: /detalle/i }).click();
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByTestId('pf-detail-opening-provenance')).toContainText(
+    `GOLA-L-8006 v${newPinVersion} · puertas H−35`,
+  );
 });
