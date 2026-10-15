@@ -518,4 +518,207 @@ test('#1261: un error de carga muestra superficie honesta con Reintentar, nunca 
   assert.strictEqual(bridgeCalls[bridgeCalls.length - 1].command, 'get_design_opening');
 });
 
+// #1329 fixtures: two verified gola L of DIFFERENT makers (the picker's
+// hard case) curated by the factory, with the workshop's standard marked
+// for section L.
+const STANDARD_ANSWER = {
+  ...READY_ANSWER,
+  capabilities: {
+    version: 1,
+    grips: {
+      handle: { enabled: true, default: true },
+      gola: {
+        enabled: true,
+        profiles: ['profile.gola-l.alu', 'profile.gola-l.marca-b'],
+        standardProfiles: { L: 'profile.gola-l.alu' }
+      },
+      bottom_overhang: { enabled: false }
+    }
+  },
+  profiles: [
+    {
+      id: 'profile.gola-l.alu', name: 'Gola L SCILM 8006', manufacturer: 'SCILM',
+      cross_section_shape: 'L', datasheet_status: 'verified', compatible_placements: ['top'],
+      door_reduction_mm: 40,
+      body_modifiers: [{ role: 'lateral', notch_height_mm: 56.5, notch_depth_mm: 27.2, notch_at: 'top_front' }]
+    },
+    {
+      id: 'profile.gola-l.marca-b', name: 'Gola L Marca B', manufacturer: 'Marca B',
+      cross_section_shape: 'L', datasheet_status: 'verified', compatible_placements: ['top'],
+      door_reduction_mm: 35
+    }
+  ]
+};
+
+function pickGola(elementsById) {
+  const body = elementsById['design-inspector-opening-body'];
+  const systemSelect = findDeep(body, (child) => child.id === 'opening-system-select');
+  const golaOption = systemSelect.children.find((option) => option.value === 'gola');
+  golaOption.selected = true;
+  systemSelect.value = 'gola';
+  systemSelect.onchange();
+}
+
+function pickProfile(elementsById, profileId) {
+  const body = elementsById['design-inspector-opening-body'];
+  const profileSelect = findDeep(body, (child) => child.id === 'opening-profile-select');
+  const option = profileSelect.children.find((child) => child.value === profileId);
+  option.selected = true;
+  profileSelect.value = profileId;
+  profileSelect.onchange();
+}
+
+test('#1329: elegir gola preselecciona el único estándar seleccionable del taller', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening(STANDARD_ANSWER);
+
+  pickGola(elementsById);
+  assert.strictEqual(opening._state().draft.profileId, 'profile.gola-l.alu',
+    'the workshop standard is the preselection for a fresh gola choice');
+  // And the single-placement profile auto-assigns its placement as today.
+  // (JSON compare: the array lives in the vm realm, not this one.)
+  assert.strictEqual(JSON.stringify(opening._state().draft.placements), JSON.stringify(['top']));
+});
+
+test('#1329: dos secciones con estándar no adivinan — sin preselección', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening({
+    ...STANDARD_ANSWER,
+    capabilities: {
+      version: 1,
+      grips: {
+        handle: { enabled: true, default: true },
+        gola: {
+          enabled: true,
+          profiles: ['profile.gola-l.alu', 'profile.gola-l.marca-b', 'profile.gola-c.alu'],
+          standardProfiles: { L: 'profile.gola-l.alu', C: 'profile.gola-c.alu' }
+        }
+      }
+    },
+    profiles: [
+      ...STANDARD_ANSWER.profiles,
+      { id: 'profile.gola-c.alu', name: 'Gola C', cross_section_shape: 'C', datasheet_status: 'verified', compatible_placements: ['between'] }
+    ]
+  });
+
+  pickGola(elementsById);
+  assert.strictEqual(opening._state().draft.profileId, '',
+    'with several marked sections the card cannot guess — the honest absence');
+});
+
+test('#1329 fail-closed: un estándar no seleccionable (pendiente de ficha) no preselecciona', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening({
+    ...STANDARD_ANSWER,
+    capabilities: {
+      version: 1,
+      grips: {
+        handle: { enabled: true, default: true },
+        gola: {
+          enabled: true,
+          profiles: ['profile.gola-l.alu', 'profile.gola-l.dead'],
+          standardProfiles: { L: 'profile.gola-l.dead' }
+        }
+      }
+    },
+    profiles: [
+      STANDARD_ANSWER.profiles[0],
+      { id: 'profile.gola-l.dead', name: 'Gola muerto', cross_section_shape: 'L', datasheet_status: 'pending', compatible_placements: ['top'] }
+    ]
+  });
+
+  pickGola(elementsById);
+  assert.strictEqual(opening._state().draft.profileId, '',
+    'a dead standard never invents a preselection');
+});
+
+test('#1329: consecuencias visibles del perfil elegido — descuento, muesca y fabricante', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening(STANDARD_ANSWER);
+
+  pickGola(elementsById);
+  const consequences = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-consequences');
+  assert.ok(consequences, 'the consequences line must render for the chosen profile');
+  assert.ok(consequences.textContent.includes('H−40'), consequences.textContent);
+  assert.ok(consequences.textContent.includes('Muesca 56.5 × 27.2 mm'), consequences.textContent);
+  assert.ok(consequences.textContent.includes('SCILM'), consequences.textContent);
+
+  // The option names the maker too, before selecting.
+  const profileSelect = findDeep(elementsById['design-inspector-opening-body'], (child) => child.id === 'opening-profile-select');
+  const marcaBOption = profileSelect.children.find((child) => child.value === 'profile.gola-l.marca-b');
+  assert.ok(marcaBOption.textContent.includes('Marca B'), marcaBOption.textContent);
+});
+
+test('#1329: elegir el ESTÁNDAR muestra la nota y aplica con UN click', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening(STANDARD_ANSWER);
+
+  pickGola(elementsById); // preselecciona el estándar
+  const note = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-standard-note');
+  assert.ok(note, 'the standard note must render');
+  assert.ok(note.textContent.includes('Perfil estándar de tu taller'), note.textContent);
+
+  const applyButton = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-apply');
+  applyButton.onclick();
+  assert.strictEqual(bridgeCalls.length, 2);
+  assert.strictEqual(bridgeCalls[1].command, 'apply_design_opening',
+    'the standard applies directly — one click, no confirmation friction');
+});
+
+test('#1329: elegir un NO estándar exige confirmación — el primer click NO emite el PUT', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening(STANDARD_ANSWER);
+
+  pickGola(elementsById);
+  pickProfile(elementsById, 'profile.gola-l.marca-b');
+  const applyButton = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-apply');
+  applyButton.onclick();
+
+  assert.strictEqual(bridgeCalls.length, 1, 'the first click only arms the warning — no write');
+  const warning = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-nonstandard-warning');
+  assert.ok(warning, 'the non-standard warning must render');
+  assert.ok(warning.textContent.includes('no es el estándar de tu taller'), warning.textContent);
+  assert.ok(warning.textContent.includes('Gola L SCILM 8006'), 'the warning names the standard');
+  const confirmButton = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-apply');
+  assert.ok(confirmButton.textContent.includes('Confirmar perfil no estándar'), confirmButton.textContent);
+
+  // Second click: the explicit confirmation sends the ONE write.
+  confirmButton.onclick();
+  assert.strictEqual(bridgeCalls.length, 2);
+  assert.strictEqual(bridgeCalls[1].command, 'apply_design_opening');
+  assert.strictEqual(bridgeCalls[1].payload.selection.profileId, 'profile.gola-l.marca-b');
+});
+
+test('#1329: cambiar el perfil después de la advertencia la limpia (se re-confirma)', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening(STANDARD_ANSWER);
+
+  pickGola(elementsById);
+  pickProfile(elementsById, 'profile.gola-l.marca-b');
+  findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-apply').onclick();
+  assert.strictEqual(opening._state().confirmNonStandard, true);
+
+  pickProfile(elementsById, 'profile.gola-l.alu');
+  assert.strictEqual(opening._state().confirmNonStandard, false, 'a new choice clears the armed confirmation');
+  assert.ok(!findAllDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-nonstandard-warning').length,
+    'the warning disappears with the new choice');
+  // And applying the standard goes straight through again.
+  findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-apply').onclick();
+  assert.strictEqual(bridgeCalls.length, 2);
+});
+
 console.log(JSON.stringify({ success: true, testsPassed }));
