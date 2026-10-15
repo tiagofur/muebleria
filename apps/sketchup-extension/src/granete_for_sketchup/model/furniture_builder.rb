@@ -305,13 +305,45 @@ module Granete
 
         def bevel_pentagon(band, extents, through)
           leg = band[:z1] - band[:z0]
-          through == :x ? bevel_pentagon_x_through(band, extents, leg) : bevel_pentagon_y_through(band, extents, leg)
+          raw = if through == :x
+                  bevel_pentagon_x_through(band, extents, leg)
+                else
+                  bevel_pentagon_y_through(band, extents, leg)
+                end
+          dedupe_polygon_points(raw)
         end
 
-        # Through = local X (the door convention): the pentagon stands at
+        # Host-faithful shape: SketchUp's add_face fails on repeated or
+        # collinear-collapsed vertices. A 45° cut whose leg equals a band
+        # span legitimately collapses the pentagon into a TRIANGLE (the
+        # owner's door: 13 mm bevel over a 13 mm band) — emit the distinct
+        # vertices only; fewer than three is not a face and fails loudly.
+        # rubocop:disable-next Metrics/AbcSize
+        def dedupe_polygon_points(points)
+          distinct = [points.first]
+          points.drop(1).each do |point|
+            last = distinct.last
+            next if (point[0] - last[0]).abs < 1.0e-9 &&
+                    (point[1] - last[1]).abs < 1.0e-9 &&
+                    (point[2] - last[2]).abs < 1.0e-9
+
+            distinct << point
+          end
+          if distinct.size > 2 && (distinct.first[0] - distinct.last[0]).abs < 1.0e-9 &&
+             (distinct.first[1] - distinct.last[1]).abs < 1.0e-9 &&
+             (distinct.first[2] - distinct.last[2]).abs < 1.0e-9
+            distinct.pop
+          end
+          raise ArgumentError, 'el bisel degenera en menos de tres vértices' if distinct.size < 3
+
+          distinct
+        end
+
+        # Through = local X (the door convention): the polygon stands at
         # x=band start, spanning the band's (Y, Z) rectangle minus the 45°
         # triangle at the named corner; front = the Y edge the band's edge
-        # span touches. Winding follows the rectangle (start corner first).
+        # span touches. The cut corner's two leg tips replace the corner,
+        # joined by the hypotenuse.
         def bevel_pentagon_x_through(band, extents, leg)
           front = bevel_edge_side(band[:y0], band[:y1], extents[1])
           x0 = band[:x0]
@@ -321,23 +353,26 @@ module Granete
           y_hi = band[:y1]
           if band[:edge] == 'top_front'
             if front == :start
-              [[x0, y_lo, z_lo], [x0, y_hi, z_lo], [x0, y_hi, z_hi - leg],
-               [x0, y_hi - leg, z_hi], [x0, y_lo, z_hi]]
-            else
+              # Cut corner (y_lo, z_hi): tips (y_lo, z_hi−leg) and (y_lo+leg, z_hi).
               [[x0, y_lo, z_lo], [x0, y_hi, z_lo], [x0, y_hi, z_hi],
                [x0, y_lo + leg, z_hi], [x0, y_lo, z_hi - leg]]
+            else
+              # Cut corner (y_hi, z_hi): tips (y_hi, z_hi−leg) and (y_hi−leg, z_hi).
+              [[x0, y_lo, z_lo], [x0, y_hi, z_lo], [x0, y_hi, z_hi - leg],
+               [x0, y_hi - leg, z_hi], [x0, y_lo, z_hi]]
             end
           elsif front == :start
-            # bottom_front: the triangle bites the FRONT-BOTTOM corner.
+            # bottom_front: cut corner (y_lo, z_lo).
             [[x0, y_lo + leg, z_lo], [x0, y_hi, z_lo], [x0, y_hi, z_hi],
              [x0, y_lo, z_hi], [x0, y_lo, z_lo + leg]]
           else
+            # bottom_front: cut corner (y_hi, z_lo).
             [[x0, y_hi - leg, z_lo], [x0, y_lo, z_lo], [x0, y_lo, z_hi],
              [x0, y_hi, z_hi], [x0, y_hi, z_lo + leg]]
           end
         end
 
-        # Through = local Y (the mirrored convention): same pentagon with
+        # Through = local Y (the mirrored convention): same polygon with
         # X and Y roles swapped.
         def bevel_pentagon_y_through(band, extents, leg)
           front = bevel_edge_side(band[:x0], band[:x1], extents[0])
@@ -348,17 +383,20 @@ module Granete
           x_hi = band[:x1]
           if band[:edge] == 'top_front'
             if front == :start
-              [[x_lo, y0, z_lo], [x_hi, y0, z_lo], [x_hi, y0, z_hi - leg],
-               [x_hi - leg, y0, z_hi], [x_lo, y0, z_hi]]
-            else
+              # Cut corner (x_lo, z_hi).
               [[x_lo, y0, z_lo], [x_hi, y0, z_lo], [x_hi, y0, z_hi],
                [x_lo + leg, y0, z_hi], [x_lo, y0, z_hi - leg]]
+            else
+              # Cut corner (x_hi, z_hi).
+              [[x_lo, y0, z_lo], [x_hi, y0, z_lo], [x_hi, y0, z_hi - leg],
+               [x_hi - leg, y0, z_hi], [x_lo, y0, z_hi]]
             end
           elsif front == :start
-            # bottom_front, mirrored.
+            # bottom_front: cut corner (x_lo, z_lo).
             [[x_lo + leg, y0, z_lo], [x_hi, y0, z_lo], [x_hi, y0, z_hi],
              [x_lo, y0, z_hi], [x_lo, y0, z_lo + leg]]
           else
+            # bottom_front: cut corner (x_hi, z_lo).
             [[x_hi - leg, y0, z_lo], [x_lo, y0, z_lo], [x_lo, y0, z_hi],
              [x_hi, y0, z_hi], [x_hi, y0, z_lo + leg]]
           end

@@ -836,6 +836,23 @@ module SketchupStub
     end
 
     def add_face(points)
+      # Host-faithful: SketchUp refuses degenerate faces — fewer than three
+      # DISTINCT vertices is not a face and the real host fails instead of
+      # drawing garbage. Consecutive repeated vertices collapse exactly like
+      # the host's vertex welding.
+      collapsed = [points.first]
+      points.drop(1).each do |point|
+        last = collapsed.last
+        same = (point.x - last.x).abs < 1.0e-9 &&
+               (point.y - last.y).abs < 1.0e-9 &&
+               (point.z - last.z).abs < 1.0e-9
+        collapsed << point unless same
+      end
+      if collapsed.size < 3
+        raise ArgumentError,
+              'add_face: menos de tres vértices distintos no forman una cara (host-faithful)'
+      end
+
       face = FaceStub.new(points)
       SketchupStub.record_undo { @faces.delete(face) }
       @faces << face
