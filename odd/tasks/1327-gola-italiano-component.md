@@ -153,6 +153,15 @@ en la puerta + no hace el 45 en la parte superior»):dos causas SEPARADAS:
    (verificada: techo/manguete 590−15=575, strip [400,15,70] en y 575-590).
    Re-aplicar limpia la geometría host stale: el pin v5 gobierna el resolve.
 
+Iteración #4 (2026-10-14 noche, «simplemente no aplica»): el apply llegaba al server (pin v5) pero
+el REBUILD abortaba en el host. Bug mío del render (#1339): con la puerta real (pata 13 sobre banda
+13×13) la banda colapsa legítimamente en TRIÁNGULO y mis fórmulas emitían vértices duplicados (y la
+esquina cortada del lado equivocado en top_front) — el add_face real falla y el mueble queda
+intacto. Los stubs no validaban duplicados por eso pasó. **PR #1340** (MERGEADO, main 8dde19dc,
+CI success): fórmulas corregidas + dedupe fail-loud + stub add_face host-faithful (esta clase de
+bug no vuelve a escapar) + test del caso exacto del owner. **RBZ 0.1.73** (sha256 c6e5a409…) +
+watcher de instalación automática al cierre de SketchUp.
+
 Pendiente (aceptación owner): aplicar la apertura con «Gola italiano (tira de melamina)» en un
 mueble de prueba en SketchUp — tira con color de puerta en 3D y en despiece, puerta con descuento
 35 y el corte 45°; el 8006 sigue intacto.
