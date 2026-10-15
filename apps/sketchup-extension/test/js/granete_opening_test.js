@@ -721,4 +721,87 @@ test('#1329: cambiar el perfil después de la advertencia la limpia (se re-confi
   assert.strictEqual(bridgeCalls.length, 2);
 });
 
+// #1330 fixtures: a PERSISTED gola selection carrying its frozen pin (the
+// same shape the design opening GET/PUT serializes).
+const PINNED_ANSWER = {
+  ...STANDARD_ANSWER,
+  opening: {
+    system: 'gola',
+    profileId: 'profile.gola-l.alu',
+    placements: ['top'],
+    profilePin: {
+      profileCode: 'GOLA-L-SCILM-8006',
+      frontReductionMm: 38,
+      gripClearanceMm: 2,
+      doorReductionMm: 40,
+      datasheetStatus: 'verified',
+      bom: { profileVersion: 8, members: {} }
+    }
+  }
+};
+
+test('#1330: la tarjeta nombra el pin congelado — código, versión y descuento', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening(PINNED_ANSWER);
+
+  const persisted = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-persisted');
+  assert.ok(persisted, 'the persisted note must render');
+  assert.ok(persisted.textContent.includes('Apertura guardada: Gola (perfil integrado)'), persisted.textContent);
+  assert.ok(persisted.textContent.includes('GOLA-L-SCILM-8006 v8'), persisted.textContent);
+  assert.ok(persisted.textContent.includes('puertas H−40'), persisted.textContent);
+  // The pin wins over the live catalog name (one truth with the web).
+  assert.ok(!persisted.textContent.includes('Gola L SCILM 8006 ('), persisted.textContent);
+});
+
+test('#1330: gola sin pin (pre-pin) pide re-aplicar; los otros sistemas no llevan pin', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening({
+    ...STANDARD_ANSWER,
+    opening: { system: 'gola', profileId: 'profile.gola-l.alu', placements: ['top'] }
+  });
+  let persisted = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-persisted');
+  assert.ok(persisted.textContent.includes('sin pin — re-aplicá la apertura'), persisted.textContent);
+
+  // A different design re-issues the authoritative read (requestId advances).
+  opening.ensureLoaded('d-2');
+  const requestId = bridgeCalls[bridgeCalls.length - 1].payload.requestId;
+  opening.onDesignOpening({
+    ...STANDARD_ANSWER,
+    requestId,
+    designId: 'd-2',
+    opening: { system: 'handle', profileId: '', placements: [] }
+  });
+  persisted = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-persisted');
+  assert.ok(persisted.textContent.includes('Apertura guardada: Jaladera'), persisted.textContent);
+  assert.ok(!persisted.textContent.includes('sin pin'), persisted.textContent);
+});
+
+test('#1330: getSummary reporta la versión pineada y degrada al código del pin si el perfil sale del catálogo', () => {
+  const bridgeCalls = [];
+  const { opening } = initModule(bridgeCalls);
+  opening.refresh('d-pin', 'v1');
+  opening.onDesignOpening(PINNED_ANSWER);
+
+  const summary = opening.getSummary();
+  assert.strictEqual(summary.profileName, 'GOLA-L-SCILM-8006', 'the frozen pin names the profile');
+  assert.strictEqual(summary.profileVersion, 8);
+
+  // The profile disappears from the live catalog: the pin still names it.
+  opening.ensureLoaded('d-pin-2');
+  const degradedRequestId = bridgeCalls[bridgeCalls.length - 1].payload.requestId;
+  opening.onDesignOpening({
+    ...PINNED_ANSWER,
+    requestId: degradedRequestId,
+    designId: 'd-pin-2',
+    profiles: [{ id: 'profile.other', name: 'Otro', datasheet_status: 'verified', compatible_placements: ['top'] }]
+  });
+  const degraded = opening.getSummary();
+  assert.strictEqual(degraded.profileName, 'GOLA-L-SCILM-8006');
+  assert.strictEqual(degraded.profileVersion, 8);
+});
+
 console.log(JSON.stringify({ success: true, testsPassed }));

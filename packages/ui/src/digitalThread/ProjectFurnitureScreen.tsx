@@ -21,6 +21,7 @@ import {
   GraneteApiClient,
   GraneteApiError,
   type Design,
+  type DesignAuthoringDefaults,
   type DesignRevision,
   type FurnitureWorkspaceReleaseContext,
   type ProjectFurnitureWorkspace,
@@ -321,6 +322,16 @@ export function ProjectFurnitureScreen({
     queryKey: queryKeys.designs,
     queryFn: ({ signal }) => api.listProjectDesigns(token, projectId, signal),
   });
+  // #1330: the detail drawer's read-only opening procedencia — the durable
+  // selection with its frozen pin, from the WORKING copy when the context is
+  // the editable design and from the revision's frozen snapshot otherwise.
+  const detailWorkingCopyQuery = useQuery({
+    queryKey: queryKeys.designWorkingCopy?.(designContext.designId ?? '') ?? queryKeys.designs,
+    queryFn: ({ signal }) =>
+      api.getDesignWorkingCopy(token, designContext.designId as string, signal),
+    enabled: designContext.kind === 'working' && designContext.designId != null,
+    placeholderData: keepPreviousData,
+  });
 
   const quoteRevisions: readonly QuoteRevisionDetail[] = quoteRevisionsQuery.data ?? [];
   const designs: readonly Design[] = designsQuery.data ?? [];
@@ -354,6 +365,22 @@ export function ProjectFurnitureScreen({
   const designRevisions: readonly DesignRevision[] = designRevisionsQuery.data ?? [];
   const selectedDesignRevision =
     designRevisions.find((revision) => revision.id === designContext.designRevisionId) ?? null;
+
+  // #1330: the detail drawer's read-only opening procedencia — the durable
+  // selection with its frozen pin, from the WORKING copy when the context is
+  // the editable design and from the revision's frozen snapshot otherwise.
+  const detailOpeningDefaults: DesignAuthoringDefaults | null | undefined =
+    designContext.kind === 'working'
+      ? (detailWorkingCopyQuery.data?.authoring_defaults ?? null)
+      : designContext.kind === 'revision'
+        ? (selectedDesignRevision?.authoring_defaults_snapshot ?? null)
+        : null;
+  const detailOpeningProvenance = openingProvenanceView(
+    detailOpeningDefaults,
+    designContext.kind === 'working' &&
+      designContext.designId != null &&
+      detailWorkingCopyQuery.isPending,
+  );
 
   // Single authoritative backend read-model query: POST /projects/{projectId}/furniture-workspace
   const currentContextState: ProjectFurnitureContextState = useMemo(
@@ -831,6 +858,7 @@ export function ProjectFurnitureScreen({
           designRevision={selectedDesignRevision}
           contextualRelease={contextualRelease}
           latestProjectRelease={latestProjectRelease}
+          openingProvenance={detailOpeningProvenance}
           onClose={() => setDetailRow(null)}
         />
       ) : null}
@@ -1175,7 +1203,64 @@ interface DetailDrawerProps {
   readonly designRevision: DesignRevision | null;
   readonly contextualRelease: FurnitureWorkspaceReleaseContext | null;
   readonly latestProjectRelease: FurnitureWorkspaceReleaseContext | null;
+  readonly openingProvenance: OpeningProvenanceView;
   readonly onClose: () => void;
+}
+
+/** #1330 — the drawer's read-only opening procedencia, derived ONLY from the
+ * design's durable selection and its frozen pin. Every absence is truthful:
+ * no opening, pre-pin legacy selection — nothing invented. `undefined`
+ * defaults = the source is still loading; `null` = the design declares no
+ * opening. */
+export type OpeningProvenanceView =
+  | { readonly state: 'loading' }
+  | { readonly state: 'none' }
+  | { readonly state: 'system'; readonly systemLabel: string }
+  | { readonly state: 'unpinned'; readonly systemLabel: string }
+  | {
+      readonly state: 'pinned';
+      readonly label: string;
+    };
+
+const OPENING_SYSTEM_LABELS: Readonly<Record<string, string>> = {
+  handle: 'Jaladera',
+  gola: 'Gola (perfil integrado)',
+  bottom_overhang: 'Rebase inferior',
+};
+
+export function openingProvenanceView(
+  defaults: DesignAuthoringDefaults | null | undefined,
+  loading: boolean,
+): OpeningProvenanceView {
+  if (loading) return { state: 'loading' };
+  const opening = defaults?.opening ?? null;
+  if (!opening) return { state: 'none' };
+  const systemLabel = OPENING_SYSTEM_LABELS[opening.system] ?? opening.system;
+  if (opening.system !== 'gola') {
+    // Only the gola profile carries a pin — the other systems have no
+    // datasheet to freeze.
+    return { state: 'system', systemLabel };
+  }
+  const pin = opening.profilePin ?? null;
+  if (!pin) {
+    return { state: 'unpinned', systemLabel };
+  }
+  const parts: string[] = [];
+  const version = pin.bom?.profileVersion ?? null;
+  parts.push(version != null ? `${pin.profileCode} v${version}` : pin.profileCode);
+  const doorDiscount =
+    pin.doorReductionMm ??
+    (pin.frontReductionMm > 0 ? pin.frontReductionMm + pin.gripClearanceMm : null);
+  if (doorDiscount != null && doorDiscount > 0) {
+    parts.push(`puertas H−${doorDiscount}`);
+  }
+  const notch = (pin.bodyModifiers ?? []).find(
+    (modifier) => modifier.notch_height_mm != null && modifier.notch_depth_mm != null,
+  );
+  if (notch) {
+    parts.push(`muesca ${notch.notch_height_mm} × ${notch.notch_depth_mm} mm`);
+  }
+  return { state: 'pinned', label: parts.join(' · ') };
 }
 
 function ProjectFurnitureDetailDrawer({
@@ -1185,6 +1270,7 @@ function ProjectFurnitureDetailDrawer({
   designRevision,
   contextualRelease,
   latestProjectRelease,
+  openingProvenance,
   onClose,
 }: DetailDrawerProps): ReactNode {
   const quoteItem =
@@ -1250,6 +1336,22 @@ function ProjectFurnitureDetailDrawer({
               <>
                 <dt>Línea de cotización</dt>
                 <dd className="pf-tech-id">{row.commercialGrouping.quoteLineId}</dd>
+              </>
+            ) : null}
+            {row.presence === 'placed' ? (
+              <>
+                <dt>Apertura</dt>
+                <dd data-testid="pf-detail-opening-provenance">
+                  {openingProvenance.state === 'loading'
+                    ? 'Cargando…'
+                    : openingProvenance.state === 'none'
+                      ? 'Sin apertura'
+                      : openingProvenance.state === 'unpinned'
+                        ? `${openingProvenance.systemLabel} · sin pin — re-aplicá la apertura para congelar la procedencia`
+                        : openingProvenance.state === 'system'
+                          ? openingProvenance.systemLabel
+                          : openingProvenance.label}
+                </dd>
               </>
             ) : null}
           </dl>

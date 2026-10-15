@@ -361,6 +361,20 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                   ) : null}
                 </div>
 
+                {line.openingProvenance ? (
+                  <p
+                    className="project-item-readonly-value"
+                    style={{ margin: '0.25rem 0 0', fontSize: '0.8125rem' }}
+                    data-testid={`quote-opening-provenance-${line.quoteLineId}`}
+                  >
+                    Apertura:{' '}
+                    {line.openingProvenance.profileCode
+                      ? `${line.openingProvenance.profileCode} v${line.openingProvenance.profileVersion}`
+                      : `perfil v${line.openingProvenance.profileVersion}`}{' '}
+                    · {line.openingProvenance.membersSummary}
+                  </p>
+                ) : null}
+
                 {line.isMultiUnit ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     <div className="catalog-form__field" style={{ maxWidth: '120px' }}>

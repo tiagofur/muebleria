@@ -10,6 +10,7 @@ import type { Customer, Project } from '@granete/domain';
 import type {
   ProjectCommercialQuoteStatus,
   ProjectCommercialSummary,
+  QuoteCommercialOpeningBom,
   QuoteCommercialOption,
   QuoteCommercialSnapshot,
   QuoteRevisionItem,
@@ -35,6 +36,44 @@ export interface ProjectRevisionLineView {
   readonly salePrice: number | null;
   readonly units: ReadonlyArray<ProjectRevisionUnitView>;
   readonly isMultiUnit: boolean;
+  /** #1330 — the frozen opening provenance of the line (null = the line
+   * contributes no opening BOM; snapshots frozen before #1263/#1330 render
+   * the truthful absences they carry). */
+  readonly openingProvenance: ProjectRevisionOpeningProvenance | null;
+}
+
+export interface ProjectRevisionOpeningProvenance {
+  /** The pin's frozen code; null in snapshots frozen before #1330. */
+  readonly profileCode: string | null;
+  readonly profileVersion: number;
+  /** Plain-workshop member summary, e.g. «perfil + 3 soportes + tapas». */
+  readonly membersSummary: string;
+}
+
+const OPENING_MEMBER_LABELS: Readonly<Record<string, string>> = {
+  profile: 'perfil',
+  supports: 'soportes',
+  endCaps: 'tapas',
+};
+
+function openingProvenanceOf(entry: QuoteCommercialOpeningBom): ProjectRevisionOpeningProvenance {
+  const first = entry.lines[0];
+  const quantities = new Map<string, number>();
+  for (const line of entry.lines) {
+    quantities.set(line.memberKey, (quantities.get(line.memberKey) ?? 0) + line.quantity);
+  }
+  const parts: string[] = [];
+  for (const key of ['profile', 'supports', 'endCaps']) {
+    const quantity = quantities.get(key);
+    if (quantity == null) continue;
+    const label = OPENING_MEMBER_LABELS[key] ?? key;
+    parts.push(key === 'supports' && quantity !== 1 ? `${quantity} ${label}` : label);
+  }
+  return {
+    profileCode: first?.profileCode ?? null,
+    profileVersion: first?.profileVersion ?? 0,
+    membersSummary: parts.join(' + '),
+  };
 }
 
 function parseFiniteDim(val: unknown): number | null {
@@ -166,6 +205,11 @@ export function buildRevisionLines(
       salePrice = line.amounts.salePrice;
     }
 
+    // #1330: the frozen opening provenance joins strictly by quoteLineId —
+    // the snapshot's own frozen code+version, never a live-catalog lookup.
+    const openingEntry =
+      snapshot.openingBom?.find((entry) => entry.quoteLineId === line.quoteLineId) ?? null;
+
     return {
       quoteLineId: line.quoteLineId,
       quantity: line.quantity,
@@ -175,6 +219,7 @@ export function buildRevisionLines(
       salePrice,
       units,
       isMultiUnit: line.quantity > 1 || units.length > 1,
+      openingProvenance: openingEntry ? openingProvenanceOf(openingEntry) : null,
     };
   });
 }

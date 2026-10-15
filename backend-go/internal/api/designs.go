@@ -162,7 +162,130 @@ func optionalString(value string) *string {
 
 func toDesignAuthoringDefaultsDTO(defaults domain.DesignAuthoringDefaults) openapi.DesignAuthoringDefaults {
 	normalized := defaults.Normalize()
-	return openapi.DesignAuthoringDefaults{MaterialChoices: normalized.MaterialChoices}
+	return openapi.DesignAuthoringDefaults{
+		MaterialChoices: normalized.MaterialChoices,
+		// #1330: the durable opening selection travels with its frozen pin —
+		// the web's read-only procedencia surface consumes exactly what the
+		// design opening GET serializes, never a re-derivation.
+		Opening: toDesignOpeningSelectionDTO(normalized.Opening),
+	}
+}
+
+func toDesignOpeningSelectionDTO(selection *domain.DesignOpeningSelection) *openapi.DesignOpeningSelection {
+	if selection == nil {
+		return nil
+	}
+	dto := &openapi.DesignOpeningSelection{System: selection.System}
+	if selection.ProfileID != "" {
+		profileID := selection.ProfileID
+		dto.ProfileId = &profileID
+	}
+	if len(selection.Placements) > 0 {
+		dto.Placements = append([]string(nil), selection.Placements...)
+	}
+	dto.ProfilePin = toDesignOpeningProfilePinDTO(selection.ProfilePin)
+	return dto
+}
+
+func toDesignOpeningProfilePinDTO(pin *domain.DesignOpeningProfilePin) *openapi.DesignOpeningProfilePin {
+	if pin == nil {
+		return nil
+	}
+	dto := &openapi.DesignOpeningProfilePin{
+		ProfileCode:          pin.ProfileCode,
+		FrontReductionMm:     int64(pin.FrontReductionMm),
+		GripClearanceMm:      int64(pin.GripClearanceMm),
+		DoorReductionMm:      optionalInt64(pin.DoorReductionMm),
+		DatasheetStatus:      pin.DatasheetStatus,
+		CompatiblePlacements: append([]string(nil), pin.CompatiblePlacements...),
+	}
+	// 0 is the truthful "pin authored before the envelope existed" absence.
+	if pin.ProfileHeightMm != 0 {
+		height := pin.ProfileHeightMm
+		dto.ProfileHeightMm = &height
+	}
+	if pin.ProfileDepthMm != 0 {
+		depth := pin.ProfileDepthMm
+		dto.ProfileDepthMm = &depth
+	}
+	if len(pin.BodyModifiers) > 0 {
+		dto.BodyModifiers = make([]openapi.OpeningProfileBodyModifier, 0, len(pin.BodyModifiers))
+		for _, modifier := range pin.BodyModifiers {
+			dto.BodyModifiers = append(dto.BodyModifiers, toOpeningProfileBodyModifierDTO(modifier))
+		}
+	}
+	if pin.BOM != nil {
+		members := make(map[string]openapi.OpeningProfileBOMMember, len(pin.BOM.Members))
+		for key, member := range pin.BOM.Members {
+			members[key] = toOpeningProfileBOMMemberDTO(member)
+		}
+		dto.Bom = &openapi.DesignOpeningProfilePinBOM{
+			ProfileVersion: pin.BOM.ProfileVersion,
+			Members:        members,
+		}
+	}
+	return dto
+}
+
+func toOpeningProfileBodyModifierDTO(modifier domain.OpeningBodyModifier) openapi.OpeningProfileBodyModifier {
+	dto := openapi.OpeningProfileBodyModifier{Role: modifier.Role}
+	if modifier.Effect != "" {
+		effect := modifier.Effect
+		dto.Effect = &effect
+	}
+	if modifier.DepthReductionMm != nil {
+		depth := int64(*modifier.DepthReductionMm)
+		dto.DepthReductionMm = &depth
+	}
+	dto.NotchHeightMm = optionalFloat64(modifier.NotchHeightMm)
+	dto.NotchDepthMm = optionalFloat64(modifier.NotchDepthMm)
+	if modifier.NotchAt != "" {
+		notchAt := modifier.NotchAt
+		dto.NotchAt = &notchAt
+	}
+	dto.BevelAngleDeg = optionalFloat64(modifier.BevelAngleDeg)
+	dto.BevelSizeMm = optionalFloat64(modifier.BevelSizeMm)
+	if modifier.BevelAt != "" {
+		bevelAt := modifier.BevelAt
+		dto.BevelAt = &bevelAt
+	}
+	return dto
+}
+
+func toOpeningProfileBOMMemberDTO(member domain.OpeningBOMMember) openapi.OpeningProfileBOMMember {
+	dto := openapi.OpeningProfileBOMMember{HardwareID: member.HardwareID, Rule: member.Rule}
+	if member.ComponentID != "" {
+		componentID := member.ComponentID
+		dto.ComponentID = &componentID
+	}
+	if member.Unit != "" {
+		unit := member.Unit
+		dto.Unit = &unit
+	}
+	if member.SpacingMm != nil {
+		spacing := int64(*member.SpacingMm)
+		dto.SpacingMm = &spacing
+	}
+	if member.DimensionsMm != nil {
+		dto.DimensionsMm = append([]float64(nil), member.DimensionsMm[:]...)
+	}
+	return dto
+}
+
+func optionalInt64(value *int) *int64 {
+	if value == nil {
+		return nil
+	}
+	converted := int64(*value)
+	return &converted
+}
+
+func optionalFloat64(value *float64) *float64 {
+	if value == nil {
+		return nil
+	}
+	converted := *value
+	return &converted
 }
 
 func toDesignMaterialChoiceModesDTO(modes map[string]domain.DesignMaterialChoiceMode) map[string]openapi.DesignMaterialChoiceMode {

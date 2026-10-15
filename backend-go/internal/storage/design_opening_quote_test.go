@@ -159,6 +159,11 @@ func TestCreateInitialDesignQuoteRevisionFreezesOpeningBOM(t *testing.T) {
 	byMember := map[string]domain.QuoteCommercialOpeningBOMLine{}
 	for _, line := range entry.Lines {
 		byMember[line.MemberKey] = line
+		// #1330: every line names the pin's frozen code — the quote's
+		// procedencia never joins the live catalog to name the profile.
+		if line.ProfileCode != "GOLA-L-8006" {
+			t.Fatalf("line %s missing the pin's frozen profile code: %+v", line.MemberKey, line)
+		}
 	}
 	if line := byMember["profile"]; math.Abs(line.Quantity-0.764) > 1e-9 || line.CutLengthMm != 764 || line.Unit != "meter" || line.ProfileVersion != profileVersion {
 		t.Fatalf("profile run drifted: %+v", line)

@@ -192,6 +192,29 @@
     return label;
   }
 
+  // #1330: what the design is PINNED to, named from the frozen pin — the
+  // same code+version the web shows (one truth). «sin pin» is the truthful
+  // absence for gola selections authored before the pin existed; the other
+  // systems never carry a pin, so they name nothing.
+  function pinnedSuffix(opening) {
+    if (!opening || opening.system !== "gola") {
+      return "";
+    }
+    var pin = opening.profilePin;
+    if (!pin || !pin.profileCode) {
+      return " · sin pin — re-aplicá la apertura para congelar la procedencia";
+    }
+    var suffix = " · " + pin.profileCode;
+    var version = pin.bom && pin.bom.profileVersion;
+    if (version) {
+      suffix += " v" + version;
+    }
+    if (pin.doorReductionMm) {
+      suffix += " · puertas H−" + pin.doorReductionMm;
+    }
+    return suffix;
+  }
+
   // #1329: the profile's own declared consequences, computed ONLY from the
   // profile entity the server sent (no derived-output guesswork): the door
   // discount (H − N), the declared notch envelope and the maker.
@@ -455,7 +478,7 @@
     persistedNote.style.cssText = "font-size: var(--text-xs); margin: var(--space-1) 0 0;";
     persistedNote.setAttribute("data-testid", "opening-persisted");
     if (state.persisted && state.persisted.opening) {
-      persistedNote.textContent = "Apertura guardada: " + labelFor(SYSTEM_LABELS, state.persisted.opening.system);
+      persistedNote.textContent = "Apertura guardada: " + labelFor(SYSTEM_LABELS, state.persisted.opening.system) + pinnedSuffix(state.persisted.opening);
     } else {
       persistedNote.textContent = "Sin apertura guardada todavía.";
     }
@@ -783,8 +806,18 @@
     var opening = state.persisted && state.persisted.opening;
     var system = (opening && opening.system) || "handle";
     var systemLabel = labelFor(SYSTEM_LABELS, system) || system;
+    var pin = opening && opening.profilePin;
+    // #1330: the frozen pin names the profile — the live catalog row is only
+    // a display fallback and a REMOVED profile degrades to the pin's code,
+    // never to a bare id.
     var profileName = "";
-    if (opening && opening.profileId) {
+    var profileVersion = null;
+    if (pin && pin.profileCode) {
+      profileName = pin.profileCode;
+      if (pin.bom && pin.bom.profileVersion) {
+        profileVersion = pin.bom.profileVersion;
+      }
+    } else if (opening && opening.profileId) {
       for (var i = 0; i < state.profiles.length; i++) {
         if (state.profiles[i].id === opening.profileId) {
           profileName = state.profiles[i].name || state.profiles[i].code || opening.profileId;
@@ -812,6 +845,9 @@
       systemLabel: systemLabel,
       profileId: (opening && opening.profileId) || "",
       profileName: profileName,
+      // #1330: the pinned provenance — null when the selection predates the
+      // pin (truthful absence, never a live-catalog version).
+      profileVersion: profileVersion,
       placementLabel: placementLabel,
       resolvedText: resolvedText,
       isGola: system === "gola",
