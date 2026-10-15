@@ -17,7 +17,7 @@ import (
 // guarded (version) like every simple catalog family (#1091/#443).
 
 const openingProfileColumns = `
-	id, organization_id, code, name, grip_type, cross_section_shape,
+	id, organization_id, code, name, manufacturer, grip_type, cross_section_shape,
 	compatible_placements, datasheet_status, geometry_origin,
 	front_reduction_mm, grip_clearance_mm, profile_height_mm, profile_depth_mm,
 	door_reduction_mm,
@@ -27,7 +27,7 @@ const openingProfileColumns = `
 func scanOpeningProfile(row pgx.Row) (*domain.OpeningProfile, error) {
 	var p domain.OpeningProfile
 	err := row.Scan(
-		&p.ID, &p.OrganizationID, &p.Code, &p.Name, &p.GripType, &p.CrossSectionShape,
+		&p.ID, &p.OrganizationID, &p.Code, &p.Name, &p.Manufacturer, &p.GripType, &p.CrossSectionShape,
 		&p.CompatiblePlacements, &p.DatasheetStatus, &p.GeometryOrigin,
 		&p.FrontReductionMm, &p.GripClearanceMm, &p.ProfileHeightMm, &p.ProfileDepthMm,
 		&p.DoorReductionMm,
@@ -102,16 +102,16 @@ func (s *PostgresStore) CreateOpeningProfile(ctx context.Context, profile *domai
 	bodyModifiers, bomMembers := openingProfileJSONColumns(profile)
 	query := `
 		INSERT INTO opening_profiles (
-			id, organization_id, code, name, grip_type, cross_section_shape,
+			id, organization_id, code, name, manufacturer, grip_type, cross_section_shape,
 			compatible_placements, datasheet_status, geometry_origin,
 			front_reduction_mm, grip_clearance_mm, profile_height_mm, profile_depth_mm,
 			door_reduction_mm,
 			body_modifiers, bom_members, active, version
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,1)
-		RETURNING ` + openingProfileColumns + `;
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,1)
+		RETURNING ` + openingProfileColumns + `
 	`
 	row := s.db(ctx).QueryRow(ctx, query,
-		profile.ID, OrgFromCtx(ctx), profile.Code, profile.Name, profile.GripType, profile.CrossSectionShape,
+		profile.ID, OrgFromCtx(ctx), profile.Code, profile.Name, profile.Manufacturer, profile.GripType, profile.CrossSectionShape,
 		profile.CompatiblePlacements, profile.DatasheetStatus, profile.GeometryOrigin,
 		profile.FrontReductionMm, profile.GripClearanceMm, profile.ProfileHeightMm, profile.ProfileDepthMm,
 		profile.DoorReductionMm,
@@ -135,17 +135,17 @@ func (s *PostgresStore) UpdateOpeningProfile(ctx context.Context, id string, exp
 	bodyModifiers, bomMembers := openingProfileJSONColumns(profile)
 	query := `
 		UPDATE opening_profiles SET
-			code = $3, name = $4, grip_type = $5, cross_section_shape = $6,
-			compatible_placements = $7, datasheet_status = $8, geometry_origin = $9,
-			front_reduction_mm = $10, grip_clearance_mm = $11, profile_height_mm = $12, profile_depth_mm = $13,
-			door_reduction_mm = $14,
-			body_modifiers = $15, bom_members = $16, active = $17,
+			code = $3, name = $4, manufacturer = $5, grip_type = $6, cross_section_shape = $7,
+			compatible_placements = $8, datasheet_status = $9, geometry_origin = $10,
+			front_reduction_mm = $11, grip_clearance_mm = $12, profile_height_mm = $13, profile_depth_mm = $14,
+			door_reduction_mm = $15,
+			body_modifiers = $16, bom_members = $17, active = $18,
 			version = version + 1, updated_at = NOW()
-		WHERE id = $1 AND organization_id = $2 AND version = $18
-		RETURNING ` + openingProfileColumns + `;
+		WHERE id = $1 AND organization_id = $2 AND version = $19
+		RETURNING ` + openingProfileColumns + `
 	`
 	row := s.db(ctx).QueryRow(ctx, query,
-		id, OrgFromCtx(ctx), profile.Code, profile.Name, profile.GripType, profile.CrossSectionShape,
+		id, OrgFromCtx(ctx), profile.Code, profile.Name, profile.Manufacturer, profile.GripType, profile.CrossSectionShape,
 		profile.CompatiblePlacements, profile.DatasheetStatus, profile.GeometryOrigin,
 		profile.FrontReductionMm, profile.GripClearanceMm, profile.ProfileHeightMm, profile.ProfileDepthMm,
 		profile.DoorReductionMm,

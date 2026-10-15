@@ -18,10 +18,15 @@ import (
 // it is not authorable until every required geometry value exists WITH its
 // auditable origin. Missing values are a blocked state, never defaults.
 type OpeningProfile struct {
-	ID                   string   `json:"id"`
-	OrganizationID       string   `json:"organization_id"`
-	Code                 string   `json:"code"`
-	Name                 string   `json:"name"`
+	ID             string `json:"id"`
+	OrganizationID string `json:"organization_id"`
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	// Manufacturer (#1329) names who makes the physical profile (e.g. SCILM)
+	// so two gola L of different makers are distinguishable in the picker.
+	// Informational only: the code stays the identity and the auditable
+	// geometry origin stays GeometryOrigin.
+	Manufacturer         string   `json:"manufacturer,omitempty"`
 	GripType             string   `json:"grip_type"`
 	CrossSectionShape    string   `json:"cross_section_shape,omitempty"`
 	CompatiblePlacements []string `json:"compatible_placements"`
@@ -163,6 +168,11 @@ func ValidateOpeningProfile(p OpeningProfile) error {
 	}
 	if strings.TrimSpace(p.Name) == "" {
 		return fmt.Errorf("el nombre del perfil de apertura es obligatorio")
+	}
+	// #1329: informational identity, never required — but bounded so the
+	// picker line stays readable.
+	if len([]rune(p.Manufacturer)) > 120 {
+		return fmt.Errorf("el fabricante del perfil debe tener como máximo 120 caracteres")
 	}
 	if !containsString(OpeningGripTypes, p.GripType) {
 		return fmt.Errorf("el tipo de grip %q no es válido", p.GripType)

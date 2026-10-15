@@ -53,6 +53,8 @@ export interface OpeningProfileDraft {
   readonly id: string;
   readonly code: string;
   readonly name: string;
+  /** #1329 — informational maker name (e.g. SCILM); the code stays the identity. */
+  readonly manufacturer: string;
   readonly gripType: OpeningGripTypeDraft;
   readonly crossSection: OpeningCrossSectionDraft;
   readonly top: boolean;
@@ -88,6 +90,7 @@ export function emptyOpeningProfileDraft(): OpeningProfileDraft {
     id: '',
     code: '',
     name: '',
+    manufacturer: '',
     gripType: 'gola',
     crossSection: 'L',
     top: true,
@@ -122,6 +125,8 @@ export interface OpeningProfileRowLike {
   readonly id: string;
   readonly code: string;
   readonly name: string;
+  /** #1329 — nullable: not declared yet is the truthful absence. */
+  readonly manufacturer: string | null;
   readonly gripType: string;
   readonly crossSection: string | null;
   readonly placements: readonly string[];
@@ -146,6 +151,7 @@ export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfil
     id: row.id,
     code: row.code,
     name: row.name,
+    manufacturer: row.manufacturer ?? '',
     gripType: (row.gripType as OpeningGripTypeDraft) ?? 'gola',
     crossSection: (row.crossSection as OpeningCrossSectionDraft) ?? '',
     top: row.placements.includes('top'),
