@@ -77,3 +77,91 @@ Web 48 archivos / 581 tests PASS; typecheck PASS.
 
 Retiro total de F074/legacy y convergencia J6: siguen NOMBRADOS — el camino
 legacy queda vivo para drafts/no-canonical hasta decisión de producto.
+
+## K3-paridad (2026-10-16) — identidad de partes TS alineada al espacio congelado de Go
+
+**Bloqueador que abre este slice (hallazgo en vivo, #1070):**
+`composeFrozenDrilling` nunca calza para módulos compuestos: el BOM congelado
+Go nombra piezas `st-<componentId>-copy-N` / `mod-<componentId>-copy-N`
+(#736, 684b899d — prefijos para desduplicar; layout.go:916 igual) mientras el
+BOM TS las nombra sin prefijo (bom.ts:578, llamadas con `idPrefix: ''`).
+Los conteos calzan, los nombres no ⇒ «la partida liberada X no tiene routing
+congelado» para TODO release compuesto (KDT/pack/DXF congelado muertos en el
+browser para esos releases).
+
+**Dirección elegida: TS adopta el espacio de Go.**
+- Go es el lado congelado YA publicado (releases existentes + cutting-demand
+  + routing + part-executions llevan ids prefijados); cambiar Go rompería el
+  readback de cada release vivo.
+- El fixture de paridad de autoría #477 (`sketchupAuthoringResolve.contract.json`)
+  YA pina ids prefijados (`st-comp-side-copy-0`, `mod-comp-shelf-copy-0`) —
+  el espacio prefijado es el contrato de intercambio; bom.ts es el outlier.
+- Agregados ya están alineados en ambos (`agr-…`).
+
+**Cambio (un solo unit de dominio + compañeros obligatorios):**
+1. `bom.ts` — estructura expande con `st-`, instancias de módulo con `mod-`
+   (semántica de copyCounters idéntica a Go; por llamada).
+2. `project3dPreview.ts:524-525` — prefixes `''` → `st-`/`mod-` (si no, los
+   placements manuales desaparecen del 3D en silencio).
+3. `projectDrilling.ts` `manualPlacementsForPart` — strip del prefijo en el
+   stem-match (si no, perforaciones manuales mueren en compuestos).
+4. `deriveOverridesFromParts.ts` — strip del prefijo en el regex `-copy-`
+   (si no, overrides del BoardEditor se persisten bajo clave inexistente).
+5. Fixture de paridad compartido (`contracts/`) consumido por test Go y test
+   TS: mismo módulo compuesto ⇒ mismos part ids en ambos runtimes.
+6. Pines de test actualizados (~48 ids sin prefijo en 9 archivos) y goldens
+   Pnn (la renumeración pasa a ser la de Go: `mod-` < `st-` lexicográfico).
+
+**Efectos aceptados:** renumeración Pnn en compuestos (unifica con el
+despiece congelado — hoy divergen), `part_definition_id` históricos mezclados
+(sin joins: solo round-trip). **No se rompen:** planes de corte persistidos
+(no llevan partId), labels de manufactura (demanda congelada), exports
+PTX/PDF/DXF (códigos limpios), quotes, workshop occurrences.
+
+**Consecuencia inmediata:** desbloquea el happy path KDT de #1070 (spec
+`engineering-kdt-export.spec.ts` gana su segundo test: ZIP con XML congelado
++ readback con `parseKdtPanelBytes` re-exportada) y el join K1/K2 para
+compuestos.
+
+## Mapa de migración de F074 (aceptación «retiro o mapa», 2026-10-16)
+
+Estado real del fallback F074 (heurística por nombre de pieza) tras K1+K2+KDT:
+
+1. **Caminos con autoridad canónica — F074 ya no existe**: KDT
+   (useExportHandlers), capa drilling del DXF (K2) y pack de producción (K1)
+   componen SOLO del snapshot congelado; sin autoridad canónica NO hay
+   fallback (fail-closed con mensaje estructurado). El comentario legacy en
+   useExportHandlers.ts:602 documenta la frontera.
+2. **Camino legacy vivo, marcado y acotado**: proyectos SIN release canónico
+   (drafts/quote) siguen resolviendo perforaciones con F128/F130+F074 — es el
+   único origen honesto para un pack de estimado; el pack lo declara con
+   `"source": "legacy-live"` (nunca mezclado con agujeros congelados).
+3. **Disparador de retiro total** (decisión de producto, no de este slice):
+   cuando el ciclo de fabricación solo componga packs contra releases
+   canónicos (gate de lifecycle producción→pack), el camino legacy se borra
+   con su marcador. Hoy retirarlo dejaría a los drafts sin pack de estimado.
+
+Este mapa queda como aceptación del ítem «F074 retirado de los caminos
+reemplazados (o mapa de migración aceptado por el owner)»: los caminos
+reemplazados (releases canónicos) ya no lo usan; el resto queda documentado
+con su disparador de retiro.
+
+## Evidencia K3-parity (2026-10-16, congelado para revisión)
+
+- Rama `fix/995-part-identity-parity` sobre main `adfa6c50`. Verificación:
+  domain 1980 ✓ · ui 2263 ✓ · web 605 ✓ · excel 701+5skip ✓ · storage 268 ✓ ·
+  Go domain completo ✓ (incluye el fixture nuevo) · typechecks web/excel/tests ✓.
+- Paridad: `contracts/bomPartIdentityParity.contract.json` consumido por
+  `bomPartIdentityParity.test.ts` (TS) y `bom_part_identity_parity_test.go`
+  (Go) — misma secuencia st-/mod-/agr-…instance-… en ambos runtimes.
+- Fixture `componentBindings.contract.json` colapsado a un solo
+  `piecePrefix: "mod-"` (el dual ts/go era el workaround que documentaba la
+  divergencia).
+- Browser proof (gate local PASS, 2/2): `engineering-kdt-export.spec.ts` —
+  sin salida → toast; KDT configurado → ZIP con XML congelado, cazoleta
+  35×13 leída con `parseKdtPanelBytes` + manifest con provenance del release
+  (projectId/releaseId/bomFingerprint/digest del perfil). El happy path de
+  #1070 queda demostrado; el spec vive en ese issue por trazabilidad.
+- Pnn: `modGar01` fixture reordenado (orden canónico = Go). Efectos aceptados
+  documentados arriba (this slice): renumeración Pnn compuestos,
+  part_definition_id históricos mixtos sin joins.
