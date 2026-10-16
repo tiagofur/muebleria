@@ -106,6 +106,27 @@ interface Seeded {
   readonly fingerprint: string;
   readonly token: string;
   readonly apiBase: string;
+  readonly organizationId: string;
+}
+
+/** Serial-suite citizenship: the machining selection is THIS spec's test
+ * variable. Restoring confirmed-empty afterwards keeps the shard's later
+ * residents (machine-output-selection) seeing exactly the state they were
+ * written against — a configured record adds a second «Detalle técnico» to
+ * the Ajustes screen and breaks their strict-mode locators. There is no
+ * DELETE API, so the gate pool services the fixture support directly (same
+ * precedent as the library-release flip in support/api). */
+async function deleteMachiningSelection(organizationId: string): Promise<void> {
+  const { Pool } = await import('pg');
+  const pool = new Pool({ connectionString: required('ORGANIZATION_TEST_DATABASE_URL') });
+  try {
+    await pool.query(
+      'DELETE FROM machine_output_selections WHERE organization_id = $1 AND operation = $2',
+      [organizationId, 'machining'],
+    );
+  } finally {
+    await pool.end();
+  }
 }
 
 async function login(page: Page): Promise<void> {
@@ -122,6 +143,10 @@ async function login(page: Page): Promise<void> {
 
 test.describe.serial('Descarga de programas KDT nunca queda muda (#1070)', () => {
   let seeded!: Seeded;
+
+  test.afterAll(async () => {
+    if (seeded) await deleteMachiningSelection(seeded.organizationId);
+  });
 
   test.beforeAll(async () => {
     const apiBase = required('ORGANIZATION_API_BASE');
@@ -301,12 +326,14 @@ test.describe.serial('Descarga de programas KDT nunca queda muda (#1070)', () =>
     );
     expect(frozenDrills.length, `frozen drill operations: ${JSON.stringify(snapshot.routing).slice(0, 400)}`).toBeGreaterThan(0);
 
+    if (!owner.organization) throw new Error('owner organization missing');
     seeded = {
       projectId: PROJECT_ID,
       releaseId: release.id,
       fingerprint: snapshot.release.manufacturingFingerprint,
       token,
       apiBase,
+      organizationId: owner.organization.id,
     };
   });
 
@@ -334,9 +361,16 @@ test.describe.serial('Descarga de programas KDT nunca queda muda (#1070)', () =>
   test('salida KDT configurada + liberación congelada: el clic descarga el ZIP con el programa congelado', async ({ page }) => {
     test.setTimeout(120_000);
     const client = new GraneteApiClient(seeded.apiBase);
+    // Optimistic-concurrency safe: adopt the CURRENT version if a shard
+    // resident left a machining record (normally confirmed-empty after our
+    // own cleanup, but never assume).
+    const current = await client.listMachineOutputSelections(seeded.token);
+    const machining = current.selections.find(
+      (entry) => entry.selection.operation === 'machining',
+    );
     await client.upsertMachineOutputSelection(seeded.token, 'machining', {
       selection: KDT_SELECTION,
-      expectedVersion: 0,
+      expectedVersion: machining?.selection.version ?? 0,
     });
 
     await login(page);
