@@ -54,6 +54,9 @@ export function ComponentListView({
     (Boolean(search.trim()) ||
       status !== 'active' ||
       placementFilter !== 'all');
+  // K5-parity (#1032 pattern, #1019): ONE creation CTA per state — on the
+  // truly-empty state the EmptyState owns the action.
+  const isTrulyEmpty = rows.length === 0 && !isFilterEmpty;
 
   const clearFilters = () => {
     setSearch('');
@@ -68,7 +71,7 @@ export function ComponentListView({
         subtitle="Piezas reutilizables de ingeniería para composición de muebles"
         icon={<Puzzle size={16} strokeWidth={1.5} />}
         primaryAction={
-          canMutate ? (
+          canMutate && !isTrulyEmpty ? (
             <button
               type="button"
               className="btn btn--primary"

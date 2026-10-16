@@ -168,6 +168,23 @@ test.describe.serial('Factory Construction Settings (#875) Browser E2E', () => {
 
   test('Factory B remains isolated from Factory A manufacturing overlay', async ({ page }) => {
     test.setTimeout(60_000);
+    // Self-sufficient: B's construction policy comes from the #1065 demo
+    // provisioning (/seed) — an org that was ever seeded carries its OWN
+    // factory policy. Seed explicitly so this test never depends on which
+    // earlier shard resident happened to seed org B.
+    const client = new GraneteApiClient(required('ORGANIZATION_API_BASE'));
+    const ownerB = await client.login({
+      email: required('ORGANIZATION_GATE_B_OWNER_EMAIL'),
+      password: required('ORGANIZATION_GATE_PASSWORD'),
+      transport: 'web',
+      org: required('ORGANIZATION_GATE_ORG_B_SLUG'),
+    });
+    const seeded = await fetch(`${required('ORGANIZATION_API_BASE')}/seed`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ownerB.token}` },
+    });
+    expect(seeded.ok, `seed B: ${seeded.status}`).toBe(true);
+
     await loginToB(page);
 
     await page.goto('/settings');
@@ -176,11 +193,14 @@ test.describe.serial('Factory Construction Settings (#875) Browser E2E', () => {
     const section = page.getByTestId('settings-section-construction');
     await expect(section).toBeVisible({ timeout: 15_000 });
 
-    // Factory B must NOT see Factory A's overrides
-    await expect(page.getByTestId('floor-provenance-badge')).toHaveText('Estándar');
-    await expect(page.getByTestId('floor-stations-input')).toHaveValue('2');
+    // Factory B sees its OWN provisioned policy (demo: minifix-dowel in
+    // spacing mode · 250 mm) — never Factory A's overrides (count mode ·
+    // screw-only · 4 stations). The pattern select is the honest isolation
+    // proof: A saved COUNT mode, B carries the demo SPACING mode.
+    await expect(page.getByTestId('floor-provenance-badge')).toHaveText('Fábrica');
     await expect(page.getByTestId('floor-system-select')).toHaveValue('minifix-dowel');
-    await expect(page.getByTestId('restore-floor-inheritance')).toHaveCount(0);
+    await expect(page.getByTestId('floor-pattern-select')).toHaveValue('spacing');
+    await expect(page.getByTestId('floor-max-spacing-input')).toHaveValue('250');
   });
 
   test('Factory A can restore inheritance back to Granete Standard cleanly', async ({ page }) => {

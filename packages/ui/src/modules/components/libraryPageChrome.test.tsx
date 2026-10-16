@@ -89,7 +89,9 @@ describe('F104 page chrome — library list views', () => {
         onOpenDetail={vi.fn()}
       />,
     );
-    expectSharedHeader('Componentes', 'Nuevo componente');
+    // K5-paridad (#1019): catálogo vacío — el header cede el CTA al EmptyState.
+    expectSharedHeader('Componentes');
+    expect(screen.getByRole('button', { name: 'Crear componente' })).toBeTruthy();
     const toolbar = screen.getByTestId('page-toolbar');
     expect(within(toolbar).getByRole('searchbox')).toBeDefined();
     expect(
