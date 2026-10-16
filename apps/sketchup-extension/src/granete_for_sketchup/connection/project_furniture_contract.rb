@@ -14,13 +14,16 @@ module Granete
                                    :parameters, :material_choices, :material_choice_modes,
                                    :transform, :technical_client_locator, :room_id,
                                    keyword_init: true)
-          # updated_at is kept as the VERBATIM server string: it is the
-          # canonical workingVersion token every write must echo back as
-          # expected_working_version (#810).
-          # authoring_defaults is the durable Design-scoped defaults block
-          # (#784): {role => material id}, canonical empty map when absent.
+          # updated_at is the VERBATIM server string: the canonical
+          # workingVersion token every write echoes back (#810).
+          # authoring_defaults (#784): {role => material id}, empty map when
+          # absent.
           WorkingCopy = Struct.new(:design_id, :project_id, :base_revision_id, :items, :updated_at,
                                    :authoring_defaults,
+                                   # #1330/#1344: the durable opening selection rides
+                                   # authoring_defaults since the DTO widening — read-only
+                                   # here (the opening card reads the dedicated endpoint).
+                                   :opening,
                                    keyword_init: true)
           Instance = Struct.new(:id, :project_id, :furniture_definition_id, :origin, :lifecycle_status,
                                 # #1177: optimistic-concurrency token of the unit —
@@ -219,7 +222,8 @@ module Granete
               WorkingCopy.new(
                 design_id: body['design_id'], project_id: body['project_id'],
                 base_revision_id: base, updated_at: updated_at,
-                authoring_defaults: parse_authoring_defaults!(body['authoring_defaults']),
+                authoring_defaults: parse_authoring_defaults!(OpeningContract.working_defaults_raw(body)),
+                opening: OpeningContract.parse!(OpeningContract.opening_raw(body)),
                 items: body['items'].map { |entry| parse_working_item!(entry) }
               )
             end

@@ -22,6 +22,7 @@ module Granete
         connection/transform_contract
         connection/position_journal
         connection/managed_furniture
+        connection/project_furniture_opening_contract
         connection/project_furniture_contract
         connection/host_reconciliation
         connection/host_restore

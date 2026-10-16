@@ -9,6 +9,7 @@ require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/connection/model_binding'
 require_relative '../../src/granete_for_sketchup/connection/transform_contract'
 require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
+require_relative '../../src/granete_for_sketchup/connection/project_furniture_opening_contract'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
 require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
 require_relative '../../src/granete_for_sketchup/connection/host_restore'
@@ -1517,6 +1518,56 @@ class ProjectFurnitureTest < Minitest::Test
         PF::Contract::WorkingCopyContract.parse_working_copy!(body)
       end
     end
+  end
+
+  # #1342 follow-up — the #1344 DTO widening rides `opening` (the design's
+  # durable selection with its frozen pin) inside authoring_defaults. The
+  # plugin's transport contract must ACCEPT and expose it (read-only) —
+  # rejecting it 500'd every gola design's Inspector card in the real host.
+  def test_working_copy_authoring_defaults_accepts_opening_selection
+    body = working_copy_body([])
+    body['authoring_defaults'] = { 'materialChoices' => { 'INTERIOR' => 'mat-white' } }
+    body['authoring_defaults']['opening'] = {
+      'system' => 'gola',
+      'profileId' => 'profile.gola-italiano.tira',
+      'placements' => ['top'],
+      'profilePin' => {
+        'profileCode' => 'GOLA-ITALIANO',
+        'frontReductionMm' => 33,
+        'gripClearanceMm' => 2,
+        'doorReductionMm' => 35,
+        'datasheetStatus' => 'verified',
+        'profileHeightMm' => 70,
+        'profileDepthMm' => 15,
+        'compatiblePlacements' => ['top'],
+        'bodyModifiers' => [
+          { 'role' => 'door', 'bevel_angle_deg' => 45, 'bevel_size_mm' => 13, 'bevel_at' => 'top_front' }
+        ],
+        'bom' => { 'profileVersion' => 7, 'members' => {} }
+      }
+    }
+
+    parsed = PF::Contract::WorkingCopyContract.parse_working_copy!(body)
+    opening = parsed.opening
+    refute_nil opening, 'the opening selection must travel on the working copy'
+    assert_equal 'gola', opening['system']
+    assert_equal 'GOLA-ITALIANO', opening.dig('profilePin', 'profileCode')
+    # The choices consumers keep their exact shape.
+    assert_equal body['authoring_defaults']['materialChoices'], parsed.authoring_defaults
+
+    # Fail-closed envelope: unknown keys at the SELECTION level reject.
+    body['authoring_defaults']['opening']['manufacturer'] = 'nope'
+    assert_raises(PF::Contract::ContractError) do
+      PF::Contract::WorkingCopyContract.parse_working_copy!(body)
+    end
+    body['authoring_defaults']['opening'].delete('manufacturer')
+
+    # The pin's payload is server-owned read-only data: unknown extra keys
+    # pass through verbatim (the frozen slice belongs to the server's
+    # contract; enumerating it here broke on every honest addition).
+    body['authoring_defaults']['opening']['profilePin']['futureField'] = 1
+    reparsed = PF::Contract::WorkingCopyContract.parse_working_copy!(body)
+    assert_equal 1, reparsed.opening.dig('profilePin', 'futureField')
   end
 
   def test_transform_contract_conversions
