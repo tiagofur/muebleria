@@ -611,6 +611,34 @@ export function generateDxfByPiece(options: GenerateDxfOptions): DxfPieceCutFile
   const results: DxfPieceCutFile[] = [];
 
   for (const piece of pieces) {
+    // #1061 — released plans name the file with the release-unique workshop
+    // ID (`1-P01`, no project/module prefix: exports already ship one folder
+    // per project and CNC readers choke on long names). A workshop ID that
+    // repeats inside ONE plan is a data defect, never a `_N` disambiguation.
+    // Legacy/live plans without workshopId keep the descriptive long name.
+    if (piece.workshopId?.trim()) {
+      const fileName = `${piece.workshopId.trim()}.dxf`;
+      if (nameCounts.has(fileName)) {
+        throw new Error(`ID de taller duplicado en el plan: ${piece.workshopId.trim()}`);
+      }
+      nameCounts.set(fileName, 1);
+      const dxfContent = buildSinglePieceDxf(piece, drillingByPiece);
+      const bytes = new TextEncoder().encode(dxfContent);
+      results.push({
+        pieceId: piece.id,
+        partCode: piece.partCode,
+        partName: piece.partName,
+        moduleCode: piece.moduleCode,
+        labelRef: piece.labelRef,
+        materialName: piece.materialName,
+        fileName,
+        dxfContent,
+        bytes,
+        lengthMm: piece.lengthMm,
+        widthMm: piece.widthMm,
+      });
+      continue;
+    }
     const safePart = sanitizeFileNameToken(piece.partCode || 'pieza');
     const modToken = piece.moduleCode ? `_${sanitizeFileNameToken(piece.moduleCode)}` : '';
     const labelToken = piece.labelRef ? `_${sanitizeFileNameToken(piece.labelRef)}` : '';

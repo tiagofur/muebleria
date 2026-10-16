@@ -42,7 +42,7 @@ corte productivo, sin datos de cliente.
 
 | Paso | Qué hacer | Registro |
 |---|---|---|
-| I1 | Copiar el `.xml` a la máquina (USB/red, como el taller cargue Promob hoy) — anotar si el nombre `K<hash12>.xml` genera problema | método de carga + aceptación del nombre |
+| I1 | Copiar el `.xml` a la máquina (USB/red, como el taller cargue Promob hoy) — anotar si el nombre `1-P01-A.xml` (ID de taller #1061) genera problema | método de carga + aceptación del nombre |
 | I2 | Abrir/importar el programa en el control | ¿abre? ¿mensajes/advertencias exactos? |
 | I3 | Verificar en la **vista previa** del programa: cantidad de operaciones (6/2/4), tipo (vertical/horizontal) por tabla | conteo por programa |
 | I4 | Verificar **cada operación** contra `expected-values.md`: canto, coordenadas X1/Y1, Z1, diámetro, profundidad | matriz completa (checklist) |
@@ -67,7 +67,8 @@ corte productivo, sin datos de cliente.
 
 1. Versión exacta del software de control + ¿validación de versión?
 2. Restricciones reales de nombre de archivo (longitud/caracteres) — hoy
-   Granete usa `K<hash12>.xml` como candidato conservador.
+   Granete usa el ID de taller (`1-P01-A.xml`, #1061) como nombre de
+   archivo industrial.
 3. ¿Cómo interpreta el control el AlignmentFace? ¿Coincide con la política
    Granete (canto X=0 contra el tope)?
 4. ¿Existen TypeNo 4/5 distintos de lo documentado? ¿`<Arc>` en Path?

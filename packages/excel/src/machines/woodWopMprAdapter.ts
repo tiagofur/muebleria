@@ -111,6 +111,8 @@ const MPR_PROVENANCE = {
 export interface MprPieceArtifact {
   readonly pieceCode: string;
   readonly machiningFace: 'front' | 'back';
+  /** #1061 — final workshop ID (face-suffixed when both faces program). */
+  readonly workshopId: string;
   readonly bytes: Uint8Array;
 }
 
@@ -222,6 +224,7 @@ export function serializeMprPerPiece(
   return transformJobToMprCandidatePrograms(job, MPR_PROVENANCE).map((program) => ({
     pieceCode: program.pieceCode,
     machiningFace: program.machiningFace,
+    workshopId: program.workshopId,
     bytes: serializeMprCandidateDocument(program.document),
   }));
 }

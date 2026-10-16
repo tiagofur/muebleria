@@ -103,6 +103,8 @@ const KDT_PROVENANCE: KdtProvenance = {
 export interface KdtPieceArtifact {
   readonly pieceCode: string;
   readonly machiningFace: 'front' | 'back';
+  /** #1061 — final workshop ID (face-suffixed when both faces program). */
+  readonly workshopId: string;
   readonly bytes: Uint8Array;
 }
 
@@ -214,6 +216,7 @@ export function serializePerPiece(
   return transformJobToPrograms(job, KDT_PROVENANCE).map((program) => ({
     pieceCode: program.pieceCode,
     machiningFace: program.machiningFace,
+    workshopId: program.workshopId,
     bytes: serializeKdtPanelDocument(program.document),
   }));
 }

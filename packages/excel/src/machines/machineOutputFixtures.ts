@@ -93,6 +93,7 @@ export function buildCad4CandidateCuttingJob(): ResolvedCuttingJob {
 
 const FIXTURE_MACHINING_PATTERN = {
   pieceCode: 'fixture-module-m.fixture-panel-001',
+  workshopId: '1-P01',
   moduleCode: 'fixture-module-m',
   partName: 'Pieza Sintetica Panel 001',
   lengthMm: 600,

@@ -4,6 +4,7 @@ import { buildFixtureMachiningJob, FIXTURE_JOB_GENERATED_AT } from './machineOut
 import {
   generateSelectedMachiningOutput,
   kdtArtifactFileName,
+  mprArtifactFileName,
 } from './outputSelectionResolver';
 import { KDT_FLEXDRILL_1200_PROFILE, MPR_WOODWOP_PROFILE } from './profiles';
 import { KDT_POSTPROCESSOR_ADAPTER } from './kdtAdapter';
@@ -45,7 +46,9 @@ describe('generateSelectedMachiningOutput (#1005 K3)', () => {
     expect(bundles).toHaveLength(1);
     const bundle = bundles[0]!;
     expect(new TextDecoder().decode(bundle.artifact.bytes)).toContain('<KDTPanelFormat>');
-    expect(bundle.artifact.fileName).toMatch(/^K[0-9A-F]{12}\.xml$/);
+    // #1061: el nombre de archivo ES el ID de taller.
+    // Fixture de UNA cara: bare ID, sin sufijo A/B (regla #1061).
+    expect(bundle.artifact.fileName).toBe('1-P01.xml');
     expect(bundle.manifest.delivery).toEqual({
       mode: 'by-piece',
       piece: { code: 'fixture-module-m.fixture-panel-001', machiningFace: 'back' },
@@ -108,7 +111,7 @@ describe('generateSelectedMachiningOutput (#1005 K3)', () => {
     const mprBundles = await generateSelectedMachiningOutput(job, mprMachiningSelection());
     expect(mprBundles).toHaveLength(1);
     expect(mprBundles[0]!.artifact.kind).toBe('mpr');
-    expect(mprBundles[0]!.artifact.fileName).toMatch(/^M[0-9A-F]{12}\.mpr$/);
+    expect(mprBundles[0]!.artifact.fileName).toBe('1-P01.mpr');
     expect(new TextDecoder().decode(mprBundles[0]!.artifact.bytes)).toContain('[H');
     await expect(
       generateSelectedMachiningOutput(job, {
@@ -136,12 +139,9 @@ describe('generateSelectedMachiningOutput (#1005 K3)', () => {
     ).rejects.toThrow(/no produce programas KDT/);
   });
 
-  it('kdtArtifactFileName es determinista y sensible a pieza/cara', async () => {
-    const a = await kdtArtifactFileName('job-1', 'MOD-1-P01', 'front');
-    const b = await kdtArtifactFileName('job-1', 'MOD-1-P01', 'back');
-    const c = await kdtArtifactFileName('job-1', 'MOD-1-P01', 'front');
-    expect(a).toMatch(/^K[0-9A-F]{12}\.xml$/);
-    expect(a).not.toBe(b);
-    expect(a).toBe(c);
+  it('kdtArtifactFileName es el ID de taller + extensión (#1061: sin hash ni prefijo por formato)', async () => {
+    expect(kdtArtifactFileName({ workshopId: '1-P01-A' })).toBe('1-P01-A.xml');
+    expect(mprArtifactFileName({ workshopId: '1-P01-B' })).toBe('1-P01-B.mpr');
+    expect(kdtArtifactFileName({ workshopId: '2-P04' })).toBe('2-P04.xml');
   });
 });

@@ -53,6 +53,8 @@ export interface KdtPieceProgram {
   readonly pieceCode: string;
   /** Which board face points UP on the machine for this program. */
   readonly machiningFace: 'front' | 'back';
+  /** #1061 — final workshop ID (face-suffixed when the piece programs both faces). */
+  readonly workshopId: string;
   readonly document: KdtPanelDocument;
 }
 
@@ -98,11 +100,33 @@ function validateHole(hole: HoleDefinition, pattern: PartDrillingPattern): strin
  * machining face). Collects every defect instead of failing on the first,
  * so the workshop sees the full data picture at once.
  */
+/**
+ * #1061 — the machine-facing workshop ID: the bare `1-P01` form gains the
+ * A/B face suffix ONLY when the piece programs both faces (front=A,
+ * back=B); single-face pieces keep the bare ID.
+ */
+function workshopIdForFace(
+  workshopId: string,
+  upFace: 'front' | 'back',
+  bothFaces: boolean,
+): string {
+  if (!bothFaces) return workshopId;
+  return `${workshopId}${upFace === 'front' ? '-A' : '-B'}`;
+}
+
 export function transformPatternToPrograms(
   pattern: PartDrillingPattern,
   provenance: KdtProvenance,
 ): { programs: KdtPieceProgram[]; reasons: AdapterBlockReason[] } {
   const reasons: AdapterBlockReason[] = [];
+  if (!pattern.workshopId?.trim()) {
+    reasons.push(
+      invalid(
+        `pieza ${pattern.pieceCode}: sin ID de taller (#1061) — el nombre de archivo de máquina lo requiere`,
+      ),
+    );
+    return { programs: [], reasons };
+  }
   const t = pattern.thicknessMm;
   if (t === undefined || !Number.isFinite(t) || t <= 0) {
     reasons.push(
@@ -113,6 +137,9 @@ export function transformPatternToPrograms(
     return { programs: [], reasons };
   }
 
+  // Narrowed after the guard: the rest of the function (including the
+  // program builder closure) reads it as a definite string.
+  const workshopId = pattern.workshopId;
   const front: HoleDefinition[] = [];
   const back: HoleDefinition[] = [];
   const edges: HoleDefinition[] = [];
@@ -130,6 +157,7 @@ export function transformPatternToPrograms(
   const build = (upFace: 'front' | 'back', holes: readonly HoleDefinition[]): KdtPieceProgram => ({
     pieceCode: pattern.pieceCode,
     machiningFace: upFace,
+    workshopId: workshopIdForFace(workshopId, upFace, hasFront && hasBack),
     document: {
       panel: {
         lengthMm: pattern.lengthMm,
@@ -143,10 +171,14 @@ export function transformPatternToPrograms(
     },
   });
 
+  const hasFront = front.length > 0;
+  const hasBack = back.length > 0;
   const programs: KdtPieceProgram[] = [];
-  if (front.length > 0) programs.push(build('front', [...front, ...edges]));
-  if (back.length > 0) {
-    programs.push(build('back', front.length === 0 ? [...back, ...edges] : back));
+  // #1061: the A/B suffix appears ONLY when the piece programs BOTH faces —
+  // single-face pieces keep the bare workshop ID (the owner's naming rule).
+  if (hasFront) programs.push(build('front', [...front, ...edges]));
+  if (hasBack) {
+    programs.push(build('back', hasFront ? back : [...back, ...edges]));
   }
   if (programs.length === 0 && edges.length > 0) {
     programs.push(build('front', edges));
