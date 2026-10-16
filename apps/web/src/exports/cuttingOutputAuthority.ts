@@ -60,7 +60,10 @@ export async function runWithCuttingOutputAuthority<T>(
     case 'loading':
       throw new CuttingOutputUnavailableError(
         'loading',
-        'La configuración de salida de corte todavía se está cargando.',
+        // #1070: worded for BOTH operations (cutting and machining route
+        // through this authority) — never a dead click while the read model
+        // loads.
+        'La configuración de salida de máquina todavía se está cargando.',
       );
     case 'error':
       throw new CuttingOutputUnavailableError('error', state.error);

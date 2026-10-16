@@ -608,7 +608,16 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
         projectId != null
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
-      if (!project || !catalog) return;
+      // #1070 — never a mute return: every exit of this handler is a download
+      // or an explained toast.
+      if (!project || !catalog) {
+        toast({
+          type: 'error',
+          message:
+            'No se encontró el proyecto o el catálogo activo para exportar programas KDT.',
+        });
+        return;
+      }
       if (
         session === 'auth' &&
         !canExportProductionForProject(actorRole, project.status)

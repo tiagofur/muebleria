@@ -1263,19 +1263,18 @@ export function ProductionOrderOptimizationPanel({
                     </p>
                   ) : null}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                    {/* #1070 — the click never dies: a not-ready target keeps
+                    the button enabled so the handler explains the exact
+                    blocker (sin salida / fetch fallido / snapshot ausente) as
+                    a toast; only an in-flight export disables it. */}
                     <button
                       type="button"
                       className="btn btn--primary btn--small"
                       onClick={() => {
                         void onExportMachiningKdt?.();
                       }}
-                      disabled={exportBusy || !machiningOutputTarget?.ready}
+                      disabled={exportBusy}
                       data-testid="prod-opt-export-kdt"
-                      title={
-                        !machiningOutputTarget?.ready
-                          ? 'Configurá la salida de mecanizado (KDT) en Ajustes → Ingeniería.'
-                          : undefined
-                      }
                     >
                       Descargar programas KDT (.zip)
                     </button>

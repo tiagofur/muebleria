@@ -287,6 +287,31 @@ describe('ProductionOrderOptimizationPanel — default del taller (F133)', () =>
   });
 });
 
+describe('ProductionOrderOptimizationPanel — programas KDT (#1070)', () => {
+  it('el clic sin salida de mecanizado lista nunca queda mudo: botón habilitado que dispara el handler', () => {
+    const onExportMachiningKdt = vi.fn();
+    render(
+      <ProductionOrderOptimizationPanel
+        project={project()}
+        catalog={null}
+        cutRows={[]}
+        onExportMachiningKdt={onExportMachiningKdt}
+      />,
+    );
+
+    // #1070: sin target de mecanizado el resumen lo nombra y el botón sigue
+    // cliqueable — la explicación exacta la da el handler (toast), nunca un
+    // disabled que traga el clic.
+    expect(
+      screen.getByTestId('prod-opt-machining-output-summary').textContent,
+    ).toContain('sin salida de mecanizado configurada');
+    const button = screen.getByTestId('prod-opt-export-kdt') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(onExportMachiningKdt).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('ProductionOrderOptimizationPanel — estrategia de corte (F126)', () => {
   it('el selector cambia la config: nesting muestra espaciado de fresa y oculta el kerf', () => {
     render(
