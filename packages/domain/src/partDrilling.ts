@@ -41,6 +41,13 @@ export interface PartDrillingPattern {
   readonly thicknessMm?: number;
   readonly materialName: string;
   readonly holes: readonly HoleDefinition[];
+  /**
+   * #1061 — the release-unique workshop ID (`${unitOrdinal}-P${seq}`, ≤10
+   * chars): the despiece authority behind machine filenames and the label
+   * barcode. Optional for backward compatibility with producers that predate
+   * the field; the workshop naming fails closed without it.
+   */
+  readonly workshopId?: string;
 }
 
 export interface ProjectDrillingData {

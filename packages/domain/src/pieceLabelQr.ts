@@ -13,6 +13,13 @@ export type PieceLabelQrFields = {
   readonly projectId: string;
   readonly moduleCode: string;
   readonly partCode?: string;
+  /**
+   * #1061 — release-unique workshop ID (`1-P01`, ≤10 chars, ≤10 chars):
+   * the scanned barcode's piece key — the SAME id the despiece shows and
+   * the CNC filenames carry. Optional: scans of pre-#1061 labels keep
+   * resolving through the legacy partCode.
+   */
+  readonly workshopId?: string;
   readonly description: string;
   readonly materialCode: string;
   readonly lengthMm: number;
@@ -56,6 +63,7 @@ export function pieceLabelQrPayload(fields: PieceLabelQrFields): string {
     projectId: fields.projectId,
     module: fields.moduleCode,
     part: fields.partCode ?? '',
+    ...(fields.workshopId ? { piece: fields.workshopId } : {}),
     desc: fields.description.slice(0, 80),
     material: fields.materialCode,
     L: fields.lengthMm,
@@ -233,6 +241,7 @@ export function parsePieceLabelScan(text: string): ParsedPieceLabelScan | null {
       projectId: scanString(parsed.projectId),
       moduleCode,
       partCode: scanString(parsed.part) || undefined,
+      workshopId: scanString(parsed.piece) || undefined,
       description: scanString(parsed.desc),
       materialCode: scanString(parsed.material),
       lengthMm: scanNumber(parsed.L),

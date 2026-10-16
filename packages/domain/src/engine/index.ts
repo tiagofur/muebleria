@@ -58,6 +58,7 @@ export {
   generateCutRowsWithLinks,
   generatePieceLabels,
   validateFrozenWorkshopOccurrenceOrdinals,
+  workshopPieceId,
 } from './cut';
 export type {
   WorkshopOccurrenceAssignment,

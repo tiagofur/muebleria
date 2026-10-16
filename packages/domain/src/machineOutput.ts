@@ -111,6 +111,9 @@ export interface PartRoutingPattern {
   readonly cuts: readonly RoutingCutDefinition[];
   readonly openingProfileId?: string;
   readonly boundary?: string;
+  /** #1061 — release-unique workshop ID (`${unitOrdinal}-P${seq}`); the
+   * machine-file naming authority when present. */
+  readonly workshopId?: string;
 }
 
 /**

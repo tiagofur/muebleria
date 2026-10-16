@@ -325,6 +325,7 @@ export type { BoardLineCost, HardwareLineCost, LineCost, ComposedModuleInput, Co
 export {
   resolveBom,
   componentIdFromComposedPartId,
+  workshopPieceId,
   resolveComposedModule,
   calcMaterialCostPerM2,
   calcBoardLineMetrics,

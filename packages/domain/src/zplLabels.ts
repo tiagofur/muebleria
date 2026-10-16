@@ -98,6 +98,7 @@ export function pieceToZpl(
     projectId: options.projectId ?? 'PROJ',
     moduleCode: label.moduleCode,
     partCode: label.partCode,
+    workshopId: label.workshopId,
     description: label.description,
     materialCode: label.materialCode,
     lengthMm: label.lengthMm,

@@ -77,6 +77,25 @@ function isInternalUuidOrCopy(code?: string): boolean {
 }
 
 /**
+ * #1061 — the release-unique workshop piece ID: `${unitOrdinal}-P${seq}`
+ * (≤10 chars). The despiece authority behind machine filenames and the
+ * label barcode: the unit ordinal is the frozen liberation order (#781
+ * workshopOccurrenceOrdinal) and the sequence is the piece's position
+ * within its unit. Pure projection — never replaces the deep partId
+ * identity. Fails closed on non-positive inputs instead of inventing an
+ * ambiguous id.
+ */
+export function workshopPieceId(unitOrdinal: number, seq: number): string {
+  if (!Number.isInteger(unitOrdinal) || unitOrdinal < 1) {
+    throw new RangeError(`ordinal de unidad inválido: ${unitOrdinal}`);
+  }
+  if (!Number.isInteger(seq) || seq < 1) {
+    throw new RangeError(`secuencia de pieza inválida: ${seq}`);
+  }
+  return `${unitOrdinal}-P${String(seq).padStart(2, '0')}`;
+}
+
+/**
  * Format a human-readable, clean and unique piece code.
  * Ex: MOD-CAJ-01-P01, MOD-CAJ-01-LAT-DER, or MOD-CAJ-01-L2-P01 for duplicate lines.
  */
@@ -375,6 +394,23 @@ export function applyFrozenWorkshopOccurrenceOrdinals(
 }
 
 /** #781 — canonical part order inside one occurrence (see above). */
+
+/**
+ * #1061 — the unit ordinal behind each item's workshop IDs: the frozen
+ * ordinal carried on the items when the walk is frozen (identical to the
+ * release lane's frozen liberation order), else the 1-based traversal
+ * position inside the canonical occurrence order. Partial contexts throw in
+ * canonicalWorkshopOccurrences before this is ever read — never mixed.
+ */
+function workshopUnitOrdinals(items: readonly WorkshopOccurrenceOrdering[]): Map<string, number> {
+  const ordered = canonicalWorkshopOccurrences(items);
+  const positions = new Map<string, number>();
+  ordered.forEach((entry, index) => {
+    positions.set(entry.id, entry.workshopOccurrenceOrdinal ?? index + 1);
+  });
+  return positions;
+}
+
 export function canonicalWorkshopParts<T extends { readonly id: string }>(
   parts: readonly T[],
 ): T[] {
@@ -387,9 +423,18 @@ export function generateCutRowsWithLinks(
 ): { rows: ProductionCutRow[]; links: CutRowPieceLink[] } {
   const sortable: SortableCutRow[] = [];
   const moduleCounts = new Map<string, number>();
+  // #1061 — the live lane carries the workshop ID too: the frozen ordinal
+  // when every item carries it (identical to the release lane's frozen
+  // liberation order), else the 1-based position inside this canonical
+  // walk. #995 K3-parity uses the live lane's workshopId for the
+  // machine-file naming fallback contract.
+  const unitPositions = workshopUnitOrdinals(project.items);
+  let occurrenceIndex = 0;
 
   // #781 — canonical occurrence order (see canonicalWorkshopOccurrences).
   for (const item of canonicalWorkshopOccurrences(project.items)) {
+    occurrenceIndex++;
+    const unitOrdinal = unitPositions.get(item.id) ?? occurrenceIndex;
     if (!(item.quantity > 0)) {
       throw new ValidationError(
         `Project item quantity must be > 0 (got ${item.quantity})`,
@@ -483,6 +528,10 @@ export function generateCutRowsWithLinks(
           edgeBandCode: edgeBand?.code,
           edgeBandName: edgeBand?.name,
           edgeBandThicknessMm: edgeBand?.thicknessMm,
+          // #1061 — the live lane's workshop ID: frozen ordinal when frozen,
+          // else the canonical walk position. The machine-name fallback
+          // contract matches the release lane when frozen.
+          workshopId: workshopPieceId(unitOrdinal, partIdx),
         },
       });
     }
@@ -583,9 +632,15 @@ export function generatePieceLabels(
 ): PieceLabel[] {
   const sortable: SortablePieceLabel[] = [];
   const moduleCounts = new Map<string, number>();
+  // #1061 — the label carries the same workshop ID the despiece computes
+  // for this (unit, part): frozen whenever the walk is frozen.
+  const unitPositions = workshopUnitOrdinals(project.items);
+  let occurrenceIndex = 0;
 
   // #781 — canonical occurrence order (see canonicalWorkshopOccurrences).
   for (const item of canonicalWorkshopOccurrences(project.items)) {
+    occurrenceIndex++;
+    const unitOrdinal = unitPositions.get(item.id) ?? occurrenceIndex;
     if (!(item.quantity > 0)) {
       throw new ValidationError(
         `Project item quantity must be > 0 (got ${item.quantity})`,
@@ -714,6 +769,7 @@ export function generatePieceLabels(
             sides,
             edgeForInstruction,
           ),
+          workshopId: workshopPieceId(unitOrdinal, partIdx),
         },
       });
     }
