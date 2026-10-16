@@ -585,14 +585,24 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     // Serial-suite citizenship: this test wrote an ORG-B factory overlay.
     // Leaving it behind turns factory-construction-settings' B isolation
     // assert («floor provenance = Estándar») into a deterministic failure
-    // whenever both specs share a shard. Strip the shelf keys this test
-    // contributed; the settings read model derives per-family provenance
-    // from the overlay keys, so without them B is Standard again.
+    // whenever both specs share a shard. Restore B to Standard: the policy
+    // read model prefers the STRUCTURED blob (`joint.constructionPolicy`)
+    // and derives per-family provenance from its entries, so the shelf
+    // family must leave BOTH the granular keys and the blob.
     const activeB = await client.getActiveStandardLibraryOverlay(tokenB2);
     if (activeB) {
       const remaining = { ...((activeB.overrides ?? {}) as Record<string, unknown>) };
       for (const key of Object.keys(remaining)) {
         if (key.startsWith('joint.shelfToSide.')) delete remaining[key];
+      }
+      const structured = remaining['joint.constructionPolicy'] as
+        | { shelfToSide?: unknown; [key: string]: unknown }
+        | undefined;
+      if (structured && typeof structured === 'object') {
+        delete structured.shelfToSide;
+        const hasFactoryFamily = ['floorToSide', 'topToSide', 'shelfToSide', 'backPanel', 'componentOverrides']
+          .some((family) => structured[family] !== undefined);
+        if (!hasFactoryFamily) delete remaining['joint.constructionPolicy'];
       }
       await client.updateLibraryOverlay(tokenB2, activeB.id, activeB.version, {
         overrides: remaining,
