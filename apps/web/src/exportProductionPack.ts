@@ -13,6 +13,7 @@ import {
   generateModuleLabels,
   pieceBatchToZpl,
   moduleBatchToZpl,
+  workshopPieceId,
   DomainError,
   domainErrorToExportIssue,
   type Catalog,
@@ -168,6 +169,18 @@ export function composeFrozenDrilling(
   }
   let totalHoles = 0;
   const routingPatterns: PartRoutingPattern[] = [];
+  // #1061 — the release-unique workshop ID per frozen part: the unit ordinal
+  // is the unit's ARRAY POSITION in the frozen snapshot ("the frozen
+  // liberation order IS the manufacturing occurrence order", #781) and the
+  // sequence is the part's position within its partId-sorted unit — the SAME
+  // ordering rule the despiece derives its Pnn codes from.
+  const workshopIdByPart = new Map<string, string>();
+  frozen.snapshot.routing.units.forEach((unit, unitIndex) => {
+    const sortedPartIds = unit.parts.map((part) => part.partId).sort();
+    sortedPartIds.forEach((partId, seqIndex) => {
+      workshopIdByPart.set(partId, workshopPieceId(unitIndex + 1, seqIndex + 1));
+    });
+  });
   const patterns = resolved.links.map((link, index) => {
     const holes = holesByPart.get(link.partId);
     if (!holes) {
@@ -177,6 +190,10 @@ export function composeFrozenDrilling(
     if (!legacy) {
       throw new Error(`el despiece no identifica la partida liberada ${link.partId}`);
     }
+    const workshopId = workshopIdByPart.get(link.partId);
+    if (!workshopId) {
+      throw new Error(`la partida liberada ${link.partId} no tiene ID de taller (#1061)`);
+    }
     totalHoles += holes.length;
     const route = routingByPart.get(link.partId);
     if (route) {
@@ -185,6 +202,7 @@ export function composeFrozenDrilling(
         cuts: route.cuts,
         openingProfileId: route.openingProfileId,
         boundary: route.boundary,
+        workshopId,
       });
     }
     return {
@@ -197,6 +215,9 @@ export function composeFrozenDrilling(
       thicknessMm: legacy.thicknessMm,
       materialName: legacy.materialName,
       holes,
+      // #1061 — machine filenames and the label barcode carry the release-
+      // unique workshop ID, never the long despiece label.
+      workshopId,
     };
   });
   return {

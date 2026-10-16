@@ -17,10 +17,12 @@
 | `MOD-K4-P01:back` | MOD-K4-P01 · Lateral K4 P01 (600×400×18) | **back** (Face B) | `6c1d884b9e9bdbe84de82e74ba75c570db13eedf061c8a5003785fd647702125` |
 | `MOD-K4-P02:front` | MOD-K4-P02 · Base K4 P02 (600×400×18) | **front** (Face A) | `41987e71c9a5cc01c878e270ebc99ed0ef583151cf8d04f5fcd6c0c755ad170c` |
 
-Nombres de archivo industriales: `K<hash12>.xml` (ver el ZIP descargado; el
-mapeo archivo→piezas está en cada `manifest.json`). En ambos archivos el
-canto de **alineación (AlignmentFace, rojo)** es el canto X=0
-(Quadrant 2 = canto inferior de la pieza en orientación de taller).
+Nombres de archivo industriales (#1061): el ID de taller del despiece —
+`1-P01-A.xml` y `1-P01-B.xml` (la pieza P01 programa ambas caras) y
+`1-P02.xml` (una cara, sin sufijo). El mapeo archivo→piezas está en cada
+`manifest.json`. En ambos archivos el canto de **alineación
+(AlignmentFace, rojo)** es el canto X=0 (Quadrant 2 = canto inferior de la
+pieza en orientación de taller).
 
 ## Programa 1 — MOD-K4-P01, cara **front** arriba (6 operaciones)
 

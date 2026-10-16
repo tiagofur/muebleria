@@ -390,6 +390,10 @@ test.describe.serial('Descarga de programas KDT nunca queda muda (#1070)', () =>
     const xmlNames = [...entries.keys()].filter((name) => name.endsWith('.xml'));
     // One piece × one face with operations → exactly one KDT program.
     expect(xmlNames).toHaveLength(1);
+    // #1061 — the workshop ID is the filename (`${unitOrdinal}-P${seq}`,
+    // no hash, no per-format prefix): the scanned label barcode and the CNC
+    // filename resolve to the same despiece piece.
+    expect(xmlNames[0]).toMatch(/^[1-9][0-9]*-P[0-9]{2}\.xml$/);
 
     // Independent readback (same standard as the PTX flow): the downloaded
     // XML carries the FROZEN cup hole — never invented, never live-resolved.

@@ -44,6 +44,7 @@ export function buildKdtFieldFixtureJob(): ResolvedMachiningJob {
       patterns: [
         {
           pieceCode: 'MOD-K4-P01',
+          workshopId: '1-P01',
           moduleCode: 'MOD-K4',
           partName: 'Lateral K4 P01',
           lengthMm: 600,
@@ -67,6 +68,7 @@ export function buildKdtFieldFixtureJob(): ResolvedMachiningJob {
         },
         {
           pieceCode: 'MOD-K4-P02',
+          workshopId: '1-P02',
           moduleCode: 'MOD-K4',
           partName: 'Base K4 P02',
           lengthMm: 600,

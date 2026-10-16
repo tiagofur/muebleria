@@ -48,6 +48,7 @@ function parsedToNeutralOperation(
 function allFacesPattern(): PartDrillingPattern {
   return {
     pieceCode: 'MOD-1-P01',
+    workshopId: '1-P01',
     moduleCode: 'MOD-1',
     partName: 'Pieza Seis Caras',
     lengthMm: 600,

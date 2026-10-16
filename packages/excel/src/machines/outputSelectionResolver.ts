@@ -554,31 +554,18 @@ export { machineOutputBlockerMessageEs } from '@granete/domain';
  * descriptive mapping; filename constraints stay pendingEvidence until the
  * client-a sample confirms them.
  */
-export async function mprArtifactFileName(
-  jobId: string,
-  pieceCode: string,
-  machiningFace: 'front' | 'back',
-): Promise<string> {
-  const token = (
-    await sha256Hex(`granete:mpr-artifact:${jobId}:${pieceCode}:${machiningFace}`)
-  )
-    .slice(0, 12)
-    .toUpperCase();
-  return `M${token}.mpr`;
+/**
+ * #1061 — the machine file name IS the release-unique workshop ID (the
+ * owner's naming rule: despiece ID + A/B face suffix, ≤10 chars, no
+ * per-format prefixes). The artifact carries it from the transform, which
+ * fails closed when a pattern lacks it.
+ */
+export function mprArtifactFileName(piece: { readonly workshopId: string }): string {
+  return `${piece.workshopId}.mpr`;
 }
 
-export async function kdtArtifactFileName(
-  jobId: string,
-  pieceCode: string,
-  machiningFace: 'front' | 'back',
-): Promise<string> {
-  const token = (
-    await sha256Hex(`granete:kdt-artifact:${jobId}:${pieceCode}:${machiningFace}`)
-  )
-    .slice(0, 12)
-    .toUpperCase();
-  const extension = 'xml';
-  return `K${token}.${extension}`;
+export function kdtArtifactFileName(piece: { readonly workshopId: string }): string {
+  return `${piece.workshopId}.xml`;
 }
 
 /**
@@ -622,7 +609,13 @@ export async function generateSelectedMachiningOutput(
   type PerPieceSerializer = (
     job: ResolvedMachiningJob,
     profile: OutputCompatibilityProfile,
-  ) => readonly { pieceCode: string; machiningFace: 'front' | 'back'; bytes: Uint8Array }[];
+  ) => readonly {
+    pieceCode: string;
+    machiningFace: 'front' | 'back';
+    /** #1061 — final workshop ID; the machine file name authority. */
+    workshopId: string;
+    bytes: Uint8Array;
+  }[];
   const serializePerPieceForFamily = (family: string): PerPieceSerializer | undefined =>
     family === 'kdt'
       ? (job2, prof) => serializePerPiece(job2, prof)
@@ -699,8 +692,8 @@ export async function generateSelectedMachiningOutput(
   for (const piece of pieces) {
     const fileName =
       profile.formatFamily === 'kdt'
-        ? await kdtArtifactFileName(job.jobId, piece.pieceCode, piece.machiningFace)
-        : await mprArtifactFileName(job.jobId, piece.pieceCode, piece.machiningFace);
+        ? kdtArtifactFileName(piece)
+        : mprArtifactFileName(piece);
     bundles.push(
       // Bytes already serialized by the family's per-piece serializer (which
       // owns gating); the builder wraps each program into artifact + manifest.

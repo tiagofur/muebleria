@@ -96,6 +96,9 @@ export interface CutPlanPlacedPiece {
   readonly partName: string;
   readonly moduleCode: string;
   readonly labelRef: string;
+  /** #1061 — release-unique workshop ID projected from the source cut row;
+   * absent on legacy/live plans that predate it. */
+  readonly workshopId?: string;
   readonly materialName: string;
   readonly materialCode?: string;
   /** X coordinate on board (mm), relative to raw board corner */

@@ -33,6 +33,8 @@ export interface MprCandidateProvenance {
 export interface MprCandidatePieceProgram {
   readonly pieceCode: string;
   readonly machiningFace: 'front' | 'back';
+  /** #1061 — final workshop ID (face-suffixed when both faces program). */
+  readonly workshopId: string;
   readonly document: MprCandidateDocument;
 }
 
@@ -145,6 +147,12 @@ export function transformPatternToMprCandidatePrograms(
   pattern: PartDrillingPattern,
   baseProvenance: Omit<MprCandidateProvenance, 'pieceCode' | 'machiningFace'>,
 ): MprCandidatePieceProgram[] {
+  if (!pattern.workshopId?.trim()) {
+    throw new MprCandidateParseError(
+      `pieza ${pattern.pieceCode}: sin ID de taller (#1061) — el nombre de archivo de máquina lo requiere`,
+    );
+  }
+  const workshopId = pattern.workshopId;
   const t = pattern.thicknessMm;
   if (t === undefined || !Number.isFinite(t) || t <= 0) {
     throw new MprCandidateParseError(
@@ -159,9 +167,13 @@ export function transformPatternToMprCandidatePrograms(
     else if (hole.face === 'back') back.push(hole);
     else edges.push(hole);
   }
+  const hasFront = front.length > 0;
+  const hasBack = back.length > 0;
   const build = (upFace: 'front' | 'back', holes: readonly HoleDefinition[]): MprCandidatePieceProgram => ({
     pieceCode: pattern.pieceCode,
     machiningFace: upFace,
+    // #1061: the A/B suffix appears ONLY when the piece programs BOTH faces.
+    workshopId: bothFaces(workshopId, upFace, hasFront && hasBack),
     document: {
       piece: {
         lengthMm: pattern.lengthMm,
@@ -179,14 +191,28 @@ export function transformPatternToMprCandidatePrograms(
   });
 
   const programs: MprCandidatePieceProgram[] = [];
-  if (front.length > 0) programs.push(build('front', [...front, ...edges]));
-  if (back.length > 0) {
-    programs.push(build('back', front.length === 0 ? [...back, ...edges] : back));
+  if (hasFront) programs.push(build('front', [...front, ...edges]));
+  if (hasBack) {
+    programs.push(build('back', hasFront ? back : [...back, ...edges]));
   }
   if (programs.length === 0 && edges.length > 0) {
     programs.push(build('front', edges));
   }
   return programs;
+}
+
+/**
+ * #1061 — the machine-facing workshop ID: the bare `1-P01` form gains the
+ * A/B face suffix ONLY when the piece programs both faces (front=A,
+ * back=B); single-face pieces keep the bare ID.
+ */
+function bothFaces(
+  workshopId: string,
+  upFace: 'front' | 'back',
+  twoFaces: boolean,
+): string {
+  if (!twoFaces) return workshopId;
+  return `${workshopId}${upFace === 'front' ? '-A' : '-B'}`;
 }
 
 /** Whole-job split into candidate programs; pieces keep their order. */

@@ -1903,6 +1903,12 @@ export interface ProductionCutRow {
   /** Board thickness in mm from the resolved part. */
   readonly thicknessMm?: number;
   /**
+   * #1061 — release-unique workshop ID (`${unitOrdinal}-P${seq}`, ≤10
+   * chars): the despiece authority behind machine filenames and the label
+   * barcode. Set by the frozen-release flows; absent on legacy live rows.
+   */
+  readonly workshopId?: string;
+  /**
    * Assigned edge band for this row's banded sides — what to load in the
    * edge bander. Undefined when no single band applies / part has none.
    */
@@ -1959,6 +1965,13 @@ export interface PieceLabel {
   readonly W2: boolean;
   /** Spanish workshop instruction (sides + edge band when known). */
   readonly edgeBandingInstruction: string;
+  /**
+   * #1061 — release-unique workshop ID (`${unitOrdinal}-P${seq}`, ≤10
+   * chars): the despiece authority behind the label barcode — the SAME id
+   * the CNC filenames carry, so the scanned barcode resolves to the piece
+   * and its machine files.
+   */
+  readonly workshopId?: string;
 }
 
 /**

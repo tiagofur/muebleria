@@ -29,6 +29,12 @@ export interface PieceToPlace {
    * it; hand-built candidates fall back to the row's labelRef/id.
    */
   labelRef?: string;
+  /**
+   * #1061 — per-placement workshop ID: the row's workshopId, with the SAME
+   * `-C<n>` disambiguation as labelRef for copies 2..N. Set by unrollRows
+   * when the row carries one; absent on legacy rows.
+   */
+  workshopId?: string;
 }
 
 export interface PlacementResult {
@@ -88,6 +94,7 @@ export function unrollRows(
     for (let i = 0; i < qty; i++) {
       seq++;
       const rowLabel = row.labelRef?.trim() || '';
+      const rowWorkshop = row.workshopId?.trim() || '';
       result.push({
         originalRow: row,
         indexInUnrolled: seq,
@@ -97,6 +104,8 @@ export function unrollRows(
         id: `${row.partCode || 'P'}-${seq}`,
         labelRef:
           rowLabel !== '' && qty > 1 && i > 0 ? `${rowLabel}-C${i + 1}` : rowLabel,
+        workshopId:
+          rowWorkshop !== '' && qty > 1 && i > 0 ? `${rowWorkshop}-C${i + 1}` : rowWorkshop || undefined,
       });
     }
   }

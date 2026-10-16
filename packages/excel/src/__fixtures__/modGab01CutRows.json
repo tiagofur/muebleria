@@ -18,7 +18,8 @@
     "thicknessMm": 15,
     "edgeBandCode": "CAN-ARA-BLA",
     "edgeBandName": "ARAUCO BLANCO",
-    "edgeBandThicknessMm": 0.5
+    "edgeBandThicknessMm": 0.5,
+    "workshopId": "1-P03"
   },
   {
     "quantity": 1,
@@ -39,7 +40,8 @@
     "thicknessMm": 15,
     "edgeBandCode": "CAN-ARA-BLA",
     "edgeBandName": "ARAUCO BLANCO",
-    "edgeBandThicknessMm": 0.5
+    "edgeBandThicknessMm": 0.5,
+    "workshopId": "1-P04"
   },
   {
     "quantity": 1,
@@ -60,7 +62,8 @@
     "thicknessMm": 15,
     "edgeBandCode": "CAN-ARA-BLA",
     "edgeBandName": "ARAUCO BLANCO",
-    "edgeBandThicknessMm": 0.5
+    "edgeBandThicknessMm": 0.5,
+    "workshopId": "1-P01"
   },
   {
     "quantity": 1,
@@ -81,7 +84,8 @@
     "thicknessMm": 15,
     "edgeBandCode": "CAN-ARA-BLA",
     "edgeBandName": "ARAUCO BLANCO",
-    "edgeBandThicknessMm": 0.5
+    "edgeBandThicknessMm": 0.5,
+    "workshopId": "1-P05"
   },
   {
     "quantity": 1,
@@ -102,7 +106,8 @@
     "thicknessMm": 15,
     "edgeBandCode": "CAN-ARA-BLA",
     "edgeBandName": "ARAUCO BLANCO",
-    "edgeBandThicknessMm": 0.5
+    "edgeBandThicknessMm": 0.5,
+    "workshopId": "1-P06"
   },
   {
     "quantity": 1,
@@ -123,7 +128,8 @@
     "thicknessMm": 15,
     "edgeBandCode": "CAN-ARA-BLA",
     "edgeBandName": "ARAUCO BLANCO",
-    "edgeBandThicknessMm": 0.5
+    "edgeBandThicknessMm": 0.5,
+    "workshopId": "1-P07"
   },
   {
     "quantity": 1,
@@ -144,7 +150,8 @@
     "thicknessMm": 18,
     "edgeBandCode": "CAN-MAD-FRE",
     "edgeBandName": "MADERADO FRENTE",
-    "edgeBandThicknessMm": 2
+    "edgeBandThicknessMm": 2,
+    "workshopId": "1-P02"
   },
   {
     "quantity": 1,
@@ -162,6 +169,7 @@
     "moduleCode": "MOD-GAB-01",
     "labelRef": "MOD-GAB-01-P08",
     "materialCode": "TAB-ARA-BLA",
-    "thicknessMm": 15
+    "thicknessMm": 15,
+    "workshopId": "1-P08"
   }
 ]

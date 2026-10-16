@@ -19,6 +19,7 @@ import {
   canonicalWorkshopOccurrences,
   formatOptimizerPartDescription,
   resolveCleanPieceCode,
+  workshopPieceId,
 } from './engine/cut';
 import type {
   Catalog,
@@ -109,6 +110,9 @@ export interface ReleaseDemandRowContext {
   readonly cleanPartCode: string;
   /** Stable label key (workshop code authority shared with the optimizer rows). */
   readonly labelRef: string;
+  /** #1061 — 1-based part sequence within the unit (canonical partId order);
+   * the release-cut-row workshop ID's seq half. */
+  readonly partIdx: number;
 }
 
 /**
@@ -143,7 +147,7 @@ export function* iterateReleaseDemandPieces(
         partIdx,
         lineSuffix,
       );
-      yield { unit, piece, moduleCode, module, cleanPartCode, labelRef };
+      yield { unit, piece, moduleCode, module, cleanPartCode, labelRef, partIdx };
     }
   }
 }
@@ -224,6 +228,10 @@ export function releaseCutRowsFromDemand(
       partCode: entry.cleanPartCode,
       moduleCode: entry.moduleCode,
       labelRef: entry.labelRef,
+      // #1061 — the FROZEN workshop ID: unit ordinal from the demand's
+      // frozen liberation order (#781) + the unit's canonical part sequence.
+      // Identical to what composeFrozenDrilling derives on the pack side.
+      workshopId: workshopPieceId(entry.unit.workshopOccurrenceOrdinal, entry.partIdx),
       thicknessMm: entry.piece.thicknessMm,
       edgeBandCode,
       edgeBandName: edge?.name,
