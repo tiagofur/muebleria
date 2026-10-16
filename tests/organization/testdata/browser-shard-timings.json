@@ -7,6 +7,7 @@
     "tests/organization/design-working-materials-reconcile.spec.ts": 8.5,
     "tests/organization/engineering-cutting-demand.spec.ts": 23.6,
     "tests/organization/engineering-entry.spec.ts": 24.9,
+    "tests/organization/engineering-kdt-export.spec.ts": 40.0,
     "tests/organization/engineering-physical-gate.spec.ts": 15.3,
     "tests/organization/engineering-state.spec.ts": 20.8,
     "tests/organization/fabrication-flow-visibility.spec.ts": 20.1,
