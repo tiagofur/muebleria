@@ -3,6 +3,7 @@
 require 'json'
 require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/connection/transform_contract'
+require_relative '../../src/granete_for_sketchup/connection/project_furniture_opening_contract'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
 
 class WorkingCopyContractTest < Minitest::Test
