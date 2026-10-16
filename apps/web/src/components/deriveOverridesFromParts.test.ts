@@ -37,6 +37,15 @@ describe('deriveOverridesFromParts (gap #1 — BoardEditor persistence)', () => 
     expect(result['comp-a']).toEqual({ xFormula: '50' });
   });
 
+  it('strips the Go #736 scope prefix when keying overrides (#995 K3-parity)', () => {
+    const original = [makePart('mod-comp-a-copy-0', { x: 0, y: 10, z: 0 })];
+    const edited = [makePart('mod-comp-a-copy-0', { x: 50, y: 10, z: 0 })];
+    const result = deriveOverridesFromParts(edited, original);
+    // The override must key on the SOURCE componentId, never on `mod-comp-a`.
+    expect(result['comp-a']).toEqual({ xFormula: '50' });
+    expect(result['mod-comp-a']).toBeUndefined();
+  });
+
   it('produces lengthFormula/widthFormula when dims changed', () => {
     const original = [makePart('comp-b-copy-0', { lengthMm: 720, widthMm: 560 })];
     const edited = [makePart('comp-b-copy-0', { lengthMm: 700, widthMm: 560 })];

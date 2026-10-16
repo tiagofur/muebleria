@@ -9,7 +9,7 @@
  */
 
 import { generateCutRowsWithLinks, type CutRowPieceLink } from './engine/cut';
-import { resolveBom } from './engine/bom';
+import { componentIdFromComposedPartId, resolveBom } from './engine/bom';
 import {
   deriveJointHardwarePlacements,
   type DerivedJointPlacement,
@@ -70,12 +70,12 @@ function manualPlacementsForPart(
   for (const instance of instances) {
     const placements = instance.overrides?.hardwarePlacements;
     if (!placements || placements.length === 0) continue;
-    // Expanded ids are `${componentId}-copy-${i}` (agregados carry a prefix —
-    // suffix match keeps the join working for both).
-    const marker = '-copy-';
-    const idx = partId.indexOf(marker);
-    const stem = idx > 0 ? partId.slice(0, idx) : partId;
-    if (stem === instance.componentId || partId.startsWith(instance.componentId)) {
+    // Composed ids carry the #736 scope prefixes (st-/mod- for structure and
+    // module copies, #995 K3-parity); strip before matching the source
+    // component. Legacy flat ids equal the componentId verbatim.
+    const stem =
+      componentIdFromComposedPartId(partId) ?? partId.replace(/^(?:st|mod)-/, '');
+    if (stem === instance.componentId) {
       out.push(...placements);
     }
   }

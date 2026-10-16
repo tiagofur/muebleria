@@ -1,8 +1,7 @@
 {
   "schemaVersion": 1,
-  "goPiecePrefix": "mod-",
-  "tsPiecePrefix": "",
-  "comment": "Existing engines use distinct module-piece namespaces; this helper preserves each, not cross-runtime ID equality.",
+  "piecePrefix": "mod-",
+  "comment": "#995 K3-parity: BOTH runtimes name composed part ids with the SAME Go #736 namespace (structure `st-<componentId>-copy-N`, module `mod-<componentId>-copy-N`); this fixture exercises module-level instances. piecePrefix applies to every case pieceId in each runtime — cross-runtime ID equality IS the contract (composeFrozenDrilling joins frozen Go ids against live TS ids).",
   "parameters": [
     {
       "name": "shelfCount", "label": "Shelves", "type": "number",

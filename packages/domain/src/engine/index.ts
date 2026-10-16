@@ -29,6 +29,7 @@ export {
 } from './validate';
 export {
   resolveBom,
+  componentIdFromComposedPartId,
   resolveComposedModule,
   resolveStructure,
 } from './bom';

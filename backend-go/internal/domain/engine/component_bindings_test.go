@@ -11,9 +11,9 @@ import (
 
 func TestComponentBindingsSharedContract(t *testing.T) {
 	var fixture struct {
-		GoPiecePrefix string                                `json:"goPiecePrefix"`
-		Parameters    []domain.FurnitureParameterDefinition `json:"parameters"`
-		Cases         []struct {
+		PiecePrefix string                                `json:"piecePrefix"`
+		Parameters  []domain.FurnitureParameterDefinition `json:"parameters"`
+		Cases       []struct {
 			Name       string         `json:"name"`
 			Values     map[string]any `json:"values"`
 			Quantities []int          `json:"quantities"`
@@ -92,7 +92,7 @@ func TestComponentBindingsSharedContract(t *testing.T) {
 			}
 			expectedIDs := []string{}
 			for _, id := range scenario.PieceIDs {
-				expectedIDs = append(expectedIDs, fixture.GoPiecePrefix+id)
+				expectedIDs = append(expectedIDs, fixture.PiecePrefix+id)
 			}
 			if !reflect.DeepEqual(pieceIDs, expectedIDs) {
 				t.Fatalf("unexpected physical IDs: %v", pieceIDs)

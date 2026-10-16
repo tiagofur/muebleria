@@ -438,10 +438,11 @@ export function resolveModuleAssemblies(
  * placement is resolved against the board part the instance produced. The link
  * between a component instance and its board part is the engine part-id
  * convention `${idPrefix}${componentId}-copy-${i}` (engine/bom.ts
- * `expandComponentInstances`). Structure + module components use `idPrefix=''`;
- * each agregado instance uses `idPrefix='agr-${agrIdx}-'` (AH-03, collision-safe).
- * The resolver mirrors that per-source prefix so the resolved
- * `componentInstanceId` equals the part id and the renderer attaches the handle
+ * `expandComponentInstances`). Structure components use `idPrefix='st-'`,
+ * module components `idPrefix='mod-'` (Go #736 namespaces, #995 K3-parity);
+ * each agregado unit uses `idPrefix='agr-${agrId}-${instanceTag}u${i}-'`
+ * (AH-03, collision-safe). The resolver mirrors that per-source prefix so the
+ * resolved `componentInstanceId` equals the part id and the renderer attaches the handle
  * to the matching board mesh by id.
  *
  * The instance set iterated is the FULL set that produced board parts: the
@@ -461,16 +462,13 @@ export function resolveModuleAssemblies(
  * only by the 3D preview.
  *
  * AH-03 part-id partitioning (collision-safe). Two agregados that reference
- * components sharing a componentId expand to DISTINCT part ids
- * (`agr-0-X-copy-0` vs `agr-1-X-copy-0`) because engine/bom.ts prefixes each
- * agregado instance with `agr-${agrIdx}-`. The resolver iterates each source
- * set (structure / module / per-agregado-instance) with its own prefix and
+ * components sharing a componentId expand to DISTINCT part ids because
+ * engine/bom.ts namespaces each agregado unit (`agr-<id>-…u<N>-`, with the
+ * `instance-<iid>-` tag when the same agregado is instantiated more than
+ * once, #388). The resolver iterates each source
+ * set (structure / module / per-agregado-unit) with its own prefix and
  * looks the part up against the now-unique `partById` Map, so a placement
- * always links to its OWN board — never the wrong/collapsed one. Structure and
- * module placements keep `''` (backward compatible with the 31 Fase 2 face-mode
- * goldens). Residual: structure↔module componentId overlap still shares `''`
- * (pre-agregado behavior; rare in practice — components are typed by
- * placement/role); out of scope here.
+ * always links to its OWN board — never the wrong/collapsed one.
  */
 export function resolveModuleHardwarePlacements(
   /** Pick: synthetic drafts (agregado/structure editor previews) pass only these fields. */
@@ -489,10 +487,10 @@ export function resolveModuleHardwarePlacements(
   } = {},
 ): ResolvedHardwarePlacement[] {
   // AH-03: part ids are collision-free. Structure + module components expand
-  // with idPrefix=''; each agregado instance expands per unit with
-  // `agr-${agregadoId}-u${unitIndex}`. The resolver mirrors that per-source
-  // prefix so each placement links to its own board (two agregados sharing a
-  // componentId no longer collapse).
+  // with the Go #736 scope prefixes (`st-` / `mod-`, #995 K3-parity); each
+  // agregado unit expands with `agr-<id>-<tag>u<N>-`. The resolver mirrors
+  // that per-source prefix so each placement links to its own board (two
+  // agregados sharing a componentId no longer collapse).
   const partById = new Map(boardParts.map((p) => [p.id, p]));
   const out: ResolvedHardwarePlacement[] = [];
 
@@ -509,25 +507,46 @@ export function resolveModuleHardwarePlacements(
   // each expansion scope. The engine runs ONE expandComponentInstances call
   // per scope — the structure list, the module list, and each agregado unit
   // — and #434 made copy ids unique per component ACROSS each list (global
-  // per-scope counters, bom.ts:457-458/506), so two entries pointing at the
-  // same component no longer re-emit `-copy-0`. Structure + module use ''
-  // (backward compatible with the 31 Fase 2 face goldens). Each agregado
-  // instance is expanded per unit — mirroring the motor's
-  // `calculateAgregadoSubspaceUnits` (quantity units, unitIndex 0..N-1) —
-  // with prefix `agr-${agregadoId}-u${unitIndex}`.
+  // per-scope counters), so two entries pointing at the same component no
+  // longer re-emit `-copy-0`. #995 K3-parity: structure + module carry the
+  // Go #736 scope prefixes (`st-` / `mod-`) — the resolved ids must equal the
+  // BOM ids or every manual placement silently misses its board. Each
+  // agregado instance is expanded per unit with
+  // `agr-${agregadoId}-${instanceTag}u${unitIndex}-`, instanceTag mirroring
+  // the engine's repeated-instance disambiguation (#388).
   // Base-mode filtering need NOT be replicated here: parts bom.ts filtered
   // out are absent from `partById`, so the lookup below skips them naturally
   // (and, like the engine — which filters the entry BEFORE expanding —, a
   // skipped entry consumes no copy number).
   type Source = { inst: ModuleComponentInstance; prefix: string };
   const sourceGroups: Source[][] = [
-    (structure?.components ?? []).map((inst) => ({ inst, prefix: '' })),
-    (module.components ?? []).map((inst) => ({ inst, prefix: '' })),
+    (structure?.components ?? []).map((inst) => ({ inst, prefix: 'st-' })),
+    (module.components ?? []).map((inst) => ({ inst, prefix: 'mod-' })),
   ];
+  const agregadoInstanceCount = new Map<string, number>();
+  for (const agrInst of allAgregadoInstances) {
+    agregadoInstanceCount.set(
+      agrInst.agregadoId,
+      (agregadoInstanceCount.get(agrInst.agregadoId) ?? 0) + 1,
+    );
+  }
   allAgregadoInstances.forEach((agrInst) => {
+    // The engine THROWS on a repeated instance without a stable id; a module
+    // like that never produces a BOM, so there is nothing to preview — fail
+    // the same way instead of reconstructing ids the engine never emitted.
+    let instanceTag = '';
+    if ((agregadoInstanceCount.get(agrInst.agregadoId) ?? 0) > 1) {
+      const instanceId = (agrInst.id ?? '').trim();
+      if (!instanceId) {
+        throw new Error(
+          `repeated agregado ${agrInst.agregadoId} requires a stable instance id`,
+        );
+      }
+      instanceTag = `instance-${instanceId}-`;
+    }
     const qty = Math.max(1, Math.floor(agrInst.quantity) || 1);
     for (let unitIndex = 0; unitIndex < qty; unitIndex++) {
-      const prefix = `agr-${agrInst.agregadoId}-u${unitIndex}`;
+      const prefix = `agr-${agrInst.agregadoId}-${instanceTag}u${unitIndex}-`;
       const unitInst = { ...agrInst, quantity: 1 };
       sourceGroups.push(
         resolveAgregadoInstance(unitInst, agregadosCatalog, unitIndex).components.map(

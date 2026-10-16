@@ -185,8 +185,9 @@ describe('collectExportIssues', () => {
     };
     const issues = collectExportIssues(project, catalog);
     expect(issues.some((i) => i.field === 'lengthMm/widthMm')).toBe(true);
-    // Expanded part id is `${componentId}-copy-${i}` (see expandComponentInstances).
-    expect(issues.some((i) => i.partId === 'comp-bad-dim-copy-0')).toBe(true);
+    // Expanded part id is `st-<componentId>-copy-N` (Go #736 namespace).
+    // #995 K3-parity: structure copies carry the Go `st-` scope prefix.
+    expect(issues.some((i) => i.partId === 'st-comp-bad-dim-copy-0')).toBe(true);
   });
 
   it('VAL-06: inactive material choice is blocked', () => {

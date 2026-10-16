@@ -1,0 +1,27 @@
+{
+  "schemaId": "granete.bom-part-identity-parity.v1",
+  "comment": "#995 K3-parity: the BOM part-id NAMING RULE is one contract across runtimes. Go (#736, resolve.go expandComponentInstances) and TS (bom.ts) must name composed part ids IDENTICALLY: structure copies `st-<componentId>-copy-N`, module-instance copies `mod-<componentId>-copy-N`, agregado units `agr-<agregadoId>[-instance-<instanceId>-]u<unitIndex>-<componentId>-copy-N` (the instance tag appears only when the same agregadoId is instantiated more than once, #388). Each test builds its own minimal catalog around this skeleton and asserts the exact expectedPartIds SEQUENCE (BOM order: structure, module, agregados). composeFrozenDrilling joins these ids against the frozen release program — a divergence here kills every composed release export.",
+  "structureComponents": [
+    { "componentId": "comp-lateral", "quantity": 2 }
+  ],
+  "moduleComponents": [
+    { "componentId": "comp-puerta", "quantity": 1 }
+  ],
+  "agregado": {
+    "id": "agr-cajones",
+    "components": [
+      { "componentId": "comp-frente-cajon", "quantity": 1 }
+    ]
+  },
+  "agregadoInstances": [
+    { "id": "agr-inst-1", "agregadoId": "agr-cajones", "quantity": 1 },
+    { "id": "agr-inst-2", "agregadoId": "agr-cajones", "quantity": 1 }
+  ],
+  "expectedPartIds": [
+    "st-comp-lateral-copy-0",
+    "st-comp-lateral-copy-1",
+    "mod-comp-puerta-copy-0",
+    "agr-agr-cajones-instance-agr-inst-1-u0-comp-frente-cajon-copy-0",
+    "agr-agr-cajones-instance-agr-inst-2-u0-comp-frente-cajon-copy-0"
+  ]
+}
