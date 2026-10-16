@@ -1,26 +1,91 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Download, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { inflateRawSync } from 'node:zlib';
+import { parseKdtPanelBytes } from '@granete/excel';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #1070 browser E2E — the «Descargar programas KDT (.zip)» button never dies
- * silently. The demo defect (2026-10-04) was a click swallowed by a disabled
- * button: no toast, no network, no console signal.
+ * silently, and with the KDT output configured it delivers the frozen
+ * programs:
  *
  *   seed (structured module whose placed panel drills at release time →
  *   quote → accept → release P1 whose frozen snapshot carries the drill)
  *   → Optimización WITHOUT a machining output: the click surfaces an error
- *     toast — a click on this button can never be a no-op.
+ *     toast — a click on this button can never be a no-op;
+ *   → configure the KDT tuple (Flexdrill 1200 · KDTPanelFormat r2): the SAME
+ *     click downloads the ZIP whose program reads back with the FROZEN cup
+ *     hole (35×13) and the release provenance manifest.
  *
- * The toast names the release's REAL first blocker; which blocker that is
- * depends on the released content. Today composing the frozen drilling joins
- * the Go release BOM part ids (st-/mod- prefixed) against the TS live BOM ids
- * (unprefixed) and that identity divergence blocks EVERY structured release
- * before the output-configured check — it belongs to the export-bridge
- * parity debt, not to the never-mute contract this spec pins. The beforeAll
- * assert still proves the Go side of that chain (the release freezes real
- * drill operations).
+ * The live↔frozen join works because #995 K3-parity names composed part ids
+ * with the SAME Go #736 namespace on both runtimes (st-/mod- prefixed) — the
+ * pre-parity web could never compose a structured release.
  */
+
+// The exact KDT tuple of the shared machine-output catalog contract (#591):
+// Flexdrill 1200 · KDTPanelFormat r2 · granete-kdt 0.2.0.
+const KDT_SELECTION = {
+  operation: 'machining' as const,
+  machineProfileId: 'client-b-machine-c-kdt-flexdrill1200',
+  machineProfileRevisionId: 'r1',
+  outputProfileId: 'kdt-flexdrill-1200',
+  outputProfileRevisionId: 'r2',
+  outputProfileDigest: 'd11d92c35fb481e158cebc336a6c7c419c39b89366e5939dea39787b1bc8b77e',
+  adapterId: 'granete-kdt',
+  adapterVersion: '0.2.0',
+  adapterImplementationDigest: 'b9b824c7f86b16603f4d90e278d5920d26b816fdcff9007804ae64e3f0a5d17f',
+};
+
+/** Minimal ZIP central-directory reader (JSZip output → inflateRaw): the
+ * gate asserts on the DELIVERED archive, not on in-memory bundles. */
+function readZipEntries(bytes: Uint8Array): Map<string, Uint8Array> {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= 0; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('la descarga no es un ZIP');
+  const entryCount = view.getUint16(eocd + 10, true);
+  let offset = view.getUint32(eocd + 16, true);
+  const entries = new Map<string, Uint8Array>();
+  for (let n = 0; n < entryCount; n++) {
+    if (view.getUint32(offset, true) !== 0x02014b50) throw new Error('directorio central corrupto');
+    const method = view.getUint16(offset + 10, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const nameLen = view.getUint16(offset + 28, true);
+    const extraLen = view.getUint16(offset + 30, true);
+    const commentLen = view.getUint16(offset + 32, true);
+    const localOffset = view.getUint32(offset + 42, true);
+    const name = new TextDecoder().decode(bytes.subarray(offset + 46, offset + 46 + nameLen));
+    const lhNameLen = view.getUint16(localOffset + 26, true);
+    const lhExtraLen = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + lhNameLen + lhExtraLen;
+    const raw = bytes.subarray(dataStart, dataStart + compressedSize);
+    entries.set(name, method === 0 ? raw : new Uint8Array(inflateRawSync(raw)));
+    offset += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+
+async function captureDownloads(page: Page, trigger: () => Promise<void>, count: number): Promise<{ name: string; bytes: Uint8Array }[]> {
+  const downloads: Download[] = [];
+  const capture = (download: Download): void => { downloads.push(download); };
+  page.on('download', capture);
+  try {
+    await trigger();
+    await expect.poll(() => downloads.length, { timeout: 20_000 }).toBe(count);
+  } finally {
+    page.off('download', capture);
+  }
+  return Promise.all(
+    downloads.map(async (download) => ({
+      name: download.suggestedFilename(),
+      bytes: new Uint8Array(await readFile((await download.path())!)),
+    })),
+  );
+}
+
 
 const PROJECT_ID = '5a170000-0000-4000-8000-000000001070';
 const QUOTE_LINE_ID = '5a170000-0000-4000-8000-000000001071';
@@ -38,6 +103,7 @@ const DEPTH_MM = 560;
 interface Seeded {
   readonly projectId: string;
   readonly releaseId: string;
+  readonly fingerprint: string;
   readonly token: string;
   readonly apiBase: string;
 }
@@ -235,7 +301,13 @@ test.describe.serial('Descarga de programas KDT nunca queda muda (#1070)', () =>
     );
     expect(frozenDrills.length, `frozen drill operations: ${JSON.stringify(snapshot.routing).slice(0, 400)}`).toBeGreaterThan(0);
 
-    seeded = { projectId: PROJECT_ID, releaseId: release.id, token, apiBase };
+    seeded = {
+      projectId: PROJECT_ID,
+      releaseId: release.id,
+      fingerprint: snapshot.release.manufacturingFingerprint,
+      token,
+      apiBase,
+    };
   });
 
   test('sin salida de mecanizado configurada, el clic explica el bloqueo (toast) — nunca queda mudo', async ({ page }) => {
@@ -248,8 +320,7 @@ test.describe.serial('Descarga de programas KDT nunca queda muda (#1070)', () =>
 
     // #1070: the exact demo defect — the button used to render disabled and
     // swallow the click. It stays enabled and the click ALWAYS surfaces the
-    // release's real first blocker as an error toast (which blocker that is
-    // depends on the released content — see the header note).
+    // release's real first blocker as an error toast.
     const button = page.getByTestId('prod-opt-export-kdt');
     await expect(button).toBeEnabled();
     await button.click();
@@ -258,5 +329,53 @@ test.describe.serial('Descarga de programas KDT nunca queda muda (#1070)', () =>
     await expect(toast).toBeVisible();
     await expect(toast).toHaveAttribute('data-toast-type', 'error');
     await expect(toast).not.toContainText('undefined');
+  });
+
+  test('salida KDT configurada + liberación congelada: el clic descarga el ZIP con el programa congelado', async ({ page }) => {
+    test.setTimeout(120_000);
+    const client = new GraneteApiClient(seeded.apiBase);
+    await client.upsertMachineOutputSelection(seeded.token, 'machining', {
+      selection: KDT_SELECTION,
+      expectedVersion: 0,
+    });
+
+    await login(page);
+    await page.goto(`/engineering/${seeded.projectId}?release=${seeded.releaseId}`);
+    await page.getByTestId('eng-tab-optimizacion').click();
+
+    // The engineering screen reads the SERVER read model: wait for the exact
+    // tuple to be durably selected before clicking (no empty-state race).
+    await expect(page.getByTestId('prod-opt-machining-output-summary')).toContainText('Flexdrill 1200');
+    await expect(page.getByTestId('prod-opt-machining-output-blocked')).toHaveCount(0);
+
+    const files = await captureDownloads(page, () => page.getByTestId('prod-opt-export-kdt').click(), 1);
+    const zip = files[0]!;
+    expect(zip.name).toMatch(/^programas-kdt-.*\.zip$/);
+
+    const entries = readZipEntries(zip.bytes);
+    const xmlNames = [...entries.keys()].filter((name) => name.endsWith('.xml'));
+    // One piece × one face with operations → exactly one KDT program.
+    expect(xmlNames).toHaveLength(1);
+
+    // Independent readback (same standard as the PTX flow): the downloaded
+    // XML carries the FROZEN cup hole — never invented, never live-resolved.
+    const program = parseKdtPanelBytes(entries.get(xmlNames[0]!)!);
+    expect(program.panel.lengthMm).toBeGreaterThan(0);
+    const cups = program.operations.filter(
+      (op) => op.kind === 'vertical-hole' && op.fields['Diameter'] === 35,
+    );
+    expect(cups.length, 'cazoleta 35 mm congelada en el programa').toBeGreaterThan(0);
+    expect(cups[0]!.fields['Depth']).toBe(13);
+
+    const manifest = JSON.parse(new TextDecoder().decode(entries.get(`${xmlNames[0]}.manifest.json`)!)) as {
+      provenance?: Record<string, unknown>;
+      outputCompatibilityProfileDigest?: string;
+    };
+    expect(manifest.provenance).toMatchObject({
+      projectId: seeded.projectId,
+      productionReleaseId: seeded.releaseId,
+      bomFingerprint: seeded.fingerprint,
+    });
+    expect(manifest.outputCompatibilityProfileDigest).toBe(KDT_SELECTION.outputProfileDigest);
   });
 });

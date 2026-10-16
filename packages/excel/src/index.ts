@@ -419,6 +419,14 @@ export {
   type KdtPieceArtifact,
 } from './machines/kdtAdapter';
 
+// #995 K3-parity / #1070: the browser gate reads the downloaded KDT programs
+// back independently (same readback standard as the PTX flow's #650 parser).
+export {
+  parseKdtPanelBytes,
+  type KdtParsedDocument,
+  type KdtParsedPanel,
+} from './machines/kdt/parse';
+
 export {
   generateMachineArtifact,
   manifestComparisonKey,
