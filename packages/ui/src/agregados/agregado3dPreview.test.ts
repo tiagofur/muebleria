@@ -186,8 +186,9 @@ describe('resolveAgregado3DPreview', () => {
     expect(res.resolvedHardwarePlacements).toHaveLength(1);
 
     const placement = res.resolvedHardwarePlacements[0]!;
-    // Links to the door part produced by the draft component ('' engine prefix).
-    expect(placement.componentInstanceId).toBe('c-puerta-copy-0');
+    // Links to the door part produced by the draft component (Go `mod-`
+    // namespace, #995 K3-parity).
+    expect(placement.componentInstanceId).toBe('mod-c-puerta-copy-0');
     expect(placement.hardwareId).toBe('hw-jal-1');
     // Front face: +Y normal, standoff = previewProjectionMm.
     expect(placement.localNormal).toEqual([0, 1, 0]);

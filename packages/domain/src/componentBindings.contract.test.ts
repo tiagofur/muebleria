@@ -35,7 +35,7 @@ describe('evaluated component binding Go/TS parity', () => {
       const bom = resolveBom(prepared, { INTERIOR: 'mat-body' }, source,
         undefined, undefined, undefined, { widthMm: 600, heightMm: 750, depthMm: 500 });
       expect(prepared.id).toBe(module.id);
-      expect(bom.boardParts.map((part) => part.id)).toEqual(scenario.pieceIds!.map((id) => fixture.tsPiecePrefix + id));
+      expect(bom.boardParts.map((part) => part.id)).toEqual(scenario.pieceIds!.map((id) => fixture.piecePrefix + id));
       expect((prepared.components ?? []).map((part) => part.quantity)).toEqual(scenario.quantities);
       expect(bom.boardParts).toHaveLength(scenario.quantities!.reduce((sum, quantity) => sum + quantity, 0));
       expect(new Set(bom.boardParts.map((part) => part.id)).size).toBe(bom.boardParts.length);

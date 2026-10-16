@@ -595,6 +595,19 @@ function expandComponentInstances(
   return parts;
 }
 
+/**
+ * Recover the source component id from a composed part id, mirroring the
+ * construction at expandComponentInstances (`${idPrefix}${componentId}-copy-N`)
+ * and Go's #736 namespaces: structure copies live under `st-`, module-instance
+ * copies under `mod-` (#995 K3-parity). Agregado-unit ids carry the `agr-…`
+ * family prefix and never resolve to a plain component id (their placements
+ * are F131). Returns null when the id is not a composed `-copy-` id at all.
+ */
+export function componentIdFromComposedPartId(partId: string): string | null {
+  const match = partId.match(/^(?:(?:st|mod)-)?(.+)-copy-\d+$/);
+  return match ? match[1]! : null;
+}
+
 export interface ComposedModuleInput {
   readonly structure: Structure;
   readonly componentInstances: readonly ModuleComponentInstance[];
@@ -648,10 +661,15 @@ export function resolveComposedModule(
   );
 
   // Structure component instances + module component instances, expanded.
+  // #995 K3-parity: the scope prefixes MUST mirror Go's expandComponentInstances
+  // (#736) byte for byte — the frozen release BOM, cutting demand, routing and
+  // the #477 authoring contract all name composed parts `st-<id>-copy-N` /
+  // `mod-<id>-copy-N`; the unprefixed live ids could never join the frozen
+  // program (composeFrozenDrilling) for composed modules.
   const structureParts = expandComponentInstances(
     structureInstances,
     catalog,
-    '',
+    'st-',
     dims,
     optionChoices,
     B,
@@ -659,7 +677,7 @@ export function resolveComposedModule(
   const moduleParts = expandComponentInstances(
     moduleInstances,
     catalog,
-    '',
+    'mod-',
     dims,
     optionChoices,
     B,
@@ -673,6 +691,20 @@ export function resolveComposedModule(
     ...(structure.agregados ?? []),
     ...(module?.agregados ?? []),
   ];
+
+  // #388/#995 K3-parity — repeated agregado instances disambiguate with the
+  // persisted instance id, mirroring Go's BOM resolve byte for byte
+  // (resolve.go instanceTag): `agr-<id>-instance-<iid>-u<N>-`. Single
+  // instances keep the historical tagless prefix. A repeated instance without
+  // a stable id is a data-integrity error, never a silent collision.
+  const agregadoInstanceCount = new Map<string, number>();
+  for (const agrInst of allAgregadoInstances) {
+    agregadoInstanceCount.set(
+      agrInst.agregadoId,
+      (agregadoInstanceCount.get(agrInst.agregadoId) ?? 0) + 1,
+    );
+  }
+  const seenAgregadoInstanceIds = new Set<string>();
 
   const PW = dims.width;
   const PH = dims.height;
@@ -691,6 +723,26 @@ export function resolveComposedModule(
           field: 'agregadoId',
         },
       );
+    }
+
+    let instanceTag = '';
+    if ((agregadoInstanceCount.get(agrInst.agregadoId) ?? 0) > 1) {
+      const instanceId = (agrInst.id ?? '').trim();
+      if (!instanceId) {
+        throw new ResolutionError(
+          `repeated agregado ${agrInst.agregadoId} requires a stable instance id`,
+          { agregadoId: agrInst.agregadoId, field: 'id' },
+        );
+      }
+      const identityKey = `${agrInst.agregadoId}\u0000${instanceId}`;
+      if (seenAgregadoInstanceIds.has(identityKey)) {
+        throw new ResolutionError(
+          `repeated agregado ${agrInst.agregadoId} has duplicate instance id ${instanceId}`,
+          { agregadoId: agrInst.agregadoId, field: 'id' },
+        );
+      }
+      seenAgregadoInstanceIds.add(identityKey);
+      instanceTag = `instance-${instanceId}-`;
     }
 
     // Evaluate sub-assembly space bounding box and origin position in parent furniture space
@@ -779,7 +831,7 @@ export function resolveComposedModule(
       const unitParts = expandComponentInstances(
         filteredComponents,
         catalog,
-        `agr-${agrInst.agregadoId}-u${unit.unitIndex}`,
+        `agr-${agrInst.agregadoId}-${instanceTag}u${unit.unitIndex}-`,
         { width: unit.width, height: unit.height, depth: unit.depth },
         optionChoices,
         B,
@@ -1004,6 +1056,9 @@ export function resolveBom(
   // empty structure lets resolveComposedModule handle the agregado expansion
   // (subspace, offsets, hardware) — same logic as the composed path. Without
   // this, a non-composed module's agregados were silently dropped from the BOM.
+  // The vehicle structure carries NO agregados of its own: they flow through
+  // the `module` argument, and listing them twice would double-count the
+  // instances (and now trip the repeated-instance id guard).
   const hasAgregados = module.agregados && module.agregados.length > 0;
   if (hasAgregados) {
     const syntheticStructure: Structure = {
@@ -1012,7 +1067,7 @@ export function resolveBom(
       name: module.name,
       externalDims: dimsFallback,
       components: [],
-      agregados: module.agregados,
+      agregados: [],
       active: true,
     };
     const composed = resolveComposedModule({

@@ -163,10 +163,10 @@ export function resolveAgregado3DPreview(
       },
     );
 
-    // Draft components expand with the engine's '' prefix, so the placement
-    // resolver's synthetic-module path (module.components only) links each
-    // placement to its own board part by id. VH-08: preview-only, never the
-    // cut path.
+    // Draft components expand with the engine's `mod-` namespace (Go #736,
+    // #995 K3-parity), and the placement resolver's synthetic-module path
+    // mirrors it, so each placement links to its own board part by id.
+    // VH-08: preview-only, never the cut path.
     const resolvedHardwarePlacements = resolveModuleHardwarePlacements(
       { components: draft.components },
       resolvedBoardParts,

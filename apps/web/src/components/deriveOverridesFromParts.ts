@@ -8,9 +8,10 @@
  * maps them back to the override shape the domain expects, keyed by the
  * original componentId.
  *
- * Part IDs from resolveComposedModule follow the pattern
- * `${componentId}-copy-${i}` (bom.ts:464). We parse that to recover the
- * componentId, then group all copies of the same component. Because overrides
+ * Part IDs from resolveComposedModule follow Go's #736 scope namespaces
+ * (`st-<componentId>-copy-N` / `mod-<componentId>-copy-N`); the domain
+ * helper recovers the componentId, then we group all copies of the same
+ * component. Because overrides
  * are per-instance (not per-copy), we apply the LAST copy's edited values —
  * this is acceptable for the common case (quantity 1 per component instance).
  *
@@ -18,7 +19,7 @@
  * overrides; untouched parts produce nothing (keeping the draft clean).
  */
 
-import type { ResolvedBoardPart } from '@granete/domain';
+import { componentIdFromComposedPartId, type ResolvedBoardPart } from '@granete/domain';
 
 export type ComponentOverrides = {
   readonly lengthFormula?: string;
@@ -33,10 +34,14 @@ export type ComponentOverrides = {
 
 export type OverridesByComponentId = Readonly<Record<string, ComponentOverrides>>;
 
-/** Parse `${componentId}-copy-${i}` → componentId. Returns null if no match. */
+/**
+ * Parse the source componentId out of a composed part id. Part ids from
+ * resolveComposedModule follow Go's #736 namespaces
+ * (`st-<componentId>-copy-N` / `mod-<componentId>-copy-N`, #995 K3-parity);
+ * the domain helper strips the scope prefix and the `-copy-N` suffix.
+ */
 function componentIdFromPartId(partId: string): string | null {
-  const match = partId.match(/^(.+)-copy-\d+$/);
-  return match ? match[1]! : null;
+  return componentIdFromComposedPartId(partId);
 }
 
 /**

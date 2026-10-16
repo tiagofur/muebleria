@@ -454,7 +454,8 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
 
     const p = placements[0]!;
     // componentInstanceId = engine part id `${componentId}-copy-${i}`.
-    expect(p.componentInstanceId).toBe('c-puerta-copy-0');
+    // #995 K3-parity: module instances carry the Go `mod-` scope prefix.
+    expect(p.componentInstanceId).toBe('mod-c-puerta-copy-0');
     expect(p.hardwareId).toBe('hw-knob');
     // Pinned front-face mapping (resolver contract): for a 596x18x720 board,
     // front at xMm=50, yMm=50 → (50, 18, 50), normal (0,1,0).
@@ -565,7 +566,7 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
 
   it('G2: agregado con quantity=N produce placements por unidad con prefijo que matchea el motor (agr-<id>-u<N>)', () => {
     // El motor (engine/bom.ts resolveComposedModule) expande cada agregado por
-    // unidad con part-id `agr-${agregadoId}-u${unitIndex}${componentId}-copy-${i}`
+    // unidad con part-id `agr-${agregadoId}-u${unitIndex}-${componentId}-copy-${i}` (#995 K3-parity: formato Go con guion)
     // (sin guion entre unitIndex y componentId). El resolver de herrajes debe
     // reproducir ese prefijo para que los placements encuentren sus piezas.
     // Bug G2: antes usaba `agr-${agrIdx}-` (índice + guion) → nunca matcheaba.
@@ -598,8 +599,8 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
     };
     // Part-ids exactos que el motor generaría para quantity=2 (unidades 0 y 1).
     const motorPartIds = [
-      `agr-${agregadoId}-u0c-puerta-copy-0`,
-      `agr-${agregadoId}-u1c-puerta-copy-0`,
+      `agr-${agregadoId}-u0-c-puerta-copy-0`,
+      `agr-${agregadoId}-u1-c-puerta-copy-0`,
     ];
     const mockBoardParts = motorPartIds.map((id) => ({
       id,
@@ -658,8 +659,8 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
       agregados: [{ agregadoId, quantity: 1 }],
     };
     const expectedPartIds = [
-      `agr-${agregadoId}-u0c-puerta-copy-0`,
-      `agr-${agregadoId}-u0c-puerta-copy-1`,
+      `agr-${agregadoId}-u0-c-puerta-copy-0`,
+      `agr-${agregadoId}-u0-c-puerta-copy-1`,
     ];
     const mockBoardParts = expectedPartIds.map((id) => ({
       id,
@@ -704,7 +705,7 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
       ],
       agregados: [],
     };
-    const mockBoardParts = ['c-puerta-copy-0', 'c-puerta-copy-1'].map((id) => ({
+    const mockBoardParts = ['mod-c-puerta-copy-0', 'mod-c-puerta-copy-1'].map((id) => ({
       id,
       widthMm: 596,
       thicknessMm: 18,
@@ -719,7 +720,7 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
     );
 
     expect(placements.map((placement) => placement.componentInstanceId)).toEqual([
-      'c-puerta-copy-1',
+      'mod-c-puerta-copy-1',
     ]);
   });
 
@@ -745,7 +746,7 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
       ],
       agregados: [],
     };
-    const expectedPartIds = ['c-puerta-copy-0', 'c-puerta-copy-1'];
+    const expectedPartIds = ['mod-c-puerta-copy-0', 'mod-c-puerta-copy-1'];
     const mockBoardParts = expectedPartIds.map((id) => ({
       id,
       widthMm: 596,

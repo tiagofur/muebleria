@@ -2225,7 +2225,7 @@ describe('resolveComposedModule', () => {
 
     // Structure component parts expanded correctly (costado quantity 2)
     const costados = result.boardParts.filter((p) =>
-      p.id.startsWith('comp-costado-copy'),
+      p.id.startsWith('st-comp-costado-copy'),
     );
     expect(costados).toHaveLength(2);
     expect(costados[0]!.lengthMm).toBe(720);
@@ -2233,7 +2233,7 @@ describe('resolveComposedModule', () => {
     expect(costados[0]!.quantity).toBe(1);
 
     const bases = result.boardParts.filter((p) =>
-      p.id.startsWith('comp-base-copy'),
+      p.id.startsWith('st-comp-base-copy'),
     );
     expect(bases).toHaveLength(1);
     expect(bases[0]!.lengthMm).toBe(464);
@@ -2241,7 +2241,7 @@ describe('resolveComposedModule', () => {
 
     // Puerta ×1
     const puerta = result.boardParts.find(
-      (p) => p.id === 'comp-puerta-copy-0',
+      (p) => p.id === 'mod-comp-puerta-copy-0',
     )!;
     expect(puerta.description).toBe('Puerta');
     expect(puerta.lengthMm).toBe(717);
@@ -2252,10 +2252,10 @@ describe('resolveComposedModule', () => {
 
     // Entrepaño ×2
     const ent1 = result.boardParts.find(
-      (p) => p.id === 'comp-entrepano-copy-0',
+      (p) => p.id === 'mod-comp-entrepano-copy-0',
     )!;
     const ent2 = result.boardParts.find(
-      (p) => p.id === 'comp-entrepano-copy-1',
+      (p) => p.id === 'mod-comp-entrepano-copy-1',
     )!;
     expect(ent1).toBeDefined();
     expect(ent2).toBeDefined();
@@ -2292,13 +2292,13 @@ describe('resolveComposedModule', () => {
     });
 
     const costadoIds = result.boardParts
-      .filter((p) => p.id.startsWith('comp-costado-copy'))
+      .filter((p) => p.id.startsWith('st-comp-costado-copy'))
       .map((p) => p.id)
       .sort();
     expect(costadoIds).toEqual([
-      'comp-costado-copy-0',
-      'comp-costado-copy-1',
-      'comp-costado-copy-2',
+      'st-comp-costado-copy-0',
+      'st-comp-costado-copy-1',
+      'st-comp-costado-copy-2',
     ]);
     // All copies still resolve as one board population (no identity-driven
     // duplication beyond the authored quantity).
@@ -2336,7 +2336,7 @@ describe('resolveComposedModule', () => {
     });
 
     const puerta = result.boardParts.find(
-      (p) => p.id === 'comp-puerta-copy-0',
+      (p) => p.id === 'mod-comp-puerta-copy-0',
     )!;
     expect(puerta.edges).toEqual(overridesEdges);
   });
@@ -2437,7 +2437,7 @@ describe('resolveBom composed module dispatch', () => {
 
     // Verify structure component parts have materials
     const costados = bom.boardParts.filter((p) =>
-      p.id.startsWith('comp-costado-copy'),
+      p.id.startsWith('st-comp-costado-copy'),
     );
     expect(costados).toHaveLength(2);
     for (const c of costados) {
@@ -2447,14 +2447,14 @@ describe('resolveBom composed module dispatch', () => {
 
     // Verify module component parts have materials
     const puerta = bom.boardParts.find(
-      (p) => p.id === 'comp-puerta-copy-0',
+      (p) => p.id === 'mod-comp-puerta-copy-0',
     )!;
     expect(puerta.materialId).toBe('mat-a');
     expect(puerta.optionRole).toBe('FRENTE');
     expect(puerta.grain).toBe(0);
 
     const entrepanos = bom.boardParts.filter((p) =>
-      p.id.startsWith('comp-entrepano-copy'),
+      p.id.startsWith('mod-comp-entrepano-copy'),
     );
     expect(entrepanos).toHaveLength(2);
     for (const e of entrepanos) {
@@ -2595,19 +2595,19 @@ describe('golden: composed module cost (F049 / H07)', () => {
 
     // Verify module component parts resolved
     const puerta = bom.boardParts.find(
-      (p) => p.id === 'seed-comp-puerta-copy-0',
+      (p) => p.id === 'mod-seed-comp-puerta-copy-0',
     );
     expect(puerta).toBeDefined();
     expect(puerta!.optionRole).toBe('FRENTE');
 
     const entrepanos = bom.boardParts.filter((p) =>
-      p.id.startsWith('seed-comp-entrepano-copy'),
+      p.id.startsWith('mod-seed-comp-entrepano-copy'),
     );
     expect(entrepanos).toHaveLength(2);
 
     // Verify structure component parts resolved
     const costados = bom.boardParts.filter((p) =>
-      p.id.startsWith('seed-comp-costado-copy'),
+      p.id.startsWith('st-seed-comp-costado-copy'),
     );
     expect(costados).toHaveLength(2);
     expect(costados[0]!.optionRole).toBe('INTERIOR');

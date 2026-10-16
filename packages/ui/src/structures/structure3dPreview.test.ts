@@ -234,7 +234,8 @@ describe('resolveStructure3DPreview with Agregados', () => {
     expect(res.resolvedHardwarePlacements).toHaveLength(1);
 
     const placement = res.resolvedHardwarePlacements[0]!;
-    expect(placement.componentInstanceId).toBe('c-frente-copy-0');
+    // #995 K3-parity: structure copies carry the Go `st-` prefix.
+      expect(placement.componentInstanceId).toBe('st-c-frente-copy-0');
     expect(placement.hardwareId).toBe('hw-jal-1');
     expect(placement.localNormal).toEqual([0, 1, 0]);
     expect(placement.standoffMm).toBe(32);
@@ -287,9 +288,9 @@ describe('resolveStructure3DPreview with Agregados', () => {
     // One jaladera per agregado unit, each linked to its own prefixed part.
     expect(res.resolvedHardwarePlacements).toHaveLength(3);
     expect(res.resolvedHardwarePlacements.map((p) => p.componentInstanceId)).toEqual([
-      'agr-agr-cajones-3-u0c-frente-copy-0',
-      'agr-agr-cajones-3-u1c-frente-copy-0',
-      'agr-agr-cajones-3-u2c-frente-copy-0',
+      'agr-agr-cajones-3-u0-c-frente-copy-0',
+      'agr-agr-cajones-3-u1-c-frente-copy-0',
+      'agr-agr-cajones-3-u2-c-frente-copy-0',
     ]);
   });
 
