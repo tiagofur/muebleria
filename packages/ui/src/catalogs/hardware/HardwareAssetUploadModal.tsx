@@ -25,7 +25,7 @@ import {
   RefreshCw,
   Upload,
 } from 'lucide-react';
-import { Modal } from '../../common';
+import { Modal, ConfirmDialog } from '../../common';
 
 export type UploadStage =
   | 'idle'
@@ -73,6 +73,8 @@ export function HardwareAssetUploadModal({
 
   // Upload operation state
   const [stage, setStage] = useState<UploadStage>('idle');
+  // K5 #1032 — the in-flight close guard waits for the system ConfirmDialog.
+  const [confirmCancelUpload, setConfirmCancelUpload] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<HardwareAssetUploadSession | null>(null);
 
@@ -119,21 +121,26 @@ export function HardwareAssetUploadModal({
   useEffect(() => {
     if (!open) {
       invalidateActiveAttempt();
+      setConfirmCancelUpload(false);
     }
     return () => {
       invalidateActiveAttempt();
     };
   }, [open]);
 
+  // K5 #1032: the in-flight guard is the system's ConfirmDialog, never a
+  // native window.confirm.
   const handleClose = () => {
-    if (stage === 'starting' || stage === 'uploading' || stage === 'finalizing' || stage === 'resuming') {
-      if (!window.confirm('Hay una carga en curso. ¿Querés cancelarla?')) {
-        return;
-      }
-      if (session && assetService && session.status !== 'finalized') {
-        void assetService.cancelUpload(session.id);
-      }
+    const uploadInFlight =
+      stage === 'starting' || stage === 'uploading' || stage === 'finalizing' || stage === 'resuming';
+    if (uploadInFlight && !confirmCancelUpload) {
+      setConfirmCancelUpload(true);
+      return;
     }
+    if (uploadInFlight && session && assetService && session.status !== 'finalized') {
+      void assetService.cancelUpload(session.id);
+    }
+    setConfirmCancelUpload(false);
     invalidateActiveAttempt();
     resetForm();
     onClose();
@@ -239,7 +246,7 @@ export function HardwareAssetUploadModal({
         }
 
         if (activeSession.status === 'cancelled') {
-          setError('La sesión de carga fue cancelada en el servidor. Inicia una nueva carga.');
+          setError('La sesión de carga fue cancelada en el servidor. Iniciá una nueva carga.');
           setStage('error');
           setSession(null);
           return;
@@ -248,7 +255,7 @@ export function HardwareAssetUploadModal({
         if (activeSession.status !== 'finalized') {
           const expiresAtMs = new Date(activeSession.expires_at).getTime();
           if (Number.isFinite(expiresAtMs) && expiresAtMs < Date.now()) {
-            setError('La sesión de carga ha expirado. Inicia una nueva carga.');
+            setError('La sesión de carga ha expirado. Iniciá una nueva carga.');
             setStage('error');
             setSession(null);
             return;
@@ -385,7 +392,8 @@ export function HardwareAssetUploadModal({
     stage === 'confirmed';
 
   return (
-    <Modal
+    <>
+      <Modal
       open={open}
       onClose={handleClose}
       title={targetAssetId ? `Nueva versión: ${targetAssetName ?? 'Herraje'}` : 'Subir modelo 3D'}
@@ -447,7 +455,7 @@ export function HardwareAssetUploadModal({
     >
       <form id={formId} className="catalog-form" onSubmit={handleSubmit}>
         {error ? (
-          <div className="catalog-form__error" data-testid="hardware-upload-error">
+          <div className="catalog-form__error" role="alert" data-testid="hardware-upload-error">
             <AlertCircle size={16} aria-hidden />
             <span>{error}</span>
           </div>
@@ -706,6 +714,16 @@ export function HardwareAssetUploadModal({
           </div>
         ) : null}
       </form>
-    </Modal>
+      </Modal>
+      <ConfirmDialog
+        open={confirmCancelUpload}
+        onClose={() => setConfirmCancelUpload(false)}
+        title="Cancelar carga"
+        message="Hay una carga en curso. ¿Querés cancelarla?"
+        confirmLabel="Cancelar carga"
+        dataTestId="hardware-asset-upload-cancel-confirm"
+        onConfirm={handleClose}
+      />
+      </>
   );
 }

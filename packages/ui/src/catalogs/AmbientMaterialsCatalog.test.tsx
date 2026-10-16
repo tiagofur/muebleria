@@ -69,7 +69,8 @@ describe('AmbientMaterialsCatalog', () => {
         canMutate
       />,
     );
-    fireEvent.click(screen.getByTestId('ambient-material-create'));
+    // K5 #1032: catálogo vacío — el CTA vive en el EmptyState.
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar acabado' }));
     // Modal is open
     const codeInput = screen.getByLabelText('Código');
     fireEvent.change(codeInput, { target: { value: 'GRANITE' } });
@@ -216,7 +217,8 @@ describe('AmbientMaterialsCatalog', () => {
         canMutate
       />,
     );
-    fireEvent.click(screen.getByTestId('ambient-material-create'));
+    // K5 #1032: catálogo vacío — el CTA vive en el EmptyState.
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar acabado' }));
 
     fireEvent.change(screen.getByLabelText('Código'), {
       target: { value: 'OAK-DARK' },
@@ -299,6 +301,7 @@ describe('AmbientMaterialsCatalog — save contract (K1 #1032)', () => {
       />,
     );
 
+    // K5 #1032: catálogo vacío — el CTA vive en el EmptyState.
     await user.click(screen.getByRole('button', { name: /Nuevo acabado/i }));
     await user.type(screen.getByLabelText('Código'), 'AMB-K1');
     await user.type(screen.getByLabelText('Nombre'), 'Acabado K1');
@@ -334,6 +337,7 @@ describe('AmbientMaterialsCatalog — save contract (K1 #1032)', () => {
       />,
     );
 
+    // K5 #1032: catálogo vacío — el CTA vive en el EmptyState.
     await user.click(screen.getByRole('button', { name: /Nuevo acabado/i }));
     await user.type(screen.getByLabelText('Código'), 'AMB-K1');
     await user.type(screen.getByLabelText('Nombre'), 'Acabado K1');

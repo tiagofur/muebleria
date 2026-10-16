@@ -1,63 +1,47 @@
-# ODD — #1032 Paridad UX del grupo CATÁLOGOS
+# ODD — #1032 Paridad UX del grupo CATÁLOGOS (K1→K5)
 
-- **Lane:** Delegated Direct (5 pantallas × 5 slices; recovery valioso).
-- **Writer:** GLM (ZCode), sesión 2026-10-04. Un escritor, rama aislada por slice.
-- **Base:** `origin/main` @ 4d17697b (incluye #1009 y #1019 mergeados).
-  Aprobación: owner en sesión — top 5 completo en orden, Duplicar en las 5
-  (vía draft, reutilizando el camino de creación), issue madre #1032.
+- **Issue**: tiagofur/muebleria#1032 (`status:approved`; alcance aprobado por
+  el owner 2026-10-04 «top 5 completo en orden», re-confirmado 2026-10-16).
+- **Lane**: Delegated Direct. Un escritor.
+- **Base**: main `7d176aa7` (post #1350). Rama `feat/1032-catalogos-ux-parity`.
 
-## Outcome
+## Estado encontrado (2026-10-16, auditoría de código)
 
-Las 5 pantallas de catálogo (Materiales, Cantos, Herrajes, Perfiles, Acabados)
-firman los patrones de la familia: contrato de guardado (K1), confirmación de
-Desactivar + Duplicar (K2), clases CSS reales (K3), identidad en modals +
-internos fuera de pantalla (K4), higiene de datos (K5).
+K1→K4 estaban MAYORMENTE implementados en main por slices previas (contrato
+de guardado en las 3, ConfirmDialog+Duplicar en las 5/6, cápsulas
+status-badge, identidad en modals, disclosure de internos). La issue nunca se
+actualizó ni cerró. Restantes reales encontrados y cerrados en esta rama:
 
-## Decisiones de alcance
+1. **K5 grupo**: doble CTA de creación en estado vacío en Edges/Materials/
+   Herrajes/Acabados (Perfiles ya lo tenía) → header cede al EmptyState con
+   `canMutate && !isTrulyEmpty` en los 4.
+2. **K3 grupo**: `.btn--sm` (clase muerta, el CSS define `.btn--small`) en
+   LibraryPublishConfirmContent, LibraryConsumerViewPanel y
+   LibraryDraftWorkspaceBanner (paneles #1102 llegados post-auditoría) →
+   migrados; grep de `badge*`/`btn--secondary`/`btn--sm` en catalogs/ verde.
+3. **K5**: `window.confirm` nativo en HardwareAssetUploadModal →
+   ConfirmDialog del sistema (guard de cierre en vuelo).
+4. **A11y transversal**: `catalog-form__error` sin announce → `role="alert"`
+   en los 9 formularios del grupo + el indicador del upload.
+5. **Hallazgo de la re-corrida**: Desactivar desde el detalle expandido de
+   Cantos (EdgesCatalog:350) no pasaba por confirmación → mismo contrato K2
+   que la acción de fila.
+6. **Voseo**: "Inicia…"/"Selecciona…" en el subsistema 3D → voseo.
 
-- Duplicar es **vía draft**: abre el modal de creación prefillado (código
-  `-COPY` sugerido, nombre «(copia)») reutilizando el camino de creación
-  existente — sin store actions ni deep-copies de dominio nuevas.
-- Eliminar queda fuera (el retiro es Desactivar).
-- Referencia interna del contrato de guardado: `HardwareCatalog.tsx:157-182`
-  (Herrajes y Perfiles ya lo cumplen).
+## Verificación
 
-## Checks / evidencia
+- Unit: ui 2264 ✓ (incluye pin nuevo de K5 en Perfiles), web 605 ✓, tsc ui/tests ✓.
+- Detector impeccable: **0 findings** en catalogs/ (baseline 2026-10-04 tenía
+  cramped-padding/line-length/badges sin cápsula).
+- Re-corrida critique dual-agent: **37/40** (desde **19/40**) — snapshot
+  `.impeccable/critique/2026-10-16T18-15-32Z__packages-ui-src-catalogs.md`.
+- Browser: `catalogs-ux-parity.spec.ts` (nuevo) 5/5 PASS — identidad en los
+  4 editores, Desactivar con ConfirmDialog en edges, estado vacío de Perfiles
+  con CTA único en vivo.
 
-- Vitest packages/ui (+ apps/web si toca store), typecheck workspace.
-- Browser proof de las 5 rutas al cierre + re-corrida `$impeccable critique`
-  (baseline 19/40). Overlay sin cramped-padding/line-length nuevos (K5).
-- PRs apilados con label type:* desde el inicio.
+## Restante conocido (documentado, fuera de este alcance)
 
-## Task log
-
-- [x] Issue #1032 fileada; preflight OK; rama K1 desde origin/main.
-- [x] K1 → PR #1033 (`feat/1032-catalogos-ux-k1`). Las 3 pantallas a
-  contrato async + store actions devolviendo el settle (materials/edges/
-  ambient dejaban de tragar rechazos; createEdge → Promise<string> con el
-  quick-create esperándolo). ui 2108/2108 (6 tests diferidos), web 581/581.
-- [x] K2 → PR #1034 (`feat/1032-catalogos-ux-k2`). Desactivar pide
-  ConfirmDialog (código+nombre+consecuencia) y Duplicar vía draft prefillado
-  (`suggestDuplicateCode` + «(copia)») en las 5. 2 tests de desactivación
-  actualizados al contrato nuevo. 124/124 catalogs.
-- [x] K3 → PR #1035 (`feat/1032-catalogos-ux-k3`). 13 usos `.badge*` →
-  `status-badge--*` (5 variantes genéricas nuevas), botones muertos →
-  `btn--small`. Grep de muertas en catalogs/: 0.
-- [x] K4 → PR #1038 (`feat/1032-catalogos-ux-k4`). Los 5 modals con
-  identidad guardada en el título; IDs/SHA en disclosure «Datos técnicos»;
-  «Forma genérica: bar-pull» traducido con los labels del formulario;
-  voseo unificado en el subsistema 3D.
-- [x] K5 → PR #1039 (`feat/1032-catalogos-ux-k5`). `CatalogColumn.numeric`
-  → `catalog-table__num` alineado derecha (8 columnas), hint CSS duplicado
-  consolidado con `max-width: 72ch`. cramped-padding documentado como falso
-  positivo (densidad diseñada); CTAs dobles son patrón de familia.
-- [x] Browser proof (rama K5 servida por vite local, modo invitado):
-  Materiales — cifras alineadas a derecha en screenshot; Desactivar abre el
-  ConfirmDialog «¿Seguro que querés desactivar "TAB-ARA-BLA — ARAUCO
-  BLANCO"?…» (K2 ✓); Duplicar abre el modal de creación con
-  `TAB-ARA-BLA-COPY` + `ARAUCO BLANCO (copia)` (K2 ✓); Herrajes — fila con
-  Editar·Duplicar·Desactivar, «Forma genérica: Bisagra» traducido (K4 ✓),
-  costo unit. tabular derecho (K5 ✓). El badge de validación 3D requiere un
-  herraje con asset vinculado (el seed invitado no tiene) — la evidencia de
-  K3 es el mapeo completo a status-badge + el grep en 0. Restante post-merge:
-  re-corrida `$impeccable critique` sobre main (baseline 19/40).
+"Semilla del workspace" sin explicar en 3 EmptyStates; voz de plataforma en
+el subsistema 3D ("recurso"/"organización"); sort de columnas; foco
+programático al error; Reactivar en filas de Perfiles. Quedan nombrados en
+el snapshot para un slice de polish futuro.

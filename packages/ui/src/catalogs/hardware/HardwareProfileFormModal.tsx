@@ -105,7 +105,7 @@ export function HardwareProfileFormModal({
       }
     >
       <form id={formId} className="catalog-form" onSubmit={onSubmit}>
-        {error ? <p className="catalog-form__error">{error}</p> : null}
+        {error ? <p className="catalog-form__error" role="alert">{error}</p> : null}
 
         <label className="catalog-form__field">
           <span>Código</span>

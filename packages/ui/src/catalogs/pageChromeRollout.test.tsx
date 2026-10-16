@@ -81,8 +81,10 @@ describe('F104 page chrome — catalogs', () => {
         getCostPerM2={() => 0}
       />,
     );
-    expectSharedHeader('Materiales', 'Nuevo material');
+    // K5 #1032: en estado vacío el header cede el CTA al EmptyState.
+    expectSharedHeader('Materiales');
     expect(screen.queryByTestId('page-toolbar')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Agregar material' })).toBeTruthy();
   });
 
   it('Cantos renders the shared header', () => {
@@ -95,7 +97,9 @@ describe('F104 page chrome — catalogs', () => {
         onReactivate={vi.fn()}
       />,
     );
-    expectSharedHeader('Cantos', 'Nuevo canto');
+    // K5 #1032: un solo CTA en vacío (EmptyState).
+    expectSharedHeader('Cantos');
+    expect(screen.getByRole('button', { name: 'Agregar canto' })).toBeTruthy();
   });
 
   it('Herrajes renders the shared header', () => {
@@ -108,7 +112,9 @@ describe('F104 page chrome — catalogs', () => {
         onReactivate={vi.fn()}
       />,
     );
-    expectSharedHeader('Herrajes', 'Nuevo herraje');
+    // K5 #1032: un solo CTA en vacío (EmptyState).
+    expectSharedHeader('Herrajes');
+    expect(screen.getByRole('button', { name: 'Agregar herraje' })).toBeTruthy();
   });
 
   it('Acabados renders the shared header with nav label as title', () => {
@@ -122,7 +128,9 @@ describe('F104 page chrome — catalogs', () => {
       />,
     );
     // §4.1b: header title must match the nav label ("Acabados").
-    expectSharedHeader('Acabados', 'Nuevo acabado');
+    // K5 #1032: un solo CTA en vacío (EmptyState).
+    expectSharedHeader('Acabados');
+    expect(screen.getByRole('button', { name: 'Agregar acabado' })).toBeTruthy();
   });
 
   it('Grupos renders the shared header', () => {

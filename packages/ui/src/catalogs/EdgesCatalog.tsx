@@ -242,7 +242,9 @@ export function EdgesCatalog({
         subtitle="Cintillas y melaminas de canto del taller"
         icon={<Minus size={16} strokeWidth={1.5} />}
         primaryAction={
-          canMutate ? (
+          // K5 #1032: ONE creation CTA per state — on the truly-empty state
+          // the EmptyState owns the action (same contract as Perfiles).
+          canMutate && !isTrulyEmpty ? (
             <button
               type="button"
               className="btn btn--primary"
@@ -347,7 +349,9 @@ export function EdgesCatalog({
                     <button
                       type="button"
                       className="btn btn--small"
-                      onClick={() => onDeactivate(row.id)}
+                      // K2 #1032: same contract as the row action — the
+                      // expanded detail never deactivates without asking.
+                      onClick={() => setConfirmDeactivate(row)}
                     >
                       <EyeOff size={14} strokeWidth={1.5} aria-hidden />
                       Desactivar
@@ -445,7 +449,7 @@ export function EdgesCatalog({
         }
       >
         <form id={formId} className="catalog-form" onSubmit={handleSubmit}>
-          {error ? <p className="catalog-form__error">{error}</p> : null}
+          {error ? <p className="catalog-form__error" role="alert">{error}</p> : null}
 
           <fieldset className="catalog-form__section" data-testid="edge-form-identity">
             <legend className="catalog-form__section-title">Identidad</legend>

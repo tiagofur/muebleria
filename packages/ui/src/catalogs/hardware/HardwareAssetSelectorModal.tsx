@@ -378,7 +378,7 @@ export function HardwareAssetSelectorModal({
                     )}
                   </div>
                 ) : (
-                  <p className="catalog-form__hint">Selecciona un modelo de la lista.</p>
+                  <p className="catalog-form__hint">Seleccioná un modelo de la lista.</p>
                 )}
               </div>
             </div>

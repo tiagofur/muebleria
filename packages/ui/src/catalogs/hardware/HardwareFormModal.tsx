@@ -83,7 +83,7 @@ export function HardwareFormModal({
       }
     >
       <form id={formId} className="catalog-form" onSubmit={onSubmit}>
-        {error ? <p className="catalog-form__error">{error}</p> : null}
+        {error ? <p className="catalog-form__error" role="alert">{error}</p> : null}
 
         <fieldset
           className="catalog-form__section"
