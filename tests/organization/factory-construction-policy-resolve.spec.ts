@@ -581,6 +581,23 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     expect(b.profileOps).toBe(4);
     expect(b.demand.size).toBeGreaterThan(0);
     expect(b.fingerprint).not.toBe(a.fingerprint); // A=4 / B=2: the #875 A/B truth
+
+    // Serial-suite citizenship: this test wrote an ORG-B factory overlay.
+    // Leaving it behind turns factory-construction-settings' B isolation
+    // assert («floor provenance = Estándar») into a deterministic failure
+    // whenever both specs share a shard. Strip the shelf keys this test
+    // contributed; the settings read model derives per-family provenance
+    // from the overlay keys, so without them B is Standard again.
+    const activeB = await client.getActiveStandardLibraryOverlay(tokenB2);
+    if (activeB) {
+      const remaining = { ...((activeB.overrides ?? {}) as Record<string, unknown>) };
+      for (const key of Object.keys(remaining)) {
+        if (key.startsWith('joint.shelfToSide.')) delete remaining[key];
+      }
+      await client.updateLibraryOverlay(tokenB2, activeB.id, activeB.version, {
+        overrides: remaining,
+      });
+    }
   });
 
   test('excepción por componente: pisa la política de fábrica y «Restaurar herencia» la elimina (#875 slice 3)', async ({ page }) => {
