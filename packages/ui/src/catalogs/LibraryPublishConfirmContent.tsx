@@ -118,7 +118,7 @@ export function LibraryPublishConfirmContent({
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
         <button
           type="button"
-          className="btn btn--sm"
+          className="btn btn--small"
           onClick={onCancel}
           disabled={publishing}
           data-testid="library-publish-cancel-btn"
@@ -127,7 +127,7 @@ export function LibraryPublishConfirmContent({
         </button>
         <button
           type="button"
-          className="btn btn--primary btn--sm"
+          className="btn btn--primary btn--small"
           onClick={onConfirm}
           disabled={publishing || loading || !diff}
           data-testid="library-publish-confirm-btn"

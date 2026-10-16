@@ -87,6 +87,13 @@ describe('HardwareProfilesCatalog (#914)', () => {
     expect(screen.getByText('Embebida')).toBeTruthy();
   });
 
+  it('K5 #1032: en el estado vacío hay UN solo CTA de creación — el del EmptyState', () => {
+    setup({ profiles: [] });
+    // El header cede la acción al estado vacío: nunca dos CTAs de creación.
+    expect(screen.queryByTestId('hardware-profile-create-btn')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Crear perfil' })).toBeTruthy();
+  });
+
   it('creates a profile with one hardware line', async () => {
     const user = userEvent.setup();
     const { props } = setup();

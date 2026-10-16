@@ -272,7 +272,9 @@ export function HardwareProfilesCatalog({
         subtitle="Soluciones de unión: herrajes del catálogo, cantidades por aplicación y su receta técnica"
         icon={<Layers size={16} strokeWidth={1.5} />}
         primaryAction={
-          canMutate ? (
+          // K5 #1032: ONE creation CTA per state — on the truly-empty state
+          // the EmptyState owns the action.
+          canMutate && !isTrulyEmpty ? (
             <button
               type="button"
               className="btn btn--primary"

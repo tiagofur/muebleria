@@ -117,7 +117,7 @@ export function EdgeQuickCreateModal({
       }
     >
       {edgeError ? (
-        <p className="catalog-form__error">{edgeError}</p>
+        <p className="catalog-form__error" role="alert">{edgeError}</p>
       ) : null}
       <div className="catalog-form">
         <div className="catalog-form__field">

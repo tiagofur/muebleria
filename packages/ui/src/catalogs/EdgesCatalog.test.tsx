@@ -136,7 +136,8 @@ describe('EdgesCatalog — save contract (K1 #1032)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo canto/i }));
+    // K5 #1032: catálogo vacío — el CTA vive en el EmptyState.
+    await user.click(screen.getByRole('button', { name: /Agregar canto/i }));
     await user.type(screen.getByLabelText('Código'), 'CAN-K1');
     await user.type(screen.getByLabelText('Nombre'), 'Canto K1');
     await user.type(screen.getByLabelText('Espesor (mm)'), '15');
@@ -173,7 +174,8 @@ describe('EdgesCatalog — save contract (K1 #1032)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo canto/i }));
+    // K5 #1032: catálogo vacío — el CTA vive en el EmptyState.
+    await user.click(screen.getByRole('button', { name: /Agregar canto/i }));
     await user.type(screen.getByLabelText('Código'), 'CAN-K1');
     await user.type(screen.getByLabelText('Nombre'), 'Canto K1');
     await user.type(screen.getByLabelText('Espesor (mm)'), '15');

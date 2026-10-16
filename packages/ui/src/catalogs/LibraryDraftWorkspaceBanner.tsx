@@ -131,7 +131,7 @@ export function LibraryDraftWorkspaceBanner({
               <>
                 <button
                   type="button"
-                  className="btn btn--sm"
+                  className="btn btn--small"
                   onClick={onValidateDraft}
                   disabled={validating}
                   data-testid="library-draft-validate-btn"
@@ -141,7 +141,7 @@ export function LibraryDraftWorkspaceBanner({
                 </button>
                 <button
                   type="button"
-                  className="btn btn--primary btn--sm"
+                  className="btn btn--primary btn--small"
                   onClick={onPublishClick}
                   data-testid="library-publish-open-btn"
                 >
@@ -153,7 +153,7 @@ export function LibraryDraftWorkspaceBanner({
             {!currentDraft && !error ? (
               <button
                 type="button"
-                className="btn btn--primary btn--sm"
+                className="btn btn--primary btn--small"
                 onClick={onOpenDraft}
                 disabled={opening}
                 data-testid="library-draft-open-btn"

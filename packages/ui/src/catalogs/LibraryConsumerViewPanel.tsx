@@ -105,7 +105,7 @@ export function LibraryConsumerViewPanel({
         {latest && (!pin || pin !== latest.id) ? (
           <button
             type="button"
-            className="btn btn--primary btn--sm"
+            className="btn btn--primary btn--small"
             onClick={() => onPin(latest.id)}
             disabled={loading}
             data-testid="library-consumer-update-btn"

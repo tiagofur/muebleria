@@ -197,7 +197,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
     await user.type(screen.getByLabelText('Código'), 'HER-NEW-3D');
     await user.type(screen.getByLabelText('Nombre'), 'Nuevo con 3D');
 
@@ -247,7 +247,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
     await user.type(screen.getByLabelText('Código'), 'HER-UP');
     await user.type(screen.getByLabelText('Nombre'), 'Herraje con subida');
 
@@ -289,7 +289,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-selector-btn'));
@@ -388,7 +388,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-selector-btn'));
@@ -491,7 +491,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
     await user.type(screen.getByLabelText('Código'), 'HER-C2');
     await user.type(screen.getByLabelText('Nombre'), 'Herraje C2');
 
@@ -564,7 +564,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));
@@ -615,7 +615,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));
@@ -626,13 +626,14 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     // Submit upload form (startUpload will remain pending)
     fireEvent.submit(screen.getByTestId('hardware-asset-upload-modal').querySelector('form')!);
 
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-
-    // Modal is in 'starting' stage; user closes it via the upload modal's close button
+    // Modal is in 'starting' stage; user closes it via the upload modal's close button —
+    // K5 #1032: the in-flight guard is the system ConfirmDialog, never window.confirm.
     const closeBtn = within(screen.getByTestId('hardware-asset-upload-modal')).getByRole('button', {
       name: 'Cerrar',
     });
     await user.click(closeBtn);
+    const cancelConfirm = await screen.findByTestId('hardware-asset-upload-cancel-confirm');
+    await user.click(within(cancelConfirm).getByRole('button', { name: 'Cancelar carga' }));
 
     // Now resolve the startUpload promise
     resolveStart({
@@ -741,7 +742,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));
@@ -803,7 +804,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));
@@ -883,7 +884,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     // Open new hardware modal
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));
@@ -948,7 +949,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));

@@ -356,7 +356,9 @@ export function AmbientMaterialsCatalog({
           ) : undefined
         }
         primaryAction={
-          canMutate ? (
+          // K5 #1032: ONE creation CTA per state — on the truly-empty state
+          // the EmptyState owns the action (same contract as Perfiles).
+          canMutate && !isTrulyEmpty ? (
             <button
               type="button"
               className="btn btn--primary"

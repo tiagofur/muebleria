@@ -202,7 +202,7 @@ export function MaterialCategoryModals({
         }
       >
         <form id={catFormId} className="catalog-form" onSubmit={handleCategorySubmit}>
-          {catError ? <p className="catalog-form__error">{catError}</p> : null}
+          {catError ? <p className="catalog-form__error" role="alert">{catError}</p> : null}
           <div className="catalog-form__field">
             <label htmlFor="mat-cat-name">Nombre</label>
             <input

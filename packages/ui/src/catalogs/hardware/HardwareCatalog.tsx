@@ -267,7 +267,9 @@ export function HardwareCatalog({
         subtitle="Bisagras, correderas y demás del catálogo"
         icon={<Settings2 size={16} strokeWidth={1.5} />}
         primaryAction={
-          canMutate ? (
+          // K5 #1032: ONE creation CTA per state — on the truly-empty state
+          // the EmptyState owns the action (same contract as Perfiles).
+          canMutate && !isTrulyEmpty ? (
             <button
               type="button"
               className="btn btn--primary"
