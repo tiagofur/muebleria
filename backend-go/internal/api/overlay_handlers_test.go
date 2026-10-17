@@ -440,6 +440,50 @@ func TestHandleUpdateLibraryOverlay(t *testing.T) {
 		}
 	})
 
+	t.Run("Rebase conflict blocks overrides with 409 (#958)", func(t *testing.T) {
+		conflicted := &domain.LibraryOverlay{
+			ID:             overlayID,
+			OrganizationID: orgA,
+			LibraryID:      standardID,
+			BaseReleaseID:  uuid.New(),
+			Status:         "rebase_conflict",
+			Version:        1,
+			Overrides:      json.RawMessage(`{"parameters.panelThickness": 15.0}`),
+			CreatedAt:      time.Now().UTC(),
+			UpdatedAt:      time.Now().UTC(),
+		}
+		store := &stubStore{
+			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
+				overlayID: conflicted,
+			},
+		}
+		srv := &Server{Store: store}
+
+		reqBody := openapi.UpdateLibraryOverlayRequest{
+			Overrides: map[string]any{
+				"parameters.panelThickness": 18.0,
+			},
+		}
+		bodyBytes, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
+		req.SetPathValue("id", overlayID.String())
+		req.Header.Set("If-Match", FormatVersionETag(1))
+		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
+		rr := httptest.NewRecorder()
+
+		srv.HandleUpdateLibraryOverlay(rr, req)
+
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got %d: %s", rr.Code, rr.Body.String())
+		}
+		// The stored overrides must be untouched: the resolution flow operates
+		// on the overrides stored at rebase time.
+		if string(store.overlaysByID[overlayID].Overrides) != `{"parameters.panelThickness": 15.0}` {
+			t.Fatalf("overrides must stay untouched during rebase_conflict, got %s", store.overlaysByID[overlayID].Overrides)
+		}
+	})
+
 	t.Run("Invalid override path 400", func(t *testing.T) {
 		store := &stubStore{
 			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
