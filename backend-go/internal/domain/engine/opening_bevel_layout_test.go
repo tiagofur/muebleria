@@ -72,8 +72,10 @@ func TestOpeningBevelMaterializesOnDoorBoards(t *testing.T) {
 		}
 
 		// Furniture-frame verification from the PUBLISHED transform: the
-		// wedge lives in the door's top 9 mm and front 9 mm, through the
-		// full width.
+		// wedge lives in the door's top 9 mm and BACK 9 mm, through the
+		// full width (#1342: the bevel lowers the edge toward the back —
+		// the front face stays full and the top keeps the 18−9 flat at
+		// the front).
 		for cornerX := 0; cornerX < 2; cornerX++ {
 			for cornerY := 0; cornerY < 2; cornerY++ {
 				for cornerZ := 0; cornerZ < 2; cornerZ++ {
@@ -93,9 +95,9 @@ func TestOpeningBevelMaterializesOnDoorBoards(t *testing.T) {
 						t.Fatalf("door %s bevel corner %v is not on the top 9 mm band (door top %g)",
 							component.ComponentInstanceID, world, maxC[2])
 					}
-					if mathAbs(world[1]-(maxC[1]-9)) > 1e-6 && mathAbs(world[1]-maxC[1]) > 1e-6 {
-						t.Fatalf("door %s bevel corner %v is not on the front 9 mm band (door front %g)",
-							component.ComponentInstanceID, world, maxC[1])
+					if mathAbs(world[1]-minC[1]) > 1e-6 && mathAbs(world[1]-(minC[1]+9)) > 1e-6 {
+						t.Fatalf("door %s bevel corner %v is not on the back 9 mm band (door back %g)",
+							component.ComponentInstanceID, world, minC[1])
 					}
 					if world[0] < minC[0]-1e-6 || world[0] > maxC[0]+1e-6 {
 						t.Fatalf("door %s bevel corner %v leaves the width span [%g %g]",

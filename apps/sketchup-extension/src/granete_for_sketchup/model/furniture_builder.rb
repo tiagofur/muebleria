@@ -284,10 +284,13 @@ module Granete
           band.merge(through: through_x ? :x : :y)
         end
 
-        # The wedge's 5 faces (2 section triangles + 3 side quads), each with
-        # an outward-wound ring. The section is the band rectangle minus the
-        # 45° corner triangle at the corner the PUBLISHED BASIS derives —
-        # in v1 (patas iguales) la sección siempre es un TRIÁNGULO.
+        # The wedge's section faces (2 cross-sections + one side per edge),
+        # each with an outward-wound ring. #1342: the gola bevel LOWERS the
+        # door's edge TOWARD THE BACK — the furniture-front face stays full
+        # height and the top keeps its thickness-minus-leg flat at the
+        # front. The section is the FULL thickness at the un-cut z end
+        # tapering to that flat at the cut end (a trapezoid; a leg equal to
+        # the full edge extent degenerates it to the v1 triangle).
         # rubocop:disable-next Metrics/AbcSize
         def bevel_wedge_faces(band, extents, basis)
           through = band[:through]
@@ -298,15 +301,14 @@ module Granete
           front_local_end = published_axis_end(basis, 1, edge_axis, edge_extent)
           top_local_end = published_axis_end(basis, 2, :z, extents[2])
           z_end = band[:edge] == 'top_front' ? top_local_end : opposite_end(top_local_end)
+          back_end = opposite_end(front_local_end)
 
-          e_lo = band[edge_axis == :y ? :y0 : :x0]
-          e_hi = band[edge_axis == :y ? :y1 : :x1]
           z_lo = band[:z0]
           z_hi = band[:z1]
           t_lo = band[through == :x ? :x0 : :y0]
           t_hi = band[through == :x ? :x1 : :y1]
 
-          section = remaining_section(e_lo, e_hi, z_lo, z_hi, front_local_end, z_end)
+          section = remaining_section(edge_extent, z_lo, z_hi, back_end, z_end, z_hi - z_lo)
           to_point = ->(t, e, z) { through == :x ? [t, e, z] : [e, t, z] }
 
           section_lo = section.map { |(e, z)| to_point.call(t_lo, e, z) }
@@ -355,17 +357,30 @@ module Granete
           end_sym == :end ? :start : :end
         end
 
-        # The band rectangle's three surviving corners once the 45° corner
-        # triangle (edge_end, z_end) is removed.
-        def remaining_section(e_lo, e_hi, z_lo, z_hi, edge_end, z_end)
-          corners = {
-            a: [e_lo, z_lo], b: [e_hi, z_lo], c: [e_hi, z_hi], d: [e_lo, z_hi]
-          }
-          cut = { %i[end end] => :c, %i[end start] => :b,
-                  %i[start end] => :d, %i[start start] => :a }[[edge_end, z_end]]
-          raise ArgumentError, 'esquina de corte del bisel no clasificable' if cut.nil?
+        # #1342: the surviving section of the bevel band — the door's FULL
+        # thickness at the un-cut z end, tapering over the 45° leg to the
+        # front flat (edge_extent − leg) at the cut end. The cut corner is
+        # the BACK one (back_end): the furniture-front face never shortens.
+        # Consecutive coincident vertices (leg == edge extent ⇒ triangle)
+        # are dropped; fewer than 3 distinct points fails loudly.
+        def remaining_section(edge_extent, z_lo, z_hi, back_end, z_end, leg)
+          back_face = back_end == :start ? 0.0 : edge_extent
+          front_face = back_end == :start ? edge_extent : 0.0
+          reach = back_end == :start ? leg : edge_extent - leg
+          full_z = z_end == :end ? z_lo : z_hi
+          cut_z = z_end == :end ? z_hi : z_lo
+          dedupe_polygon_points([
+                                  [back_face, full_z], [front_face, full_z], [front_face, cut_z], [reach, cut_z]
+                                ])
+        end
 
-          corners.reject { |key, _corner| key == cut }.values
+        def dedupe_polygon_points(points)
+          deduped = points.each_with_index
+                          .reject { |point, index| point == points[(index + 1) % points.size] }
+                          .map(&:first)
+          raise ArgumentError, 'el bisel degeneró la sección (<3 vértices)' if deduped.size < 3
+
+          deduped
         end
 
         def wedge_centroid(faces)
