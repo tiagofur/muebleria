@@ -61,8 +61,8 @@ func applyOpeningBevelsToBoards(boards []layoutBoard, modifiers []ResolvedOpenin
 
 // localBevelPrism derives the EXACT local bounding prism of one front
 // board's bevel wedge: it hugs the board's furniture-top (or bottom) end and
-// its furniture-front edge, running the board's full remaining width, with
-// the 45° wedge's equal legs on the vertical and front axes. The mapping
+// its furniture-BACK edge, running the board's full remaining width, with
+// the 45° wedge's equal legs on the vertical and back axes. The mapping
 // reads the board's published basis (the same transform the contract
 // carries), so a mirrored or flipped door never receives a mirrored cut by
 // accident.
@@ -99,14 +99,18 @@ func localBevelPrism(board *layoutBoard, modifier ResolvedOpeningBodyModifier, k
 	}
 	size[axis] = modifier.BevelSizeMm
 
-	// Front leg: from the furniture-front edge toward the back.
+	// Front leg: the wedge hugs the furniture-BACK face. #1342: the
+	// top_front (or bottom_front) bevel LOWERS the door's edge toward the
+	// back — the furniture-front face stays full and the edge keeps its
+	// thickness-minus-leg flat at the front. The removed wedge is the BACK
+	// corner: hug the end OPPOSITE the furniture front.
 	frontSize := sizes[frontAxis]
 	if modifier.BevelSizeMm >= frontSize {
 		return LayoutBevel{}, fmt.Errorf(
 			"componente %s: el bisel %g mm no cabe en la dimensión de frente %g mm",
 			board.id, modifier.BevelSizeMm, frontSize)
 	}
-	if frontSign > 0 {
+	if frontSign < 0 {
 		start[frontAxis] = frontSize - modifier.BevelSizeMm
 	}
 	size[frontAxis] = modifier.BevelSizeMm
