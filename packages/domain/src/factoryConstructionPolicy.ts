@@ -180,29 +180,43 @@ function jointFamilyOverlayEntries(
 export function policyToOverlayOverrides(policy: FactoryConstructionPolicy): Record<string, unknown> {
   const overrides: Record<string, unknown> = {};
 
+  // #1065 — the projected family rule omits stationsCount when the rule is
+  // spacing-derived (mutually exclusive; the release compiler refuses a
+  // rule declaring both).
+  type ProjectedJointFamilyRule = Omit<JointFamilyRule, 'stationsCount'> &
+    Partial<Pick<JointFamilyRule, 'stationsCount'>>;
   const structuredPolicy: {
     version: 1;
-    floorToSide?: JointFamilyRule;
-    topToSide?: JointFamilyRule;
-    shelfToSide?: JointFamilyRule;
+    floorToSide?: ProjectedJointFamilyRule;
+    topToSide?: ProjectedJointFamilyRule;
+    shelfToSide?: ProjectedJointFamilyRule;
     backPanel?: BackPanelFamilyRule;
     componentOverrides?: Readonly<Record<string, ComponentConstructionOverride>>;
   } = {
     version: policy.version,
   };
 
+  // #1065 — the structured projection carries the spacing/count pattern
+  // EXACTLY as the rule declares it: a spacing-derived rule must not persist
+  // `stationsCount` (the release compiler refuses a rule declaring both),
+  // so the spread drops it when maxSpacingMm is set.
+  const structuredFamily = (rule: JointFamilyRule): ProjectedJointFamilyRule => {
+    const { stationsCount: _omitted, ...rest } = { ...rule, provenance: 'factory' as const };
+    return rule.maxSpacingMm !== undefined ? rest : { ...rule, provenance: 'factory' as const };
+  };
+
   if (policy.floorToSide.provenance === 'factory') {
-    structuredPolicy.floorToSide = { ...policy.floorToSide, provenance: 'factory' };
+    structuredPolicy.floorToSide = structuredFamily(policy.floorToSide);
     Object.assign(overrides, jointFamilyOverlayEntries('joint.floorToSide', policy.floorToSide));
   }
 
   if (policy.topToSide.provenance === 'factory') {
-    structuredPolicy.topToSide = { ...policy.topToSide, provenance: 'factory' };
+    structuredPolicy.topToSide = structuredFamily(policy.topToSide);
     Object.assign(overrides, jointFamilyOverlayEntries('joint.topToSide', policy.topToSide));
   }
 
   if (policy.shelfToSide.provenance === 'factory') {
-    structuredPolicy.shelfToSide = { ...policy.shelfToSide, provenance: 'factory' };
+    structuredPolicy.shelfToSide = structuredFamily(policy.shelfToSide);
     Object.assign(overrides, jointFamilyOverlayEntries('joint.shelfToSide', policy.shelfToSide));
   }
 
