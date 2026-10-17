@@ -275,6 +275,13 @@ func (s *Server) HandleUpdateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 				"El overlay cambió en otra sesión. Recargá la configuración y volvé a aplicar tus cambios sobre la versión actual.", nil)
 			return
 		}
+		// #958 — overrides writes are refused while the overlay carries
+		// pending rebase conflicts: resolve them first (the resolution flow
+		// operates on the overrides stored at rebase time).
+		if errors.Is(err, application.ErrOverlayInRebaseConflict) {
+			respondWithError(w, http.StatusConflict, err.Error())
+			return
+		}
 		if errors.Is(err, application.ErrInvalidOverridePath) {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return

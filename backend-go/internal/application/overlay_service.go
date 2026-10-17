@@ -32,6 +32,10 @@ var (
 	ErrRebasePendingConflictsRemain = errors.New("overlay has unresolved rebase conflicts blocking activation/publication")
 	ErrInvalidOverridePath          = errors.New("invalid or unauthorized override path")
 	ErrInvalidResolutionAction      = errors.New("invalid conflict resolution action")
+	// #958 — overrides writes are refused while a rebase carries unresolved
+	// conflicts: the resolution flow operates on the overrides stored at
+	// rebase time, and a mid-resolution write would diverge the merge result.
+	ErrOverlayInRebaseConflict      = errors.New("overlay has unresolved rebase conflicts: resolve them before editing overrides")
 )
 
 // OverlayStore defines the storage contract required by OverlayService.
@@ -171,6 +175,14 @@ func (s *OverlayService) UpdateOverrides(
 	}
 	if overlay.OrganizationID != orgID {
 		return ErrUnauthorizedOverlayAccess
+	}
+
+	// #958 — fail closed while the overlay carries pending rebase conflicts:
+	// the resolution flow (keep_custom/adopt_upstream) operates on the
+	// overrides stored at rebase time, so a mid-resolution policy write would
+	// diverge the merge result. Resolve (or re-rebase) first, then edit.
+	if overlay.Status == "rebase_conflict" {
+		return ErrOverlayInRebaseConflict
 	}
 
 	if len(overrides) > 0 && string(overrides) != "{}" {

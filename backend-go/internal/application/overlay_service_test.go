@@ -382,6 +382,42 @@ func TestOverlayService_UpdateOverrides_AuthorizationAndPathCheck(t *testing.T) 
 	}
 }
 
+// #958 — overrides writes are refused while the overlay carries pending
+// rebase conflicts: the resolution flow operates on the overrides stored at
+// rebase time, so a mid-resolution policy write would diverge the merge
+// result. Fail closed, overrides and version untouched.
+func TestOverlayService_UpdateOverrides_RefusedDuringRebaseConflict(t *testing.T) {
+	ctx := context.Background()
+	store := newMockOverlayStore()
+	svc := application.NewOverlayService(store)
+
+	orgA := uuid.New()
+	overlayID := uuid.New()
+
+	store.overlays[overlayID] = &domain.LibraryOverlay{
+		ID:             overlayID,
+		OrganizationID: orgA,
+		Status:         "rebase_conflict",
+		Overrides:      json.RawMessage(`{"parameters.toeKickHeight": 120}`),
+		Version:        1,
+	}
+
+	err := svc.UpdateOverrides(ctx, overlayID, orgA, 1, json.RawMessage(`{"parameters.toeKickHeight": 140}`), nil)
+	if !errors.Is(err, application.ErrOverlayInRebaseConflict) {
+		t.Fatalf("expected ErrOverlayInRebaseConflict, got %v", err)
+	}
+
+	// Stored state untouched: overrides and version stay exactly as the
+	// rebase left them, so the resolution flow keeps operating on its truth.
+	stored := store.overlays[overlayID]
+	if string(stored.Overrides) != `{"parameters.toeKickHeight": 120}` {
+		t.Fatalf("overrides must stay untouched during rebase_conflict, got %s", stored.Overrides)
+	}
+	if stored.Version != 1 {
+		t.Fatalf("version must stay untouched during rebase_conflict, got %d", stored.Version)
+	}
+}
+
 func TestOverlayService_ExecuteRebase_DisjointCleanMerge(t *testing.T) {
 	ctx := context.Background()
 	store := newMockOverlayStore()
