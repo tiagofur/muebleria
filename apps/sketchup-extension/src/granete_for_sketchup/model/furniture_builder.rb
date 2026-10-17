@@ -229,19 +229,17 @@ module Granete
         # #1327: the wedge band sits at the boundary end of local Z, covers
         # ONE full horizontal axis (the through span), meets one cross edge
         # of the other horizontal axis, and runs only PART of Z — otherwise
-        # it is not the v1 bevel and fails loudly. The solid is emitted as
-        # EXPLICIT faces with outward-wound rings (never add_face-normal +
-        # pushpull guessing: that pair put the prism outside the door when
-        # the host wound the section against the guess). The cut corner and
-        # the prism's span derive from the PUBLISHED basis.
-        def bevel_box_segments(full, bevel, extents, basis)
+        # it is not the v1 bevel and fails loudly. The door is emitted as
+        # ONE profile prism — its full cross-section with the 45° corner
+        # removed, extruded through the board — so the front face is a
+        # single continuous face with no horizontal seam where a stacked
+        # box/wedge join would draw one. Faces carry outward-wound rings
+        # (never add_face-normal + pushpull guessing: that pair put the
+        # prism outside the door when the host wound the section against
+        # the guess). The cut corner derives from the PUBLISHED basis.
+        def bevel_box_segments(_full, bevel, extents, basis)
           band = bevel_band_in_inches(bevel, extents)
-
-          segments = []
-          segments << full.merge(z0: 0.0, z1: band[:z0]) if band[:z0].positive?
-          segments << { faces: bevel_wedge_faces(band, extents, basis) }
-          segments << full.merge(z0: band[:z1], z1: extents[2]) if band[:z1] < extents[2] - 1.0e-6
-          segments
+          [{ faces: bevel_profile_faces(band, extents, basis) }]
         end
 
         # rubocop:disable-next Metrics/AbcSize
@@ -284,15 +282,12 @@ module Granete
           band.merge(through: through_x ? :x : :y)
         end
 
-        # The wedge's section faces (2 cross-sections + one side per edge),
-        # each with an outward-wound ring. #1342: the gola bevel LOWERS the
-        # door's edge TOWARD THE BACK — the furniture-front face stays full
-        # height and the top keeps its thickness-minus-leg flat at the
-        # front. The section is the FULL thickness at the un-cut z end
-        # tapering to that flat at the cut end (a trapezoid; a leg equal to
-        # the full edge extent degenerates it to the v1 triangle).
-        # rubocop:disable-next Metrics/AbcSize
-        def bevel_wedge_faces(band, extents, basis)
+        # #1342: the WHOLE door as ONE prism of its beveled profile — the
+        # full (edge × length) rectangle with the 45° corner triangle
+        # removed, extruded along the through axis. One solid, one
+        # continuous front face: no stacked-seam edge where the box and the
+        # wedge band would meet (the horizontal line the owner saw).
+        def bevel_profile_faces(band, extents, basis)
           through = band[:through]
           raise ArgumentError, 'el bisel no declaró un eje through' if through.nil?
 
@@ -303,12 +298,18 @@ module Granete
           z_end = band[:edge] == 'top_front' ? top_local_end : opposite_end(top_local_end)
           back_end = opposite_end(front_local_end)
 
-          z_lo = band[:z0]
-          z_hi = band[:z1]
+          leg = band[:z1] - band[:z0]
           t_lo = band[through == :x ? :x0 : :y0]
           t_hi = band[through == :x ? :x1 : :y1]
 
-          section = remaining_section(edge_extent, z_lo, z_hi, back_end, z_end, z_hi - z_lo)
+          section = profile_section(edge_extent, extents[2], back_end, z_end, leg)
+          stitch_section_prism(section, through, t_lo, t_hi)
+        end
+
+        # Stitches one section polygon into a closed prism along the
+        # through axis: 2 section rings + one side quad per polygon edge,
+        # every ring wound outward by Newell-vs-centroid.
+        def stitch_section_prism(section, through, t_lo, t_hi)
           to_point = ->(t, e, z) { through == :x ? [t, e, z] : [e, t, z] }
 
           section_lo = section.map { |(e, z)| to_point.call(t_lo, e, z) }
@@ -322,6 +323,34 @@ module Granete
 
           centroid = wedge_centroid(faces)
           faces.map { |ring| orient_ring!(ring, centroid) }
+        end
+
+        # The board's FULL cross-section with the bevel corner triangle
+        # removed: the rectangle's cut-corner vertex replaced by the two
+        # leg-inward points of the 45° chamfer (each sits on one of the
+        # corner's axis-aligned edges).
+        def profile_section(edge_extent, length_extent, back_end, z_end, leg)
+          ring = [[0.0, 0.0], [edge_extent, 0.0], [edge_extent, length_extent], [0.0, length_extent]]
+          cut_e = back_end == :start ? 0.0 : edge_extent
+          cut_z = z_end == :end ? length_extent : 0.0
+          cut_index = ring.index([cut_e, cut_z])
+          raise ArgumentError, 'esquina de corte del bisel no clasificable' if cut_index.nil?
+
+          prev_corner = ring[(cut_index - 1) % ring.size]
+          next_corner = ring[(cut_index + 1) % ring.size]
+          ring[cut_index] = chamfer_step([cut_e, cut_z], prev_corner, leg)
+          ring.insert(cut_index + 1, chamfer_step([cut_e, cut_z], next_corner, leg))
+          dedupe_polygon_points(ring)
+        end
+
+        # One point `leg` inward from the cut corner along the axis-aligned
+        # edge toward `corner` — exactly one component changes on any
+        # rectangle edge; interpolating the other divides by zero.
+        def chamfer_step(cut, corner, leg)
+          delta_e = corner[0] - cut[0]
+          return [cut[0] + (delta_e.positive? ? leg : -leg), cut[1]] if delta_e.abs > 1.0e-12
+
+          [cut[0], cut[1] + (corner[1] > cut[1] ? leg : -leg)]
         end
 
         # The local end (start|end) of `axis` whose published image points at
@@ -355,23 +384,6 @@ module Granete
 
         def opposite_end(end_sym)
           end_sym == :end ? :start : :end
-        end
-
-        # #1342: the surviving section of the bevel band — the door's FULL
-        # thickness at the un-cut z end, tapering over the 45° leg to the
-        # front flat (edge_extent − leg) at the cut end. The cut corner is
-        # the BACK one (back_end): the furniture-front face never shortens.
-        # Consecutive coincident vertices (leg == edge extent ⇒ triangle)
-        # are dropped; fewer than 3 distinct points fails loudly.
-        def remaining_section(edge_extent, z_lo, z_hi, back_end, z_end, leg)
-          back_face = back_end == :start ? 0.0 : edge_extent
-          front_face = back_end == :start ? edge_extent : 0.0
-          reach = back_end == :start ? leg : edge_extent - leg
-          full_z = z_end == :end ? z_lo : z_hi
-          cut_z = z_end == :end ? z_hi : z_lo
-          dedupe_polygon_points([
-                                  [back_face, full_z], [front_face, full_z], [front_face, cut_z], [reach, cut_z]
-                                ])
         end
 
         def dedupe_polygon_points(points)
