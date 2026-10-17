@@ -62,7 +62,31 @@ module Granete
             return { 'status' => 'drawn', 'source' => 'asset',
                      'heightMm' => spec['heightMm'], 'depthMm' => spec['depthMm'] }
           end
+          # #1356: melamine-strip profiles (#1327) materialize as BOARDS —
+          # the tira plus the lateral notches and the door bevel, each
+          # marker carrying the profileId. The layout itself IS the channel:
+          # the placeholder box would cover the door's bevel zone in
+          # default white on every apply.
+          if layout_materializes_profile?(layout, spec['profileId'])
+            return { 'status' => 'drawn', 'source' => 'layout' }
+          end
+
           design_opening_draw_channel_placeholder(active_model, root, spec)
+        end
+
+        # Whether the resolved layout already carries this profile's
+        # materialization markers: body boards whose notches or bevels name
+        # the profile. Fail-closed on anything less — a layout without
+        # markers keeps the #1272 placeholder behavior.
+        def layout_materializes_profile?(layout, profile_id)
+          return false if profile_id.to_s.empty?
+          return false unless layout.respond_to?(:boards)
+
+          Array(layout.boards).any? do |board|
+            markers = Array(board.respond_to?(:notches) ? board.notches : []) +
+                      Array(board.respond_to?(:bevels) ? board.bevels : [])
+            markers.any? { |marker| marker.is_a?(Hash) && marker['profileId'] == profile_id }
+          end
         end
 
         # Draws the placeholder block inside the rebuilt root: a solid of the

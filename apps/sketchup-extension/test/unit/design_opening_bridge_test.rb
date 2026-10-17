@@ -707,6 +707,86 @@ class DesignOpeningBridgeTest < Minitest::Test
                  answer['geometry'])
   end
 
+  # #1356: melamine-strip profiles (#1327) materialize as boards whose
+  # notches/bevels carry the profileId — the layout IS the channel. The
+  # white placeholder box must stay OUT or it covers the door's bevel zone
+  # (the exact shape of the real gola-italiano resolve of 2026-10-17:
+  # manual bisagras as the only hardware, notch markers on both laterals,
+  # bevel marker on the door).
+  def test_apply_skips_placeholder_when_layout_materializes_profile
+    working_item = Struct.new(:furniture_instance_id, :furniture_definition_id, :parameters,
+                              :material_choices).new('fi-1356', 'mod-1356', {}, {})
+    applied_state = { 'opening' => { 'system' => 'gola', 'profileId' => 'profile.gola-italiano.tira' },
+                      'resolution' => { 'state' => 'resolved',
+                                        'fronts' => [{ 'widthMm' => 400, 'heightMm' => 685,
+                                                       'grips' => [{ 'boundary' => 'top', 'consumedMm' => 35 }] }] },
+                      'dimsKnown' => true,
+                      'workingVersion' => '2026-10-17T13:00:00.000000Z' }
+    service = FakeService.new(applied_state: applied_state,
+                              working_copy: Struct.new(:items).new([working_item]),
+                              profiles: [{ 'id' => 'profile.gola-italiano.tira', 'code' => 'GOLA-ITALIANO',
+                                           'profile_height_mm' => 70, 'profile_depth_mm' => 15 }])
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(service))
+
+    root = Object.new
+    bisagra = Struct.new(:hardware_id, :placement_kind).new('hw-bisagra', 'manual')
+    lateral = Struct.new(:notches, :bevels).new(
+      [{ 'startMm' => [0, 0, 650], 'sizeMm' => [15, 15, 70],
+         'profileId' => 'profile.gola-italiano.tira', 'boundary' => 'top' }], []
+    )
+    door = Struct.new(:notches, :bevels).new(
+      [], [{ 'startMm' => [0, 2, 669], 'sizeMm' => [397, 13, 13], 'angleDeg' => 45,
+             'edge' => 'top_front', 'profileId' => 'profile.gola-italiano.tira', 'boundary' => 'top' }]
+    )
+    tira = Struct.new(:notches, :bevels).new([], [])
+    layout = Struct.new(:hardware, :boards).new([bisagra], [lateral, door, tira])
+    definition = { 'furniture_definition_id' => 'mod-1356', 'name' => 'Gabinete Gola Italiano' }
+    metadata = { root => {
+      'identity' => { 'instanceRef' => 'inst-1356', 'furnitureInstanceId' => 'fi-1356' },
+      'intent' => { 'furnitureDefinitionId' => 'mod-1356', 'parameters' => {}, 'materialChoices' => {} }
+    } }
+    provider = FakeConvergeCatalogProvider.new(definition, layout)
+    coordinator = FakeConvergeCoordinator.new(
+      Granete::SketchUpExtension::Host::MutationOutcome.new(outcome: 'committed'), apply: true
+    )
+    builder = FakeConvergeBuilder.new
+    @bridge.instance_variable_set(:@catalog_provider, provider)
+    @bridge.instance_variable_set(:@metadata_store_factory, ->(_model) { FakeMetadataStore.new(metadata) })
+    @bridge.define_singleton_method(:mutation_coordinator) { coordinator }
+    @bridge.define_singleton_method(:furniture_builder_for) { |_model| builder }
+    binding_json = JSON.generate({ 'projectId' => PROJECT, 'designId' => DESIGN_A,
+                                   'baseRevisionId' => nil, 'schemaVersion' => 1 })
+    @bridge.define_singleton_method(:active_model) { FakeEntitiesModel.new([root], binding_json) }
+
+    @bridge.handle_apply_design_opening(
+      @dialog,
+      JSON.generate({ 'requestId' => 55, 'designId' => DESIGN_A,
+                      'selection' => { 'system' => 'gola', 'profileId' => 'profile.gola-italiano.tira' } })
+    )
+
+    answer = last_script_payload
+    assert_equal({ 'status' => 'converged', 'units' => 1,
+                   'channel' => { 'status' => 'drawn', 'source' => 'layout',
+                                  'heightMm' => 70, 'depthMm' => 15 } },
+                 answer['geometry'])
+  end
+
+  # #1356 unit: the materialization predicate fails closed — no boards, no
+  # markers or a foreign profileId never suppress the placeholder.
+  def test_layout_materializes_profile_predicate
+    lateral = Struct.new(:notches, :bevels).new(
+      [{ 'profileId' => 'profile.gola-italiano.tira' }], []
+    )
+    layout = Struct.new(:boards).new([lateral])
+    assert @bridge.layout_materializes_profile?(layout, 'profile.gola-italiano.tira')
+    refute @bridge.layout_materializes_profile?(layout, 'profile.otro')
+    refute @bridge.layout_materializes_profile?(Struct.new(:boards).new([]), 'profile.gola-italiano.tira')
+    refute @bridge.layout_materializes_profile?(Object.new, 'profile.gola-italiano.tira')
+    refute @bridge.layout_materializes_profile?(layout, '')
+    plain = Struct.new(:notches, :bevels).new([], [])
+    refute @bridge.layout_materializes_profile?(Struct.new(:boards).new([plain]), 'profile.gola-italiano.tira')
+  end
+
   # #1280 — the sync handler converges the design's opening after a
   # successful sync: opening a saved project rebuilds its placed furniture
   # AS gola. The model attribute pins the converged workingVersion so a
