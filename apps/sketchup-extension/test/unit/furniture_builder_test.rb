@@ -608,20 +608,20 @@ class FurnitureBuilderTest < Minitest::Test
       definition, 596, 15, 681, bevels: [bevel], basis: IDENTITY_BASIS
     )
 
-    # Caja completa debajo de la banda + el prisma del bisel de 6 caras
-    # (2 secciones trapezoidales + 4 lados).
-    assert_equal 7, definition.entities.faces.size, 'full box + wedge (2 secciones + 4 lados)'
-    # La sección del wedge (trapecio en x=0): basis identidad ⇒ frente local
-    # = final de Y ⇒ esquina cortada (y=0, z=681) = ATRÁS-arriba; el frente
-    # (y=15) llega lleno hasta 681 y el plano superior queda y 13..15.
+    # #1342: la puerta es UN prisma de perfil chaflanado — 2 secciones
+    # pentagonales + 5 lados = 7 caras, sin costuras horizontales.
+    assert_equal 7, definition.entities.faces.size, 'perfil prism (2 secciones + 5 lados)'
+    # La sección (pentágono en x=0): frente local = final de Y ⇒ esquina
+    # cortada (y=0, z=681) = ATRÁS-arriba; el frente (y=15) llega lleno
+    # hasta 681, el plano superior queda y 13..15 y el atrás baja a 668.
     section = definition.entities.faces
-                        .select { |f| f.points.size == 4 }
+                        .select { |f| f.points.size == 5 }
                         .find { |f| f.points.all? { |p| (p.x - 0.0).abs < 1.0e-6 } }
-    refute_nil section, 'la sección trapezoidal del bisel debe existir en x=0'
+    refute_nil section, 'la sección pentagonal del perfil debe existir en x=0'
     pts = section.points.map { |p| [p.x, p.y, p.z] }
     assert_in_delta 0.0 * MM, pts.map { |p| p[1] }.min, 1.0e-6
     assert_in_delta 15.0 * MM, pts.map { |p| p[1] }.max, 1.0e-6
-    assert_in_delta 668.0 * MM, pts.map { |p| p[2] }.min, 1.0e-6
+    assert_in_delta 0.0 * MM, pts.map { |p| p[2] }.min, 1.0e-6
     assert_in_delta 681.0 * MM, pts.map { |p| p[2] }.max, 1.0e-6
     # La esquina CORTADA (y=0, z=681) NO existe; el frente-arriba (y=15, z=681) SÍ.
     cut_present = pts.any? { |p| (p[1] - 0.0).abs < 1.0e-6 && (p[2] - (681.0 * MM)).abs < 1.0e-6 }
@@ -630,6 +630,8 @@ class FurnitureBuilderTest < Minitest::Test
     assert front_top, 'la cara frontal llega LLENA hasta arriba (rebaja hacia atrás)'
     flat_top = pts.any? { |p| (p[1] - (13.0 * MM)).abs < 1.0e-6 && (p[2] - (681.0 * MM)).abs < 1.0e-6 }
     assert flat_top, 'el plano superior conserva espesor−pata (13) al frente'
+    back_low = pts.any? { |p| (p[1] - 0.0).abs < 1.0e-6 && (p[2] - (668.0 * MM)).abs < 1.0e-6 }
+    assert back_low, 'la cara trasera baja 13 (rebaja por detrás)'
   end
 
   # #1342 — regression: the wedge's EVERY face must be wound OUTWARD (the
@@ -648,13 +650,9 @@ class FurnitureBuilderTest < Minitest::Test
       definition, 396, 15, 681, bevels: [bevel], basis: IDENTITY_BASIS
     )
 
-    # Sólo las 6 caras del WEDGE (todas dentro de la banda 668..681): la caja
-    # inferior usa el canal add_face+pushpull cuya normal sigue la convención
-    # del host, no el contrato outward del wedge.
-    wedge_faces = definition.entities.faces.select do |face|
-      face.points.all? { |p| p.z >= (668.0 - 1.0) * MM }
-    end
-    assert_equal 6, wedge_faces.size
+    # Las 7 caras del PRISMA de perfil completo (la puerta entera).
+    wedge_faces = definition.entities.faces
+    assert_equal 7, wedge_faces.size
     points = wedge_faces.flat_map { |face| face.points.map { |pt| [pt.x, pt.y, pt.z] } }
     centroid = points.transpose.map { |axis| axis.sum / points.size.to_f }
     wedge_faces.each_with_index do |face, index|
@@ -681,6 +679,20 @@ class FurnitureBuilderTest < Minitest::Test
     refute_nil ramp, 'la cara rampa (hipotenusa 45° atrás) debe existir'
     assert ramp.normal.y.negative?, 'la rampa debe mirar hacia atrás (−y)'
     assert ramp.normal.z.positive?, 'la rampa debe mirar hacia arriba (+z)'
+
+    # La cara frontal es UNA sola cara continua z 0..681: sin la costura
+    # horizontal que el apilado caja+cuña dejaba en el plano de la banda.
+    front = wedge_faces.find do |face|
+      ring = face.points.map { |p| [p.x / MM, p.y / MM, p.z / MM] }
+      ring.size == 4 && ring.all? { |p| (p[1] - 15.0).abs < 0.01 } &&
+        (ring.map { |p| p[2] }.min - 0.0).abs < 0.01 && (ring.map { |p| p[2] }.max - 681.0).abs < 0.01
+    end
+    refute_nil front, 'la cara frontal debe ser UNA cara continua 0..681'
+    seam_free = wedge_faces.none? do |face|
+      ring = face.points.map { |p| [p.x / MM, p.y / MM, p.z / MM] }
+      ring.size == 4 && ring.all? { |p| (p[2] - 668.0).abs < 0.01 }
+    end
+    assert seam_free, 'no debe existir cara interna en el plano de la banda (costura)'
   end
 
   def test_build_local_box_bevel_follows_mirrored_basis
@@ -697,7 +709,7 @@ class FurnitureBuilderTest < Minitest::Test
     )
 
     section = definition.entities.faces
-                        .select { |f| f.points.size == 4 }
+                        .select { |f| f.points.size == 5 }
                         .find { |f| f.points.all? { |p| (p.x - 0.0).abs < 1.0e-6 } }
     refute_nil section
     pts = section.points.map { |p| [p.x, p.y, p.z] }
