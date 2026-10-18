@@ -90,11 +90,12 @@ class PlacementPreviewFlowTest < Minitest::Test
   # the resolved dimensionsMm drive the preview extents. dims_mutable lets
   # a test model the composition CHANGING between preview and commit.
   class FakeCatalog
-    attr_reader :layout_resolves
+    attr_reader :layout_resolves, :layout_design_ids
     attr_accessor :dims_mutable
 
     def initialize
       @layout_resolves = []
+      @layout_design_ids = []
       @dims_mutable = nil
       @definitions = [{
         'furniture_definition_id' => DEFINITION_ID,
@@ -112,8 +113,9 @@ class PlacementPreviewFlowTest < Minitest::Test
       @definitions.find { |d| d['furniture_definition_id'] == id }
     end
 
-    def resolved_native_layout(_definition_id, _params = {}, choices = {}, _design_id = nil)
+    def resolved_native_layout(_definition_id, _params = {}, choices = {}, design_id = nil)
       @layout_resolves << choices.dup
+      @layout_design_ids << design_id
       LIB::LayoutContract.parse!(layout_body)
     end
 
@@ -348,6 +350,24 @@ class PlacementPreviewFlowTest < Minitest::Test
 
     refute result['ok'], 'a stale context must fail closed, never place blindly'
     assert_empty top_level_entities, 'no ghost placement in a stale context'
+  end
+
+  # #1361: the design-bound insert resolves WITH the design id — the layout
+  # then carries the design's opening context (a gola design inserts its
+  # fronts handle-free: the opening pass prunes the JALADERA placements
+  # server-side). Before, both flows resolved against the generic catalog
+  # and the new mueble entered with a stray pull.
+  def test_insert_and_preview_resolve_with_the_bound_design_id
+    preview = @placer.prepare_catalog_preview(definition_id: DEFINITION_ID,
+                                              parameters: {}, material_choices: {})
+    assert preview['ok'], preview.inspect
+    stub_create_instance
+    placed = @placer.create_and_place(definition_id: DEFINITION_ID, parameters: {},
+                                      material_choices: {}, idempotency_key: 'idem-1361')
+    assert placed['ok'], placed.inspect
+
+    assert_equal [DESIGN_ID, DESIGN_ID], @catalog.layout_design_ids,
+                 'preview and insert must both resolve with the bound design id'
   end
 
   def test_catalog_preview_prepares_without_minting_identity
