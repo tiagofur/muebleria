@@ -662,6 +662,32 @@
     render();
   }
 
+  // #1360: with NO saved opening, the workshop's standard PRE-ARMS the
+  // draft on load — the Aplicar button exists immediately, without the
+  // manual dance of touching another system and back. Same fail-closed
+  // rules as setDraftSystem: only when exactly ONE section's standard is
+  // selectable; a design with a saved opening keeps the read-only card.
+  function armDraftWithStandard() {
+    if (state.draft || state.saving) {
+      return false;
+    }
+    if (state.persisted && state.persisted.opening) {
+      return false;
+    }
+    var standardId = uniqueSelectableStandardId();
+    if (!standardId) {
+      return false;
+    }
+
+    var preselected = placementsFor(standardId);
+    state.draft = {
+      system: "gola",
+      profileId: standardId,
+      placements: preselected.length === 1 ? [preselected[0]] : []
+    };
+    return true;
+  }
+
   function setDraftProfile(profileId) {
     var draft = ensureDraft();
     draft.profileId = profileId;
@@ -745,6 +771,7 @@
       state.workingVersion = answer.workingVersion;
     }
     state.status = "ready";
+    armDraftWithStandard();
     render();
     if (typeof deps.onSummaryChanged === "function") {
       deps.onSummaryChanged();
