@@ -417,7 +417,12 @@ module Granete
         module PlacementCreation
           module_function
 
-          def prepare_unit(catalog_provider, definition_id, parameters, material_choices)
+          # #1361: the design-bound insert resolves WITH the design id so the
+          # layout carries the design's opening context — a gola design
+          # inserts its fronts already handle-free (the opening pass prunes
+          # the JALADERA placements) instead of entering with a stray pull.
+          # nil (unbound model / catalog preview) keeps the generic layout.
+          def prepare_unit(catalog_provider, definition_id, parameters, material_choices, design_id: nil)
             definition = catalog_provider.find_definition(definition_id)
             unless definition
               return { 'ok' => false, 'code' => 'definition_unavailable',
@@ -425,7 +430,7 @@ module Granete
             end
 
             params = WorkingCopyMerger.catalog_parameters(definition, parameters)
-            layout = WorkingCopyMerger.resolve_layout(catalog_provider, definition, params, material_choices)
+            layout = WorkingCopyMerger.resolve_layout(catalog_provider, definition, params, material_choices, design_id)
             { 'ok' => true, 'definition' => definition, 'params' => params, 'layout' => layout }
           end
 
@@ -667,7 +672,8 @@ module Granete
                                                     overrides: material_overrides,
                                                     modes: material_choice_modes)
 
-            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective.choices)
+            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective.choices,
+                                                  design_id: context['binding']&.design_id)
             return prep unless prep['ok']
 
             signature_mismatch = composition_mismatch(expected_layout_signature, prep['layout'])
@@ -708,7 +714,8 @@ module Granete
             effective = compose_effective_materials(context['binding'], definition_id,
                                                     material_choices, overrides: material_overrides)
 
-            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective.choices)
+            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective.choices,
+                                                  design_id: context['binding']&.design_id)
             return prep unless prep['ok']
 
             { 'ok' => true, 'code' => 'preview_ready',
