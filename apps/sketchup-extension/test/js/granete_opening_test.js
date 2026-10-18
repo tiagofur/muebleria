@@ -805,3 +805,73 @@ test('#1330: getSummary reporta la versión pineada y degrada al código del pin
 });
 
 console.log(JSON.stringify({ success: true, testsPassed }));
+
+test('#1360: sin apertura guardada, el estándar del taller PREARMA el draft — Aplicar sin dance', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening({ ...STANDARD_ANSWER, opening: null });
+
+  const draft = opening._state().draft;
+  assert.ok(draft, 'the standard pre-arms the draft on load');
+  assert.strictEqual(draft.system, 'gola');
+  assert.strictEqual(draft.profileId, 'profile.gola-l.alu',
+    'the unique selectable standard is the preselection');
+  assert.strictEqual(JSON.stringify(draft.placements), JSON.stringify(['top']));
+
+  const applyButton = findDeep(elementsById['design-inspector-opening-body'],
+    (child) => child.attributes['data-testid'] === 'opening-apply');
+  assert.ok(applyButton, 'the Aplicar button exists WITHOUT any manual change');
+  assert.strictEqual(applyButton.textContent, 'Aplicar apertura');
+
+  const systemSelect = findDeep(elementsById['design-inspector-opening-body'],
+    (child) => child.id === 'opening-system-select');
+  const selectedSystem = systemSelect.children.find((option) => option.selected);
+  assert.ok(selectedSystem && selectedSystem.value === 'gola',
+    'the select shows the pre-armed system');
+});
+
+test('#1360: con apertura guardada NO se prearma — la tarjeta queda de sólo lectura', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  // STANDARD_ANSWER hereda opening={system:'handle'} de READY_ANSWER: guardada.
+  opening.onDesignOpening(STANDARD_ANSWER);
+
+  assert.strictEqual(opening._state().draft, null,
+    'a saved opening keeps the read-only card — no draft, no dance');
+  const applyButton = findDeep(elementsById['design-inspector-opening-body'],
+    (child) => child.attributes['data-testid'] === 'opening-apply');
+  assert.strictEqual(applyButton, null, 'no Aplicar button when an opening is saved');
+});
+
+test('#1360: sin estándar seleccionable no se prearma nada (fail-closed)', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening({
+    ...STANDARD_ANSWER,
+    opening: null,
+    capabilities: {
+      version: 1,
+      grips: {
+        handle: { enabled: true, default: true },
+        gola: {
+          enabled: true,
+          profiles: ['profile.gola-l.alu', 'profile.gola-l.marca-b', 'profile.gola-c.alu'],
+          standardProfiles: { L: 'profile.gola-l.alu', C: 'profile.gola-c.alu' }
+        }
+      }
+    },
+    profiles: [
+      ...STANDARD_ANSWER.profiles,
+      { id: 'profile.gola-c.alu', name: 'Gola C', cross_section_shape: 'C', datasheet_status: 'verified', compatible_placements: ['between'] }
+    ]
+  });
+
+  assert.strictEqual(opening._state().draft, null,
+    'several marked sections cannot guess — no pre-armed draft');
+  const applyButton = findDeep(elementsById['design-inspector-opening-body'],
+    (child) => child.attributes['data-testid'] === 'opening-apply');
+  assert.strictEqual(applyButton, null, 'no Aplicar button without a guessable standard');
+});
