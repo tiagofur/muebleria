@@ -77,6 +77,11 @@ export function getHardwareFinish(
   return HARDWARE_FINISHES.find((f) => f.id === id);
 }
 
+/** #1209: membership guard for the CLOSED finish preset vocabulary. */
+export function isHardwareFinishId(id: unknown): id is HardwareFinishId {
+  return typeof id === 'string' && HARDWARE_FINISHES.some((f) => f.id === id);
+}
+
 /** Normalize hex color to 6-digit lowercase format. */
 function normalizeHex(hex: string): string {
   const h = hex.trim().toLowerCase();

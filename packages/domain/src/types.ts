@@ -247,6 +247,12 @@ export interface Hardware {
     Partial<Record<HardwarePartRole, HardwareFinishId>>
   >;
   /**
+   * Selectable commercial finish presets (#1209): the choices a quote can
+   * freeze per option group. Omitted/empty = no finish choice offered — the
+   * fail-closed default for every legacy row.
+   */
+  readonly availableFinishes?: readonly HardwareFinishId[];
+  /**
    * CNC machining footprint (F127): the drilling operations this hardware
    * requires, per structural part, in the part-local frame of its placement
    * anchor. Omitted = cost-only hardware (no drilling derived from it).

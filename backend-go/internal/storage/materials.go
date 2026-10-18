@@ -41,6 +41,38 @@ func hardwarePartFinishesArg(m map[string]string) any {
 	return b
 }
 
+// --- Hardware available finishes (#1209, JSONB column available_finishes) ---
+
+// scanHardwareAvailableFinishes decodes the available_finishes JSONB column
+// into the selectable preset list. NULL / empty / invalid JSON → nil (no
+// finish choice offered — the fail-closed default).
+func scanHardwareAvailableFinishes(raw []byte) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// hardwareAvailableFinishesArg encodes the list for the JSONB column param;
+// nil writes NULL (legacy rows keep offering no finish choice).
+func hardwareAvailableFinishesArg(ids []string) any {
+	if len(ids) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(ids)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
 // --- Hardware machining profile (F127, JSONB column machining) ---
 
 // scanHardwareMachining decodes the machining JSONB column. NULL / empty /
@@ -308,7 +340,7 @@ func (s *PostgresStore) ListEdgeBands(ctx context.Context) ([]domain.EdgeBand, e
 
 func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, error) {
 	query := `
-		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, machining, notes, active, created_at, updated_at, visual_asset_id, visual_asset_revision_id, version
+		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, available_finishes, machining, notes, active, created_at, updated_at, visual_asset_id, visual_asset_revision_id, version
 		FROM hardwares
 		WHERE organization_id = $1
 		ORDER BY name ASC, id ASC;
@@ -326,9 +358,10 @@ func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, e
 		var imageURL *string
 		var packageSize *float64
 		var partFinishesRaw []byte
+		var availableFinishesRaw []byte
 		var machiningRaw []byte
 		var visualAssetID, visualRevisionID *string
-		err := rows.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &h.PreviewShape, &h.PreviewSizeMm, &h.PreviewProjectionMm, &h.PreviewDiameterMm, &h.PreviewColor, &h.PreviewRoughness, &h.PreviewMetalness, &h.PreviewClearcoat, &partFinishesRaw, &machiningRaw, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt, &visualAssetID, &visualRevisionID, &h.Version)
+		err := rows.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &h.PreviewShape, &h.PreviewSizeMm, &h.PreviewProjectionMm, &h.PreviewDiameterMm, &h.PreviewColor, &h.PreviewRoughness, &h.PreviewMetalness, &h.PreviewClearcoat, &partFinishesRaw, &availableFinishesRaw, &machiningRaw, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt, &visualAssetID, &visualRevisionID, &h.Version)
 		if err != nil {
 			return nil, err
 		}
@@ -342,6 +375,7 @@ func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, e
 			h.Notes = *notes
 		}
 		h.PartFinishes = scanHardwarePartFinishes(partFinishesRaw)
+		h.AvailableFinishes = scanHardwareAvailableFinishes(availableFinishesRaw)
 		h.Machining = scanHardwareMachining(machiningRaw)
 		// #667 M1: identifiers only; representation/digest/validation resolve
 		// below from the referenced rows (never trusted from the row itself).
@@ -519,7 +553,7 @@ func (s *PostgresStore) ReactivateEdgeBand(ctx context.Context, id string) error
 
 func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain.Hardware, error) {
 	query := `
-		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, machining, notes, active, created_at, updated_at, visual_asset_id, visual_asset_revision_id, version
+		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, available_finishes, machining, notes, active, created_at, updated_at, visual_asset_id, visual_asset_revision_id, version
 		FROM hardwares
 		WHERE id = $1 AND organization_id = $2;
 	`
@@ -529,9 +563,10 @@ func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain
 	var imageURL *string
 	var packageSize *float64
 	var partFinishesRaw []byte
+	var availableFinishesRaw []byte
 	var machiningRaw []byte
 	var visualAssetID, visualRevisionID *string
-	err := row.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &h.PreviewShape, &h.PreviewSizeMm, &h.PreviewProjectionMm, &h.PreviewDiameterMm, &h.PreviewColor, &h.PreviewRoughness, &h.PreviewMetalness, &h.PreviewClearcoat, &partFinishesRaw, &machiningRaw, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt, &visualAssetID, &visualRevisionID, &h.Version)
+	err := row.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &h.PreviewShape, &h.PreviewSizeMm, &h.PreviewProjectionMm, &h.PreviewDiameterMm, &h.PreviewColor, &h.PreviewRoughness, &h.PreviewMetalness, &h.PreviewClearcoat, &partFinishesRaw, &availableFinishesRaw, &machiningRaw, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt, &visualAssetID, &visualRevisionID, &h.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -545,6 +580,7 @@ func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain
 		h.Notes = *notes
 	}
 	h.PartFinishes = scanHardwarePartFinishes(partFinishesRaw)
+	h.AvailableFinishes = scanHardwareAvailableFinishes(availableFinishesRaw)
 	h.Machining = scanHardwareMachining(machiningRaw)
 	if visualAssetID != nil && visualRevisionID != nil {
 		h.VisualAsset = &domain.HardwareVisualAssetBinding{
@@ -575,11 +611,11 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 	visualAssetID, visualRevisionID := hardwareVisualAssetArgs(h)
 	if h.ID != "" {
 		query := `
-			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, machining, notes, active, organization_id, visual_asset_id, visual_asset_revision_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, available_finishes, machining, notes, active, organization_id, visual_asset_id, visual_asset_revision_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
 			RETURNING created_at, updated_at, version;
 		`
-		err := s.db(ctx).QueryRow(ctx, query, h.ID, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, OrgFromCtx(ctx), visualAssetID, visualRevisionID).
+		err := s.db(ctx).QueryRow(ctx, query, h.ID, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareAvailableFinishesArg(h.AvailableFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, OrgFromCtx(ctx), visualAssetID, visualRevisionID).
 			Scan(&h.CreatedAt, &h.UpdatedAt, &h.Version)
 		if err != nil {
 			return fmt.Errorf("error creating hardware: %w", err)
@@ -587,11 +623,11 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 		return nil
 	}
 	query := `
-		INSERT INTO hardwares (code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, machining, notes, active, organization_id, visual_asset_id, visual_asset_revision_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+		INSERT INTO hardwares (code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, available_finishes, machining, notes, active, organization_id, visual_asset_id, visual_asset_revision_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 		RETURNING id, created_at, updated_at, version;
 	`
-	err := s.db(ctx).QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, OrgFromCtx(ctx), visualAssetID, visualRevisionID).
+	err := s.db(ctx).QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareAvailableFinishesArg(h.AvailableFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, OrgFromCtx(ctx), visualAssetID, visualRevisionID).
 		Scan(&h.ID, &h.CreatedAt, &h.UpdatedAt, &h.Version)
 	if err != nil {
 		return fmt.Errorf("error creating hardware: %w", err)
@@ -675,11 +711,11 @@ func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, expectedV
 	visualAssetID, visualRevisionID := hardwareVisualAssetArgs(h)
 	query := `
 		UPDATE hardwares
-		SET code = $1, name = $2, unit = $3, cost_per_unit = $4, package_size = $5, image_url = $6, preview_shape = $7, preview_size_mm = $8, preview_projection_mm = $9, preview_diameter_mm = $10, preview_color = $11, preview_roughness = $12, preview_metalness = $13, preview_clearcoat = $14, part_finishes = $15, machining = $16, notes = $17, active = $18, visual_asset_id = $20, visual_asset_revision_id = $21, updated_at = CURRENT_TIMESTAMP, version = version + 1
-		WHERE id = $19 AND organization_id = $22 AND version = $23
+		SET code = $1, name = $2, unit = $3, cost_per_unit = $4, package_size = $5, image_url = $6, preview_shape = $7, preview_size_mm = $8, preview_projection_mm = $9, preview_diameter_mm = $10, preview_color = $11, preview_roughness = $12, preview_metalness = $13, preview_clearcoat = $14, part_finishes = $15, available_finishes = $16, machining = $17, notes = $18, active = $19, visual_asset_id = $21, visual_asset_revision_id = $22, updated_at = CURRENT_TIMESTAMP, version = version + 1
+		WHERE id = $20 AND organization_id = $23 AND version = $24
 		RETURNING updated_at, version;
 	`
-	err := s.db(ctx).QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, id, visualAssetID, visualRevisionID, OrgFromCtx(ctx), expectedVersion).
+	err := s.db(ctx).QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareAvailableFinishesArg(h.AvailableFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, id, visualAssetID, visualRevisionID, OrgFromCtx(ctx), expectedVersion).
 		Scan(&h.UpdatedAt, &h.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

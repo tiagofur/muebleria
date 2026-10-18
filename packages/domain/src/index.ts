@@ -306,6 +306,7 @@ export {
   HARDWARE_PART_ROLES,
   HARDWARE_PART_ROLE_LABELS_ES,
   getHardwareFinish,
+  isHardwareFinishId,
   hardwarePartRolesForShape,
   matchHardwareFinish,
   normalizeHardwarePartFinishes,

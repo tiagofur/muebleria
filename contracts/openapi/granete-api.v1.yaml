@@ -17977,6 +17977,23 @@
             },
             "description": "Per-part finish presets keyed by structural role (F080)."
           },
+          "available_finishes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "chrome",
+                "black-matte",
+                "bronze",
+                "brushed",
+                "gold"
+              ]
+            },
+            "description": "#1209 selectable commercial finish presets; null/empty = no finish choice offered. Same closed vocabulary as the F069 renderer presets."
+          },
           "machining": {
             "type": [
               "object",
@@ -18104,6 +18121,23 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "available_finishes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "chrome",
+                "black-matte",
+                "bronze",
+                "brushed",
+                "gold"
+              ]
+            },
+            "description": "#1209 selectable commercial finish presets; null/empty = no finish choice offered."
           },
           "machining": {
             "type": [

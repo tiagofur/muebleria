@@ -453,6 +453,10 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &h) {
 			return
 		}
+		if err := domain.ValidateHardwareFinishIDs(h.AvailableFinishes); err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		// #667 M1: the visual asset binding is resolved and validated before
 		// persistence; the payload's echoed facts are replaced server-side.
 		if !s.resolveHardwareVisualBindingForWrite(r, w, &h) {
@@ -507,6 +511,10 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		}
 		var h domain.Hardware
 		if !decodeJSONBody(w, r, &h) {
+			return
+		}
+		if err := domain.ValidateHardwareFinishIDs(h.AvailableFinishes); err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		// Snapshot current media URL so we can clean up the replaced file after

@@ -485,3 +485,40 @@ func TestHandleHardwareByID_IfMatchGuardsWrites(t *testing.T) {
 		}
 	})
 }
+
+// #1209 PR1: available finishes come from the CLOSED preset vocabulary — an
+// unknown id (or a duplicate) is a 400 naming the offender, never a
+// persisted offer the renderer cannot draw.
+func TestHandleHardwaresRejectsUnknownAvailableFinish(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"code":"HW-FIN","name":"Herraje","unit":"piece","cost_per_unit":1,"active":true,"available_finishes":["chrome","rose-gold"]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/hardwares", body), "admin", string(domain.RoleAdmin))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleHardwares(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "rose-gold") {
+		t.Errorf("error message = %q, want it to name the unknown finish", msg)
+	}
+}
+
+func TestHandleHardwaresRejectsDuplicatedAvailableFinish(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"code":"HW-FIN2","name":"Herraje","unit":"piece","cost_per_unit":1,"active":true,"available_finishes":["gold","gold"]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/hardwares", body), "admin", string(domain.RoleAdmin))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleHardwares(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "repetido") {
+		t.Errorf("error message = %q, want it to mention the duplicate", msg)
+	}
+}
