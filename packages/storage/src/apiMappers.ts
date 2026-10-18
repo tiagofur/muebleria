@@ -142,9 +142,11 @@ import {
 
 
 import {
+  isHardwareFinishId,
   normalizeHardwarePartFinishes,
   normalizeMachiningProfile,
   resolveWorkshopSettings,
+  type HardwareFinishId,
 } from '@granete/domain';
 
 
@@ -419,6 +421,11 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     preview_clearcoat: h.previewClearcoat ?? null,
     // Per-part finishes (F080); null keeps the column empty for legacy rows.
     part_finishes: h.partFinishes ? { ...h.partFinishes } : null,
+    // Selectable commercial finishes (#1209); null = no choice offered.
+    available_finishes:
+      h.availableFinishes && h.availableFinishes.length > 0
+        ? [...h.availableFinishes]
+        : null,
     // CNC machining footprint (F127); normalized so the payload always holds
     // a clean profile (null = cost-only hardware / legacy row).
     machining: normalizeMachiningProfile(h.machining) ?? null,
@@ -442,6 +449,15 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
   const partFinishes = normalizeHardwarePartFinishes(
     raw.part_finishes ?? raw.partFinishes,
   );
+  // #1209: only known preset ids enter the catalog — an unknown finish id in
+  // the payload drops (the server already rejects the whole write).
+  const availableRaw = raw.available_finishes ?? raw.availableFinishes;
+  const availableFinishes = Array.isArray(availableRaw)
+    ? availableRaw.filter(
+        (id): id is HardwareFinishId =>
+          typeof id === 'string' && isHardwareFinishId(id),
+      )
+    : undefined;
   const machining = normalizeMachiningProfile(raw.machining);
   return {
     id: str(raw.id),
@@ -466,6 +482,9 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     previewClearcoat: optionalNum(raw.preview_clearcoat ?? raw.previewClearcoat),
     // Per-part finishes (F080) — validated, garbage never enters the catalog.
     ...(partFinishes ? { partFinishes } : {}),
+    ...(availableFinishes && availableFinishes.length > 0
+      ? { availableFinishes }
+      : {}),
     // CNC machining footprint (F127) — sanitized on ingest.
     ...(machining ? { machining } : {}),
     // Versioned 3D asset binding (#667 M1) — identifiers plus the

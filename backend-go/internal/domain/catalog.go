@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -118,6 +119,12 @@ type Hardware struct {
 	// PartFinishes maps a structural part role (body/base/grip) to a finish
 	// preset id (F080). Nil/empty = every part uses the global preview finish.
 	PartFinishes map[string]string `json:"part_finishes,omitempty"`
+	// AvailableFinishes lists the selectable commercial finish presets for
+	// this hardware (#1209): the choices a quote can freeze per option group.
+	// Nil/empty = no finish choice offered (fail-closed). Every id must come
+	// from the closed preset vocabulary (HardwareFinishIDs) so the catalog
+	// never sells a finish the renderer cannot draw.
+	AvailableFinishes []string `json:"available_finishes,omitempty"`
 	// Category is the HardwareCategory from #350 ("hinge", "slide", "handle", "connector", "shelf_pin", "leg", etc.).
 	Category string `json:"category,omitempty"`
 	// CompatibleRoles optionally lists component roles or placements this hardware can mount on.
@@ -237,3 +244,39 @@ type Catalog struct {
 }
 
 // WorkshopSettings is taller-wide defaults (F031 + F044 COST-02).
+
+// --- Hardware commercial finish presets (#1209) ---
+
+// HardwareFinishIDs is the CLOSED finish preset vocabulary: the same ids the
+// web renderer draws (packages/domain/src/hardwareFinishes.ts, F069). The
+// shared contract fixture keeps both runtimes honest about the set.
+var hardwareFinishIDs = map[string]struct{}{
+	"chrome":      {},
+	"black-matte": {},
+	"bronze":      {},
+	"brushed":     {},
+	"gold":        {},
+}
+
+// HardwareFinishIDValid reports whether id belongs to the preset vocabulary.
+func HardwareFinishIDValid(id string) bool {
+	_, ok := hardwareFinishIDs[id]
+	return ok
+}
+
+// ValidateHardwareFinishIDs fails closed on ids outside the preset
+// vocabulary or duplicates (#1209): a hardware's available finishes are a
+// commercial offer the quote can freeze — never an invented id.
+func ValidateHardwareFinishIDs(ids []string) error {
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if !HardwareFinishIDValid(id) {
+			return fmt.Errorf("acabado %q no es un preset válido (chrome, black-matte, bronze, brushed, gold)", id)
+		}
+		if _, dup := seen[id]; dup {
+			return fmt.Errorf("acabado %q repetido en la lista", id)
+		}
+		seen[id] = struct{}{}
+	}
+	return nil
+}

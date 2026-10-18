@@ -2946,6 +2946,7 @@ type Hardware struct {
 	PreviewMetalness    *float64           `json:"preview_metalness,omitempty"`
 	PreviewClearcoat    *float64           `json:"preview_clearcoat,omitempty"`
 	PartFinishes        *map[string]string `json:"part_finishes,omitempty"`
+	AvailableFinishes   []string           `json:"available_finishes,omitempty"`
 	Machining           *map[string]any    `json:"machining,omitempty"`
 	VisualAsset         *map[string]any    `json:"visual_asset,omitempty"`
 	Active              bool               `json:"active"`
@@ -2972,6 +2973,7 @@ type HardwareWrite struct {
 	PreviewMetalness    *float64           `json:"preview_metalness,omitempty"`
 	PreviewClearcoat    *float64           `json:"preview_clearcoat,omitempty"`
 	PartFinishes        *map[string]string `json:"part_finishes,omitempty"`
+	AvailableFinishes   []string           `json:"available_finishes,omitempty"`
 	Machining           *map[string]any    `json:"machining,omitempty"`
 	VisualAsset         *map[string]string `json:"visual_asset,omitempty"`
 	Active              bool               `json:"active"`

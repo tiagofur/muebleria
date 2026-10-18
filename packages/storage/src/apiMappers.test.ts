@@ -1630,6 +1630,44 @@ describe('catalogFromApi — construcción policy (#1218)', () => {
   });
 });
 
+describe('hardwareToApi / hardwareFromApi — available finishes round-trip (#1209)', () => {
+  const base: Hardware = {
+    id: 'hw-1',
+    code: 'HW-BIS',
+    name: 'Bisagra',
+    unit: 'piece',
+    costPerUnit: 5,
+    active: true,
+  };
+
+  it('round-trips the selectable preset list', () => {
+    const hw: Hardware = {
+      ...base,
+      availableFinishes: ['chrome', 'black-matte'],
+    };
+    const api = hardwareToApi(hw);
+    expect(api.available_finishes).toEqual(['chrome', 'black-matte']);
+
+    const round = hardwareFromApi(api as Record<string, unknown>);
+    expect(round.availableFinishes).toEqual(['chrome', 'black-matte']);
+  });
+
+  it('writes null for legacy rows without an offer', () => {
+    expect(hardwareToApi(base).available_finishes).toBeNull();
+    expect(
+      hardwareFromApi({ ...base, available_finishes: null }).availableFinishes,
+    ).toBeUndefined();
+  });
+
+  it('drops unknown preset ids on ingest', () => {
+    const round = hardwareFromApi({
+      ...base,
+      available_finishes: ['chrome', 'rose-gold'],
+    });
+    expect(round.availableFinishes).toEqual(['chrome']);
+  });
+});
+
 describe('hardwareToApi / hardwareFromApi — PBR round-trip (F069)', () => {
   it('round-trips preview fields (shape + PBR)', () => {
     const hw: Hardware = {
