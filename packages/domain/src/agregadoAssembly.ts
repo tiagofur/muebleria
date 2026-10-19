@@ -1336,6 +1336,73 @@ export interface ResolveModuleAgregadoAssembliesOptions {
   readonly visualAssetLookup?: VisualAssetLookup;
 }
 
+/** Catalog slices that carry the thickness/material authority for fabricated boards (R3). */
+export interface FabricatedAuthorityCatalog {
+  readonly components?: readonly Component[];
+  readonly materials?: readonly MaterialBoard[];
+}
+
+/**
+ * Enriches the fabricated components of a resolved assembly with their
+ * authoritative thickness and material (R3): the bound material chosen through
+ * the component's option role first, the component's rectangular geometry
+ * second, never a hardcoded fallback. Every 3D consumer of a live recipe
+ * (module/structure previews, the agregado's own preview) must pass through
+ * here before projection; AssemblyMesh refuses a board without thickness.
+ *
+ * Throws when neither authority exists so the caller can surface an honest
+ * diagnostic instead of rendering a guessed board.
+ */
+export function enrichFabricatedComponentsWithAuthority(
+  fabricated: readonly ResolvedFabricatedComponent[],
+  catalog: FabricatedAuthorityCatalog,
+  optionChoices: OptionChoices | undefined,
+): readonly ResolvedFabricatedComponent[] {
+  return fabricated.map((c) => {
+    const compDef = catalog.components?.find((cmp) => cmp.id === c.componentId);
+    let thicknessMm = c.thicknessMm;
+    let materialId = c.materialId;
+
+    if (thicknessMm === undefined || !materialId) {
+      let role: string | undefined;
+      if (compDef) {
+        try {
+          role = materialBindingRole(compDef);
+        } catch {
+          role = compDef.optionRoles?.[0];
+        }
+      }
+      const resolvedMatId = role
+        ? resolveBoardOptionChoiceId(role, optionChoices ?? {})
+        : undefined;
+      if (!materialId && resolvedMatId) {
+        materialId = resolvedMatId;
+      }
+      const mat = materialId ? catalog.materials?.find((m) => m.id === materialId) : undefined;
+
+      if (thicknessMm === undefined) {
+        thicknessMm =
+          mat?.thicknessMm ??
+          (compDef?.geometry?.kind === 'rectangular_board'
+            ? compDef.geometry.thicknessMm
+            : undefined);
+      }
+    }
+
+    if (thicknessMm === undefined || !Number.isFinite(thicknessMm) || thicknessMm <= 0) {
+      throw new Error(
+        `Authoritative thicknessMm not found for fabricated component '${c.componentId}': must be defined on bound material or component geometry (no hardcoded fallback allowed)`,
+      );
+    }
+
+    return {
+      ...c,
+      thicknessMm,
+      ...(materialId ? { materialId } : {}),
+    };
+  });
+}
+
 /**
  * Resolves all agregado multi-member hardware assemblies attached to a module
  * or its structure into pure domain ResolvedModuleAssembly instances.
@@ -1480,52 +1547,11 @@ export function resolveModuleAgregadoAssemblies(
           heightMm: unit.height,
         });
 
-        // Enrich fabricated components with authoritative thickness & material from catalog (R3)
-        const enrichedFabricated = resolved.fabricatedComponents.map((c) => {
-          const compDef = catalog.components?.find((cmp) => cmp.id === c.componentId);
-          let thicknessMm = c.thicknessMm;
-          let materialId = c.materialId;
-
-          if (thicknessMm === undefined || !materialId) {
-            let role: string | undefined;
-            if (compDef) {
-              try {
-                role = materialBindingRole(compDef);
-              } catch {
-                role = compDef.optionRoles?.[0];
-              }
-            }
-            const resolvedMatId = role
-              ? resolveBoardOptionChoiceId(role, options.optionChoices ?? {})
-              : undefined;
-            if (!materialId && resolvedMatId) {
-              materialId = resolvedMatId;
-            }
-            const mat = materialId
-              ? catalog.materials?.find((m) => m.id === materialId)
-              : undefined;
-
-            if (thicknessMm === undefined) {
-              thicknessMm =
-                mat?.thicknessMm ??
-                (compDef?.geometry?.kind === 'rectangular_board'
-                  ? compDef.geometry.thicknessMm
-                  : undefined);
-            }
-          }
-
-          if (thicknessMm === undefined || !Number.isFinite(thicknessMm) || thicknessMm <= 0) {
-            throw new Error(
-              `Authoritative thicknessMm not found for fabricated component '${c.componentId}': must be defined on bound material or component geometry (no hardcoded fallback allowed)`,
-            );
-          }
-
-          return {
-            ...c,
-            thicknessMm,
-            ...(materialId ? { materialId } : {}),
-          };
-        });
+        const enrichedFabricated = enrichFabricatedComponentsWithAuthority(
+          resolved.fabricatedComponents,
+          catalog,
+          options.optionChoices,
+        );
 
         // Attach visual pins (R2)
         const pinned = attachVisualPins(

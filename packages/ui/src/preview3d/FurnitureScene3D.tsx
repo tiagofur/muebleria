@@ -1671,13 +1671,23 @@ function CameraViewSetter({
  * queda en telemetría para el gate de draw calls del smoke de performance.
  */
 function ScenePerfProbe(): null {
-  const { gl, scene } = useThree();
+  const { gl, scene, camera, raycaster } = useThree();
   const frameCount = useRef(0);
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      (window as unknown as { __graneteScene?: unknown }).__graneteScene = scene;
+      const probe = window as unknown as {
+        __graneteScene?: unknown;
+        __graneteCamera?: unknown;
+        __graneteRaycaster?: unknown;
+      };
+      probe.__graneteScene = scene;
+      // Same read-only harness seam as the scene (#444): lets a browser test
+      // project a node to canvas pixels and verify the raycast hit before a
+      // real click (#670 member selection).
+      probe.__graneteCamera = camera;
+      probe.__graneteRaycaster = raycaster;
     }
-  }, [scene]);
+  }, [scene, camera, raycaster]);
   useFrame(() => {
     frameCount.current += 1;
     if (frameCount.current % 30 !== 0) return;

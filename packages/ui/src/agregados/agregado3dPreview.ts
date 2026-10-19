@@ -33,6 +33,7 @@ import type {
 import {
   attachVisualPins,
   createCatalogVisualAssetLookup,
+  enrichFabricatedComponentsWithAuthority,
   projectResolvedAssemblyFor3D,
   resolveAgregadoAssembly,
   resolveComposedModule,
@@ -200,8 +201,9 @@ export function resolveAgregado3DPreview(
 
     // #669: project the catalog agregado's own assembly recipe at identity
     // placement. Same canonical path as module previews
-    // (resolveAgregadoAssembly → attachVisualPins → projectResolvedAssemblyFor3D);
-    // a recipe failure is an honest diagnostic that keeps the resolved pieces.
+    // (resolveAgregadoAssembly → enrich R3 authority → attachVisualPins →
+    // projectResolvedAssemblyFor3D); a recipe or authority failure is an honest
+    // diagnostic that keeps the resolved pieces — never a render-time crash.
     let assemblies: readonly ProjectedAssembly[] = [];
     let assemblyError: string | null = null;
     const trimmedId = agregadoId?.trim() ?? '';
@@ -220,8 +222,16 @@ export function resolveAgregado3DPreview(
             },
             { widthMm: dims.width, depthMm: dims.depth, heightMm: dims.height },
           );
+          const enriched = {
+            ...resolved,
+            fabricatedComponents: enrichFabricatedComponentsWithAuthority(
+              resolved.fabricatedComponents,
+              { components: catalogInput.components, materials: catalogInput.materials },
+              optionChoices,
+            ),
+          };
           const pinned = attachVisualPins(
-            resolved,
+            enriched,
             createCatalogVisualAssetLookup(catalogInput.hardware),
           );
           assemblies = [
