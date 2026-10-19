@@ -1,0 +1,11 @@
+{
+  "schema": "granete.hardware-finish-presets.v1",
+  "description": "#1209 PR2: the CLOSED commercial finish preset vocabulary, shared verbatim between Go (catalog offer validation + snapshot freeze labels) and TS (renderer presets + ingest guards). Both runtimes MUST keep their set byte-identical to presets here.",
+  "presets": [
+    { "id": "chrome", "labelEs": "Cromo" },
+    { "id": "black-matte", "labelEs": "Negro mate" },
+    { "id": "bronze", "labelEs": "Bronce" },
+    { "id": "brushed", "labelEs": "Cepillado" },
+    { "id": "gold", "labelEs": "Dorado" }
+  ]
+}

@@ -48,11 +48,16 @@ type QuoteCommercialIdentity struct {
 
 // QuoteCommercialOption is one frozen customer-facing option descriptor: the
 // option group and the chosen entity, each with identity and captured label.
+// The optional FinishID/FinishLabel freeze the chosen commercial finish of a
+// hardware choice (#1209): the preset id plus its customer-facing label,
+// captured at freeze time so later catalog label edits never rewrite history.
 type QuoteCommercialOption struct {
 	GroupCode   string `json:"groupCode"`
 	GroupLabel  string `json:"groupLabel"`
 	ChoiceID    string `json:"choiceId"`
 	ChoiceLabel string `json:"choiceLabel"`
+	FinishID    string `json:"finishId,omitempty"`
+	FinishLabel string `json:"finishLabel,omitempty"`
 }
 
 // QuoteCommercialPlinthSides freezes layout-derived exposed base returns.
@@ -187,10 +192,10 @@ type QuoteCommercialOpeningBOM struct {
 // QuoteCommercialOpeningBOMLine mirrors one engine-resolved opening BOM line
 // (#1133 resolver output, frozen verbatim).
 type QuoteCommercialOpeningBOMLine struct {
-	LineID         string  `json:"lineId"`
-	MemberKey      string  `json:"memberKey"`
-	HardwareID     string  `json:"hardwareId"`
-	ProfileID      string  `json:"profileId"`
+	LineID     string `json:"lineId"`
+	MemberKey  string `json:"memberKey"`
+	HardwareID string `json:"hardwareId"`
+	ProfileID  string `json:"profileId"`
 	// ProfileCode (#1330) is the pin's frozen human-readable code so the
 	// quote can name the profile without joining the live catalog (the code
 	// is editable and the join could lie). Absent in snapshots frozen before

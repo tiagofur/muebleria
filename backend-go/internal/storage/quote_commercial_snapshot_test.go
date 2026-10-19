@@ -1041,3 +1041,83 @@ func TestQuoteCommercialSnapshot_CorruptPayloadInsertRejected(t *testing.T) {
 		t.Fatalf("corrupt snapshot insert must fail closed, got %v", err)
 	}
 }
+
+// #1209 PR2: una elección de acabado de herraje se congela en la Q1 con su
+// id y su label ES, contra PostgreSQL real. El herraje ofrece
+// (available_finishes) y la línea elige uno en project_item_choices.
+func TestQuoteCommercialSnapshot_Q1_FreezesHardwareFinish(t *testing.T) {
+	fx := setupCommercialSnapshotFixture(t)
+	seedPresetPricingContext(t, fx)
+
+	const hinge = "94000000-0000-0000-0000-0000000000f1"
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO hardwares (id, code, name, unit, cost_per_unit, organization_id, available_finishes)
+		VALUES ('`+hinge+`', 'CS-BIS-FIN', 'Bisagra acabado', 'piece', 40, '`+rlsOrgA+`', '["chrome","black-matte"]'::jsonb);
+		INSERT INTO option_groups (id, code, name, kind, required, organization_id)
+		VALUES ('93000000-0000-0000-0000-0000000000f1', 'BISAGRA-FIN', 'Bisagras acabado', 'hardware', TRUE, '`+rlsOrgA+`');
+		INSERT INTO option_group_members (option_group_id, entity_id, organization_id)
+		VALUES ('93000000-0000-0000-0000-0000000000f1', '`+hinge+`', '`+rlsOrgA+`');
+		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, finish_id, organization_id)
+		VALUES ('`+csLine+`', 'BISAGRA-FIN', '`+hinge+`', 'black-matte', '`+rlsOrgA+`');`)
+
+	createInitialRevision(t, fx)
+	details := listRevisions(t, fx)
+	if len(details) != 1 {
+		t.Fatalf("expected exactly Q1, got %d revisions", len(details))
+	}
+	snapshot := details[0].CommercialSnapshot
+	if snapshot == nil {
+		t.Fatal("Q1 has no commercial snapshot")
+	}
+	for _, unit := range snapshot.Units {
+		found := false
+		for _, option := range unit.Options {
+			if option.GroupCode != "BISAGRA-FIN" {
+				continue
+			}
+			found = true
+			if option.ChoiceID != hinge || option.ChoiceLabel != "Bisagra acabado" {
+				t.Fatalf("finish option choice descriptor = %+v", option)
+			}
+			if option.FinishID != "black-matte" || option.FinishLabel != "Negro mate" {
+				t.Fatalf("frozen finish = %q/%q, want black-matte/Negro mate", option.FinishID, option.FinishLabel)
+			}
+		}
+		if !found {
+			t.Fatalf("unit %s lost the BISAGRA-FIN option: %+v", unit.FurnitureInstanceID, unit.Options)
+		}
+	}
+}
+
+// #1209 PR2 negativos del freeze: un acabado fuera de la oferta del herraje
+// elegido (o sobre un grupo sin herraje) rompe el build de la Q1 — nunca se
+// congela una elección que el catálogo no vende.
+func TestQuoteCommercialSnapshot_Q1_RejectsFinishOutsideOffer(t *testing.T) {
+	fx := setupCommercialSnapshotFixture(t)
+	seedPresetPricingContext(t, fx)
+
+	const hinge = "94000000-0000-0000-0000-0000000000f2"
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO hardwares (id, code, name, unit, cost_per_unit, organization_id, available_finishes)
+		VALUES ('`+hinge+`', 'CS-BIS-FIN2', 'Bisagra acabado 2', 'piece', 40, '`+rlsOrgA+`', '["chrome"]'::jsonb);
+		INSERT INTO option_groups (id, code, name, kind, required, organization_id)
+		VALUES ('93000000-0000-0000-0000-0000000000f2', 'BISAGRA-FIN2', 'Bisagras acabado 2', 'hardware', TRUE, '`+rlsOrgA+`');
+		INSERT INTO option_group_members (option_group_id, entity_id, organization_id)
+		VALUES ('93000000-0000-0000-0000-0000000000f2', '`+hinge+`', '`+rlsOrgA+`');
+		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, finish_id, organization_id)
+		VALUES ('`+csLine+`', 'BISAGRA-FIN2', '`+hinge+`', 'gold', '`+rlsOrgA+`');`)
+
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, txErr := fx.store.CreateInitialQuoteRevision(ctx, storage.CreateInitialQuoteRevisionCommand{
+			ProjectID:   fx.projectID,
+			ActorUserID: rlsUserA,
+			RequestID:   "quote-lifecycle-test",
+		})
+		return txErr
+	})
+	if err == nil {
+		t.Fatal("a finish outside the hardware offer must fail the Q1 build")
+	} else if got := err.Error(); !strings.Contains(got, "CS-BIS-FIN2") || !strings.Contains(got, "gold") {
+		t.Fatalf("rejection must name the hardware and the finish, got: %v", err)
+	}
+}

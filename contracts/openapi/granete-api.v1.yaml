@@ -11706,6 +11706,23 @@
               "type": "string"
             }
           },
+          "option_finishes": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "chrome",
+                "black-matte",
+                "bronze",
+                "brushed",
+                "gold"
+              ]
+            },
+            "description": "#1209 chosen commercial finish per option group (group_code -> finish preset id). Server validates the finish id at the write boundary and the chosen hardware's offer at the quote freeze."
+          },
           "transform": {
             "$ref": "#/components/schemas/Transform3D"
           },
@@ -11767,6 +11784,23 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "option_finishes": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "chrome",
+                "black-matte",
+                "bronze",
+                "brushed",
+                "gold"
+              ]
+            },
+            "description": "#1209 chosen commercial finish per option group (group_code -> finish preset id). Keys must pair with material_choices keys; validated fail-closed at the freeze."
           },
           "material_choice_modes": {
             "type": "object",

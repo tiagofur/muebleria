@@ -189,6 +189,16 @@ func validateProjectPayloadRequiredIDs(w http.ResponseWriter, p *domain.Project,
 				return false
 			}
 		}
+		for role, finishID := range p.Items[i].OptionFinishes {
+			if !domain.HardwareFinishIDValid(finishID) {
+				respondWithError(w, http.StatusBadRequest, "acabado "+finishID+" inválido ("+role+") en una línea de la cotización")
+				return false
+			}
+			if p.Items[i].OptionChoices[role] == "" {
+				respondWithError(w, http.StatusBadRequest, "acabado sin elección de herraje ("+role+") en una línea de la cotización")
+				return false
+			}
+		}
 	}
 	for role, choice := range p.ProjectLevelChoices {
 		if !isValidUUID(choice) {

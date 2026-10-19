@@ -43,18 +43,18 @@ func scanDesignRevision(row pgx.Row) (*domain.DesignRevision, error) {
 const designRevisionItemColumns = `
 	id, organization_id, project_id, design_revision_id,
 	furniture_instance_id, COALESCE(furniture_definition_id::text, ''),
-	definition_version, parameters, material_choices, material_choice_sources, material_choice_modes,
+	definition_version, parameters, material_choices, option_finishes, material_choice_sources, material_choice_modes,
 	transform, COALESCE(room_id, ''), technical_client_locator,
 	created_at, presentation_snapshot`
 
 func scanDesignRevisionItem(row pgx.Row) (*domain.DesignRevisionItem, error) {
 	var item domain.DesignRevisionItem
-	var rawParams, rawMaterials, rawSources, rawModes, rawTransform, rawPresentation []byte
+	var rawParams, rawMaterials, rawFinishes, rawSources, rawModes, rawTransform, rawPresentation []byte
 	var rawLocator []byte
 	if err := row.Scan(
 		&item.ID, &item.OrganizationID, &item.ProjectID, &item.DesignRevisionID,
 		&item.FurnitureInstanceID, &item.FurnitureDefinitionID,
-		&item.DefinitionVersion, &rawParams, &rawMaterials, &rawSources, &rawModes,
+		&item.DefinitionVersion, &rawParams, &rawMaterials, &rawFinishes, &rawSources, &rawModes,
 		&rawTransform, &item.RoomID, &rawLocator,
 		&item.CreatedAt, &rawPresentation,
 	); err != nil {
@@ -76,6 +76,11 @@ func scanDesignRevisionItem(row pgx.Row) (*domain.DesignRevisionItem, error) {
 	if len(rawMaterials) > 0 {
 		if err := json.Unmarshal(rawMaterials, &item.MaterialChoices); err != nil {
 			return nil, fmt.Errorf("%w: read back material choices: %v", domain.ErrSerializationFailed, err)
+		}
+	}
+	if len(rawFinishes) > 0 && string(rawFinishes) != "null" {
+		if err := json.Unmarshal(rawFinishes, &item.OptionFinishes); err != nil {
+			return nil, fmt.Errorf("%w: read back option finishes: %v", domain.ErrSerializationFailed, err)
 		}
 	}
 	if item.MaterialChoices == nil {
@@ -113,7 +118,7 @@ func scanDesignRevisionItem(row pgx.Row) (*domain.DesignRevisionItem, error) {
 const designWorkingItemColumns = `
 	id, organization_id, project_id, design_id,
 	furniture_instance_id, COALESCE(furniture_definition_id::text, ''),
-	definition_version, parameters, material_choices, material_choice_sources, material_choice_modes,
+	definition_version, parameters, material_choices, option_finishes, material_choice_sources, material_choice_modes,
 	transform, COALESCE(room_id, ''), technical_client_locator,
 	created_at, updated_at`
 
@@ -324,7 +329,7 @@ func (s *PostgresStore) resolveRevisionNumbering(ctx context.Context, designID, 
 func (s *PostgresStore) loadWorkingItemsForPublish(ctx context.Context, designID string) ([]PublishDesignRevisionItemCommand, error) {
 	wRows, err := s.db(ctx).Query(ctx, `
 		SELECT furniture_instance_id, COALESCE(furniture_definition_id::text, ''),
-		       definition_version, parameters, material_choices, material_choice_sources, material_choice_modes,
+		       definition_version, parameters, material_choices, option_finishes, material_choice_sources, material_choice_modes,
 		       transform, COALESCE(room_id, ''), technical_client_locator
 		FROM design_working_items
 		WHERE design_id = $1
@@ -338,11 +343,11 @@ func (s *PostgresStore) loadWorkingItemsForPublish(ctx context.Context, designID
 	var itemsToPublish []PublishDesignRevisionItemCommand
 	for wRows.Next() {
 		var itm PublishDesignRevisionItemCommand
-		var rawP, rawM, rawS, rawModes, rawT, rawL []byte
+		var rawP, rawM, rawF, rawS, rawModes, rawT, rawL []byte
 		var defIDStr string
 		if err := wRows.Scan(
 			&itm.FurnitureInstanceID, &defIDStr,
-			&itm.DefinitionVersion, &rawP, &rawM, &rawS, &rawModes, &rawT,
+			&itm.DefinitionVersion, &rawP, &rawM, &rawF, &rawS, &rawModes, &rawT,
 			&itm.RoomID, &rawL,
 		); err != nil {
 			return nil, fmt.Errorf("scan working item for publish: %w", err)
@@ -356,6 +361,11 @@ func (s *PostgresStore) loadWorkingItemsForPublish(ctx context.Context, designID
 		if len(rawM) > 0 {
 			if err := json.Unmarshal(rawM, &itm.MaterialChoices); err != nil {
 				return nil, fmt.Errorf("%w: unmarshal working item material_choices: %v", domain.ErrSerializationFailed, err)
+			}
+		}
+		if len(rawF) > 0 && string(rawF) != "null" {
+			if err := json.Unmarshal(rawF, &itm.OptionFinishes); err != nil {
+				return nil, fmt.Errorf("%w: unmarshal working item option_finishes: %v", domain.ErrSerializationFailed, err)
 			}
 		}
 		if len(rawS) > 0 && string(rawS) != "null" {
@@ -548,6 +558,14 @@ func (s *PostgresStore) insertDesignRevisionAndItems(ctx context.Context, design
 			}
 			materialsJSON = m
 		}
+		var finishesJSON []byte = []byte("{}")
+		if itemCmd.OptionFinishes != nil {
+			f, err := json.Marshal(itemCmd.OptionFinishes)
+			if err != nil {
+				return nil, fmt.Errorf("%w: option_finishes serialization error: %v", domain.ErrSerializationFailed, err)
+			}
+			finishesJSON = f
+		}
 		var sourcesJSON []byte
 		if itemCmd.MaterialChoiceSources != nil {
 			sourcesJSON, err = json.Marshal(itemCmd.MaterialChoiceSources)
@@ -586,23 +604,23 @@ func (s *PostgresStore) insertDesignRevisionAndItems(ctx context.Context, design
 		}
 
 		var insertedItem domain.DesignRevisionItem
-		var rawP, rawM, rawS, rawModes, rawT, rawL, rawPresentation []byte
+		var rawP, rawM, rawF, rawS, rawModes, rawT, rawL, rawPresentation []byte
 		err = s.db(ctx).QueryRow(ctx, `
 			INSERT INTO design_revision_items (
 				organization_id, project_id, design_revision_id,
 				furniture_instance_id, furniture_definition_id, definition_version,
-				parameters, material_choices, material_choice_sources, material_choice_modes, transform, room_id, technical_client_locator,
+				parameters, material_choices, option_finishes, material_choice_sources, material_choice_modes, transform, room_id, technical_client_locator,
 				presentation_snapshot
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 			RETURNING `+designRevisionItemColumns,
 			designOrgID, projectID, rev.ID,
 			itemCmd.FurnitureInstanceID, defID, itemCmd.DefinitionVersion,
-			paramsJSON, materialsJSON, sourcesJSON, modesJSON, transformJSON, itemCmd.RoomID, locatorJSON, presentationJSON,
+			paramsJSON, materialsJSON, finishesJSON, sourcesJSON, modesJSON, transformJSON, itemCmd.RoomID, locatorJSON, presentationJSON,
 		).Scan(
 			&insertedItem.ID, &insertedItem.OrganizationID, &insertedItem.ProjectID, &insertedItem.DesignRevisionID,
 			&insertedItem.FurnitureInstanceID, &insertedItem.FurnitureDefinitionID,
-			&insertedItem.DefinitionVersion, &rawP, &rawM, &rawS, &rawModes, &rawT, &insertedItem.RoomID, &rawL,
+			&insertedItem.DefinitionVersion, &rawP, &rawM, &rawF, &rawS, &rawModes, &rawT, &insertedItem.RoomID, &rawL,
 			&insertedItem.CreatedAt, &rawPresentation,
 		)
 		if err != nil {

@@ -304,6 +304,11 @@ func (s *PostgresStore) buildInitialQuoteItems(ctx context.Context, projectID st
 				FROM project_item_choices pic
 				WHERE pic.project_item_id = pi.id
 			), 'null'::jsonb),
+			COALESCE((
+				SELECT jsonb_object_agg(pic.option_group_code, pic.finish_id)
+				FROM project_item_choices pic
+				WHERE pic.project_item_id = pi.id AND pic.finish_id IS NOT NULL
+			), 'null'::jsonb),
 			fi.id::text, fi.lifecycle_status
 		FROM project_items pi
 		JOIN quote_line_furniture_instances qli ON qli.quote_line_id = pi.id AND qli.state = 'current'
@@ -319,14 +324,15 @@ func (s *PostgresStore) buildInitialQuoteItems(ctx context.Context, projectID st
 		ModuleID        string
 		LineCustomDims  map[string]any
 		LineOptions     map[string]string
+		LineFinishes    map[string]string
 		InstanceID      string
 		LifecycleStatus string
 	}
 	units := []quotedUnit{}
 	for unitRows.Next() {
 		var unit quotedUnit
-		var dimsJSON, optionsJSON []byte
-		if err := unitRows.Scan(&unit.LineID, &unit.ModuleID, &dimsJSON, &optionsJSON, &unit.InstanceID, &unit.LifecycleStatus); err != nil {
+		var dimsJSON, optionsJSON, finishesJSON []byte
+		if err := unitRows.Scan(&unit.LineID, &unit.ModuleID, &dimsJSON, &optionsJSON, &finishesJSON, &unit.InstanceID, &unit.LifecycleStatus); err != nil {
 			unitRows.Close()
 			return nil, err
 		}
@@ -345,6 +351,14 @@ func (s *PostgresStore) buildInitialQuoteItems(ctx context.Context, projectID st
 				return nil, fmt.Errorf("%w: option_choices de la línea de cotización", domain.ErrInvalidRevisionSnapshot)
 			}
 			unit.LineOptions = choices
+		}
+		if len(finishesJSON) > 0 && string(finishesJSON) != "null" {
+			finishes := map[string]string{}
+			if err := json.Unmarshal(finishesJSON, &finishes); err != nil {
+				unitRows.Close()
+				return nil, fmt.Errorf("%w: option_finishes de la línea de cotización", domain.ErrInvalidRevisionSnapshot)
+			}
+			unit.LineFinishes = finishes
 		}
 		units = append(units, unit)
 	}
@@ -374,8 +388,10 @@ func (s *PostgresStore) buildInitialQuoteItems(ctx context.Context, projectID st
 			QuoteLineID:         unit.LineID,
 			Parameters:          map[string]any{},
 			// The quoted finish rides along: option_choices are the board
-			// choices (role -> material id) the customer selected (#620).
+			// choices (role -> material id) the customer selected (#620),
+			// option_finishes the chosen hardware finish per group (#1209).
 			MaterialChoices: unit.LineOptions,
+			OptionFinishes:  unit.LineFinishes,
 			LifecycleStatus: unit.LifecycleStatus,
 		}
 		if unit.ModuleID != "" {

@@ -47,6 +47,7 @@ type PublishDesignRevisionItemCommand struct {
 	DefinitionVersion      *int
 	Parameters             map[string]any
 	MaterialChoices        map[string]string
+	OptionFinishes         map[string]string
 	MaterialChoiceSources  map[string]domain.DesignMaterialProvenance
 	MaterialChoiceModes    map[string]domain.DesignMaterialChoiceMode
 	PresentationSnapshot   *domain.DesignRevisionPresentationSnapshot
@@ -70,6 +71,7 @@ type UpdateDesignWorkingCopyItemCommand struct {
 	DefinitionVersion      *int
 	Parameters             map[string]any
 	MaterialChoices        map[string]string
+	OptionFinishes         map[string]string
 	MaterialChoiceModes    map[string]domain.DesignMaterialChoiceMode
 	Transform              domain.Transform3D
 	RoomID                 string

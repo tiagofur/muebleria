@@ -1289,6 +1289,7 @@ type PublishDesignRevisionItem struct {
 	DefinitionVersion      *int64                              `json:"definition_version,omitempty"`
 	Parameters             map[string]any                      `json:"parameters,omitempty"`
 	MaterialChoices        map[string]string                   `json:"material_choices,omitempty"`
+	OptionFinishes         *map[string]string                  `json:"option_finishes,omitempty"`
 	Transform              *Transform3D                        `json:"transform,omitempty"`
 	RoomID                 *string                             `json:"room_id,omitempty"`
 	TechnicalClientLocator *TechnicalClientLocator             `json:"technical_client_locator,omitempty"`
@@ -1302,6 +1303,7 @@ type DesignWorkingCopyItem struct {
 	DefinitionVersion      *int64                              `json:"definition_version,omitempty"`
 	Parameters             map[string]any                      `json:"parameters"`
 	MaterialChoices        map[string]string                   `json:"material_choices"`
+	OptionFinishes         *map[string]string                  `json:"option_finishes,omitempty"`
 	MaterialChoiceModes    map[string]DesignMaterialChoiceMode `json:"material_choice_modes"`
 	Transform              *Transform3D                        `json:"transform,omitempty"`
 	RoomID                 *string                             `json:"room_id,omitempty"`

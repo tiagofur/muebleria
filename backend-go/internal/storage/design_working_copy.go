@@ -15,12 +15,12 @@ import (
 // assert de versión para gates de staleness (#784).
 func scanDesignWorkingItem(row pgx.Row) (*domain.DesignWorkingItem, error) {
 	var item domain.DesignWorkingItem
-	var rawParams, rawMaterials, rawSources, rawModes, rawTransform []byte
+	var rawParams, rawMaterials, rawFinishes, rawSources, rawModes, rawTransform []byte
 	var rawLocator []byte
 	if err := row.Scan(
 		&item.ID, &item.OrganizationID, &item.ProjectID, &item.DesignID,
 		&item.FurnitureInstanceID, &item.FurnitureDefinitionID,
-		&item.DefinitionVersion, &rawParams, &rawMaterials, &rawSources, &rawModes,
+		&item.DefinitionVersion, &rawParams, &rawMaterials, &rawFinishes, &rawSources, &rawModes,
 		&rawTransform, &item.RoomID, &rawLocator,
 		&item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
@@ -45,6 +45,11 @@ func scanDesignWorkingItem(row pgx.Row) (*domain.DesignWorkingItem, error) {
 	if len(rawMaterials) > 0 {
 		if err := json.Unmarshal(rawMaterials, &item.MaterialChoices); err != nil {
 			return nil, fmt.Errorf("%w: read back material choices: %v", domain.ErrSerializationFailed, err)
+		}
+	}
+	if len(rawFinishes) > 0 && string(rawFinishes) != "null" {
+		if err := json.Unmarshal(rawFinishes, &item.OptionFinishes); err != nil {
+			return nil, fmt.Errorf("%w: read back option finishes: %v", domain.ErrSerializationFailed, err)
 		}
 	}
 	if item.MaterialChoices == nil {
@@ -372,6 +377,18 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 				}
 				cmd.Items[i].MaterialChoiceModes = filteredModes
 			}
+			if ok && len(cmd.Items[i].OptionFinishes) > 0 {
+				// #1209: finish choices follow their group choices — a role
+				// the definition does not consume drops its finish too, so
+				// finished choices never outlive their group choice.
+				filteredFinishes := make(map[string]string, len(cmd.Items[i].OptionFinishes))
+				for role, finishID := range cmd.Items[i].OptionFinishes {
+					if _, consumed := filtered[role]; consumed {
+						filteredFinishes[role] = finishID
+					}
+				}
+				cmd.Items[i].OptionFinishes = filteredFinishes
+			}
 		}
 	}
 
@@ -435,6 +452,14 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 			}
 			materialsJSON = m
 		}
+		finishesJSON := []byte("{}")
+		if item.OptionFinishes != nil {
+			f, err := json.Marshal(item.OptionFinishes)
+			if err != nil {
+				return nil, fmt.Errorf("%w: option_finishes serialization error: %v", domain.ErrSerializationFailed, err)
+			}
+			finishesJSON = f
+		}
 		sources := make(map[string]domain.DesignMaterialProvenance, len(item.MaterialChoices))
 		priorItemChoices, itemExisted := previousChoices[item.FurnitureInstanceID]
 		for role, materialID := range item.MaterialChoices {
@@ -475,13 +500,13 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 			INSERT INTO design_working_items (
 				organization_id, project_id, design_id,
 				furniture_instance_id, furniture_definition_id, definition_version,
-				parameters, material_choices, material_choice_sources, material_choice_modes, transform, room_id, technical_client_locator,
+				parameters, material_choices, option_finishes, material_choice_sources, material_choice_modes, transform, room_id, technical_client_locator,
 				created_at, updated_at
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
 		`, designOrgID, projectID, cmd.DesignID,
 			item.FurnitureInstanceID, defID, item.DefinitionVersion,
-			paramsJSON, materialsJSON, sourcesJSON, modesJSON, transformJSON, item.RoomID, locatorJSON,
+			paramsJSON, materialsJSON, finishesJSON, sourcesJSON, modesJSON, transformJSON, item.RoomID, locatorJSON,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("insert working item: %w", err)
@@ -650,12 +675,12 @@ func (s *PostgresStore) ResetDesignWorkingCopy(ctx context.Context, cmd ResetDes
 		INSERT INTO design_working_items (
 			organization_id, project_id, design_id,
 			furniture_instance_id, furniture_definition_id, definition_version,
-			parameters, material_choices, material_choice_sources, material_choice_modes, transform, room_id, technical_client_locator,
+			parameters, material_choices, option_finishes, material_choice_sources, material_choice_modes, transform, room_id, technical_client_locator,
 			created_at, updated_at
 		)
 		SELECT organization_id, project_id, $1,
 		       furniture_instance_id, furniture_definition_id, definition_version,
-		       parameters, material_choices, material_choice_sources,
+		       parameters, material_choices, option_finishes, material_choice_sources,
 		       COALESCE(
 		           material_choice_modes,
 		           (SELECT COALESCE(jsonb_object_agg(role, to_jsonb('override'::text)), '{}'::jsonb)

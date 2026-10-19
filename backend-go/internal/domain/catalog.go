@@ -280,3 +280,20 @@ func ValidateHardwareFinishIDs(ids []string) error {
 	}
 	return nil
 }
+
+// HardwareFinishLabelsES is the customer-facing Spanish label of each finish
+// preset (#1209 PR2): commercial snapshot freeze captures the label so the
+// quote line reads «Bisagra · Negro mate».
+var hardwareFinishLabelsES = map[string]string{
+	"chrome":      "Cromo",
+	"black-matte": "Negro mate",
+	"bronze":      "Bronce",
+	"brushed":     "Cepillado",
+	"gold":        "Dorado",
+}
+
+// HardwareFinishLabelES returns the customer-facing label of a preset id, or
+// "" for ids outside the vocabulary (the freeze rejects before reaching here).
+func HardwareFinishLabelES(id string) string {
+	return hardwareFinishLabelsES[id]
+}
