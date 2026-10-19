@@ -10,6 +10,7 @@ import type {
   Module,
   OptionChoices,
   OptionGroup,
+  ProjectedAssembly,
   ResolvedBoardPart,
   Structure,
   Component,
@@ -24,6 +25,7 @@ import {
   resolveBom,
   resolveModuleMeasurePreset,
 } from '@granete/domain';
+import { resolveModuleAssemblies } from '../preview3d/project3dPreview';
 import { DEFAULT_MODULE_FOOTPRINT_MM } from '../preview3d/project3dLayout';
 import { defaultOptionChoicesForModule } from './moduleHelpers';
 
@@ -36,6 +38,12 @@ export type Module3DPreviewResult = {
   readonly presets: readonly DimensionPreset[];
   /** Effective option choices used for this resolve (defaults + overrides). */
   readonly optionChoices: OptionChoices;
+  /**
+   * Projected rigid-member assemblies of the module's (and its structure's)
+   * agregados (#669) — same canonical path Proyectar uses. Empty when there
+   * are none or when the recipe fails (diagnostic in `error`, parts kept).
+   */
+  readonly assemblies: readonly ProjectedAssembly[];
   readonly error: string | null;
   readonly empty: boolean;
 };
@@ -147,22 +155,41 @@ export function resolveModule3DPreview(
 
   try {
     const bom = resolveBom(module, choices, catalog, measurePresetId);
+
+    // #669: project the module's (and its structure's) agregado assemblies
+    // through the same canonical path Proyectar uses. A recipe failure is an
+    // honest diagnostic that keeps the resolved pieces — never an empty scene.
+    let assemblies: readonly ProjectedAssembly[] = [];
+    let assemblyError: string | null = null;
+    try {
+      assemblies = resolveModuleAssemblies(module, dims, catalogInput, {
+        optionChoices: choices,
+      });
+    } catch (e) {
+      assemblyError =
+        e instanceof Error
+          ? `No se pudo proyectar el ensamble del agregado: ${e.message}`
+          : 'No se pudo proyectar el ensamble del agregado.';
+    }
+
     return {
       parts: bom.boardParts,
+      assemblies,
       width: dims.width,
       height: dims.height,
       depth: dims.depth,
       measurePresetId,
       presets,
       optionChoices: choices,
-      error: null,
-      empty: bom.boardParts.length === 0,
+      error: assemblyError,
+      empty: bom.boardParts.length === 0 && assemblies.length === 0,
     };
   } catch (e) {
     const message =
       e instanceof Error ? e.message : 'No se pudo resolver el armado 3D.';
     return {
       parts: [],
+      assemblies: [],
       width: dims.width,
       height: dims.height,
       depth: dims.depth,

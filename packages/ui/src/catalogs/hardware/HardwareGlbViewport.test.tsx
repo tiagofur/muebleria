@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HardwareVisualAssetBinding } from '@granete/domain';
 
@@ -10,14 +10,30 @@ vi.mock('@react-three/fiber', () => ({
   ),
 }));
 
-vi.mock('../../preview3d/HardwareGlbMesh', () => ({
-  HardwareGlbMesh: ({ member }: { member: { glb?: unknown } }) => (
-    <div
-      data-testid="hardware-glb-mesh-mock"
-      data-has-glb={member.glb ? 'yes' : 'no'}
-    />
-  ),
-}));
+vi.mock('../../preview3d/HardwareGlbMesh', async () => {
+  const { useEffect } = await import('react');
+  return {
+    HardwareGlbMesh: ({
+      member,
+      onStatusChange,
+    }: {
+      member: { glb?: unknown };
+      onStatusChange?: (status: string, diagnostic?: string) => void;
+    }) => {
+      useEffect(() => {
+        const status =
+          (globalThis as Record<string, unknown>).__glbMockStatus ?? 'ready';
+        onStatusChange?.(status as never);
+      }, []);
+      return (
+        <div
+          data-testid="hardware-glb-mesh-mock"
+          data-has-glb={member.glb ? 'yes' : 'no'}
+        />
+      );
+    },
+  };
+});
 
 vi.mock('../../preview3d/HardwareMesh', () => ({
   HardwareMesh: () => <div data-testid="hardware-mesh-fallback-mock" />,
@@ -130,7 +146,8 @@ describe('hardwareDraftToProcedural (#669)', () => {
 });
 
 describe('HardwareGlbViewport (#669)', () => {
-  it('renders the exact GLB branch with the procedural fallback mounted', () => {
+  it('renders the exact GLB branch and the marker reports ready', async () => {
+    (globalThis as Record<string, unknown>).__glbMockStatus = 'ready';
     render(<HardwareGlbViewport draft={draftWithShape} binding={glbBinding} />);
 
     expect(screen.getByTestId('hardware-glb-viewport')).toBeInTheDocument();
@@ -138,9 +155,31 @@ describe('HardwareGlbViewport (#669)', () => {
       'data-has-glb',
       'yes',
     );
-    expect(screen.getByTestId('hardware-glb-viewport-marker')).toHaveTextContent(
-      'Modelo exacto del archivo vinculado (GLB).',
+    await waitFor(() =>
+      expect(screen.getByTestId('hardware-glb-viewport-marker')).toHaveTextContent(
+        'Modelo exacto del archivo vinculado (GLB).',
+      ),
     );
+  });
+
+  it('marker stays honest while the exact model loads or fails (review note)', async () => {
+    (globalThis as Record<string, unknown>).__glbMockStatus = 'loading';
+    render(<HardwareGlbViewport draft={draftWithShape} binding={glbBinding} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('hardware-glb-viewport-marker')).toHaveTextContent(
+        'Cargando el modelo exacto…',
+      ),
+    );
+
+    cleanup();
+    (globalThis as Record<string, unknown>).__glbMockStatus = 'corrupt';
+    render(<HardwareGlbViewport draft={draftWithShape} binding={glbBinding} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('hardware-glb-viewport-marker')).toHaveTextContent(
+        'No se pudo cargar el modelo exacto (corrupt); se muestra la representación genérica.',
+      ),
+    );
+    delete (globalThis as Record<string, unknown>).__glbMockStatus;
   });
 
   it('renders the procedural path with an explicit marker when no GLB exists', () => {

@@ -172,6 +172,7 @@ export function Structure3DModal({
               resolvedHardwarePlacements={
                 preview.resolvedHardwarePlacements
               }
+              assemblies={preview.assemblies}
               hardwareCatalog={catalog.hardware}
               paintModeHint="Los selectores de acabado de arriba eligen el material de cada grupo. Este control solo cambia cómo se colorea la vista."
               testId="structure-3d-viewer"

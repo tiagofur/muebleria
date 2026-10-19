@@ -90,6 +90,58 @@ const jaladera: Hardware = {
   previewColor: '#333333',
 };
 
+const runnerHardware: Hardware = {
+  id: 'hw-runner',
+  code: 'RUN-450',
+  name: 'Corredera 450',
+  unit: 'piece',
+  costPerUnit: 25,
+  active: true,
+  visualAsset: {
+    assetId: 'ast-runner',
+    assetRevisionId: 'rev-skp-runner',
+    representation: 'skp',
+    sha256: 's'.repeat(64),
+    validationState: 'validated',
+    glb: {
+      revisionId: 'rev-glb-runner',
+      sha256: 'g'.repeat(64),
+      sourceUnits: 'm',
+      upAxis: 'y',
+    },
+    mountFrame: {
+      originMm: [0, 0, 0],
+      basis: { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] },
+    },
+  },
+};
+
+const cajonConReceta: Agregado = {
+  id: 'agr-cajon-receta',
+  code: 'CAJ-R',
+  name: 'Cajón con receta',
+  commercialKitHardwareId: 'hw-kit',
+  rigidMembers: [
+    {
+      memberId: 'corredera-izq',
+      role: 'runner_left',
+      source: { kind: 'fixed', fixed: { hardwareId: 'hw-runner' } },
+      placement: {
+        x: { ref: 'min', offsetMm: 0 },
+        y: { ref: 'min', offsetMm: 0 },
+        z: { ref: 'min', offsetMm: 0 },
+      },
+      bomRole: 'included_in_kit',
+    },
+  ],
+};
+
+const catalogConReceta: Module3DCatalogInput = {
+  ...mockCatalogInput,
+  agregados: [mockAgregado, cajonConReceta],
+  hardware: [runnerHardware],
+};
+
 function placementOn(hardwareId: string) {
   return {
     hardwarePlacements: [
@@ -316,5 +368,72 @@ describe('resolveStructure3DPreview with Agregados', () => {
     expect(res.error).toBeNull();
     expect(res.parts).toHaveLength(1);
     expect(res.resolvedHardwarePlacements).toEqual([]);
+  });
+});
+
+describe('resolveStructure3DPreview assemblies (#669)', () => {
+  it('returns empty assemblies when instances carry no recipe', () => {
+    const draft: StructureDraft = {
+      ...emptyStructureDraft(),
+      code: 'EST',
+      name: 'Estructura',
+      widthMm: 800,
+      heightMm: 720,
+      depthMm: 500,
+      agregados: [
+        { id: 'inst-1', agregadoId: 'agr-cajones-3', quantity: 1 },
+      ],
+    };
+    const res = resolveStructure3DPreview(draft, mockCatalogInput);
+
+    expect(res.error).toBeNull();
+    expect(res.assemblies).toEqual([]);
+  });
+
+  it('projects the structure agregado recipe with pins and GLB', () => {
+    const draft: StructureDraft = {
+      ...emptyStructureDraft(),
+      code: 'EST',
+      name: 'Estructura',
+      widthMm: 800,
+      heightMm: 720,
+      depthMm: 500,
+      agregados: [
+        { id: 'inst-receta', agregadoId: 'agr-cajon-receta', quantity: 1 },
+      ],
+    };
+    const res = resolveStructure3DPreview(draft, catalogConReceta);
+
+    expect(res.error).toBeNull();
+    expect(res.assemblies).toHaveLength(1);
+    const assembly = res.assemblies[0]!;
+    expect(assembly.agregadoId).toBe('agr-cajon-receta');
+    expect(assembly.rigidMembers).toHaveLength(1);
+    expect(assembly.rigidMembers[0]!.hardwareId).toBe('hw-runner');
+    expect(assembly.rigidMembers[0]!.assetId).toBe('ast-runner');
+    expect(assembly.rigidMembers[0]!.glb?.revisionId).toBe('rev-glb-runner');
+  });
+
+  it('reports an honest diagnostic when the instance id is missing (pieces kept)', () => {
+    const draft: StructureDraft = {
+      ...emptyStructureDraft(),
+      code: 'EST',
+      name: 'Estructura',
+      widthMm: 800,
+      heightMm: 720,
+      depthMm: 500,
+      agregados: [
+        { id: '', agregadoId: 'agr-cajon-receta', quantity: 1 },
+      ],
+    };
+    const before = resolveStructure3DPreview(
+      { ...draft, agregados: [] },
+      catalogConReceta,
+    );
+    const res = resolveStructure3DPreview(draft, catalogConReceta);
+
+    expect(res.parts).toEqual(before.parts);
+    expect(res.assemblies).toEqual([]);
+    expect(res.error).toMatch(/No se pudo proyectar el ensamble/);
   });
 });

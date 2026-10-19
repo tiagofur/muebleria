@@ -249,7 +249,9 @@ export function resolveAgregado3DPreview(
       depth: dims.depth,
       optionChoices,
       error: assemblyError,
-      empty: resolvedBoardParts.length === 0,
+      // Assemblies count as content: a hardware-only recipe (rigid members,
+      // no board pieces) still renders its members — review round-1 note.
+      empty: resolvedBoardParts.length === 0 && assemblies.length === 0,
     };
   } catch (e) {
     const message =

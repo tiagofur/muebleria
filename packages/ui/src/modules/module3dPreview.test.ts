@@ -123,6 +123,52 @@ const catalog = {
   optionGroups,
 };
 
+const runnerHardware: Hardware = {
+  id: 'hw-runner',
+  code: 'RUN-450',
+  name: 'Corredera 450',
+  unit: 'piece',
+  costPerUnit: 25,
+  active: true,
+  visualAsset: {
+    assetId: 'ast-runner',
+    assetRevisionId: 'rev-skp-runner',
+    representation: 'skp',
+    sha256: 's'.repeat(64),
+    validationState: 'validated',
+    glb: {
+      revisionId: 'rev-glb-runner',
+      sha256: 'g'.repeat(64),
+      sourceUnits: 'm',
+      upAxis: 'y',
+    },
+    mountFrame: {
+      originMm: [0, 0, 0],
+      basis: { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] },
+    },
+  },
+};
+
+const cajonAgregado: Agregado = {
+  id: 'agr-cajon',
+  code: 'CAJ',
+  name: 'Cajón',
+  commercialKitHardwareId: 'hw-kit',
+  rigidMembers: [
+    {
+      memberId: 'corredera-izq',
+      role: 'runner_left',
+      source: { kind: 'fixed', fixed: { hardwareId: 'hw-runner' } },
+      placement: {
+        x: { ref: 'min', offsetMm: 0 },
+        y: { ref: 'min', offsetMm: 0 },
+        z: { ref: 'min', offsetMm: 0 },
+      },
+      bomRole: 'included_in_kit',
+    },
+  ],
+};
+
 describe('resolveModule3DPreview', () => {
   it('defaults to first measure preset and returns parts', () => {
     const preview = resolveModule3DPreview(baseModule, catalog);
@@ -170,4 +216,36 @@ describe('resolveModule3DPreview', () => {
     expect(wood.optionChoices.INTERIOR).toBe('mat-wood');
   });
 
+  it('returns empty assemblies when the module has no agregado recipes (#669)', () => {
+    const preview = resolveModule3DPreview(baseModule, catalog);
+    expect(preview.error).toBeNull();
+    expect(preview.assemblies).toEqual([]);
+  });
+
+  it('projects the module agregado recipe with identity placement (#669)', () => {
+    const withRecipe: Module = {
+      ...baseModule,
+      agregados: [
+        {
+          id: 'inst-cajon',
+          agregadoId: 'agr-cajon',
+          quantity: 1,
+        },
+      ],
+    };
+    const preview = resolveModule3DPreview(withRecipe, {
+      ...catalog,
+      modules: [withRecipe],
+      agregados: [cajonAgregado],
+      hardware: [runnerHardware],
+    });
+
+    expect(preview.error).toBeNull();
+    expect(preview.assemblies).toHaveLength(1);
+    expect(preview.assemblies[0]!.agregadoId).toBe('agr-cajon');
+    expect(preview.assemblies[0]!.rigidMembers).toHaveLength(1);
+    expect(preview.assemblies[0]!.rigidMembers[0]!.hardwareId).toBe('hw-runner');
+    expect(preview.assemblies[0]!.rigidMembers[0]!.assetId).toBe('ast-runner');
+    expect(preview.assemblies[0]!.rigidMembers[0]!.glb?.revisionId).toBe('rev-glb-runner');
+  });
 });

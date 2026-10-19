@@ -261,6 +261,7 @@ export function StructureEditorComponentsPanel({
                   resolvedHardwarePlacements={
                     preview.resolvedHardwarePlacements
                   }
+                  assemblies={preview.assemblies}
                   hardwareCatalog={catalogInput?.hardware}
                   testId="structure-components-3d-viewer"
                 />
