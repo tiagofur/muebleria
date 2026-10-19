@@ -234,7 +234,7 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
 	}
 
-	units, err := s.buildQuoteCommercialUnits(ctx, items)
+	units, err := s.buildQuoteCommercialUnits(ctx, items, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +414,7 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
 	}
 
-	units, err := s.buildQuoteCommercialUnits(ctx, items)
+	units, err := s.buildQuoteCommercialUnits(ctx, items, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -595,7 +595,7 @@ func buildQuoteCommercialLines(pricingProject domain.Project, catalog domain.Cat
 // physical unit: module code/name and option group/choice labels read from
 // the owning organization's catalog at capture time. Missing customer-facing
 // labels fail typed/actionable; raw UUIDs are never frozen as presentation.
-func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []CreateQuoteRevisionItemCommand) ([]domain.QuoteCommercialUnit, error) {
+func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []CreateQuoteRevisionItemCommand, catalog domain.Catalog) ([]domain.QuoteCommercialUnit, error) {
 	orgID := OrgFromCtx(ctx)
 
 	moduleIDs := make([]string, 0, len(items))
@@ -633,6 +633,10 @@ func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []C
 	if err != nil {
 		return nil, err
 	}
+	hardwareByID := make(map[string]domain.Hardware, len(catalog.Hardware))
+	for _, hw := range catalog.Hardware {
+		hardwareByID[hw.ID] = hw
+	}
 
 	units := make([]domain.QuoteCommercialUnit, 0, len(items))
 	for _, item := range items {
@@ -656,6 +660,9 @@ func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []C
 		}
 		unit.ModuleCode = label.Code
 		unit.ModuleName = label.Name
+		if err := validateUnitFinishChoices(item, catalog, hardwareByID); err != nil {
+			return nil, err
+		}
 		for groupCode, choiceID := range item.MaterialChoices {
 			groupLabel := groupLabels[groupCode]
 			if strings.TrimSpace(groupLabel) == "" {
@@ -665,12 +672,17 @@ func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []C
 			if !ok || strings.TrimSpace(choiceLabel) == "" {
 				return nil, fmt.Errorf("%w: la opción %s no tiene label comercial; corregí el catálogo antes de cotizar", domain.ErrInvalidRevisionSnapshot, choiceID)
 			}
-			unit.Options = append(unit.Options, domain.QuoteCommercialOption{
+			option := domain.QuoteCommercialOption{
 				GroupCode:   groupCode,
 				GroupLabel:  groupLabel,
 				ChoiceID:    choiceID,
 				ChoiceLabel: choiceLabel,
-			})
+			}
+			if finishID := item.OptionFinishes[groupCode]; finishID != "" {
+				option.FinishID = finishID
+				option.FinishLabel = domain.HardwareFinishLabelES(finishID)
+			}
+			unit.Options = append(unit.Options, option)
 		}
 		sort.Slice(unit.Options, func(i, j int) bool {
 			if unit.Options[i].GroupCode == unit.Options[j].GroupCode {
@@ -681,6 +693,41 @@ func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []C
 		units = append(units, unit)
 	}
 	return units, nil
+}
+
+// validateUnitFinishChoices enforces the #1209 freeze contract on one item:
+// every finish choice must sit on a group with a hardware choice, name an id
+// of the preset vocabulary, and belong to the chosen hardware's declared
+// offer. A freeze never invents or drops a finish — the quote build fails.
+func validateUnitFinishChoices(item CreateQuoteRevisionItemCommand, catalog domain.Catalog, hardwareByID map[string]domain.Hardware) error {
+	if len(item.OptionFinishes) == 0 {
+		return nil
+	}
+	unit := item.FurnitureInstanceID
+	for groupCode, finishID := range item.OptionFinishes {
+		choiceID := item.MaterialChoices[groupCode]
+		if choiceID == "" {
+			return fmt.Errorf("%w: la unidad %s elige acabado %q en el grupo %s sin elección de herraje", domain.ErrInvalidRevisionSnapshot, unit, finishID, groupCode)
+		}
+		if !domain.HardwareFinishIDValid(finishID) {
+			return fmt.Errorf("%w: la unidad %s elige acabado %q fuera del vocabulario (grupo %s)", domain.ErrInvalidRevisionSnapshot, unit, finishID, groupCode)
+		}
+		hw, ok := hardwareByID[choiceID]
+		if !ok {
+			return fmt.Errorf("%w: la unidad %s elige acabado %q para la opción %s que no es herraje del catálogo", domain.ErrInvalidRevisionSnapshot, unit, finishID, choiceID)
+		}
+		offered := false
+		for _, offeredID := range hw.AvailableFinishes {
+			if offeredID == finishID {
+				offered = true
+				break
+			}
+		}
+		if !offered {
+			return fmt.Errorf("%w: el herraje %s (%s) no ofrece el acabado %q elegido en la unidad %s", domain.ErrInvalidRevisionSnapshot, hw.Code, hw.ID, finishID, unit)
+		}
+	}
+	return nil
 }
 
 type catalogLabel struct {

@@ -18,6 +18,10 @@ type ProjectItem struct {
 	ModuleID      string            `json:"module_id"`
 	Quantity      int               `json:"quantity"`
 	OptionChoices map[string]string `json:"option_choices"` // group_code -> choice_id
+	// OptionFinishes is the chosen commercial finish per option group
+	// (#1209): group_code -> finish preset id. Only meaningful alongside a
+	// hardware choice in the same group; nil/empty = no finish choices.
+	OptionFinishes map[string]string `json:"option_finishes,omitempty"`
 	// MeasurePresetID selects Module.Presets entry for quotation (H09 / #104).
 	MeasurePresetID string `json:"measure_preset_id,omitempty"`
 	// CustomDims is the free per-item W/H/D override (F144 / #310). nil = preset.

@@ -350,14 +350,16 @@ type TechnicalClientLocator struct {
 
 // DesignRevisionItem represents the authoring snapshot of one physical FurnitureInstance in a revision (digital-thread §9).
 type DesignRevisionItem struct {
-	ID                    string                              `json:"id"`
-	ProjectID             string                              `json:"project_id"`
-	DesignRevisionID      string                              `json:"design_revision_id"`
-	FurnitureInstanceID   string                              `json:"furniture_instance_id"`
-	FurnitureDefinitionID string                              `json:"furniture_definition_id,omitempty"`
-	DefinitionVersion     *int                                `json:"definition_version,omitempty"`
-	Parameters            map[string]any                      `json:"parameters"`
-	MaterialChoices       map[string]string                   `json:"material_choices"`
+	ID                    string            `json:"id"`
+	ProjectID             string            `json:"project_id"`
+	DesignRevisionID      string            `json:"design_revision_id"`
+	FurnitureInstanceID   string            `json:"furniture_instance_id"`
+	FurnitureDefinitionID string            `json:"furniture_definition_id,omitempty"`
+	DefinitionVersion     *int              `json:"definition_version,omitempty"`
+	Parameters            map[string]any    `json:"parameters"`
+	MaterialChoices       map[string]string `json:"material_choices"`
+	// OptionFinishes freezes the #1209 finish choice per option group.
+	OptionFinishes        map[string]string                   `json:"option_finishes,omitempty"`
 	MaterialChoiceSources map[string]DesignMaterialProvenance `json:"-"`
 	// MaterialChoiceModes freezes the #784 inheritance lineage per role.
 	// Nil marks a LEGACY pre-#784 revision item: published before the
@@ -427,14 +429,18 @@ func ValidateDesignRevisionApproval(status DesignRevisionStatus) error {
 
 // DesignWorkingItem represents a mutable draft item in a design's working copy.
 type DesignWorkingItem struct {
-	ID                    string                              `json:"id"`
-	ProjectID             string                              `json:"project_id"`
-	DesignID              string                              `json:"design_id"`
-	FurnitureInstanceID   string                              `json:"furniture_instance_id"`
-	FurnitureDefinitionID string                              `json:"furniture_definition_id,omitempty"`
-	DefinitionVersion     *int                                `json:"definition_version,omitempty"`
-	Parameters            map[string]any                      `json:"parameters"`
-	MaterialChoices       map[string]string                   `json:"material_choices"`
+	ID                    string            `json:"id"`
+	ProjectID             string            `json:"project_id"`
+	DesignID              string            `json:"design_id"`
+	FurnitureInstanceID   string            `json:"furniture_instance_id"`
+	FurnitureDefinitionID string            `json:"furniture_definition_id,omitempty"`
+	DefinitionVersion     *int              `json:"definition_version,omitempty"`
+	Parameters            map[string]any    `json:"parameters"`
+	MaterialChoices       map[string]string `json:"material_choices"`
+	// OptionFinishes is the chosen commercial finish per option group
+	// (#1209): group_code -> finish preset id. Client-authorable intent
+	// persisted verbatim alongside the material choices.
+	OptionFinishes        map[string]string                   `json:"option_finishes,omitempty"`
 	MaterialChoiceSources map[string]DesignMaterialProvenance `json:"-"`
 	// MaterialChoiceModes is the #784 per-role inheritance lineage
 	// (design|override), client-authorable intent persisted verbatim —

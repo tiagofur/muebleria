@@ -162,7 +162,7 @@ func (s *PostgresStore) CreateInitialDesignQuoteRevision(ctx context.Context, cm
 				return nil, err
 			}
 			for role, choiceID := range working.MaterialChoices {
-				if _, err = s.db(ctx).Exec(ctx, `INSERT INTO project_item_choices (project_item_id,option_group_code,choice_entity_id,organization_id) VALUES ($1,$2,$3,$4)`, lineID, role, choiceID, ownerOrg); err != nil {
+				if _, err = s.db(ctx).Exec(ctx, `INSERT INTO project_item_choices (project_item_id,option_group_code,choice_entity_id,finish_id,organization_id) VALUES ($1,$2,$3,$4,$5)`, lineID, role, choiceID, nullIfEmpty(working.OptionFinishes[role]), ownerOrg); err != nil {
 					return nil, err
 				}
 			}
@@ -183,17 +183,22 @@ func (s *PostgresStore) CreateInitialDesignQuoteRevision(ctx context.Context, cm
 				return nil, fmt.Errorf("%w: dimensiones de línea y diseño divergen", domain.ErrInvalidRevisionSnapshot)
 			}
 			choices := map[string]string{}
-			rows, qErr := s.db(ctx).Query(ctx, `SELECT option_group_code,choice_entity_id::text FROM project_item_choices WHERE project_item_id=$1`, lineID)
+			rows, qErr := s.db(ctx).Query(ctx, `SELECT option_group_code,choice_entity_id::text,finish_id FROM project_item_choices WHERE project_item_id=$1`, lineID)
 			if qErr != nil {
 				return nil, qErr
 			}
+			finishes := map[string]string{}
 			for rows.Next() {
 				var role, id string
-				if qErr = rows.Scan(&role, &id); qErr != nil {
+				var finishID *string
+				if qErr = rows.Scan(&role, &id, &finishID); qErr != nil {
 					rows.Close()
 					return nil, qErr
 				}
 				choices[role] = id
+				if finishID != nil && *finishID != "" {
+					finishes[role] = *finishID
+				}
 			}
 			rows.Close()
 			if qErr = rows.Err(); qErr != nil {
@@ -202,9 +207,16 @@ func (s *PostgresStore) CreateInitialDesignQuoteRevision(ctx context.Context, cm
 			if len(choices) != len(working.MaterialChoices) || (len(choices) > 0 && !reflect.DeepEqual(choices, working.MaterialChoices)) {
 				return nil, fmt.Errorf("%w: materiales de línea y diseño divergen", domain.ErrInvalidRevisionSnapshot)
 			}
+			wantFinishes := working.OptionFinishes
+			if wantFinishes == nil {
+				wantFinishes = map[string]string{}
+			}
+			if len(finishes) != len(wantFinishes) || (len(finishes) > 0 && !reflect.DeepEqual(finishes, wantFinishes)) {
+				return nil, fmt.Errorf("%w: acabados de línea y diseño divergen", domain.ErrInvalidRevisionSnapshot)
+			}
 		}
 		usedLines[lineID] = true
-		items = append(items, CreateQuoteRevisionItemCommand{QuoteLineID: lineID, FurnitureInstanceID: working.FurnitureInstanceID, FurnitureDefinitionID: working.FurnitureDefinitionID, DefinitionVersion: working.DefinitionVersion, Parameters: working.Parameters, MaterialChoices: working.MaterialChoices, LifecycleStatus: lifecycle})
+		items = append(items, CreateQuoteRevisionItemCommand{QuoteLineID: lineID, FurnitureInstanceID: working.FurnitureInstanceID, FurnitureDefinitionID: working.FurnitureDefinitionID, DefinitionVersion: working.DefinitionVersion, Parameters: working.Parameters, MaterialChoices: working.MaterialChoices, OptionFinishes: working.OptionFinishes, LifecycleStatus: lifecycle})
 	}
 	var liveLineCount int
 	if err := s.db(ctx).QueryRow(ctx, `SELECT count(*) FROM project_items WHERE project_id=$1`, cmd.ProjectID).Scan(&liveLineCount); err != nil {

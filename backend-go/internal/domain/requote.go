@@ -270,6 +270,12 @@ func commercialItemFromDesign(d DesignRevisionItem) CommercialItemSnapshot {
 			item.MaterialChoices[k] = v
 		}
 	}
+	if len(d.OptionFinishes) > 0 {
+		item.OptionFinishes = make(map[string]string, len(d.OptionFinishes))
+		for k, v := range d.OptionFinishes {
+			item.OptionFinishes[k] = v
+		}
+	}
 	return item
 }
 

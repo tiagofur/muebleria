@@ -427,3 +427,32 @@ func TestDesignRevisionDTOCarriesFrozenPresentationAndHonestLegacyState(t *testi
 		t.Fatalf("legacy DTO invented presentation: %#v", legacy)
 	}
 }
+
+// #1209 PR2: the working-copy PUT validates finish ids at the boundary —
+// unknown presets reject with 400 before the store ever sees the write.
+func TestHandleDesignWorkingCopy_PutRejectsUnknownFinish(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	reqBody := `{
+		"source_type": "manual",
+		"expected_working_version": "2026-09-21T00:00:00.000000Z",
+		"items": [
+			{
+				"furniture_instance_id": "` + designTestInstanceID + `",
+				"parameters": {"width": 850},
+				"material_choices": {"JALADERA": "hw-jal"},
+				"option_finishes": {"JALADERA": "rose-gold"}
+			}
+		]
+	}`
+	req := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy", reqBody, string(domain.RoleAdmin))
+	rr := httptest.NewRecorder()
+
+	srv.HandleDesignWorkingCopy(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "rose-gold") {
+		t.Fatalf("body = %s, want it to name the unknown finish", rr.Body.String())
+	}
+}

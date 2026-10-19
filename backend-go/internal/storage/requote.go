@@ -158,16 +158,23 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 			quoteLineID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("granete.quote-line:"+item.FurnitureInstanceID)).String()
 		}
 		materialChoices := make(map[string]string, len(item.MaterialChoices)+len(sourceUnit.Options))
+		optionFinishes := make(map[string]string)
 		if existedInQuote {
 			if sourceUnit.PricingContext == nil || (sourceUnit.PricingContext.StructureRevisionPin == nil && !sourceUnit.PricingContext.StructureIndependent) {
 				return nil, fmt.Errorf("%w: la revisión base no congeló el contexto de precio por unidad; creá una revisión comercial nueva con el contrato actual", domain.ErrQuoteCommercialSnapshotMissing)
 			}
 			for _, option := range sourceUnit.Options {
 				materialChoices[option.GroupCode] = option.ChoiceID
+				if option.FinishID != "" {
+					optionFinishes[option.GroupCode] = option.FinishID
+				}
 			}
 		}
 		for groupCode, choiceID := range item.MaterialChoices {
 			materialChoices[groupCode] = choiceID
+		}
+		for groupCode, finishID := range item.OptionFinishes {
+			optionFinishes[groupCode] = finishID
 		}
 		items[i] = CreateQuoteRevisionItemCommand{
 			FurnitureInstanceID:   item.FurnitureInstanceID,
@@ -176,6 +183,7 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 			DefinitionVersion:     item.DefinitionVersion,
 			Parameters:            item.Parameters,
 			MaterialChoices:       materialChoices,
+			OptionFinishes:        optionFinishes,
 			LifecycleStatus:       item.LifecycleStatus,
 			PricingContext:        domain.CloneQuoteCommercialPricingContext(sourceUnit.PricingContext),
 		}

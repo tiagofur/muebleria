@@ -112,8 +112,8 @@ type QuoteRevisionItem struct {
 // honest absence instead of a misleading 0.
 type QuoteRevisionDetail struct {
 	QuoteRevision
-	CreatedAt                  time.Time
-	Items                      []QuoteRevisionItem
+	CreatedAt                 time.Time
+	Items                     []QuoteRevisionItem
 	CommercialAmountsWithheld bool `json:"commercialAmountsWithheld,omitempty"`
 }
 
@@ -159,6 +159,7 @@ type CommercialItemSnapshot struct {
 	DefinitionVersion     *int              `json:"definitionVersion,omitempty"`
 	Parameters            map[string]any    `json:"parameters,omitempty"`
 	MaterialChoices       map[string]string `json:"materialChoices,omitempty"`
+	OptionFinishes        map[string]string `json:"optionFinishes,omitempty"`
 	LifecycleStatus       string            `json:"lifecycleStatus,omitempty"`
 
 	// Spatial evidence is OPTIONAL and is never persisted in

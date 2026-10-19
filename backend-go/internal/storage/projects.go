@@ -361,7 +361,7 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 
 	for i := range items {
 		choicesQuery := `
-			SELECT option_group_code, choice_entity_id
+			SELECT option_group_code, choice_entity_id, finish_id
 			FROM project_item_choices
 			WHERE project_item_id = $1;
 		`
@@ -374,8 +374,15 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 			items[i].OptionChoices = make(map[string]string)
 			for cRows.Next() {
 				var code, choiceID string
-				if err := cRows.Scan(&code, &choiceID); err == nil {
+				var finishID *string
+				if err := cRows.Scan(&code, &choiceID, &finishID); err == nil {
 					items[i].OptionChoices[code] = choiceID
+					if finishID != nil && *finishID != "" {
+						if items[i].OptionFinishes == nil {
+							items[i].OptionFinishes = make(map[string]string)
+						}
+						items[i].OptionFinishes[code] = *finishID
+					}
 				}
 			}
 		}()
@@ -438,9 +445,9 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 		}
 		for gcode, cid := range item.OptionChoices {
 			if _, err := tx.Exec(ctx, `
-				INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
-				VALUES ($1, $2, $3, $4)
-			`, item.ID, gcode, cid, OrgFromCtx(ctx)); err != nil {
+				INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, finish_id, organization_id)
+				VALUES ($1, $2, $3, $4, $5)
+			`, item.ID, gcode, cid, nullIfEmpty(item.OptionFinishes[gcode]), OrgFromCtx(ctx)); err != nil {
 				return fmt.Errorf("error inserting project item choice: %w", err)
 			}
 		}
@@ -909,13 +916,13 @@ func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, it
 		return err
 	}
 
-	// Insertar choices
+	// Insertar choices (#1209: the finish choice rides its group row).
 	for gcode, cid := range item.OptionChoices {
 		choiceQuery := `
-			INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
-			VALUES ($1, $2, $3, $4);
+			INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, finish_id, organization_id)
+			VALUES ($1, $2, $3, $4, $5);
 		`
-		_, err = tx.Exec(ctx, choiceQuery, item.ID, gcode, cid, OrgFromCtx(ctx))
+		_, err = tx.Exec(ctx, choiceQuery, item.ID, gcode, cid, nullIfEmpty(item.OptionFinishes[gcode]), OrgFromCtx(ctx))
 		if err != nil {
 			return err
 		}

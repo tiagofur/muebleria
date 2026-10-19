@@ -715,10 +715,26 @@ func (s *Server) HandleDesignWorkingCopy(w http.ResponseWriter, r *http.Request)
 					return
 				}
 			}
+			// #1209 wire policy at the boundary: a PRESENT finishes statement
+			// is validated strictly (unknown preset ids reject with 400, like
+			// #784 modes). An ABSENT field is the legacy writer shape — it
+			// stays nil and never fabricates choices.
+			var finishes map[string]string
+			if item.OptionFinishes != nil {
+				finishes = make(map[string]string, len(*item.OptionFinishes))
+				for role, finishID := range *item.OptionFinishes {
+					if !domain.HardwareFinishIDValid(finishID) {
+						respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "acabado "+finishID+" inválido en el grupo "+role, nil)
+						return
+					}
+					finishes[role] = finishID
+				}
+			}
 			cmdItem := storage.UpdateDesignWorkingCopyItemCommand{
 				FurnitureInstanceID: fiID,
 				Parameters:          item.Parameters,
 				MaterialChoices:     item.MaterialChoices,
+				OptionFinishes:      finishes,
 				MaterialChoiceModes: modes,
 			}
 			if item.FurnitureDefinitionID != nil {
