@@ -47,6 +47,9 @@ type CreateQuoteRevisionItemCommand struct {
 	DefinitionVersion     *int
 	Parameters            map[string]any
 	MaterialChoices       map[string]string
+	// OptionFinishes is the transient finish choice per option group (#1209),
+	// frozen into the commercial snapshot like the option choices.
+	OptionFinishes map[string]string
 	LifecycleStatus       string
 	// PricingContext is transient capture provenance stored in the canonical
 	// commercial snapshot, not in quote_revision_items.
