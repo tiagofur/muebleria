@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HardwareVisualAssetBinding } from '@granete/domain';
 
@@ -88,7 +88,13 @@ describe('Hardware3DSection bound-card notice honesty (#669 review blocker)', ()
     expect(notice).toHaveTextContent(
       'El visor web de arriba muestra el modelo exacto vinculado (GLB).',
     );
-    expect(notice).not.toHaveTextContent('representación genérica');
+    // The viewport's own load-status marker may honestly mention the generic
+    // fallback while the exact model loads; the NOTICE itself must only make
+    // the exact claim. Scope the negative to the notice element.
+    const noticeLine = within(notice).getByText(/El visor web de arriba muestra/, {
+      selector: '.hardware-bound-card__notice span',
+    });
+    expect(noticeLine).not.toHaveTextContent('representación genérica');
   });
 
   it('claims the generic representation when no GLB is derived', async () => {
