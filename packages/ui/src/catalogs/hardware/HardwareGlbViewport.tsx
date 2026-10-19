@@ -11,18 +11,22 @@
  * silently disappears.
  */
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
 import type {
   Hardware,
   HardwareVisualAssetBinding,
+  HardwareVisualGlbBinding,
   ProjectedRigidMember,
 } from '@granete/domain';
 import { normalizeHardwarePartFinishes } from '@granete/domain';
 import type { GlbSceneCache } from '../../preview3d/glbSceneCache';
 import { useGlbAssetAuthority } from '../../preview3d/glbAssetSourceContext';
-import { HardwareGlbMesh } from '../../preview3d/HardwareGlbMesh';
+import {
+  HardwareGlbMesh,
+  type HardwareGlbLoadStatus,
+} from '../../preview3d/HardwareGlbMesh';
 import { HardwareMesh } from '../../preview3d/HardwareMesh';
 import { canUseWebGL } from '../../preview3d/webglSupport';
 import type { HardwareDraft } from './hardwareDraft';
@@ -77,10 +81,7 @@ export function hardwareDraftToMember(
       }
     : undefined;
   const glb =
-    binding.glb?.revisionId &&
-    binding.glb.sha256 &&
-    binding.glb.sourceUnits &&
-    binding.glb.upAxis
+    bindingHasCompleteGlb(binding) && binding.glb
       ? {
           revisionId: binding.glb.revisionId,
           sha256: binding.glb.sha256,
@@ -161,9 +162,18 @@ export function hardwareDraftToProcedural(draft: HardwareDraft): Hardware {
  * explicit procedural fallback — the single predicate the viewport branch
  * AND the bound-card notice share, so copy never presents a proxy as exact.
  */
+export type BindingWithCompleteGlb = HardwareVisualAssetBinding & {
+  readonly glb: {
+    readonly revisionId: string;
+    readonly sha256: string;
+    readonly sourceUnits: NonNullable<HardwareVisualGlbBinding['sourceUnits']>;
+    readonly upAxis: NonNullable<HardwareVisualGlbBinding['upAxis']>;
+  };
+};
+
 export function bindingHasCompleteGlb(
   binding: HardwareVisualAssetBinding,
-): boolean {
+): binding is BindingWithCompleteGlb {
   const glb = binding.glb;
   return Boolean(
     glb?.revisionId && glb.sha256 && glb.sourceUnits && glb.upAxis,
@@ -180,6 +190,29 @@ export type HardwareGlbViewportProps = {
   readonly glbCache?: GlbSceneCache;
 };
 
+/**
+ * Marker copy reflects what the canvas ACTUALLY shows (review round-1
+ * suggestion): loading/corrupt/inaccessible/unsupported states say so while
+ * the procedural fallback renders — the marker never claims the exact model
+ * before `ready`.
+ */
+function markerText(
+  hasGlb: boolean,
+  status: HardwareGlbLoadStatus,
+): string {
+  if (!hasGlb) {
+    return 'Representación genérica: este vínculo aún no tiene GLB derivado.';
+  }
+  switch (status) {
+    case 'ready':
+      return 'Modelo exacto del archivo vinculado (GLB).';
+    case 'loading':
+      return 'Cargando el modelo exacto… (se muestra la representación genérica).';
+    default:
+      return `No se pudo cargar el modelo exacto (${status}); se muestra la representación genérica.`;
+  }
+}
+
 export function HardwareGlbViewport({
   draft,
   binding,
@@ -193,6 +226,18 @@ export function HardwareGlbViewport({
     [glbCache, authority.cache],
   );
   const webglAvailable = useMemo(() => canUseWebGL(), []);
+  const [glbStatus, setGlbStatus] = useState<HardwareGlbLoadStatus>('loading');
+  // Render-phase identity reset (React's "adjust state when props change"
+  // pattern): a binding/revision change restarts the tracked status — an
+  // effect would fire AFTER the mesh's own first report and clobber it.
+  const identityKey = `${binding.assetId}|${binding.assetRevisionId}|${
+    binding.glb?.revisionId ?? ''
+  }`;
+  const prevIdentityRef = useRef(identityKey);
+  if (prevIdentityRef.current !== identityKey) {
+    prevIdentityRef.current = identityKey;
+    setGlbStatus('loading');
+  }
   const procedural = (
     <HardwareMesh
       placement={{
@@ -247,7 +292,12 @@ export function HardwareGlbViewport({
         <directionalLight position={[300, 400, 500]} intensity={1.1} />
         <group data-testid="hardware-glb-viewport-content">
           {hasGlb ? (
-            <HardwareGlbMesh member={member} glbCache={cache} fallback={procedural} />
+            <HardwareGlbMesh
+              member={member}
+              glbCache={cache}
+              fallback={procedural}
+              onStatusChange={setGlbStatus}
+            />
           ) : (
             procedural
           )}
@@ -258,9 +308,7 @@ export function HardwareGlbViewport({
         data-testid="hardware-glb-viewport-marker"
         role="status"
       >
-        {hasGlb
-          ? 'Modelo exacto del archivo vinculado (GLB).'
-          : 'Representación genérica: este vínculo aún no tiene GLB derivado.'}
+        {markerText(hasGlb, glbStatus)}
       </p>
     </div>
   );

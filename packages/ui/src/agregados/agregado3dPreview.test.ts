@@ -369,3 +369,43 @@ describe('resolveAgregado3DPreview', () => {
     expect(res.error).toMatch(/No se pudo proyectar el ensamble/);
   });
 });
+
+describe('resolveAgregado3DPreview hardware-only recipe (#669 review note)', () => {
+  it('counts assemblies as content: a rigid-members-only recipe is not empty', () => {
+    const catalogWithRecipe: Module3DCatalogInput = {
+      ...catalogInputConHerrajes,
+      agregados: [
+        {
+          id: 'agr-kit',
+          code: 'KIT',
+          name: 'Kit sólo herraje',
+          commercialKitHardwareId: 'hw-kit-1',
+          rigidMembers: [
+            {
+              memberId: 'jaladera',
+              role: 'pull',
+              source: { kind: 'fixed', fixed: { hardwareId: 'hw-jal-1' } },
+              placement: {
+                x: { ref: 'center', offsetMm: 0 },
+                y: { ref: 'min', offsetMm: 0 },
+                z: { ref: 'center', offsetMm: 0 },
+              },
+              bomRole: 'included_in_kit',
+            },
+          ],
+        },
+      ],
+    };
+    const res = resolveAgregado3DPreview(
+      doorDraft({ components: [] }),
+      catalogWithRecipe,
+      null,
+      'agr-kit',
+    );
+
+    expect(res.error).toBeNull();
+    expect(res.parts).toHaveLength(0);
+    expect(res.assemblies).toHaveLength(1);
+    expect(res.empty).toBe(false);
+  });
+});
