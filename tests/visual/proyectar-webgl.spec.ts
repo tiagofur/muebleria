@@ -1858,3 +1858,421 @@ test('Point 12: WebGL real — #669 exact GLB member renders with canonical unit
   expect(Math.abs(report.worldDeterminant + 1)).toBeLessThan(1e-3);
   expect(consoleErrors).toEqual([]);
 });
+
+// ── Scenario 10 — #670 / #669: exact assembly-member selection in real WebGL ─
+//
+// Proves the selection → inspector wiring shipped in #1370 against Chromium's
+// real pointer pipeline (not jsdom): a REAL mouse click on a rigid member or a
+// fabricated board of a projected assembly opens the AssemblyMemberInspector
+// for THAT node of THAT instance. Two drawers built from one recipe share every
+// memberId, so the second test proves FI-A ↔ FI-B isolation: clicking the same
+// member on the other drawer moves the inspector to the other instance.
+//
+// The harness probes (__graneteScene / __graneteCamera / __graneteRaycaster)
+// are read-only: they only pick a canvas pixel whose FIRST raycast hit is the
+// target node, so the click can never land on an occluding board by accident.
+// The selection itself travels through pointer events + R3F, like a user's.
+
+type AssemblyNodeTarget =
+  | {
+      readonly kind: 'rigid';
+      readonly assemblyInstanceId: string;
+      readonly memberId: string;
+    }
+  | {
+      readonly kind: 'fabricated';
+      readonly assemblyInstanceId: string;
+      readonly componentId: string;
+    }
+  | {
+      /** Any cabinet board whose partId does NOT start with the given prefix. */
+      readonly kind: 'board-outside-assemblies';
+      readonly excludePartIdPrefix: string;
+    };
+
+type PixelPick =
+  | { readonly ok: true; readonly x: number; readonly y: number; readonly hit: string }
+  | { readonly ok: false; readonly error: string; readonly details?: unknown };
+
+/** Seed the guest workspace (data-only, before app mount) and enter as guest. */
+async function seedGuestWorkspace(page: Page, workspace: unknown) {
+  await page.addInitScript((wsJson) => {
+    try {
+      sessionStorage.setItem('granete_session', 'guest');
+      localStorage.setItem('granete_guest_workspace', wsJson);
+      localStorage.setItem('muebles_workspace_v1', wsJson);
+    } catch {
+      /* storage unavailable */
+    }
+  }, JSON.stringify(workspace));
+}
+
+async function pickUnoccludedPixel(
+  page: Page,
+  canvasSelector: string,
+  target: AssemblyNodeTarget,
+): Promise<PixelPick & { box?: { x: number; y: number; width: number; height: number } }> {
+  const box = await page.locator(canvasSelector).boundingBox();
+  if (!box) return { ok: false, error: `canvas not visible: ${canvasSelector}` };
+  const pick = await page.evaluate(
+    ({ target, width, height }) => {
+      type V3 = {
+        x: number;
+        y: number;
+        z: number;
+        set(x: number, y: number, z: number): V3;
+        applyMatrix4(m: unknown): V3;
+        project(camera: unknown): V3;
+      };
+      type Obj = {
+        userData?: Record<string, unknown>;
+        parent?: Obj | null;
+        children?: Obj[];
+        isMesh?: boolean;
+        geometry?: {
+          computeBoundingBox(): void;
+          boundingBox: { min: V3; max: V3 } | null;
+        };
+        matrixWorld: unknown;
+        traverse(cb: (o: Obj) => void): void;
+        updateMatrixWorld(force?: boolean): void;
+      };
+      type Raycaster = {
+        setFromCamera(coords: { x: number; y: number }, camera: unknown): void;
+        intersectObjects(objects: Obj[], recursive: boolean): { object: Obj }[];
+      };
+      const probes = window as unknown as {
+        __graneteScene?: Obj;
+        __graneteCamera?: { updateMatrixWorld(force?: boolean): void; position: V3 };
+        __graneteRaycaster?: Raycaster & { constructor: new () => Raycaster };
+      };
+      const scene = probes.__graneteScene;
+      const camera = probes.__graneteCamera;
+      const sharedRaycaster = probes.__graneteRaycaster;
+      if (!scene || !camera || !sharedRaycaster) {
+        return { ok: false as const, error: 'harness probes unavailable' };
+      }
+      // Fresh raycaster so the R3F shared one is never mutated by the test.
+      const raycaster = new sharedRaycaster.constructor();
+
+      let targetObj: Obj | null = null;
+      const seen: string[] = [];
+      scene.traverse((o) => {
+        const ud = o.userData ?? {};
+        if (ud.assemblyInstanceId && ud.memberId) {
+          seen.push(`${String(ud.assemblyInstanceId)}/${String(ud.memberId)}`);
+        }
+        if (ud.partId) seen.push(`part:${String(ud.partId)}`);
+        if (targetObj) return;
+        if (target.kind === 'rigid') {
+          if (
+            ud.assemblyInstanceId === target.assemblyInstanceId &&
+            ud.memberId === target.memberId &&
+            ud.renderStatus
+          ) {
+            targetObj = o;
+          }
+        } else if (target.kind === 'fabricated') {
+          if (ud.partId === `${target.assemblyInstanceId}-${target.componentId}`) targetObj = o;
+        } else if (
+          typeof ud.partId === 'string' &&
+          !ud.partId.startsWith(target.excludePartIdPrefix) &&
+          o.isMesh
+        ) {
+          targetObj = o;
+        }
+      });
+      if (!targetObj) {
+        return { ok: false as const, error: 'target node not in scene', details: seen.slice(0, 60) };
+      }
+      const tgt: Obj = targetObj;
+      const inTarget = (o: Obj | null | undefined): boolean => {
+        let cursor: Obj | null | undefined = o;
+        while (cursor) {
+          if (cursor === tgt) return true;
+          cursor = cursor.parent;
+        }
+        return false;
+      };
+      const meshes: Obj[] = [];
+      tgt.traverse((o) => {
+        if (o.isMesh && o.geometry) meshes.push(o);
+      });
+      if (meshes.length === 0) return { ok: false as const, error: 'target has no mesh' };
+
+      scene.updateMatrixWorld(true);
+      camera.updateMatrixWorld(true);
+      const Vector3 = camera.position.constructor as new () => V3;
+
+      // Projected NDC rectangle of the target from its meshes' bbox corners.
+      let minX = 1;
+      let minY = 1;
+      let maxX = -1;
+      let maxY = -1;
+      for (const m of meshes) {
+        m.geometry!.computeBoundingBox();
+        const bb = m.geometry!.boundingBox!;
+        for (const cx of [bb.min.x, bb.max.x]) {
+          for (const cy of [bb.min.y, bb.max.y]) {
+            for (const cz of [bb.min.z, bb.max.z]) {
+              const p = new Vector3().set(cx, cy, cz).applyMatrix4(m.matrixWorld).project(camera);
+              minX = Math.min(minX, p.x);
+              maxX = Math.max(maxX, p.x);
+              minY = Math.min(minY, p.y);
+              maxY = Math.max(maxY, p.y);
+            }
+          }
+        }
+      }
+
+      // Sample a grid inside that rectangle, centre-out; keep the first pixel
+      // whose FIRST hit belongs to the target.
+      const steps = 11;
+      const candidates: { x: number; y: number; d: number }[] = [];
+      for (let i = 0; i <= steps; i++) {
+        for (let j = 0; j <= steps; j++) {
+          const nx = minX + ((maxX - minX) * i) / steps;
+          const ny = minY + ((maxY - minY) * j) / steps;
+          if (nx < -1 || nx > 1 || ny < -1 || ny > 1) continue;
+          candidates.push({ x: nx, y: ny, d: Math.hypot(i - steps / 2, j - steps / 2) });
+        }
+      }
+      candidates.sort((a, b) => a.d - b.d);
+      let firstHit = 'none';
+      for (const c of candidates) {
+        raycaster.setFromCamera({ x: c.x, y: c.y }, camera);
+        const hits = raycaster.intersectObjects(scene.children ?? [], true);
+        if (hits.length === 0) continue;
+        const hitObject = hits[0]!.object;
+        if (firstHit === 'none') firstHit = JSON.stringify(hitObject.userData ?? {}).slice(0, 160);
+        if (inTarget(hitObject)) {
+          return {
+            ok: true as const,
+            x: ((c.x + 1) / 2) * width,
+            y: ((1 - c.y) / 2) * height,
+            hit: JSON.stringify(hitObject.userData ?? {}).slice(0, 160),
+          };
+        }
+      }
+      return {
+        ok: false as const,
+        error: 'target fully occluded from this camera',
+        details: {
+          firstHit,
+          rect: [minX, minY, maxX, maxY],
+          cameraPos: [
+            Math.round(camera.position.x),
+            Math.round(camera.position.y),
+            Math.round(camera.position.z),
+          ],
+        },
+      };
+    },
+    { target, width: box.width, height: box.height },
+  );
+  return { ...pick, box };
+}
+
+/**
+ * Real mouse click on an assembly node inside a Furniture3DViewer. Tries the
+ * current camera first, then the viewer's camera presets, until the node has
+ * an unoccluded pixel. Throws with the raycast diagnostics otherwise.
+ */
+async function clickAssemblyNode(
+  page: Page,
+  viewerTestId: string,
+  target: AssemblyNodeTarget,
+) {
+  const canvasSelector = `[data-testid="${viewerTestId}-viewport"] canvas`;
+  const views = [null, 'front', 'isometric', 'side', 'top'] as const;
+  const attempts: Record<string, unknown> = {};
+  for (const view of views) {
+    if (view) {
+      await page.getByTestId(`${viewerTestId}-camera-${view}`).click();
+      await settleCanvas(page);
+    }
+    const pick = await pickUnoccludedPixel(page, canvasSelector, target);
+    attempts[view ?? 'current'] = pick.ok ? 'ok' : pick;
+    if (pick.ok && pick.box) {
+      await page.mouse.click(pick.box.x + pick.x, pick.box.y + pick.y);
+      return pick;
+    }
+  }
+  throw new Error(`could not click ${JSON.stringify(target)}: ${JSON.stringify(attempts)}`);
+}
+
+test('Point 13: WebGL real — clicking a rigid member opens the exact-node inspector (Agregado 3D modal)', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const pageErrors: string[] = [];
+  page.on('pageerror', (err) => pageErrors.push(err.message));
+
+  await seedGuestWorkspace(page, createDrawerAssemblySeedWorkspace());
+  await page.goto('/add-ons');
+  await page.getByTestId('agregado-card-AGR-SYS').click();
+  await page.getByTestId('agregado-detail-view-3d').click();
+  await page.waitForSelector('[data-testid="agregado-3d-viewer-viewport"] canvas', {
+    timeout: 45_000,
+  });
+  await settleCanvas(page);
+
+  const viewer = 'agregado-3d-viewer';
+  const inspector = `${viewer}-assembly-member-inspector`;
+  const instanceId = 'agregado-preview:agr-drawer-system';
+
+  // No selection yet → the board PartInspector placeholder is shown, not ours.
+  await expect(page.getByTestId(inspector)).toHaveCount(0);
+
+  const pick = await clickAssemblyNode(page, viewer, {
+    kind: 'rigid',
+    assemblyInstanceId: instanceId,
+    memberId: 'runner-right',
+  });
+  expect(pick.ok).toBe(true);
+
+  await expect(page.getByTestId(inspector)).toHaveAttribute('data-kind', 'rigid');
+  await expect(page.getByTestId(`${inspector}-code`)).toHaveText('runner-right');
+  await expect(page.getByTestId(`${inspector}-instance`)).toHaveText(instanceId);
+  await expect(page.getByTestId(`${inspector}-agregado`)).toHaveText('agr-drawer-system');
+  await expect(page.getByTestId(`${inspector}-role`)).toHaveText('guide_right');
+  // Variant chosen by the resolver (depth-driven); the inspector shows the
+  // catalog code + name, never a bare id, whichever runner was selected.
+  await expect(page.getByTestId(`${inspector}-hardware`)).toHaveText(
+    /^RUN-(400|500) · Runner (400|500)mm$/,
+  );
+  await expect(page.getByTestId(`${inspector}-bom-role`)).toHaveText('Incluido en el juego');
+  await expect(page.getByTestId(`${inspector}-render-status`)).toContainText('Estado 3D:');
+  await expect(page.getByTestId(`${inspector}-recipe`)).toContainText('Receta en vivo');
+
+  // Clicking the same node again toggles the selection off.
+  await clickAssemblyNode(page, viewer, {
+    kind: 'rigid',
+    assemblyInstanceId: instanceId,
+    memberId: 'runner-right',
+  });
+  await expect(page.getByTestId(inspector)).toHaveCount(0);
+
+  // The clear button path: select, then clear from the inspector header.
+  await clickAssemblyNode(page, viewer, {
+    kind: 'rigid',
+    assemblyInstanceId: instanceId,
+    memberId: 'runner-left',
+  });
+  await expect(page.getByTestId(`${inspector}-code`)).toHaveText('runner-left');
+  await page.getByTestId(`${inspector}-clear`).click();
+  await expect(page.getByTestId(inspector)).toHaveCount(0);
+
+  expect(pageErrors, `page errors: ${pageErrors.join(' | ')}`).toEqual([]);
+});
+
+test('Point 14: WebGL real — two drawers from one recipe: the inspector follows the exact instance (FI-A ≠ FI-B)', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const pageErrors: string[] = [];
+  page.on('pageerror', (err) => pageErrors.push(err.message));
+
+  // Second instance of the SAME agregado on the same module: identical
+  // memberIds / componentIds, distinct assemblyInstanceIds. The seed cabinet
+  // carries a door that hides the interior from every camera (the raycast
+  // picker proved it: first hit = "Puerta Gabinete"), so this module is the
+  // open carcass, and both drawers sit between the side panels like real ones.
+  const customWs = createDrawerAssemblySeedWorkspace();
+  const drawerModule = customWs.catalog.modules[0] as {
+    id: string;
+    components?: readonly { componentId: string }[];
+    agregados?: unknown[];
+  };
+  drawerModule.components = (drawerModule.components ?? []).filter(
+    (c) => c.componentId !== 'comp-gab-puerta',
+  );
+  const insetDrawer = (id: string, zFormula: string) => ({
+    id,
+    agregadoId: 'agr-drawer-system',
+    quantity: 1,
+    position: { xFormula: '18', yFormula: '0', zFormula },
+    dimensions: { widthFormula: 'PW-36', heightFormula: '200', depthFormula: 'PD' },
+  });
+  drawerModule.agregados = [insetDrawer('inst-drawer-1', '100'), insetDrawer('inst-drawer-2', '350')];
+
+  await seedGuestWorkspace(page, customWs);
+  await page.goto('/modules');
+  await page.getByTestId(`module-card-${drawerModule.id}`).click();
+  await page.getByTestId('view-3d-btn').click();
+  await page.waitForSelector('[data-testid="module-3d-viewer-viewport"] canvas', {
+    timeout: 45_000,
+  });
+  await settleCanvas(page);
+
+  const viewer = 'module-3d-viewer';
+  const inspector = `${viewer}-assembly-member-inspector`;
+
+  // Both instances are projected into the same scene with the same node ids.
+  const projected = await page.evaluate(() => {
+    const scene = (window as unknown as { __graneteScene?: { traverse(cb: (o: unknown) => void): void } })
+      .__graneteScene;
+    const found: Record<string, string[]> = {};
+    scene?.traverse((o) => {
+      const ud = (o as { userData?: Record<string, unknown> }).userData ?? {};
+      if (ud.assemblyInstanceId && ud.memberId) {
+        const key = String(ud.assemblyInstanceId);
+        (found[key] ??= []).push(String(ud.memberId));
+      }
+    });
+    return found;
+  });
+  expect(Object.keys(projected).sort()).toEqual(['inst-drawer-1', 'inst-drawer-2']);
+  expect([...(projected['inst-drawer-1'] ?? [])].sort()).toEqual(
+    [...(projected['inst-drawer-2'] ?? [])].sort(),
+  );
+
+  // FI-A fabricated bottom → inspector pins instance 1.
+  await clickAssemblyNode(page, viewer, {
+    kind: 'fabricated',
+    assemblyInstanceId: 'inst-drawer-1',
+    componentId: 'comp-bottom-panel',
+  });
+  await expect(page.getByTestId(inspector)).toHaveAttribute('data-kind', 'fabricated');
+  await expect(page.getByTestId(`${inspector}-code`)).toHaveText('comp-bottom-panel');
+  await expect(page.getByTestId(`${inspector}-instance`)).toHaveText('inst-drawer-1');
+  await expect(page.getByTestId(`${inspector}-thickness`)).toHaveText('15 mm');
+
+  // FI-B: same componentId, other instance → the inspector must move.
+  await clickAssemblyNode(page, viewer, {
+    kind: 'fabricated',
+    assemblyInstanceId: 'inst-drawer-2',
+    componentId: 'comp-bottom-panel',
+  });
+  await expect(page.getByTestId(`${inspector}-code`)).toHaveText('comp-bottom-panel');
+  await expect(page.getByTestId(`${inspector}-instance`)).toHaveText('inst-drawer-2');
+
+  // Rigid member with the SAME memberId on each drawer → instance follows.
+  await clickAssemblyNode(page, viewer, {
+    kind: 'rigid',
+    assemblyInstanceId: 'inst-drawer-2',
+    memberId: 'runner-left',
+  });
+  await expect(page.getByTestId(inspector)).toHaveAttribute('data-kind', 'rigid');
+  await expect(page.getByTestId(`${inspector}-code`)).toHaveText('runner-left');
+  await expect(page.getByTestId(`${inspector}-instance`)).toHaveText('inst-drawer-2');
+
+  await clickAssemblyNode(page, viewer, {
+    kind: 'rigid',
+    assemblyInstanceId: 'inst-drawer-1',
+    memberId: 'runner-left',
+  });
+  await expect(page.getByTestId(`${inspector}-code`)).toHaveText('runner-left');
+  await expect(page.getByTestId(`${inspector}-instance`)).toHaveText('inst-drawer-1');
+
+  // Selecting a cabinet board (not part of any assembly) clears the member
+  // selection and hands the aside back to the board PartInspector.
+  await clickAssemblyNode(page, viewer, {
+    kind: 'board-outside-assemblies',
+    excludePartIdPrefix: 'inst-drawer-',
+  });
+  await expect(page.getByTestId(inspector)).toHaveCount(0);
+  await expect(page.getByTestId(`${viewer}-part-inspector-title`)).toBeVisible();
+
+  expect(pageErrors, `page errors: ${pageErrors.join(' | ')}`).toEqual([]);
+});
