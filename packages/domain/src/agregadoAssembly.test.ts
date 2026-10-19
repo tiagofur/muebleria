@@ -1356,6 +1356,99 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
       expect(typeof validateAgregadoAssemblyDefinition).toBe('function');
       expect(typeof projectResolvedAssemblyFor3D).toBe('function');
     });
+
+    describe('Acceptance #4 — three drawers from one recipe stay independent (#670)', () => {
+      const PARAMS = { widthMm: 570, depthMm: 530, heightMm: 200 };
+      const memberIds = (a: { rigidMembers: readonly { memberId: string }[] }): string[] =>
+        a.rigidMembers.map((m) => m.memberId);
+      const componentIds = (a: {
+        fabricatedComponents: readonly { componentId: string }[];
+      }): string[] => a.fabricatedComponents.map((c) => c.componentId);
+
+      it('FI-A / FI-B / FI-C share member and component ids but carry distinct instance ids', () => {
+        const fixture = createMerivoboxPilotFixture();
+        const resolved = resolveAgregadoAssembly(fixture, PARAMS);
+        const projected = ['fi-a', 'fi-b', 'fi-c'].map((assemblyInstanceId) =>
+          projectResolvedAssemblyFor3D({
+            assembly: resolved,
+            placement: { originMm: [0, 0, 0] },
+            assemblyInstanceId,
+          }),
+        );
+
+        expect(new Set(projected.map((p) => p.assemblyInstanceId)).size).toBe(3);
+        for (const p of projected) {
+          expect(memberIds(p)).toEqual(['side-left', 'side-right', 'runner-left', 'runner-right']);
+          expect(componentIds(p)).toEqual(componentIds(projected[0]!));
+          expect(p.agregadoId).toBe('agr-merivobox-m');
+        }
+        // Member ids are recipe identity, never derived from the instance or array position.
+        expect(memberIds(projected[2]!)).toEqual(memberIds(projected[0]!));
+      });
+
+      it('resolving FI-A at W+200 leaves FI-B byte-identical (no shared mutable state in the resolver)', () => {
+        const fixture = createMerivoboxPilotFixture();
+        const fiBBefore = JSON.stringify(resolveAgregadoAssembly(fixture, PARAMS));
+
+        const fiA = resolveAgregadoAssembly(fixture, { ...PARAMS, widthMm: PARAMS.widthMm + 200 });
+        const fiBAfter = resolveAgregadoAssembly(fixture, PARAMS);
+
+        expect(JSON.stringify(fiBAfter)).toBe(fiBBefore);
+        const rightA = fiA.rigidMembers.find((m) => m.memberId === 'side-right')!;
+        const rightB = fiBAfter.rigidMembers.find((m) => m.memberId === 'side-right')!;
+        expect(rightA.localTransform.translationMm[0] - rightB.localTransform.translationMm[0]).toBe(200);
+        expect(rightA.localTransform.basis).toEqual(rightB.localTransform.basis);
+      });
+
+      it('reordering recipe members/components does not change ids, hosts or transforms (identity is declared, not positional)', () => {
+        const fixture = createMerivoboxPilotFixture();
+        const reordered: AgregadoAssemblyInput = {
+          ...fixture,
+          rigidMembers: [...fixture.rigidMembers!].reverse(),
+          components: [...fixture.components!].reverse(),
+        };
+
+        const base = resolveAgregadoAssembly(fixture, PARAMS);
+        const re = resolveAgregadoAssembly(reordered, PARAMS);
+
+        const baseMembers = new Map(base.rigidMembers.map((m) => [m.memberId, m]));
+        const reMembers = new Map(re.rigidMembers.map((m) => [m.memberId, m]));
+        expect([...reMembers.keys()].sort()).toEqual([...baseMembers.keys()].sort());
+        for (const [id, m] of baseMembers) expect(reMembers.get(id)).toEqual(m);
+
+        const baseComps = new Map(base.fabricatedComponents.map((c) => [c.componentId, c]));
+        const reComps = new Map(re.fabricatedComponents.map((c) => [c.componentId, c]));
+        expect([...reComps.keys()].sort()).toEqual([...baseComps.keys()].sort());
+        for (const [id, c] of baseComps) expect(reComps.get(id)).toEqual(c);
+
+        expect(re.bomItems).toHaveLength(base.bomItems.length);
+        expect(re.selectedVariants).toEqual(base.selectedVariants);
+      });
+
+      it('a copied drawer re-projected under a new instance id is a distinct node set with the same members', () => {
+        const fixture = createMerivoboxPilotFixture();
+        const resolved = resolveAgregadoAssembly(fixture, PARAMS);
+        const original = projectResolvedAssemblyFor3D({
+          assembly: resolved,
+          placement: { originMm: [0, 0, 0] },
+          assemblyInstanceId: 'fi-a',
+        });
+        const copy = projectResolvedAssemblyFor3D({
+          assembly: resolved,
+          placement: { originMm: [0, 250, 0] },
+          assemblyInstanceId: 'fi-a-copy',
+        });
+
+        expect(copy.assemblyInstanceId).not.toBe(original.assemblyInstanceId);
+        expect(memberIds(copy)).toEqual(memberIds(original));
+        expect(copy.placement.originMm).toEqual([0, 250, 0]);
+        // Member-local transforms are identical: the copy moved as a unit, nothing was re-derived.
+        for (const m of original.rigidMembers) {
+          const twin = copy.rigidMembers.find((c) => c.memberId === m.memberId)!;
+          expect(twin.effectiveTransform).toEqual(m.effectiveTransform);
+        }
+      });
+    });
   });
 
   describe('#669 GLB representation projection (web co-representation)', () => {
