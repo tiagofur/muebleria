@@ -31,6 +31,7 @@ import type { HardwareDraft } from './hardwareDraft';
 import { WorkspaceTabs } from '../../common';
 import { HardwareAssetSelectorModal } from './HardwareAssetSelectorModal';
 import { HardwareAssetUploadModal } from './HardwareAssetUploadModal';
+import { HardwareGlbViewport } from './HardwareGlbViewport';
 
 export interface Hardware3DSectionProps {
   readonly draft: HardwareDraft;
@@ -253,11 +254,16 @@ export function Hardware3DSection({
                       </details>
                     </div>
 
+                    <HardwareGlbViewport
+                      draft={draft}
+                      binding={draft.visualAsset}
+                    />
+
                     <div className="hardware-bound-card__notice">
                       <Info size={15} aria-hidden />
                       <span>
                         La visualización de este archivo en SketchUp se incorporará en la siguiente
-                        entrega.
+                        entrega. El visor web de arriba muestra el modelo exacto vinculado.
                       </span>
                     </div>
 
