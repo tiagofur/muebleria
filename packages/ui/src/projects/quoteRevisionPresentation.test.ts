@@ -148,6 +148,31 @@ describe('quoteRevisionPresentation', () => {
       },
     ];
 
+    it('carries the frozen hardware finish through to the unit view (#1209)', () => {
+      const finished: QuoteCommercialSnapshot = {
+        ...sampleSnapshot,
+        units: [
+          {
+            ...sampleSnapshot.units[0]!,
+            options: [
+              {
+                groupCode: 'BISAGRA',
+                groupLabel: 'Bisagras',
+                choiceId: 'hw-bis',
+                choiceLabel: 'Bisagra Blum',
+                finishId: 'black-matte',
+                finishLabel: 'Negro mate',
+              },
+            ],
+          },
+        ],
+      };
+      const result = buildRevisionLines(finished, sampleItems);
+      const option = result[0]!.units[0]!.options[0]!;
+      expect(option.finishId).toBe('black-matte');
+      expect(option.finishLabel).toBe('Negro mate');
+    });
+
     it('joins lines, units and items strictly by quoteLineId and furnitureInstanceId', () => {
       const result = buildRevisionLines(sampleSnapshot, sampleItems);
       expect(result).toHaveLength(2);

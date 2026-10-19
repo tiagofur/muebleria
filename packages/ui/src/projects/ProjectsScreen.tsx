@@ -795,6 +795,7 @@ export function ProjectsScreen({
             onUpdateItemQuantity: state.updateItemQuantity,
             onUpdateItemMeasurePreset: state.updateItemMeasurePreset,
             onUpdateItemChoice: state.updateItemChoice,
+            onUpdateItemFinish: state.updateItemFinish,
             onRemoveItem,
             onReorderItems: onReorderItems
               ? (fromIndex, toIndex) => {

@@ -55,9 +55,15 @@ export function commercialLifecycleTimestamp(
 }
 
 function unitOptionsSummary(
-  options: ReadonlyArray<{ groupLabel: string; choiceLabel: string }>,
+  options: ReadonlyArray<{
+    groupLabel: string;
+    choiceLabel: string;
+    finishLabel?: string;
+  }>,
 ): string {
-  return options.map((o) => `${o.groupLabel}: ${o.choiceLabel}`).join('; ');
+  return options
+    .map((o) => `${o.groupLabel}: ${o.choiceLabel}${o.finishLabel ? ` · ${o.finishLabel}` : ''}`)
+    .join('; ');
 }
 
 export interface BuildExactCommercialQuoteExportModelOptions {

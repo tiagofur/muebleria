@@ -1862,10 +1862,12 @@ type QuoteCommercialLineAmounts struct {
 }
 
 type QuoteCommercialOption struct {
-	GroupCode   string `json:"groupCode"`
-	GroupLabel  string `json:"groupLabel"`
-	ChoiceId    string `json:"choiceId"`
-	ChoiceLabel string `json:"choiceLabel"`
+	GroupCode   string  `json:"groupCode"`
+	GroupLabel  string  `json:"groupLabel"`
+	ChoiceId    string  `json:"choiceId"`
+	ChoiceLabel string  `json:"choiceLabel"`
+	FinishId    *string `json:"finishId,omitempty"`
+	FinishLabel *string `json:"finishLabel,omitempty"`
 }
 
 type FurnitureWorkspaceContextKind string

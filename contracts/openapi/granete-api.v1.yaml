@@ -13961,7 +13961,7 @@
       },
       "QuoteCommercialOption": {
         "type": "object",
-        "description": "One frozen customer-facing option descriptor: option group and chosen entity, each with exact identity and captured label (#642).",
+        "description": "One frozen customer-facing option descriptor: option group and chosen entity, each with exact identity and captured label (#642). finishId/finishLabel freeze the chosen hardware finish (#1209).",
         "additionalProperties": false,
         "required": [
           "groupCode",
@@ -13980,6 +13980,12 @@
             "type": "string"
           },
           "choiceLabel": {
+            "type": "string"
+          },
+          "finishId": {
+            "type": "string"
+          },
+          "finishLabel": {
             "type": "string"
           }
         }
