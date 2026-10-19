@@ -368,6 +368,133 @@ describe('resolveAgregado3DPreview', () => {
     expect(res.assemblies).toEqual([]);
     expect(res.error).toMatch(/No se pudo proyectar el ensamble/);
   });
+
+  // Regression (#669 browser gate): the agregado preview projected fabricated
+  // boards WITHOUT the R3 thickness/material authority the module path applies,
+  // so AssemblyMesh threw at render time and the whole 3D view died with
+  // "Error al renderizar la vista 3D". Both paths now share the enrichment.
+  describe('fabricated boards carry authoritative thickness before projection (R3)', () => {
+    const fondoComponent: Component = {
+      id: 'c-fondo',
+      code: 'FND',
+      name: 'Fondo de cajón',
+      placement: 'base',
+      geometry: { kind: 'rectangular_board', lengthMm: 500, widthMm: 500, thicknessMm: 15 },
+      defaultEdges: [],
+      optionRoles: ['INTERIOR'],
+      active: true,
+    };
+    const recipeWithBoard = (componentId: string) => ({
+      id: 'agr-cajon-fondo',
+      code: 'CAJF',
+      name: 'Cajón con fondo',
+      commercialKitHardwareId: 'hw-kit-1',
+      rigidMembers: [
+        {
+          memberId: 'lateral-izq',
+          role: 'side_left',
+          source: { kind: 'fixed' as const, fixed: { hardwareId: 'hw-jal-1' } },
+          placement: {
+            x: { ref: 'min' as const, offsetMm: 0 },
+            y: { ref: 'min' as const, offsetMm: 0 },
+            z: { ref: 'min' as const, offsetMm: 0 },
+          },
+          bomRole: 'included_in_kit' as const,
+        },
+      ],
+      components: [
+        {
+          componentId,
+          quantity: 1,
+          overrides: {
+            widthRule: { source: 'assembly_width' as const, offsetMm: -35 },
+            lengthRule: { source: 'assembly_depth' as const, offsetMm: -10 },
+            placementRule: {
+              x: { ref: 'min' as const, offsetMm: 17.5 },
+              y: { ref: 'min' as const, offsetMm: 5 },
+              z: { ref: 'min' as const, offsetMm: 15 },
+            },
+          },
+        },
+      ],
+    });
+
+    it('takes thickness and material from the bound board material when the role has a choice', () => {
+      const catalog: Module3DCatalogInput = {
+        ...catalogInputConHerrajes,
+        components: [mockComponent, fondoComponent],
+        materials: [
+          ...mockCatalogInput.materials,
+          {
+            id: 'mat-int-16',
+            code: 'MEL16',
+            name: 'Melamina 16',
+            widthMm: 1830,
+            lengthMm: 2600,
+            thicknessMm: 16,
+            grainDefault: true,
+            boardPrice: 80,
+            wastePercent: 10,
+            costPerM2: 15,
+            active: true,
+          },
+        ],
+        optionGroups: [
+          ...mockCatalogInput.optionGroups,
+          {
+            id: 'og-interior',
+            code: 'INTERIOR',
+            name: 'Interior',
+            kind: 'board',
+            required: true,
+            optionIds: ['mat-int-16'],
+          },
+        ],
+        agregados: [recipeWithBoard('c-fondo')],
+      };
+
+      const res = resolveAgregado3DPreview(
+        doorDraft(),
+        catalog,
+        { INTERIOR: 'mat-int-16' },
+        'agr-cajon-fondo',
+      );
+
+      expect(res.error).toBeNull();
+      expect(res.assemblies).toHaveLength(1);
+      const [fondo] = res.assemblies[0]!.fabricatedComponents;
+      expect(fondo?.componentId).toBe('c-fondo');
+      expect(fondo?.thicknessMm).toBe(16);
+      expect(fondo?.materialId).toBe('mat-int-16');
+    });
+
+    it('falls back to the component geometry thickness when no material is bound', () => {
+      const catalog: Module3DCatalogInput = {
+        ...catalogInputConHerrajes,
+        components: [mockComponent, fondoComponent],
+        agregados: [recipeWithBoard('c-fondo')],
+      };
+
+      const res = resolveAgregado3DPreview(doorDraft(), catalog, null, 'agr-cajon-fondo');
+
+      expect(res.error).toBeNull();
+      const [fondo] = res.assemblies[0]!.fabricatedComponents;
+      expect(fondo?.thicknessMm).toBe(15);
+    });
+
+    it('reports an honest diagnostic instead of a render crash when no thickness authority exists', () => {
+      const catalog: Module3DCatalogInput = {
+        ...catalogInputConHerrajes,
+        agregados: [recipeWithBoard('c-fantasma')],
+      };
+
+      const res = resolveAgregado3DPreview(doorDraft(), catalog, null, 'agr-cajon-fondo');
+
+      expect(res.parts).toHaveLength(1);
+      expect(res.assemblies).toEqual([]);
+      expect(res.error).toMatch(/thicknessMm not found for fabricated component 'c-fantasma'/);
+    });
+  });
 });
 
 describe('resolveAgregado3DPreview hardware-only recipe (#669 review note)', () => {
