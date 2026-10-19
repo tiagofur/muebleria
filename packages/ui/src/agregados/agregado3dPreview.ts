@@ -13,17 +13,30 @@
  * parametric hardware placements (jaladeras/bisagras per piece, reused from
  * `resolveModuleHardwarePlacements`); real textures are follow-ups, mirroring
  * how `resolveStructure3DPreview` / StructureEditorComponentsPanel behave.
+ *
+ * #669: when the caller passes the catalog agregado id, the resolver also
+ * projects the agregado's own rigid-member assembly recipe (same
+ * resolveAgregadoAssembly → attachVisualPins → projectResolvedAssemblyFor3D
+ * path the module previews use) at identity placement, so its GLB members
+ * render through the shared AssemblyMesh path.
  */
 
 import type {
   Catalog,
   DimensionPreset,
   OptionChoices,
+  ProjectedAssembly,
   ResolvedBoardPart,
   ResolvedHardwarePlacement,
   Structure,
 } from '@granete/domain';
-import { resolveComposedModule } from '@granete/domain';
+import {
+  attachVisualPins,
+  createCatalogVisualAssetLookup,
+  projectResolvedAssemblyFor3D,
+  resolveAgregadoAssembly,
+  resolveComposedModule,
+} from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
 import { resolveModuleHardwarePlacements } from '../preview3d/project3dPreview';
@@ -34,6 +47,12 @@ export type Agregado3DPreviewResult = {
   readonly parts: readonly ResolvedBoardPart[];
   /** Board-local hardware placements resolved against `parts` (empty = none renderable). */
   readonly resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
+  /**
+   * Projected rigid-member assemblies of the catalog agregado itself (#669).
+   * Empty when the caller passes no agregado id, the catalog entry has no
+   * assembly recipe, or the recipe fails to resolve (diagnostic in `error`).
+   */
+  readonly assemblies: readonly ProjectedAssembly[];
   readonly width: number;
   readonly height: number;
   readonly depth: number;
@@ -60,11 +79,16 @@ function dimsFromDraft(draft: AgregadoDraft): {
 /**
  * Resolve 3D preview for an agregado draft.
  * @param optionChoicesOverride partial board finishes merged over defaults
+ * @param agregadoId catalog agregado id whose assembly recipe to project as
+ * `assemblies` (#669). The draft itself never carries a recipe, so the caller
+ * passes the authoritative identity explicitly; unknown id or no recipe →
+ * empty assemblies, never invented geometry.
  */
 export function resolveAgregado3DPreview(
   draft: AgregadoDraft,
   catalogInput: Module3DCatalogInput,
   optionChoicesOverride?: OptionChoices | null,
+  agregadoId?: string | null,
 ): Agregado3DPreviewResult {
   const dims = dimsFromDraft(draft);
 
@@ -174,14 +198,57 @@ export function resolveAgregado3DPreview(
       { optionChoices },
     );
 
+    // #669: project the catalog agregado's own assembly recipe at identity
+    // placement. Same canonical path as module previews
+    // (resolveAgregadoAssembly → attachVisualPins → projectResolvedAssemblyFor3D);
+    // a recipe failure is an honest diagnostic that keeps the resolved pieces.
+    let assemblies: readonly ProjectedAssembly[] = [];
+    let assemblyError: string | null = null;
+    const trimmedId = agregadoId?.trim() ?? '';
+    if (trimmedId) {
+      const recipe = (catalogInput.agregados ?? []).find((a) => a.id === trimmedId);
+      if (recipe && recipe.rigidMembers && recipe.rigidMembers.length > 0) {
+        try {
+          const resolved = resolveAgregadoAssembly(
+            {
+              id: recipe.id,
+              commercialKitHardwareId: recipe.commercialKitHardwareId,
+              components: recipe.components,
+              rigidMembers: recipe.rigidMembers,
+              variantSets: recipe.variantSets,
+              compatibilityRules: recipe.compatibilityRules,
+            },
+            { widthMm: dims.width, depthMm: dims.depth, heightMm: dims.height },
+          );
+          const pinned = attachVisualPins(
+            resolved,
+            createCatalogVisualAssetLookup(catalogInput.hardware),
+          );
+          assemblies = [
+            projectResolvedAssemblyFor3D({
+              assembly: pinned,
+              placement: { originMm: [0, 0, 0] },
+              assemblyInstanceId: `agregado-preview:${trimmedId}`,
+            }),
+          ];
+        } catch (e) {
+          assemblyError =
+            e instanceof Error
+              ? `No se pudo proyectar el ensamble del agregado: ${e.message}`
+              : 'No se pudo proyectar el ensamble del agregado.';
+        }
+      }
+    }
+
     return {
       parts: resolvedBoardParts,
       resolvedHardwarePlacements,
+      assemblies,
       width: dims.width,
       height: dims.height,
       depth: dims.depth,
       optionChoices,
-      error: null,
+      error: assemblyError,
       empty: resolvedBoardParts.length === 0,
     };
   } catch (e) {
@@ -192,6 +259,7 @@ export function resolveAgregado3DPreview(
     return {
       parts: [],
       resolvedHardwarePlacements: [],
+      assemblies: [],
       width: dims.width,
       height: dims.height,
       depth: dims.depth,

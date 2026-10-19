@@ -76,6 +76,7 @@ export function Agregado3DModal({
       agregadoToDraft(agregado),
       catalog,
       override,
+      agregado.id,
     );
   }, [agregado, catalog, finishChoices]);
 
@@ -137,6 +138,9 @@ export function Agregado3DModal({
               depth={preview.depth}
               materialColors={materialColors}
               materialTextures={materialTextures}
+              resolvedHardwarePlacements={preview.resolvedHardwarePlacements}
+              assemblies={preview.assemblies}
+              hardwareCatalog={catalog.hardware}
               paintModeHint="Los selectores de acabado de arriba eligen el material de cada grupo. Este control solo cambia cómo se colorea la vista."
               testId="agregado-3d-viewer"
             />
