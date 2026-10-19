@@ -8,6 +8,7 @@ import type {
   Component,
   EdgeBand,
   Hardware,
+  HardwareFinishId,
   MaterialBoard,
   Module,
   ModuleBaseMode,
@@ -38,6 +39,15 @@ import { ZOCLO_BOARD_ROLE } from '@granete/domain';
  * OPT-04 / PRJ-03: option picker values for a group — only group members (by kind + optionIds).
  * Empty optionIds → no catalog-wide dump (strict group membership).
  */
+/** Customer-facing Spanish labels of the closed finish preset vocabulary (#1209). */
+export const FINISH_LABELS_ES: Readonly<Record<HardwareFinishId, string>> = {
+  chrome: 'Cromo',
+  'black-matte': 'Negro mate',
+  bronze: 'Bronce',
+  brushed: 'Cepillado',
+  gold: 'Dorado',
+};
+
 export function optionsForGroup(
   group: OptionGroup,
   catalogs: {
@@ -239,6 +249,44 @@ export function setItemOptionChoice(
     next[groupCode] = optionId;
   }
   return next;
+}
+
+/**
+ * Patch an item's finish choice for one option group (#1209); empty finishId
+ * removes the key.
+ */
+export function setItemOptionFinish(
+  current: OptionChoices | undefined,
+  groupCode: string,
+  finishId: string,
+): OptionChoices {
+  const next: Record<string, string> = { ...(current ?? {}) };
+  if (!finishId.trim()) {
+    delete next[groupCode];
+  } else {
+    next[groupCode] = finishId;
+  }
+  return next;
+}
+
+/**
+ * Selectable finish presets for the hardware currently chosen in a group
+ * (#1209): the chosen hardware's declared offer only — nothing free-typed,
+ * nothing from another hardware in the group.
+ */
+export function finishOptionsForGroupChoice(
+  hardware: readonly Hardware[],
+  chosenHardwareId: string | undefined,
+): readonly { readonly id: string; readonly labelEs: string }[] {
+  if (!chosenHardwareId) return [];
+  const chosen = hardware.find((h) => h.id === chosenHardwareId);
+  if (!chosen?.availableFinishes || chosen.availableFinishes.length === 0) {
+    return [];
+  }
+  return chosen.availableFinishes.map((id) => ({
+    id,
+    labelEs: FINISH_LABELS_ES[id as HardwareFinishId] ?? id,
+  }));
 }
 
 /**

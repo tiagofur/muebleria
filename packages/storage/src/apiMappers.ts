@@ -1997,6 +1997,10 @@ export function projectToApi(p: Project): Record<string, unknown> {
       module_id: item.moduleId,
       quantity: item.quantity,
       option_choices: { ...item.optionChoices },
+      option_finishes:
+        item.optionFinishes && Object.keys(item.optionFinishes).length > 0
+          ? { ...item.optionFinishes }
+          : null,
       measure_preset_id: item.measurePresetId ?? '',
       // F087 — base treatment override; '' = module default.
       base_mode: item.baseMode ?? '',
@@ -2216,6 +2220,7 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     items: itemsRaw.map((it): ProjectItem => {
       const row = it as Record<string, unknown>;
       const choices = row.option_choices ?? row.optionChoices;
+      const finishes = row.option_finishes ?? row.optionFinishes;
       const measurePresetId =
         str(row.measure_preset_id ?? row.measurePresetId) || undefined;
       const pinRaw = row.structure_revision_pin ?? row.structureRevisionPin;
@@ -2246,6 +2251,9 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
           choices && typeof choices === 'object' && !Array.isArray(choices)
             ? (choices as ProjectItem['optionChoices'])
             : {},
+        ...(finishes && typeof finishes === 'object' && !Array.isArray(finishes)
+          ? { optionFinishes: finishes as ProjectItem['optionFinishes'] }
+          : {}),
         measurePresetId,
         ...(baseMode ? { baseMode } : {}),
         // #108 — undefined when null/absent (live revision). Only finite numbers

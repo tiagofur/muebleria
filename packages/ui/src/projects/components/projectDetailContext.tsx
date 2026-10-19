@@ -154,6 +154,11 @@ export interface ProjectDetailItemHandlers {
     groupCode: string,
     optionId: string,
   ) => void;
+  readonly onUpdateItemFinish: (
+    item: ProjectItem,
+    groupCode: string,
+    finishId: string,
+  ) => void;
   readonly onRemoveItem: (projectId: string, itemId: string) => void;
   /** When provided, enables drag & drop reordering of items. */
   readonly onReorderItems?: (fromIndex: number, toIndex: number) => void;

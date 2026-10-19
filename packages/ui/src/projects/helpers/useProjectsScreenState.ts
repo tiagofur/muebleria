@@ -38,6 +38,7 @@ import {
   projectToDraft,
   quickAddPayloadForModule,
   setItemOptionChoice,
+  setItemOptionFinish,
   setProjectLevelChoice,
   validateItemQuantity,
   type ProjectDraft,
@@ -479,7 +480,29 @@ export function useProjectsScreenState({
       groupCode,
       optionId,
     );
-    onUpdateItem(selectedId, { ...item, optionChoices });
+    // #1209: a hardware change orphans the finish choice of the old
+    // hardware — drop it instead of freezing a finish against the wrong
+    // offer (the freeze would reject it anyway).
+    const optionFinishes = setItemOptionFinish(
+      item.optionFinishes,
+      groupCode,
+      '',
+    );
+    onUpdateItem(selectedId, { ...item, optionChoices, optionFinishes });
+  };
+
+  const updateItemFinish = (
+    item: ProjectItem,
+    groupCode: string,
+    finishId: string,
+  ) => {
+    if (!selectedId) return;
+    const optionFinishes = setItemOptionFinish(
+      item.optionFinishes,
+      groupCode,
+      finishId,
+    );
+    onUpdateItem(selectedId, { ...item, optionFinishes });
   };
 
   const updateProjectLevelChoice = (groupCode: string, optionId: string) => {
@@ -571,6 +594,7 @@ export function useProjectsScreenState({
     updateItemMeasurePreset,
     updateItemQuantity,
     updateItemChoice,
+    updateItemFinish,
     updateProjectLevelChoice,
     handleDelete,
   };

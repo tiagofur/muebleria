@@ -1045,6 +1045,8 @@ export interface ProjectItem {
   readonly moduleId: string;
   readonly quantity: number;
   readonly optionChoices: OptionChoices;
+  /** Chosen commercial finish per option group (#1209): group_code -> finish preset id. */
+  readonly optionFinishes?: OptionChoices;
   /**
    * #781 — frozen manufacturing occurrence ordinal (1-based). The shared
    * workshop-code authority: when present on every item, occurrence order

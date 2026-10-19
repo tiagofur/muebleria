@@ -23,6 +23,7 @@ import {
   formatLifecycleStatus,
   formatRevisionUnitDimensions,
 } from '../quoteRevisionPresentation';
+import { finishOptionsForGroupChoice } from '../helpers/projectOptionHelpers';
 
 /** Drag-over visual feedback state. */
 type DropPosition = 'above' | 'below' | null;
@@ -413,6 +414,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                                 <span className="catalog-form__label">{opt.groupLabel} ({opt.groupCode})</span>
                                 <div className="project-item-readonly-value">
                                   {opt.groupLabel}: {opt.choiceLabel}
+                                  {opt.finishLabel ? ` · ${opt.finishLabel}` : null}
                                 </div>
                               </div>
                             ))}
@@ -459,6 +461,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                                 <span className="catalog-form__label">{opt.groupLabel} ({opt.groupCode})</span>
                                 <div className="project-item-readonly-value">
                                   {opt.groupLabel}: {opt.choiceLabel}
+                                  {opt.finishLabel ? ` · ${opt.finishLabel}` : null}
                                 </div>
                               </div>
                             ))}
@@ -681,6 +684,15 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                       const lineValue = item.optionChoices[group.code]?.trim() ?? '';
                       const projectDefault = project.projectLevelChoices?.[group.code]?.trim() ?? '';
                       const isOverride = Boolean(lineValue);
+                      // #1209: the effective hardware (line override, else the
+                      // project default) gates the FINISH select — finishes
+                      // come from the chosen hardware's declared offer only.
+                      const effectiveChoice = lineValue || projectDefault;
+                      const finishOptions = finishOptionsForGroupChoice(
+                        catalogs.hardware,
+                        effectiveChoice || undefined,
+                      );
+                      const lineFinish = item.optionFinishes?.[group.code]?.trim() ?? '';
                       const inheritLabel = projectDefault
                         ? `Usar default del proyecto (${optionLabelForId(projectDefault, group, catalogs)})`
                         : 'Usar default del proyecto';
@@ -710,6 +722,34 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                               <option key={opt.id} value={opt.id}>{opt.name} — {opt.code}</option>
                             ))}
                           </select>
+                          {finishOptions.length > 0 ? (
+                            <>
+                              <label
+                                htmlFor={`finish-${item.id}-${group.code}`}
+                                style={{ marginTop: 'var(--space-1)' }}
+                              >
+                                Acabado
+                              </label>
+                              <select
+                                id={`finish-${item.id}-${group.code}`}
+                                value={lineFinish}
+                                disabled={!canEditContent}
+                                onChange={(e) =>
+                                  itemHandlers.onUpdateItemFinish(
+                                    item,
+                                    group.code,
+                                    e.target.value,
+                                  )
+                                }
+                                data-testid={`item-finish-${item.id}-${group.code}`}
+                              >
+                                <option value="">Sin acabado</option>
+                                {finishOptions.map((fin) => (
+                                  <option key={fin.id} value={fin.id}>{fin.labelEs}</option>
+                                ))}
+                              </select>
+                            </>
+                          ) : null}
                         </div>
                       );
                     })}
