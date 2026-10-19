@@ -6,7 +6,9 @@ import type {
   Catalog,
   ComponentPlacement,
   DimensionPreset,
+  Module,
   OptionChoices,
+  ProjectedAssembly,
   ResolvedBoardPart,
   ResolvedHardwarePlacement,
   Structure,
@@ -14,7 +16,10 @@ import type {
 import { resolveComposedModule } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
-import { resolveModuleHardwarePlacements } from '../preview3d/project3dPreview';
+import {
+  resolveModuleAssemblies,
+  resolveModuleHardwarePlacements,
+} from '../preview3d/project3dPreview';
 import { DEFAULT_MODULE_FOOTPRINT_MM } from '../preview3d/project3dLayout';
 import type { StructureDraft } from './structureDraft';
 
@@ -22,6 +27,13 @@ export type Structure3DPreviewResult = {
   readonly parts: readonly ResolvedBoardPart[];
   /** Board-local hardware placements resolved against `parts` (empty = none renderable). */
   readonly resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
+  /**
+   * Projected rigid-member assemblies of the structure's agregado instances
+   * (#669) — canonical resolveModuleAssemblies path over a synthetic module
+   * bound to the draft structure. Empty when there are none or when the
+   * recipe fails (diagnostic in `error`, pieces kept).
+   */
+  readonly assemblies: readonly ProjectedAssembly[];
   readonly width: number;
   readonly height: number;
   readonly depth: number;
@@ -192,17 +204,47 @@ export function resolveStructure3DPreview(
       },
     );
 
+    // #669: project the structure's agregado assemblies through the canonical
+    // path — a synthetic module bound to the DRAFT structure (placed into a
+    // catalog-local structures list), so instance ids/formulas/quantities ride
+    // the exact resolver Proyectar uses. A recipe failure (e.g. an instance
+    // without its authoritative id) is an honest diagnostic, pieces kept.
+    let assemblies: readonly ProjectedAssembly[] = [];
+    let assemblyError: string | null = null;
+    const syntheticModule: Module = {
+      id: 'temp-structure-preview-module',
+      code: tempStructure.code,
+      name: tempStructure.name,
+      structureId: tempStructure.id,
+      hardwareLines: [],
+    };
+    const assemblyCatalog: Module3DCatalogInput = {
+      ...catalogInput,
+      structures: [tempStructure, ...catalogInput.structures],
+    };
+    try {
+      assemblies = resolveModuleAssemblies(syntheticModule, dims, assemblyCatalog, {
+        optionChoices,
+      });
+    } catch (e) {
+      assemblyError =
+        e instanceof Error
+          ? `No se pudo proyectar el ensamble del agregado: ${e.message}`
+          : 'No se pudo proyectar el ensamble del agregado.';
+    }
+
     return {
       parts: resolvedBoardParts,
       resolvedHardwarePlacements,
+      assemblies,
       width: dims.width,
       height: dims.height,
       depth: dims.depth,
       presetId,
       presets,
       optionChoices,
-      error: null,
-      empty: resolvedBoardParts.length === 0,
+      error: assemblyError,
+      empty: resolvedBoardParts.length === 0 && assemblies.length === 0,
     };
   } catch (e) {
     const message =
@@ -212,6 +254,7 @@ export function resolveStructure3DPreview(
     return {
       parts: [],
       resolvedHardwarePlacements: [],
+      assemblies: [],
       width: dims.width,
       height: dims.height,
       depth: dims.depth,

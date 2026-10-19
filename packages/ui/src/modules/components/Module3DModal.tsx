@@ -357,6 +357,7 @@ export function Module3DModal({
               initialShowOutlines={false}
               catalogPhotoViewToken={catalogPhotoViewToken}
               resolvedHardwarePlacements={resolvedHardwarePlacements}
+              assemblies={preview.assemblies}
               hardwareCatalog={catalog.hardware}
               optionGroups={catalog.optionGroups}
               paintModeHint="Los selectores de acabado de arriba eligen el material de cada grupo. Este control solo cambia cómo se colorea la vista. La foto de vitrina se captura sin contornos ni ejes."
