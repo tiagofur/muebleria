@@ -280,3 +280,42 @@
   height: 1rem;
   cursor: pointer;
 }
+
+/* --- Assembly member inspector (#670): render status as distinct states --- */
+
+.assembly-member-inspector__status {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+.assembly-member-inspector__status[data-tone='ok'] {
+  border-color: var(--success-600);
+  background: var(--success-50);
+  color: var(--success-700);
+}
+
+.assembly-member-inspector__status[data-tone='warning'] {
+  border-color: var(--warning-700);
+  background: var(--warning-50);
+  color: var(--warning-800);
+}
+
+.assembly-member-inspector__status[data-tone='danger'] {
+  border-color: var(--danger-600);
+  background: var(--danger-50);
+  color: var(--danger-700);
+}
+
+.assembly-member-inspector__diagnostic {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--danger-700);
+  overflow-wrap: anywhere;
+}

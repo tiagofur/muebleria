@@ -18,11 +18,15 @@ import {
   PartList,
   PaintModeField,
   MaterialSurfaceModeField,
+  AssemblyMemberInspector,
+  assemblyMemberSelectionEquals,
+  findSelectedAssemblyMember,
   canUseWebGL,
   materialColorMap,
   materialTextureMap,
   DEFAULT_MATERIAL_SURFACE_MODE,
   DEFAULT_SCENE_LIGHTING_MODE,
+  type AssemblyMemberSelection,
   type BoardColorMode,
   type MaterialColorLookup,
   type MaterialSurfaceMode,
@@ -162,6 +166,8 @@ export function Furniture3DViewer({
     readonly ts: number;
   } | null>(null);
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+  const [selectedAssemblyMember, setSelectedAssemblyMember] =
+    useState<AssemblyMemberSelection | null>(null);
   const [isolateSelected, setIsolateSelected] = useState(false);
   /**
    * Product-still clean mode (slice 2): no axes, no outer ghost, catalog
@@ -181,6 +187,7 @@ export function Furniture3DViewer({
     setProjection('perspective');
     setIsolateSelected(false);
     setSelectedPartId(null);
+    setSelectedAssemblyMember(null);
     setProductShotClean(true);
   }, [catalogPhotoViewToken]);
 
@@ -210,6 +217,29 @@ export function Furniture3DViewer({
       setSelectedPartId(null);
     }
   }, [parts, selectedPartId]);
+
+  // A re-resolve can drop the exact instance/member: clear instead of guessing
+  // another assembly that happens to share the member id.
+  useEffect(() => {
+    if (
+      selectedAssemblyMember &&
+      !findSelectedAssemblyMember(assemblies, selectedAssemblyMember)
+    ) {
+      setSelectedAssemblyMember(null);
+    }
+  }, [assemblies, selectedAssemblyMember]);
+
+  const selectPart = (partId: string | null): void => {
+    setSelectedPartId(partId);
+    if (partId !== null) setSelectedAssemblyMember(null);
+  };
+
+  const selectAssemblyMember = (selection: AssemblyMemberSelection): void => {
+    setSelectedAssemblyMember((prev) =>
+      assemblyMemberSelectionEquals(prev, selection) ? null : selection,
+    );
+    setSelectedPartId(null);
+  };
 
   const showControls = !hideControls;
   const rootClass = ['furniture-3d-viewer', className].filter(Boolean).join(' ');
@@ -419,9 +449,7 @@ Common causes:
             showWireframe={showWireframe}
             showOutlines={showOutlines}
             selectedPartId={showPartInspector ? selectedPartId : null}
-            onSelectPart={
-              showPartInspector ? setSelectedPartId : undefined
-            }
+            onSelectPart={showPartInspector ? selectPart : undefined}
             isolateSelected={showPartInspector && isolateSelected}
             lightingMode={effectiveLightingMode}
             showAxes={!productShotClean}
@@ -429,6 +457,8 @@ Common causes:
             resolvedHardwarePlacements={resolvedHardwarePlacements}
             assemblies={assemblies}
             hardwareCatalog={hardwareCatalog}
+            selectedAssemblyMember={showPartInspector ? selectedAssemblyMember : null}
+            onSelectAssemblyMember={showPartInspector ? selectAssemblyMember : undefined}
           />
         </div>
         {showPartInspector ? (
@@ -440,18 +470,28 @@ Common causes:
             <PartList
               parts={parts}
               selectedPartId={selectedPartId}
-              onSelectPart={setSelectedPartId}
+              onSelectPart={selectPart}
               testId={`${testId}-part-list`}
               optionGroups={optionGroups}
             />
-            <PartInspector
-              part={selectedPart}
-              onClear={() => setSelectedPartId(null)}
-              isolateSelected={isolateSelected}
-              onIsolateChange={setIsolateSelected}
-              testId={`${testId}-part-inspector`}
-              optionGroups={optionGroups}
-            />
+            {selectedAssemblyMember ? (
+              <AssemblyMemberInspector
+                assemblies={assemblies}
+                selection={selectedAssemblyMember}
+                hardwareCatalog={hardwareCatalog}
+                onClear={() => setSelectedAssemblyMember(null)}
+                testId={`${testId}-assembly-member-inspector`}
+              />
+            ) : (
+              <PartInspector
+                part={selectedPart}
+                onClear={() => setSelectedPartId(null)}
+                isolateSelected={isolateSelected}
+                onIsolateChange={setIsolateSelected}
+                testId={`${testId}-part-inspector`}
+                optionGroups={optionGroups}
+              />
+            )}
           </aside>
         ) : null}
       </div>

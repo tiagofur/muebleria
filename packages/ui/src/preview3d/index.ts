@@ -100,6 +100,19 @@ export {
   type AssemblyMeshProps,
   type ThreePose,
 } from './AssemblyMesh';
+export {
+  assemblyMemberSelectionEquals,
+  describeAssemblyRenderStatus,
+  findSelectedAssemblyMember,
+  type AssemblyMemberSelection,
+  type AssemblyRenderStatusLabel,
+  type AssemblyRenderStatusTone,
+  type ResolvedAssemblyMemberSelection,
+} from './assemblyMemberSelection';
+export {
+  AssemblyMemberInspector,
+  type AssemblyMemberInspectorProps,
+} from './AssemblyMemberInspector';
 export { type ModelFormat } from './ModelExporter';
 export { downloadBlob, sanitizeFilename } from './exportModel';
 export {

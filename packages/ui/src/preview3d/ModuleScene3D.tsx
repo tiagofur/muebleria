@@ -11,6 +11,7 @@ import type {
   ResolvedHardwarePlacement,
 } from '@granete/domain';
 import { FurnitureScene3D } from './FurnitureScene3D';
+import type { AssemblyMemberSelection } from './assemblyMemberSelection';
 import type {
   BoardColorMode,
   MaterialColorLookup,
@@ -68,6 +69,12 @@ export type ModuleScene3DProps = {
    * by Proyectar, with the session GLB source from context.
    */
   readonly assemblies?: readonly ProjectedAssembly[];
+  /**
+   * #670 — exact assembly node selected in this module and its click handler.
+   * Instance-scoped so drawers sharing one recipe never alias each other.
+   */
+  readonly selectedAssemblyMember?: AssemblyMemberSelection | null;
+  readonly onSelectAssemblyMember?: (selection: AssemblyMemberSelection) => void;
 };
 
 export { canUseWebGL } from './webglSupport';
@@ -96,6 +103,8 @@ export function ModuleScene3D({
   resolvedHardwarePlacements,
   hardwareCatalog,
   assemblies,
+  selectedAssemblyMember,
+  onSelectAssemblyMember,
 }: ModuleScene3DProps): ReactNode {
   return (
     <FurnitureScene3D
@@ -135,6 +144,8 @@ export function ModuleScene3D({
       isolateSelected={isolateSelected}
       lightingMode={lightingMode}
       hardwareCatalog={hardwareCatalog}
+      selectedAssemblyMember={selectedAssemblyMember}
+      onSelectAssemblyMember={onSelectAssemblyMember}
     />
   );
 }
