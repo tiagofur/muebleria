@@ -31,7 +31,7 @@ import type { HardwareDraft } from './hardwareDraft';
 import { WorkspaceTabs } from '../../common';
 import { HardwareAssetSelectorModal } from './HardwareAssetSelectorModal';
 import { HardwareAssetUploadModal } from './HardwareAssetUploadModal';
-import { HardwareGlbViewport } from './HardwareGlbViewport';
+import { HardwareGlbViewport, bindingHasCompleteGlb } from './HardwareGlbViewport';
 
 export interface Hardware3DSectionProps {
   readonly draft: HardwareDraft;
@@ -263,7 +263,10 @@ export function Hardware3DSection({
                       <Info size={15} aria-hidden />
                       <span>
                         La visualización de este archivo en SketchUp se incorporará en la siguiente
-                        entrega. El visor web de arriba muestra el modelo exacto vinculado.
+                        entrega.{' '}
+                        {bindingHasCompleteGlb(draft.visualAsset)
+                          ? 'El visor web de arriba muestra el modelo exacto vinculado (GLB).'
+                          : 'El visor web de arriba muestra una representación genérica hasta que exista un GLB derivado.'}
                       </span>
                     </div>
 

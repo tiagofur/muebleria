@@ -155,6 +155,21 @@ export function hardwareDraftToProcedural(draft: HardwareDraft): Hardware {
   };
 }
 
+/**
+ * Whether the binding carries a COMPLETE GLB co-representation (exact
+ * revision + digest + declared coordinate space). Anything less renders the
+ * explicit procedural fallback — the single predicate the viewport branch
+ * AND the bound-card notice share, so copy never presents a proxy as exact.
+ */
+export function bindingHasCompleteGlb(
+  binding: HardwareVisualAssetBinding,
+): boolean {
+  const glb = binding.glb;
+  return Boolean(
+    glb?.revisionId && glb.sha256 && glb.sourceUnits && glb.upAxis,
+  );
+}
+
 export type HardwareGlbViewportProps = {
   readonly draft: HardwareDraft;
   readonly binding: HardwareVisualAssetBinding;
@@ -203,7 +218,7 @@ export function HardwareGlbViewport({
       </div>
     );
   }
-  const hasGlb = Boolean(member.glb);
+  const hasGlb = bindingHasCompleteGlb(binding);
   return (
     <div
       className="hardware-glb-viewport"
