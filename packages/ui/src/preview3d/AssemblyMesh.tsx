@@ -142,6 +142,10 @@ export type AssemblyMeshProps = {
   readonly surfaceMode?: MaterialSurfaceMode;
   readonly onSelectMember?: (memberId: string) => void;
   readonly onSelectFabricated?: (componentId: string) => void;
+  /** Highlight exactly one rigid member of THIS assembly (#670 selection). */
+  readonly selectedMemberId?: string | null;
+  /** Highlight exactly one fabricated component of THIS assembly (#670 selection). */
+  readonly selectedFabricatedId?: string | null;
   /** Shared owner-scoped GLB cache for web consumers (#669); absent = procedural only. */
   readonly glbCache?: GlbSceneCache;
 };
@@ -170,6 +174,8 @@ export function AssemblyMesh({
   selected = false,
   onSelectMember,
   onSelectFabricated,
+  selectedMemberId = null,
+  selectedFabricatedId = null,
   glbCache,
 }: AssemblyMeshProps): ReactNode {
   const hwMap = resolveHardwareCatalogMap(hardwareCatalog);
@@ -219,6 +225,7 @@ export function AssemblyMesh({
         }
 
         const pose = assemblyPoseToThree(member.effectiveTransform);
+        const memberSelected = selected || member.memberId === selectedMemberId;
         const hardware: Hardware = hwMap.get(member.hardwareId) ?? {
           id: member.hardwareId,
           code: member.hardwareId,
@@ -243,7 +250,7 @@ export function AssemblyMesh({
             }}
             hardware={hardware}
             lightingMode={lightingMode}
-            selected={selected}
+            selected={memberSelected}
             onSelect={
               onSelectMember ? () => onSelectMember(member.memberId) : undefined
             }
@@ -272,7 +279,7 @@ export function AssemblyMesh({
               <HardwareGlbMesh
                 member={member}
                 glbCache={glbCache}
-                selected={selected}
+                selected={memberSelected}
                 onSelect={onSelectMember ? () => onSelectMember(member.memberId) : undefined}
                 fallback={proceduralHardware}
               />
@@ -313,7 +320,7 @@ export function AssemblyMesh({
             visual={visual}
             showWireframe={showWireframe}
             showOutlines={showOutlines}
-            selected={selected}
+            selected={selected || comp.componentId === selectedFabricatedId}
             lightingMode={lightingMode}
             onSelect={
               onSelectFabricated

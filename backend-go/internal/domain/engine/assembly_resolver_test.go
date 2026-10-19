@@ -1365,3 +1365,154 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 		}
 	})
 }
+
+// --- #670 acceptance #4: three drawers from one recipe stay independent ---
+//
+// Parity with packages/domain/src/agregadoAssembly.test.ts
+// ("Acceptance #4 — three drawers from one recipe stay independent").
+
+func synthDrawerParams(widthMm float64) engine.AssemblyResolutionParams {
+	return engine.AssemblyResolutionParams{WidthMm: widthMm, DepthMm: 550.0, HeightMm: 200.0}
+}
+
+func mustJSON(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return string(b)
+}
+
+func memberByID(members []domain.ResolvedRigidMember) map[string]domain.ResolvedRigidMember {
+	out := make(map[string]domain.ResolvedRigidMember, len(members))
+	for _, m := range members {
+		out[m.MemberID] = m
+	}
+	return out
+}
+
+func componentByID(comps []domain.ResolvedFabricatedComponent) map[string]domain.ResolvedFabricatedComponent {
+	out := make(map[string]domain.ResolvedFabricatedComponent, len(comps))
+	for _, c := range comps {
+		out[c.ComponentID] = c
+	}
+	return out
+}
+
+// Resolving FI-A at W+200 must leave FI-B byte-identical: the resolver holds no
+// shared mutable state between instances of the same recipe.
+func TestThreeDrawers_ResolvingFIADoesNotAlterFIB(t *testing.T) {
+	agregado := buildSyntheticDrawerFixture()
+
+	fiBBefore, err := engine.ResolveAgregadoAssembly(agregado, synthDrawerParams(600.0))
+	if err != nil {
+		t.Fatalf("FI-B before: %v", err)
+	}
+	before := mustJSON(t, fiBBefore)
+
+	fiA, err := engine.ResolveAgregadoAssembly(agregado, synthDrawerParams(800.0))
+	if err != nil {
+		t.Fatalf("FI-A: %v", err)
+	}
+	fiBAfter, err := engine.ResolveAgregadoAssembly(agregado, synthDrawerParams(600.0))
+	if err != nil {
+		t.Fatalf("FI-B after: %v", err)
+	}
+
+	if after := mustJSON(t, fiBAfter); after != before {
+		t.Fatalf("FI-B changed after resolving FI-A at W+200:\nbefore=%s\nafter=%s", before, after)
+	}
+
+	rightA := memberByID(fiA.RigidMembers)["side_right"]
+	rightB := memberByID(fiBAfter.RigidMembers)["side_right"]
+	if delta := rightA.LocalTransform.TranslationMm[0] - rightB.LocalTransform.TranslationMm[0]; math.Abs(delta-200.0) > 1e-6 {
+		t.Errorf("expected FI-A right side +200 mm vs FI-B, got %g", delta)
+	}
+	if mustJSON(t, rightA.LocalTransform.Basis) != mustJSON(t, rightB.LocalTransform.Basis) {
+		t.Errorf("rigid basis must not change with width (no scale/mirror): A=%v B=%v",
+			rightA.LocalTransform.Basis, rightB.LocalTransform.Basis)
+	}
+}
+
+// Member and component identity is declared in the recipe, never positional:
+// reversing the input arrays yields the same ids, hosts and transforms.
+func TestThreeDrawers_ReorderingRecipeKeepsIdentityAndTransforms(t *testing.T) {
+	base := buildSyntheticDrawerFixture()
+
+	reordered := buildSyntheticDrawerFixture()
+	for i, j := 0, len(reordered.RigidMembers)-1; i < j; i, j = i+1, j-1 {
+		reordered.RigidMembers[i], reordered.RigidMembers[j] = reordered.RigidMembers[j], reordered.RigidMembers[i]
+	}
+	for i, j := 0, len(reordered.Components)-1; i < j; i, j = i+1, j-1 {
+		reordered.Components[i], reordered.Components[j] = reordered.Components[j], reordered.Components[i]
+	}
+
+	resBase, err := engine.ResolveAgregadoAssembly(base, synthDrawerParams(600.0))
+	if err != nil {
+		t.Fatalf("base: %v", err)
+	}
+	resRe, err := engine.ResolveAgregadoAssembly(reordered, synthDrawerParams(600.0))
+	if err != nil {
+		t.Fatalf("reordered: %v", err)
+	}
+
+	baseMembers := memberByID(resBase.RigidMembers)
+	reMembers := memberByID(resRe.RigidMembers)
+	if len(baseMembers) != len(reMembers) {
+		t.Fatalf("member count differs: base=%d reordered=%d", len(baseMembers), len(reMembers))
+	}
+	for id, m := range baseMembers {
+		got, ok := reMembers[id]
+		if !ok {
+			t.Fatalf("member %q missing after reorder", id)
+		}
+		if mustJSON(t, got) != mustJSON(t, m) {
+			t.Errorf("member %q differs after reorder:\nbase=%s\nreordered=%s", id, mustJSON(t, m), mustJSON(t, got))
+		}
+	}
+
+	baseComps := componentByID(resBase.FabricatedComponents)
+	reComps := componentByID(resRe.FabricatedComponents)
+	if len(baseComps) != len(reComps) {
+		t.Fatalf("component count differs: base=%d reordered=%d", len(baseComps), len(reComps))
+	}
+	for id, c := range baseComps {
+		got, ok := reComps[id]
+		if !ok {
+			t.Fatalf("component %q missing after reorder", id)
+		}
+		if mustJSON(t, got) != mustJSON(t, c) {
+			t.Errorf("component %q differs after reorder:\nbase=%s\nreordered=%s", id, mustJSON(t, c), mustJSON(t, got))
+		}
+	}
+
+	if len(resRe.BOMItems) != len(resBase.BOMItems) {
+		t.Errorf("BOM item count differs: base=%d reordered=%d", len(resBase.BOMItems), len(resRe.BOMItems))
+	}
+	if mustJSON(t, resRe.SelectedVariants) != mustJSON(t, resBase.SelectedVariants) {
+		t.Errorf("selected variants differ after reorder")
+	}
+}
+
+// Three resolutions of the same recipe (FI-A, FI-B, FI-C) share the member id
+// set exactly; identity comes from the recipe, not from the instance.
+func TestThreeDrawers_SameRecipeSameMemberIDs(t *testing.T) {
+	agregado := buildSyntheticDrawerFixture()
+	want := []string{"side_left", "side_right", "runner_left", "runner_right", "locking_device_left", "locking_device_right"}
+
+	for _, w := range []float64{600.0, 600.0, 800.0} {
+		res, err := engine.ResolveAgregadoAssembly(agregado, synthDrawerParams(w))
+		if err != nil {
+			t.Fatalf("W=%g: %v", w, err)
+		}
+		if len(res.RigidMembers) != len(want) {
+			t.Fatalf("W=%g: expected %d members, got %d", w, len(want), len(res.RigidMembers))
+		}
+		for i, m := range res.RigidMembers {
+			if m.MemberID != want[i] {
+				t.Errorf("W=%g: member[%d] = %q, want %q", w, i, m.MemberID, want[i])
+			}
+		}
+	}
+}

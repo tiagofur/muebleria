@@ -45,6 +45,7 @@ import { HardwareMesh } from './HardwareMesh';
 import { HardwarePlacementGizmo, pickGizmoPlacement } from './HardwarePlacementGizmo';
 import { BoardMesh } from './BoardMesh';
 import { AssemblyMesh } from './AssemblyMesh';
+import type { AssemblyMemberSelection } from './assemblyMemberSelection';
 import type { GlbSceneCache } from './glbSceneCache';
 import { useGlbAssetAuthority } from './glbAssetSourceContext';
 import type { ProjectedAssembly } from '@granete/domain';
@@ -267,6 +268,12 @@ export type FurnitureScene3DProps = {
    */
   readonly selectedHardwareId?: string | null;
   readonly onSelectHardware?: (hardwareId: string | null) => void;
+  /**
+   * #670 — exact assembly node selected (instance + member/component). The
+   * instance id is part of the identity: drawers sharing a recipe share ids.
+   */
+  readonly selectedAssemblyMember?: AssemblyMemberSelection | null;
+  readonly onSelectAssemblyMember?: (selection: AssemblyMemberSelection) => void;
   /** F143 — guías temporales de distancia durante el drag de muro. */
   readonly showDragGuides?: boolean;
   /**
@@ -1074,6 +1081,8 @@ function ModuleGroup({
   onSelectModule,
   hardwareSelectedId,
   onSelectHardwareId,
+  selectedAssemblyMember,
+  onSelectAssemblyMember,
   wallDrag,
   wallDragEnabled,
   onModuleWallOffset,
@@ -1113,6 +1122,9 @@ function ModuleGroup({
   /** F143 — herraje seleccionado (modo detalle). */
   readonly hardwareSelectedId?: string | null;
   readonly onSelectHardwareId?: (hardwareId: string) => void;
+  /** #670 — exact assembly node selected / click handler (instance-scoped). */
+  readonly selectedAssemblyMember?: AssemblyMemberSelection | null;
+  readonly onSelectAssemblyMember?: (selection: AssemblyMemberSelection) => void;
   readonly lightingMode?: SceneLightingMode;
   readonly ambientCountertop?: AmbientMaterial;
   readonly paintHoverCountertop?: boolean;
@@ -1440,22 +1452,56 @@ function ModuleGroup({
           />
         );
       })}
-      {mod.assemblies?.map((assembly) => (
-        <AssemblyMesh
-          key={`${mod.key}-${assembly.assemblyInstanceId}`}
-          assembly={assembly}
-          hardwareCatalog={hardwareCatalog}
-          lightingMode={lightingMode}
-          showWireframe={showWireframe}
-          showOutlines={showOutlines || moduleSelected}
-          selected={moduleSelected}
-          colorMode={colorMode}
-          materialColors={materialColors}
-          materialTextures={materialTextures}
-          surfaceMode={surfaceMode}
-          glbCache={glbCache}
-        />
-      ))}
+      {mod.assemblies?.map((assembly) => {
+        const ownsSelection =
+          selectedAssemblyMember?.assemblyInstanceId === assembly.assemblyInstanceId;
+        return (
+          <AssemblyMesh
+            key={`${mod.key}-${assembly.assemblyInstanceId}`}
+            assembly={assembly}
+            hardwareCatalog={hardwareCatalog}
+            lightingMode={lightingMode}
+            showWireframe={showWireframe}
+            showOutlines={showOutlines || moduleSelected}
+            selected={moduleSelected}
+            colorMode={colorMode}
+            materialColors={materialColors}
+            materialTextures={materialTextures}
+            surfaceMode={surfaceMode}
+            glbCache={glbCache}
+            selectedMemberId={
+              ownsSelection && selectedAssemblyMember?.kind === 'rigid'
+                ? selectedAssemblyMember.memberId
+                : null
+            }
+            selectedFabricatedId={
+              ownsSelection && selectedAssemblyMember?.kind === 'fabricated'
+                ? selectedAssemblyMember.componentId
+                : null
+            }
+            onSelectMember={
+              onSelectAssemblyMember
+                ? (memberId) =>
+                    onSelectAssemblyMember({
+                      kind: 'rigid',
+                      assemblyInstanceId: assembly.assemblyInstanceId,
+                      memberId,
+                    })
+                : undefined
+            }
+            onSelectFabricated={
+              onSelectAssemblyMember
+                ? (componentId) =>
+                    onSelectAssemblyMember({
+                      kind: 'fabricated',
+                      assemblyInstanceId: assembly.assemblyInstanceId,
+                      componentId,
+                    })
+                : undefined
+            }
+          />
+        );
+      })}
     </group>
   );
 }
@@ -1674,6 +1720,8 @@ function SceneContent({
   onSelectModule,
   selectedHardwareId,
   onSelectHardware,
+  selectedAssemblyMember,
+  onSelectAssemblyMember,
   showDragGuides,
   rawHardwarePlacements,
   onUpdateHardwarePlacement,
@@ -1743,6 +1791,8 @@ function SceneContent({
   ) => void;
   readonly selectedHardwareId?: string | null;
   readonly onSelectHardware?: (hardwareId: string | null) => void;
+  readonly selectedAssemblyMember?: AssemblyMemberSelection | null;
+  readonly onSelectAssemblyMember?: (selection: AssemblyMemberSelection) => void;
   readonly showDragGuides?: boolean;
   readonly rawHardwarePlacements?: FurnitureScene3DProps['rawHardwarePlacements'];
   readonly onUpdateHardwarePlacement?: FurnitureScene3DProps['onUpdateHardwarePlacement'];
@@ -2298,6 +2348,8 @@ function SceneContent({
                   ? (id) => onSelectHardware(id)
                   : undefined
               }
+              selectedAssemblyMember={selectedAssemblyMember}
+              onSelectAssemblyMember={onSelectAssemblyMember}
               wallDrag={wallDragByKey?.[mod.key]}
               wallDragEnabled={wallDragEnabled}
               onModuleWallOffset={onModuleWallOffset}
@@ -2462,6 +2514,8 @@ export function FurnitureScene3D({
   onSelectModule,
   selectedHardwareId = null,
   onSelectHardware,
+  selectedAssemblyMember = null,
+  onSelectAssemblyMember,
   showDragGuides = false,
   wallDragByKey,
   onModuleWallOffset,
@@ -2535,7 +2589,10 @@ export function FurnitureScene3D({
   // Keep empty modules so outer ghosts match layout footprint (no invisible gaps).
   const sceneModules = modules;
   const selectionEnabled =
-    (Boolean(onSelectPart) || Boolean(onSelectModule)) && !measurementMode;
+    (Boolean(onSelectPart) ||
+      Boolean(onSelectModule) ||
+      Boolean(onSelectAssemblyMember)) &&
+    !measurementMode;
   const hasWalls = walls.length > 0;
   /** Axes default on only for floor-less inspect scenes (module editor). */
   const axesVisible = showAxes ?? !showFloor;
@@ -2845,6 +2902,12 @@ export function FurnitureScene3D({
                   onSelectHardware={
                     selectionEnabled && onSelectHardware
                       ? onSelectHardware
+                      : undefined
+                  }
+                  selectedAssemblyMember={selectedAssemblyMember}
+                  onSelectAssemblyMember={
+                    selectionEnabled && onSelectAssemblyMember
+                      ? onSelectAssemblyMember
                       : undefined
                   }
                   showDragGuides={showDragGuides}
