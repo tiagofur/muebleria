@@ -17,6 +17,11 @@ import type { AgregadoDraft } from '../agregadoDraft';
 export type AgregadoEditorPreview3DProps = {
   readonly draft: AgregadoDraft;
   readonly catalogInput: Module3DCatalogInput;
+  /**
+   * Catalog agregado id whose assembly recipe renders as GLB members (#669).
+   * Null for a brand-new agregado (no catalog entry yet) → assemblies stay empty.
+   */
+  readonly agregadoId?: string | null;
   // Reserved for the texture follow-up (V1 renders colors/grain only, matching
   // the structure editor embed).
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
@@ -25,10 +30,11 @@ export type AgregadoEditorPreview3DProps = {
 export function AgregadoEditorPreview3D({
   draft,
   catalogInput,
+  agregadoId,
 }: AgregadoEditorPreview3DProps): ReactNode {
   const preview = useMemo(
-    () => resolveAgregado3DPreview(draft, catalogInput),
-    [draft, catalogInput],
+    () => resolveAgregado3DPreview(draft, catalogInput, null, agregadoId ?? null),
+    [draft, catalogInput, agregadoId],
   );
 
   return (
@@ -61,6 +67,7 @@ export function AgregadoEditorPreview3D({
             height={preview.height}
             depth={preview.depth}
             resolvedHardwarePlacements={preview.resolvedHardwarePlacements}
+            assemblies={preview.assemblies}
             hardwareCatalog={catalogInput.hardware}
             testId="agregado-editor-3d-viewer"
           />

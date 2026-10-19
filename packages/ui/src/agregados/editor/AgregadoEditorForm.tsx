@@ -66,6 +66,7 @@ export function AgregadoEditorForm({
   setEditorTab,
   draft,
   setDraft,
+  editingId,
   catalogComponents,
   catalogHardware,
   catalogInput,
@@ -368,6 +369,7 @@ export function AgregadoEditorForm({
               <AgregadoEditorPreview3D
                 draft={draft}
                 catalogInput={catalogInput}
+                agregadoId={editingId}
                 resolveMediaUrl={resolveImageUrl}
               />
             ) : null}
@@ -623,6 +625,7 @@ export function AgregadoEditorForm({
               <AgregadoEditorPreview3D
                 draft={draft}
                 catalogInput={catalogInput}
+                agregadoId={editingId}
                 resolveMediaUrl={resolveImageUrl}
               />
             ) : null}
