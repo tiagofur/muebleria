@@ -21,6 +21,8 @@ import { Modal } from '../../common/Modal';
 
 /** Resultados del transporte (el store mapea errores de red/API a esta forma). */
 export type RecipeSimRequest = {
+  /** Id del agregado objetivo (identidad que el apply debe conservar). */
+  readonly id: string;
   readonly candidate: Agregado;
   readonly params?: { readonly widthMm: number; readonly depthMm: number; readonly heightMm: number };
   readonly variantSelections?: Record<string, number>;
@@ -92,7 +94,7 @@ function Chip({ change }: { readonly change: string }) {
   const Icon = c.icon;
   return (
     <span className={`recipe-sim__chip recipe-sim__chip--${c.tone}`}>
-      <Icon size={12} strokeWidth={2} aria-hidden />
+      <Icon size={12} strokeWidth={1.5} aria-hidden />
       {c.label}
     </span>
   );
@@ -148,7 +150,10 @@ export function RecipeChangeSimulationModal({
     openRef.current = open;
   }, [open]);
 
-  // Reabrir para otro agregado resetea todo el estado de la decisión.
+  // Reabrir para OTRO agregado resetea todo el estado de la decisión. El key
+  // es el id, no la identidad del objeto: tras aplicar, el store actualiza la
+  // entidad y el readback cambia el prop sin querer resetear la pantalla de
+  // éxito.
   useEffect(() => {
     if (open) {
       setBaseId(agregado.id);
@@ -159,7 +164,7 @@ export function RecipeChangeSimulationModal({
       setBanner(null);
       lastRequestRef.current = null;
     }
-  }, [open, agregado]);
+  }, [open, agregado.id]);
 
   const base = useMemo(
     () => candidates.find((a) => a.id === baseId) ?? agregado,
@@ -202,7 +207,11 @@ export function RecipeChangeSimulationModal({
     if (!pendingResimulate.current) return;
     pendingResimulate.current = false;
     if (!lastRequestRef.current || !openRef.current) return;
-    void runSimulate({ ...lastRequestRef.current, variantSelections: { ...selections } });
+    void runSimulate({
+      ...lastRequestRef.current,
+      id: lastRequestRef.current?.id ?? agregado.id,
+      variantSelections: { ...selections },
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selections]);
 
@@ -217,6 +226,9 @@ export function RecipeChangeSimulationModal({
     });
     if (!openRef.current) return;
     if (res.ok) {
+      // Diseño: el éxito se queda EN el modal («Receta actualizada ✓» + Listo)
+      // y el toast lo lanza el store; el readback es el catálogo actualizado
+      // detrás del modal.
       setPhase('applied');
       onApplied(res.applied);
       return;
@@ -227,6 +239,9 @@ export function RecipeChangeSimulationModal({
     setPhase(res.kind === 'conflict' || res.kind === 'not_found' ? 'conflict' : 'diff');
   };
 
+  // Diseño: el estado «simulación stale» pre-apply se resuelve por server
+  // authority — aplicar con un If-Match viejo devuelve 412 y el flujo entra a
+  // conflicto (re-simular). No hay polling que lo anticipe.
   const rejected = (simulated?.diff.variants ?? []).filter((v) => v.change === 'rejected');
   const missingPick = rejected.some(
     (v) => v.rejection && selections[v.variantSetId] === undefined && v.rejection.fittingNominals.length > 0,
@@ -265,7 +280,7 @@ export function RecipeChangeSimulationModal({
   } else {
     primary = {
       label: phase === 'simulating' ? 'Simulando…' : 'Simular',
-      onClick: () => void runSimulate({ candidate, variantSelections: { ...selections } }),
+      onClick: () => void runSimulate({ id: agregado.id, candidate, variantSelections: { ...selections } }),
       disabled: busy,
       busy,
     };
@@ -286,11 +301,13 @@ export function RecipeChangeSimulationModal({
       footer={
         <div className="recipe-sim__footer">
           <p className="recipe-sim__consequence">
-            {noChanges
-              ? 'Este cambio no altera miembros, tableros ni consumo.'
-              : conflict
-                ? banner?.text
-                : 'Se cambia la receta de este agregado. Los miembros que no cambian conservan identidad y posición.'}
+            {phase === 'applied'
+              ? 'La receta quedó guardada en el servidor.'
+              : noChanges
+                ? 'Este cambio no altera miembros, tableros ni consumo.'
+                : conflict
+                  ? banner?.text
+                  : 'Se cambia la receta de este agregado. Los miembros que no cambian conservan identidad y posición.'}
           </p>
           <div className="recipe-sim__actions">
             {!primary.busy && phase !== 'applied' ? (
@@ -333,6 +350,13 @@ export function RecipeChangeSimulationModal({
                 const next = candidates.find((a) => a.id === e.target.value);
                 setKitId(next?.commercialKitHardwareId ?? '');
                 setSelections({});
+                // El diff mostrado corresponde a la simulación anterior:
+                // aplicar otro candidato con ese If-Match sería aplicar algo
+                // que el usuario no confirmó. Vuelve a simular.
+                if (simulated) {
+                  setSimulated(null);
+                  setPhase('selects');
+                }
               }}
               disabled={busy}
               data-testid={`${testId}-base-select`}
@@ -348,7 +372,13 @@ export function RecipeChangeSimulationModal({
             <span>Kit comercial</span>
             <select
               value={kitId}
-              onChange={(e) => setKitId(e.target.value)}
+              onChange={(e) => {
+                setKitId(e.target.value);
+                if (simulated) {
+                  setSimulated(null);
+                  setPhase('selects');
+                }
+              }}
               disabled={busy}
               data-testid={`${testId}-kit-select`}
             >

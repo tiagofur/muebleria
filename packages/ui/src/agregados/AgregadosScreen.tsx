@@ -404,11 +404,11 @@ export function AgregadosScreen({
             agregado={saved}
             agregados={agregados}
             catalogHardware={catalogHardware}
-            onSimulate={onSimulateRecipe}
+            // #1369: el store ya persistió el PUT y actualizó el catálogo —
+            // re-llamar onUpdate re-salvaría todo y duplicaría el toast.
+            onSimulate={(req) => onSimulateRecipe({ ...req, id: saved.id })}
             onApply={onApplyRecipe}
-            onApplied={(applied) => {
-              void onUpdate(applied);
-            }}
+            onApplied={() => undefined}
             onClose={() => setRecipeSimOpen(false)}
           />
         );

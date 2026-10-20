@@ -255,6 +255,38 @@ describe('RecipeChangeSimulationModal (#1369 slice 2)', () => {
     expect(onApplied.mock.calls[0]![0].id).toBe('agr-1');
   });
 
+  it('el readback del store (nuevo objeto, mismo id) NO borra el estado aplicado', async () => {
+    const onApplied = vi.fn();
+    const { rerender } = renderModal({
+      onSimulate: async () => ({ ok: true, response: okDiff }),
+      onApplied,
+    });
+    await userEvent.click(screen.getByTestId('rcm-primary'));
+    await waitFor(() => expect(text('rcm-primary')).toBe('Confirmar y aplicar'));
+    await userEvent.click(screen.getByTestId('rcm-primary'));
+    await waitFor(() => expect(screen.getByTestId('rcm-applied')).toBeTruthy());
+    expect(onApplied).toHaveBeenCalledTimes(1);
+
+    // El store actualizó el catálogo: el prop llega como un OBJETO NUEVO con
+    // el mismo id (revisión aplicada). El estado de éxito debe sobrevivir.
+    const updated: Agregado = { ...saved, commercialKitHardwareId: 'kit-2' };
+    rerender(
+      <RecipeChangeSimulationModal
+        open
+        agregado={updated}
+        agregados={[updated]}
+        catalogHardware={catalogHardware}
+        onSimulate={async () => ({ ok: true, response: okDiff })}
+        onApply={async () => ({ ok: true, applied: updated })}
+        onApplied={onApplied}
+        onClose={noop}
+        testId="rcm"
+      />,
+    );
+    expect(screen.getByTestId('rcm-applied')).toBeTruthy();
+    expect(text('rcm-primary')).toBe('Listo');
+  });
+
   it('412 en aplicar: banner de conflicto, diff intacto y «Volver a simular»', async () => {
     const onSimulate = vi
       .fn()
