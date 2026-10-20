@@ -184,6 +184,25 @@ export function RecipeChangeSimulationModal({
     [base, agregado.id, agregado.code, agregado.name, kitId],
   );
 
+  // #1369 (review): el pin de variante NO es sólo lente de simulación. Lo que
+  // se confirma y se guarda es la receta con el set ESTRECHADO al nominal
+  // elegido — mapeo de forma, sin re-resolver (server authority intacta). Sin
+  // este plegado, el PUT guardaría el set completo y el resolver volvería a
+  // elegir por estrategia: lo guardado no sería lo confirmado.
+  const applyCandidate: Agregado = useMemo(() => {
+    const pins = Object.entries(selections);
+    if (pins.length === 0) return candidate;
+    return {
+      ...candidate,
+      variantSets: (candidate.variantSets ?? []).map((set) => {
+        const nominal = selections[set.id];
+        if (nominal === undefined) return set;
+        const kept = set.variants.filter((v) => Math.abs(v.nominalDimensionMm - nominal) < 1e-3);
+        return kept.length > 0 ? { ...set, variants: kept } : set;
+      }),
+    };
+  }, [candidate, selections]);
+
   const busy = phase === 'simulating' || phase === 'applying';
 
   const runSimulate = async (request: RecipeSimRequest): Promise<void> => {
@@ -222,7 +241,7 @@ export function RecipeChangeSimulationModal({
     const res = await onApply({
       id: agregado.id,
       expectedVersion: simulated.currentVersion,
-      candidate,
+      candidate: applyCandidate,
     });
     if (!openRef.current) return;
     if (res.ok) {
@@ -399,6 +418,12 @@ export function RecipeChangeSimulationModal({
                 value={selections[set.id] !== undefined ? String(selections[set.id]) : 'auto'}
                 onChange={(e) => {
                   const v = e.target.value;
+                  // «Automático» también invalida: el diff mostrado describía
+                  // la simulación con la selección anterior.
+                  if (v === 'auto' && simulated) {
+                    setSimulated(null);
+                    setPhase('selects');
+                  }
                   pendingResimulate.current = v !== 'auto';
                   setSelections((prev) => {
                     const next = { ...prev };

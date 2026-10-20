@@ -56,6 +56,9 @@ const baseAgregado: Agregado = {
   name: 'Cajón MERIVOBOX',
   active: true,
   commercialKitHardwareId: 'kit-1',
+  variantSets: saved.variantSets,
+  rigidMembers: saved.rigidMembers,
+  compatibilityRules: saved.compatibilityRules,
 };
 
 const catalogHardware: readonly Hardware[] = [
@@ -285,6 +288,64 @@ describe('RecipeChangeSimulationModal (#1369 slice 2)', () => {
     );
     expect(screen.getByTestId('rcm-applied')).toBeTruthy();
     expect(text('rcm-primary')).toBe('Listo');
+  });
+
+  it('round-1: cambiar la receta base invalida el diff mostrado', async () => {
+    renderModal({ onSimulate: async () => ({ ok: true, response: okDiff }) });
+    await userEvent.click(screen.getByTestId('rcm-primary'));
+    await waitFor(() => expect(text('rcm-primary')).toBe('Confirmar y aplicar'));
+    await userEvent.selectOptions(screen.getByTestId('rcm-base-select'), 'agr-1');
+    expect(screen.queryByTestId('rcm-diff')).toBeNull();
+    expect(text('rcm-primary')).toBe('Simular');
+  });
+
+  it('B1: volver la variante a «Automático» invalida el diff (no se puede confirmar algo no simulado)', async () => {
+    const onSimulate = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, response: okDiff })
+      .mockResolvedValueOnce({ ok: true, response: okDiff });
+    renderModal({ onSimulate: onSimulate as unknown as RecipeChangeSimulationModalProps['onSimulate'] });
+    await userEvent.click(screen.getByTestId('rcm-primary'));
+    await waitFor(() => expect(text('rcm-primary')).toBe('Confirmar y aplicar'));
+
+    // Elegir 450 explícito re-simula y mantiene el diff.
+    await userEvent.click(screen.getByTestId('rcm-variant-vs-depth'));
+    await userEvent.selectOptions(screen.getByTestId('rcm-variant-vs-depth'), '450');
+    await waitFor(() => expect(onSimulate).toHaveBeenCalledTimes(2));
+
+    // Volver a «Automático» invalida: vuelve a selección y el diff desaparece.
+    await userEvent.selectOptions(screen.getByTestId('rcm-variant-vs-depth'), 'auto');
+    await waitFor(() => expect(screen.queryByTestId('rcm-diff')).toBeNull());
+    expect(text('rcm-primary')).toBe('Simular');
+  });
+
+  it('B2: el apply guarda la receta con el set ESTRECHADO al nominal confirmado', async () => {
+    let applyReq: { readonly id: string; readonly expectedVersion: number; readonly candidate: Agregado } | null = null;
+    const onApply = vi.fn(async (req: { readonly id: string; readonly expectedVersion: number; readonly candidate: Agregado }) => {
+      applyReq = req;
+      return { ok: true, applied: req.candidate };
+    });
+    const onSimulate = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, response: okDiff })
+      .mockResolvedValueOnce({ ok: true, response: okDiff });
+    renderModal({
+      onSimulate: onSimulate as unknown as RecipeChangeSimulationModalProps['onSimulate'],
+      onApply: onApply as unknown as RecipeChangeSimulationModalProps['onApply'],
+    });
+
+    // Simular → fijar 450 explícito (re-simula) → confirmar.
+    await userEvent.click(screen.getByTestId('rcm-primary'));
+    await waitFor(() => expect(text('rcm-primary')).toBe('Confirmar y aplicar'));
+    await userEvent.selectOptions(screen.getByTestId('rcm-variant-vs-depth'), '450');
+    await waitFor(() => expect(onSimulate).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect((screen.getByTestId('rcm-primary') as HTMLButtonElement).disabled).toBe(false));
+    await userEvent.click(screen.getByTestId('rcm-primary'));
+
+    await waitFor(() => expect(applyReq).not.toBeNull());
+    const sets = applyReq!.candidate.variantSets ?? [];
+    expect(sets[0]!.variants.map((v) => v.nominalDimensionMm)).toEqual([450]);
+    expect(applyReq!.expectedVersion).toBe(3);
   });
 
   it('412 en aplicar: banner de conflicto, diff intacto y «Volver a simular»', async () => {
