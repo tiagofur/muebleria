@@ -329,11 +329,14 @@ type stubStore struct {
 	listCategories []domain.ModuleCategory
 	// Composition lists for the furniture catalog/layout endpoints
 	// (estimated piece counts + resolved layouts for SketchUp).
-	listStructures   []domain.Structure
-	listComponents   []domain.Component
-	listAgregados    []domain.Agregado
-	listHardwares    []domain.Hardware
-	listOptionGroups []domain.OptionGroup
+	listStructures []domain.Structure
+	listComponents []domain.Component
+	listAgregados  []domain.Agregado
+	// #1369 recipe simulation
+	agregadoReturnedByID *domain.Agregado
+	agregadoGetByIDErr   error
+	listHardwares        []domain.Hardware
+	listOptionGroups     []domain.OptionGroup
 	// #913 / HW-PROFILE catalog surface hooks.
 	listHardwareProfiles                      []domain.HardwareProfile
 	hardwareProfileReturnedByID               *domain.HardwareProfile
@@ -487,8 +490,8 @@ type stubStore struct {
 	constructionPolicy    *engine.FactoryConstructionPolicy
 	constructionPolicyErr error
 	// #1130: opening profile catalog.
-	openingProfiles      []domain.OpeningProfile
-	openingProfileErr    error
+	openingProfiles       []domain.OpeningProfile
+	openingProfileErr     error
 	createdOpeningProfile *domain.OpeningProfile
 	// #1134: opening capabilities catalog.
 	openingCapabilities *domain.OpeningCapabilities
