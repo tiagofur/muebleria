@@ -3565,6 +3565,12 @@ export function agregadoToApi(a: import('@granete/domain').Agregado): Record<str
     depth_mm: dims?.depth ?? 0,
     components: (a.components ?? []).map(componentInstanceToApi),
     hardware_lines: (a.hardwareLines ?? []).map(hardwareLineToApi),
+    // #1369: la receta viaja y vuelve — sin round-trip fiel, Guardar la
+    // descartaría en silencio (la lección de #1052 aplicada acá).
+    ...(a.rigidMembers ? { rigid_members: a.rigidMembers } : {}),
+    ...(a.variantSets ? { variant_sets: a.variantSets } : {}),
+    ...(a.compatibilityRules ? { compatibility_rules: a.compatibilityRules } : {}),
+    ...(a.commercialKitHardwareId ? { commercial_kit_hardware_id: a.commercialKitHardwareId } : {}),
     ...(a.presentationMotion ? { presentation_motion: a.presentationMotion } : {}),
     active: a.active !== false,
   };
@@ -3593,6 +3599,19 @@ export function agregadoFromApi(raw: Record<string, unknown>): import('@granete/
     presentationMotion: presentationMotionFromApi(
       raw.presentation_motion ?? raw.presentationMotion,
     ),
+    // #1369: la receta (miembros, sets, reglas, kit) vive en la revisión
+    // actual y el backend la hidrata — mapearla para el editor y el modal.
+    rigidMembers: Array.isArray(raw.rigid_members ?? raw.rigidMembers)
+      ? ((raw.rigid_members ?? raw.rigidMembers) as import('@granete/domain').Agregado['rigidMembers'])
+      : undefined,
+    variantSets: Array.isArray(raw.variant_sets ?? raw.variantSets)
+      ? ((raw.variant_sets ?? raw.variantSets) as import('@granete/domain').Agregado['variantSets'])
+      : undefined,
+    compatibilityRules: Array.isArray(raw.compatibility_rules ?? raw.compatibilityRules)
+      ? ((raw.compatibility_rules ?? raw.compatibilityRules) as import('@granete/domain').Agregado['compatibilityRules'])
+      : undefined,
+    commercialKitHardwareId:
+      (raw.commercial_kit_hardware_id ?? raw.commercialKitHardwareId) as string | undefined,
     active: raw.active !== false,
   };
 }

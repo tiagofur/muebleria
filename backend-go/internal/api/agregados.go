@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -21,6 +22,11 @@ func (s *Server) HandleAgregados(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			respondWithInternalError(w, err, "agregados list")
 			return
+		}
+		// #1369: la receta vigente vive en la revisión actual — hidratar para
+		// que la UI (pestaña Receta, modal, preview) la vea completa.
+		for i := range list {
+			hydrateAgregadoRecipe(&list[i], s.Store, r.Context())
 		}
 		respondWithJSON(w, http.StatusOK, list)
 
@@ -62,6 +68,8 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "agregado not found")
 			return
 		}
+		// #1369: hidratar la receta vigente desde la revisión (ver simulate).
+		hydrateAgregadoRecipe(a, s.Store, r.Context())
 		respondWithJSON(w, http.StatusOK, a)
 
 	case http.MethodPut:
@@ -140,6 +148,28 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// --- #1369: hidratación de la receta vigente ---
+
+// hydrateAgregadoRecipe reemplaza los campos de receta del agregado por los de
+// su revisión actual, preservando identidad, versión, estado y auditoría. La
+// receta vive SOLO en agregado_revisions (la fila del catálogo no la trae).
+func hydrateAgregadoRecipe(a *domain.Agregado, store CatalogStore, ctx context.Context) {
+	rev, err := store.GetAgregadoCurrentRevision(ctx, a.ID)
+	if err != nil || rev == nil {
+		return // agregado sin receta: queda tal cual
+	}
+	keptVersion, keptActive := a.Version, a.Active
+	keptRevID := a.CurrentRevisionID
+	recipe := rev.Recipe.ToAgregado(a.ID, a.Code, a.Name)
+	a.RigidMembers, a.VariantSets = recipe.RigidMembers, recipe.VariantSets
+	a.CompatibilityRules = recipe.CompatibilityRules
+	a.Components = recipe.Components
+	a.HardwareLines = recipe.HardwareLines
+	a.CommercialKitHardwareID = recipe.CommercialKitHardwareID
+	a.WidthMm, a.HeightMm, a.DepthMm = recipe.WidthMm, recipe.HeightMm, recipe.DepthMm
+	a.Version, a.Active, a.CurrentRevisionID = keptVersion, keptActive, keptRevID
+}
+
 // --- #1369 slice 1: recipe change simulation (dry-run) ---
 
 // recipeChangeSimulationRequest is the wire body of the dry-run. The candidate
@@ -190,9 +220,7 @@ func (s *Server) HandleAgregadoRecipeSimulation(w http.ResponseWriter, r *http.R
 	// #1369 (verificación en DB real): la receta vigente vive en la revisión
 	// actual, no en la fila del catálogo — sin esta hidratación el simulate
 	// ve una receta vacía y el diff no describe el cambio real.
-	if rev, revErr := s.Store.GetAgregadoCurrentRevision(r.Context(), id); revErr == nil && rev != nil {
-		*current = rev.Recipe.ToAgregado(current.ID, current.Code, current.Name)
-	}
+	hydrateAgregadoRecipe(current, s.Store, r.Context())
 
 	params := engine.AssemblyResolutionParams{
 		WidthMm:  float64(current.WidthMm),

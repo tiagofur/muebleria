@@ -10,6 +10,9 @@ import (
 // Contrato: catálogo comercial — tableros, ambientes, categorías, cANTON,
 // edge bands, herrajes, perfiles HW (#913) y side assignments (#915).
 type CatalogStore interface {
+	// #1369: receta vigente del agregado (vive en agregado_revisions).
+	GetAgregadoCurrentRevision(ctx context.Context, agregadoID string) (*domain.AgregadoRevision, error)
+
 	// Catalog: the factory construction policy (#1078/#1218) — the parsed
 	// standard-library overlay; nil when no active overlay governs.
 	GetFactoryConstructionPolicy(ctx context.Context) (*engine.FactoryConstructionPolicy, error)
