@@ -163,6 +163,9 @@ func (s *stubStore) ListAgregados(context.Context) ([]domain.Agregado, error) {
 }
 
 func (s *stubStore) GetAgregadoByID(context.Context, string) (*domain.Agregado, error) {
+	if s.agregadoReturnedByID != nil || s.agregadoGetByIDErr != nil {
+		return s.agregadoReturnedByID, s.agregadoGetByIDErr
+	}
 	s.stubNotUsed("GetAgregadoByID")
 	return nil, nil
 }

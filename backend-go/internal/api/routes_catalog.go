@@ -139,6 +139,9 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	mux.Handle("GET /api/catalog/agregados/{id}", authMW(http.HandlerFunc(server.HandleAgregadoByID)))
 	mux.Handle("PUT /api/catalog/agregados/{id}", authMW(http.HandlerFunc(server.HandleAgregadoByID)))
 	mux.Handle("DELETE /api/catalog/agregados/{id}", authMW(http.HandlerFunc(server.HandleAgregadoByID)))
+	// #1369: dry-run of a recipe change — classified diff, never mutates; the
+	// apply is the guarded PUT above.
+	mux.Handle("POST /api/catalog/agregados/{id}/recipe-change/simulate", authMW(http.HandlerFunc(server.HandleAgregadoRecipeSimulation)))
 
 	// Catálogo: Categorías jerárquicas de módulos (F025)
 	mux.Handle("GET /api/catalog/categories", authMW(http.HandlerFunc(server.HandleCategories)))

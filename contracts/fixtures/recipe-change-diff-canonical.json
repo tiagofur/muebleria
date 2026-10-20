@@ -1,0 +1,683 @@
+{
+  "description": "#1369 recipe change diff — produced by Go engine.SimulateRecipeChange over the synthetic drawer recipe; TS consumes this contract verbatim (no re-resolve).",
+  "current": {
+    "id": "agr-drawer-synth",
+    "code": "DRAWER-SYNTH",
+    "name": "Synthetic Test Drawer System",
+    "components": [
+      {
+        "componentId": "comp-drawer-bottom",
+        "quantity": 1,
+        "overrides": {
+          "lengthRule": {
+            "source": "selected_variant",
+            "variantSetId": "vs-drawer-depth",
+            "offsetMm": -10
+          },
+          "widthRule": {
+            "source": "assembly_width",
+            "offsetMm": -35
+          },
+          "placementRule": {
+            "x": {
+              "ref": "min",
+              "offsetMm": 17.5
+            },
+            "y": {
+              "ref": "min",
+              "offsetMm": 10
+            },
+            "z": {
+              "ref": "min",
+              "offsetMm": 16
+            }
+          }
+        }
+      },
+      {
+        "componentId": "comp-drawer-back",
+        "quantity": 1,
+        "overrides": {
+          "lengthRule": {
+            "source": "assembly_height",
+            "offsetMm": -40
+          },
+          "widthRule": {
+            "source": "assembly_width",
+            "offsetMm": -35
+          },
+          "placementRule": {
+            "x": {
+              "ref": "min",
+              "offsetMm": 17.5
+            },
+            "y": {
+              "ref": "max",
+              "offsetMm": -16
+            },
+            "z": {
+              "ref": "min",
+              "offsetMm": 16
+            }
+          }
+        }
+      }
+    ],
+    "commercial_kit_hardware_id": "hw-kit-drawer-synth",
+    "rigid_members": [
+      {
+        "memberId": "side_left",
+        "role": "drawer_side_left",
+        "source": {
+          "kind": "variant",
+          "variant": {
+            "variantSetId": "vs-drawer-depth"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit"
+      },
+      {
+        "memberId": "side_right",
+        "role": "drawer_side_right",
+        "source": {
+          "kind": "variant",
+          "variant": {
+            "variantSetId": "vs-drawer-depth"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "max",
+            "offsetMm": 0
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit"
+      },
+      {
+        "memberId": "runner_left",
+        "role": "drawer_runner_left",
+        "source": {
+          "kind": "variant",
+          "variant": {
+            "variantSetId": "vs-drawer-depth"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit"
+      },
+      {
+        "memberId": "runner_right",
+        "role": "drawer_runner_right",
+        "source": {
+          "kind": "variant",
+          "variant": {
+            "variantSetId": "vs-drawer-depth"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "max",
+            "offsetMm": 0
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit"
+      },
+      {
+        "memberId": "locking_device_left",
+        "role": "drawer_coupling_left",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-clip-l"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 10
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 5
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "separately_purchased"
+      },
+      {
+        "memberId": "locking_device_right",
+        "role": "drawer_coupling_right",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-clip-r"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "max",
+            "offsetMm": -10
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 5
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "separately_purchased"
+      }
+    ],
+    "variant_sets": [
+      {
+        "id": "vs-drawer-depth",
+        "dimension": "depth",
+        "variants": [
+          {
+            "nominalDimensionMm": 450,
+            "hardwareId": "hw-side-450"
+          },
+          {
+            "nominalDimensionMm": 500,
+            "hardwareId": "hw-side-500"
+          },
+          {
+            "nominalDimensionMm": 550,
+            "hardwareId": "hw-side-550"
+          }
+        ]
+      }
+    ],
+    "compatibility_rules": [
+      {
+        "variantSetId": "vs-drawer-depth",
+        "clearanceMm": 3,
+        "selectionStrategy": "max_fitting"
+      }
+    ],
+    "active": false,
+    "created_at": "0001-01-01T00:00:00Z",
+    "updated_at": "0001-01-01T00:00:00Z",
+    "version": 0
+  },
+  "candidate": {
+    "id": "agr-drawer-synth",
+    "code": "DRAWER-SYNTH",
+    "name": "Synthetic Test Drawer System",
+    "components": [
+      {
+        "componentId": "comp-drawer-bottom",
+        "quantity": 1,
+        "overrides": {
+          "lengthRule": {
+            "source": "selected_variant",
+            "variantSetId": "vs-drawer-depth",
+            "offsetMm": -10
+          },
+          "widthRule": {
+            "source": "assembly_width",
+            "offsetMm": -55
+          },
+          "placementRule": {
+            "x": {
+              "ref": "min",
+              "offsetMm": 17.5
+            },
+            "y": {
+              "ref": "min",
+              "offsetMm": 10
+            },
+            "z": {
+              "ref": "min",
+              "offsetMm": 16
+            }
+          }
+        }
+      },
+      {
+        "componentId": "comp-drawer-back",
+        "quantity": 1,
+        "overrides": {
+          "lengthRule": {
+            "source": "assembly_height",
+            "offsetMm": -40
+          },
+          "widthRule": {
+            "source": "assembly_width",
+            "offsetMm": -35
+          },
+          "placementRule": {
+            "x": {
+              "ref": "min",
+              "offsetMm": 17.5
+            },
+            "y": {
+              "ref": "max",
+              "offsetMm": -16
+            },
+            "z": {
+              "ref": "min",
+              "offsetMm": 16
+            }
+          }
+        }
+      }
+    ],
+    "commercial_kit_hardware_id": "hw-kit-drawer-premium",
+    "rigid_members": [
+      {
+        "memberId": "side_left",
+        "role": "drawer_side_left",
+        "source": {
+          "kind": "variant",
+          "variant": {
+            "variantSetId": "vs-drawer-depth"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit"
+      },
+      {
+        "memberId": "side_right",
+        "role": "drawer_side_right",
+        "source": {
+          "kind": "variant",
+          "variant": {
+            "variantSetId": "vs-drawer-depth"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "max",
+            "offsetMm": -10
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit"
+      },
+      {
+        "memberId": "runner_left",
+        "role": "drawer_runner_left",
+        "source": {
+          "kind": "variant",
+          "variant": {
+            "variantSetId": "vs-drawer-depth"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit"
+      },
+      {
+        "memberId": "runner_right",
+        "role": "drawer_runner_right",
+        "source": {
+          "kind": "variant",
+          "variant": {
+            "variantSetId": "vs-drawer-depth"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "max",
+            "offsetMm": 0
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit"
+      },
+      {
+        "memberId": "locking_device_right",
+        "role": "drawer_coupling_right",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-clip-r"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "max",
+            "offsetMm": -10
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 5
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "separately_purchased"
+      },
+      {
+        "memberId": "runner_mid",
+        "role": "drawer_runner_mid",
+        "source": {
+          "kind": "variant",
+          "variant": {
+            "variantSetId": "vs-drawer-depth"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 300
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit"
+      }
+    ],
+    "variant_sets": [
+      {
+        "id": "vs-drawer-depth",
+        "dimension": "depth",
+        "variants": [
+          {
+            "nominalDimensionMm": 450,
+            "hardwareId": "hw-side-450"
+          },
+          {
+            "nominalDimensionMm": 500,
+            "hardwareId": "hw-side-500"
+          },
+          {
+            "nominalDimensionMm": 550,
+            "hardwareId": "hw-side-550"
+          }
+        ]
+      }
+    ],
+    "compatibility_rules": [
+      {
+        "variantSetId": "vs-drawer-depth",
+        "clearanceMm": 3,
+        "selectionStrategy": "max_fitting"
+      }
+    ],
+    "active": false,
+    "created_at": "0001-01-01T00:00:00Z",
+    "updated_at": "0001-01-01T00:00:00Z",
+    "version": 0
+  },
+  "params": {
+    "widthMm": 600,
+    "depthMm": 550,
+    "heightMm": 200
+  },
+  "expectedDiff": {
+    "state": "valid",
+    "params": {
+      "widthMm": 600,
+      "depthMm": 550,
+      "heightMm": 200
+    },
+    "candidateResolved": true,
+    "members": [
+      {
+        "memberId": "locking_device_left",
+        "change": "removed",
+        "role": "drawer_coupling_left",
+        "hardwareIdBefore": "hw-clip-l",
+        "bomRoleBefore": "separately_purchased",
+        "translationBeforeMm": [
+          10,
+          5,
+          0
+        ]
+      },
+      {
+        "memberId": "locking_device_right",
+        "change": "unchanged",
+        "role": "drawer_coupling_right",
+        "hardwareIdBefore": "hw-clip-r",
+        "hardwareIdAfter": "hw-clip-r",
+        "bomRoleBefore": "separately_purchased",
+        "bomRoleAfter": "separately_purchased"
+      },
+      {
+        "memberId": "runner_left",
+        "change": "unchanged",
+        "role": "drawer_runner_left",
+        "hardwareIdBefore": "hw-side-500",
+        "hardwareIdAfter": "hw-side-500",
+        "bomRoleBefore": "included_in_kit",
+        "bomRoleAfter": "included_in_kit"
+      },
+      {
+        "memberId": "runner_mid",
+        "change": "added",
+        "role": "drawer_runner_mid",
+        "hardwareIdAfter": "hw-side-500",
+        "bomRoleAfter": "included_in_kit",
+        "translationAfterMm": [
+          300,
+          0,
+          0
+        ]
+      },
+      {
+        "memberId": "runner_right",
+        "change": "unchanged",
+        "role": "drawer_runner_right",
+        "hardwareIdBefore": "hw-side-500",
+        "hardwareIdAfter": "hw-side-500",
+        "bomRoleBefore": "included_in_kit",
+        "bomRoleAfter": "included_in_kit"
+      },
+      {
+        "memberId": "side_left",
+        "change": "unchanged",
+        "role": "drawer_side_left",
+        "hardwareIdBefore": "hw-side-500",
+        "hardwareIdAfter": "hw-side-500",
+        "bomRoleBefore": "included_in_kit",
+        "bomRoleAfter": "included_in_kit"
+      },
+      {
+        "memberId": "side_right",
+        "change": "moved",
+        "role": "drawer_side_right",
+        "hardwareIdBefore": "hw-side-500",
+        "hardwareIdAfter": "hw-side-500",
+        "bomRoleBefore": "included_in_kit",
+        "bomRoleAfter": "included_in_kit",
+        "translationBeforeMm": [
+          600,
+          0,
+          0
+        ],
+        "translationAfterMm": [
+          590,
+          0,
+          0
+        ],
+        "translationDeltaMm": [
+          -10,
+          0,
+          0
+        ]
+      }
+    ],
+    "boards": [
+      {
+        "componentId": "comp-drawer-back",
+        "change": "unchanged",
+        "before": {
+          "widthMm": 565,
+          "lengthMm": 160,
+          "quantity": 1
+        },
+        "after": {
+          "widthMm": 565,
+          "lengthMm": 160,
+          "quantity": 1
+        }
+      },
+      {
+        "componentId": "comp-drawer-bottom",
+        "change": "resized",
+        "before": {
+          "widthMm": 565,
+          "lengthMm": 490,
+          "quantity": 1
+        },
+        "after": {
+          "widthMm": 545,
+          "lengthMm": 490,
+          "quantity": 1
+        }
+      }
+    ],
+    "variants": [
+      {
+        "variantSetId": "vs-drawer-depth",
+        "change": "unchanged",
+        "before": {
+          "variantSetId": "vs-drawer-depth",
+          "hardwareId": "hw-side-500",
+          "nominalDimensionMm": 500
+        },
+        "after": {
+          "variantSetId": "vs-drawer-depth",
+          "hardwareId": "hw-side-500",
+          "nominalDimensionMm": 500
+        }
+      }
+    ],
+    "consumption": [
+      {
+        "hardwareId": "hw-clip-l",
+        "role": "drawer_coupling_left",
+        "change": "removed",
+        "quantityBefore": 1,
+        "quantityAfter": 0
+      },
+      {
+        "hardwareId": "hw-clip-r",
+        "role": "drawer_coupling_right",
+        "change": "unchanged",
+        "quantityBefore": 1,
+        "quantityAfter": 1
+      },
+      {
+        "hardwareId": "hw-kit-drawer-premium",
+        "role": "commercial_kit",
+        "change": "added",
+        "quantityBefore": 0,
+        "quantityAfter": 1
+      },
+      {
+        "hardwareId": "hw-kit-drawer-synth",
+        "role": "commercial_kit",
+        "change": "removed",
+        "quantityBefore": 1,
+        "quantityAfter": 0
+      }
+    ],
+    "summary": {
+      "added": 2,
+      "removed": 3,
+      "moved": 1,
+      "resized": 1,
+      "rejected": 0,
+      "totalChanges": 7
+    }
+  }
+}
