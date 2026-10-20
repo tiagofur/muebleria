@@ -648,6 +648,20 @@ canónico. Stale write devuelve 409/412 estructurado; nunca sobrescribe.
 Creates/commands críticos usan `Idempotency-Key`. Misma key y mismo command devuelve
 el mismo resultado. Misma key con payload diferente falla `IDEMPOTENCY_CONFLICT`.
 
+**Catálogo (decisión #443, 2026-10-19):** las familias del catálogo NO usan
+`Idempotency-Key`. Su contrato de reintento es `PUT`/`DELETE /{id}` con el id
+generado por el cliente y `If-Match` obligatorio (428 sin header), que ya es
+idempotente de facto: si un write aterrizó y el cliente no vio el ack, el
+reintento viaja con el `If-Match` original y recibe 412 `VERSION_CONFLICT` sin
+mutar — ni doble aplicación ni doble bump — y el cliente reconcilia re-leyendo
+(ETag/version) y reenviando contra la versión actual. Editar tras un borrado
+tampoco resucita: borrado físico → `not found` (404); borrado lógico (versión
++1) → 412 y la fila sigue inactiva. Pruebas sobre PostgreSQL real:
+`backend-go/internal/storage/catalog_delete_update_conflict_test.go`. El coste
+asumido es de UX, no de corrección: en red floja un reintento de algo que ya se
+guardó aparece como conflicto que se reconcilia solo; si eso molesta, cablear
+`RequireIdempotency` en `routes_catalog.go` es la mejora, no un cambio de contrato.
+
 ### Commands
 
 Acciones sensibles usan endpoints/servicios explícitos:
