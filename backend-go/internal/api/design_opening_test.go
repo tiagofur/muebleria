@@ -459,3 +459,55 @@ func TestHandleDesignOpeningPilotSkipsDefinitionlessItems(t *testing.T) {
 		t.Fatalf("pilot must skip the junk row and resolve over the real unit: %s", rr.Body.String())
 	}
 }
+
+// #1337 — end-to-end regression: applying an opening with a verified profile
+// authored with ONLY the #1316 single door discount (legacy pair absent) used
+// to die with 500 "el pin de perfil exige código, estado verificado y
+// geometría positiva". The freeze + validation + resolve must accept it.
+func TestHandleDesignOpeningPutWithSoloDoorReductionProfile(t *testing.T) {
+	store := openingDesignStub()
+	// Same catalog, one profile carrying only door_reduction_mm (pair nil).
+	door := 35
+	grip := store.openingCapabilities.Grips[domain.OpeningGripSystemGola]
+	grip.Profiles = []string{"profile.gola-solo-door"}
+	store.openingCapabilities.Grips[domain.OpeningGripSystemGola] = grip
+	store.openingProfiles = []domain.OpeningProfile{{
+		ID: "profile.gola-solo-door", Code: "GOLA-SOLO-DOOR", CompatiblePlacements: []string{"top"},
+		DatasheetStatus: "verified", DoorReductionMm: &door, Version: 8,
+		BOMMembers: map[string]domain.OpeningBOMMember{
+			"profile": {HardwareID: "HW-8006", Rule: "interior_width", Unit: "meter"},
+		},
+	}}
+	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{
+		"d1137000-0000-0000-0000-000000000001": *designWCWithDims(map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}),
+	}
+	srv := &Server{Store: store}
+
+	rr := openingRequest(t, srv, http.MethodPut, `{"system":"gola","profileId":"profile.gola-solo-door","placements":["top"]}`)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d — the solo-door profile must apply without 500 (body=%s)", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	pin := store.setOpeningCmd.Opening.ProfilePin
+	if pin == nil || pin.DoorReductionMm == nil || *pin.DoorReductionMm != 35 || pin.FrontReductionMm != 0 {
+		t.Fatalf("the pin must freeze the door discount verbatim with a 0 pair: %+v", pin)
+	}
+	var got struct {
+		Resolution *struct {
+			State  string `json:"state"`
+			Fronts []struct {
+				HeightMm int `json:"heightMm"`
+			} `json:"fronts"`
+		} `json:"resolution"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Resolution == nil || got.Resolution.State != "resolved" || len(got.Resolution.Fronts) != 1 {
+		t.Fatalf("expected one resolved front consuming the 35 mm door discount: %s", rr.Body.String())
+	}
+	// 720 - 35 (door discount) = 685: the single number governs the resolve.
+	if got.Resolution.Fronts[0].HeightMm != 685 {
+		t.Fatalf("front height = %d, want 685 (720 - door_reduction 35)", got.Resolution.Fronts[0].HeightMm)
+	}
+}

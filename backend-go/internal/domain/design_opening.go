@@ -111,7 +111,7 @@ func ValidateDesignOpeningSelection(selection DesignOpeningSelection) error {
 	if selection.ProfilePin != nil {
 		pin := selection.ProfilePin
 		if strings.TrimSpace(pin.ProfileCode) == "" || pin.DatasheetStatus != "verified" ||
-			pin.FrontReductionMm <= 0 || pin.GripClearanceMm < 0 {
+			!pinHasEffectiveDiscount(pin) {
 			return fmt.Errorf("el pin de perfil exige código, estado verificado y geometría positiva")
 		}
 		if pin.BOM != nil {
@@ -121,4 +121,16 @@ func ValidateDesignOpeningSelection(selection DesignOpeningSelection) error {
 		}
 	}
 	return nil
+}
+
+// pinHasEffectiveDiscount mirrors the #1316 authoring rule (#1337): the
+// workshop-facing door discount frozen with the pin is the declared single
+// number or the legacy datasheet pair. A door_reduction_mm that is present but
+// not positive is invalid on its own — present wins, there is no fallback to
+// the pair (the same contract as ValidateOpeningProfile).
+func pinHasEffectiveDiscount(pin *DesignOpeningProfilePin) bool {
+	if pin.DoorReductionMm != nil {
+		return *pin.DoorReductionMm > 0
+	}
+	return pin.FrontReductionMm > 0 && pin.GripClearanceMm >= 0
 }

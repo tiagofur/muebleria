@@ -67,3 +67,56 @@ func TestValidateDesignAuthoringDefaultsOpening(t *testing.T) {
 		t.Fatal("sanity: the wire shape must carry the opening key")
 	}
 }
+
+// #1337 — the pin freeze accepts the #1316 single door discount as the
+// effective geometry: a verified profile authored with only door_reduction_mm
+// (legacy pair 0/0) must be pinnable. A pin with no discount at all keeps
+// failing closed with the same workshop-facing message.
+func TestValidateDesignOpeningPinEffectiveDiscount(t *testing.T) {
+	door := 35
+	base := func() DesignOpeningSelection {
+		return DesignOpeningSelection{
+			System:     "gola",
+			ProfileID:  "profile.gola-l.alu",
+			Placements: []string{"top"},
+			ProfilePin: &DesignOpeningProfilePin{
+				ProfileCode:     "GOLA-L-ALU",
+				DatasheetStatus: "verified",
+				DoorReductionMm: &door,
+				ProfileHeightMm: 56.5,
+				ProfileDepthMm:  27.2,
+				BOM:             &DesignOpeningProfilePinBOM{ProfileVersion: 7, Members: map[string]OpeningBOMMember{}},
+			},
+		}
+	}
+
+	if err := ValidateDesignOpeningSelection(base()); err != nil {
+		t.Fatalf("pin with door_reduction_mm and 0/0 pair rejected: %v", err)
+	}
+
+	// Legacy pair alone still authorizes the freeze.
+	legacy := base()
+	legacy.ProfilePin.DoorReductionMm = nil
+	legacy.ProfilePin.FrontReductionMm = 66
+	legacy.ProfilePin.GripClearanceMm = 4
+	if err := ValidateDesignOpeningSelection(legacy); err != nil {
+		t.Fatalf("pin with legacy pair rejected: %v", err)
+	}
+
+	// No discount at all: same workshop-facing message, fail closed.
+	none := base()
+	none.ProfilePin.DoorReductionMm = nil
+	err := ValidateDesignOpeningSelection(none)
+	if err == nil || !strings.Contains(err.Error(), "el pin de perfil exige código, estado verificado y geometría positiva") {
+		t.Fatalf("pin without any discount err = %v, want the workshop message", err)
+	}
+
+	// door_reduction_mm present but non-positive is invalid on its own —
+	// present wins, no silent fallback to the pair.
+	zero := base()
+	bad := 0
+	zero.ProfilePin.DoorReductionMm = &bad
+	if err := ValidateDesignOpeningSelection(zero); err == nil {
+		t.Fatal("pin with door_reduction_mm = 0 must be rejected (present wins)")
+	}
+}
