@@ -43,6 +43,12 @@ import { AgregadoListView } from './editor/AgregadoListView';
 import { AgregadoDetailView } from './editor/AgregadoDetailView';
 import { AgregadoEditorForm, type AgregadoEditorTab } from './editor/AgregadoEditorForm';
 import { Agregado3DModal } from './editor/Agregado3DModal';
+import {
+  RecipeChangeSimulationModal,
+  type RecipeApplyResult,
+  type RecipeSimRequest,
+  type RecipeSimResult,
+} from './editor/RecipeChangeSimulationModal';
 import './agregados.css';
 
 export interface AgregadosScreenProps {
@@ -65,6 +71,14 @@ export interface AgregadosScreenProps {
   readonly catalogMaterials?: readonly MaterialBoard[];
   readonly catalogEdges?: readonly EdgeBand[];
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
+  /** #1369: dry-run de cambio de receta. Ausente ⇒ «Simular cambio» oculto. */
+  readonly onSimulateRecipe?: (req: RecipeSimRequest) => Promise<RecipeSimResult>;
+  /** #1369: aplicar la candidata con If-Match (412 ⇒ re-simular). */
+  readonly onApplyRecipe?: (req: {
+    readonly id: string;
+    readonly expectedVersion: number;
+    readonly candidate: Agregado;
+  }) => Promise<RecipeApplyResult>;
 }
 
 export function AgregadosScreen({
@@ -82,6 +96,8 @@ export function AgregadosScreen({
   catalogMaterials,
   catalogEdges,
   resolveImageUrl,
+  onSimulateRecipe,
+  onApplyRecipe,
 }: AgregadosScreenProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -243,6 +259,8 @@ export function AgregadosScreen({
   };
 
   const [view3dItem, setView3dItem] = useState<Agregado | null>(null);
+  const [recipeSimOpen, setRecipeSimOpen] = useState(false);
+  // #1369: el modal de simulación opera sobre la ENTIDAD guardada (expandedId).
   // S1 #1009: delete is destructive on a shared library asset — it only runs
   // after the ConfirmDialog; the detail view just requests it.
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -329,6 +347,11 @@ export function AgregadosScreen({
                   onBack={() => setSelectedId(null)}
                   onEdit={handleEdit}
                   onView3D={catalogInput ? (item) => setView3dItem(item) : undefined}
+                  onSimulateChange={
+                    canMutate && onSimulateRecipe && onApplyRecipe
+                      ? () => setRecipeSimOpen(true)
+                      : undefined
+                  }
                   onDelete={canMutate && onDelete ? (id) => setConfirmDeleteId(id) : undefined}
                   onDuplicate={canMutate && onDuplicate ? onDuplicate : undefined}
                   canMutate={canMutate}
@@ -340,6 +363,10 @@ export function AgregadosScreen({
         renderEditorForm={() => (
           <AgregadoEditorForm
             formId={formId}
+            recipeAgregado={editingId ? (agregados.find((a) => a.id === editingId) ?? null) : null}
+            onSimulateChange={
+              canMutate && onSimulateRecipe && onApplyRecipe ? () => setRecipeSimOpen(true) : undefined
+            }
             error={error}
             saveFailed={saveFailed}
             onSubmit={onSubmit}
@@ -366,6 +393,26 @@ export function AgregadosScreen({
           resolveMediaUrl={resolveImageUrl}
         />
       ) : null}
+
+      {(() => {
+        // #1369: el modal opera sobre la entidad guardada del detalle actual.
+        const saved = agregados.find((a) => a.id === expandedId) ?? null;
+        if (!recipeSimOpen || !saved || !onSimulateRecipe || !onApplyRecipe) return null;
+        return (
+          <RecipeChangeSimulationModal
+            open
+            agregado={saved}
+            agregados={agregados}
+            catalogHardware={catalogHardware}
+            // #1369: el store ya persistió el PUT y actualizó el catálogo —
+            // re-llamar onUpdate re-salvaría todo y duplicaría el toast.
+            onSimulate={(req) => onSimulateRecipe({ ...req, id: saved.id })}
+            onApply={onApplyRecipe}
+            onApplied={() => undefined}
+            onClose={() => setRecipeSimOpen(false)}
+          />
+        );
+      })()}
 
       <ConfirmDialog
         open={deleteTarget != null}

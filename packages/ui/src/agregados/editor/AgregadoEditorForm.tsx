@@ -12,7 +12,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import type { Component, Hardware, HardwareLine, ModuleComponentInstance, OptionGroup } from '@granete/domain';
+import type { Agregado, Component, Hardware, HardwareLine, ModuleComponentInstance, OptionGroup } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import { ModuleComponentAdderModal } from '../../modules/components/ModuleComponentAdderModal';
@@ -27,8 +27,9 @@ import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import type { AgregadoDraft } from '../agregadoDraft';
 import { AgregadoEditorGeneralPanel } from './AgregadoEditorGeneralPanel';
 import { AgregadoEditorPreview3D } from './AgregadoEditorPreview3D';
+import { AgregadoRecipePanel } from './AgregadoRecipePanel';
 
-export type AgregadoEditorTab = 'general' | 'components' | 'hardware';
+export type AgregadoEditorTab = 'general' | 'components' | 'hardware' | 'recipe';
 
 export type AgregadoEditorFormProps = {
   readonly formId: string;
@@ -50,12 +51,17 @@ export type AgregadoEditorFormProps = {
   readonly optionGroups?: readonly OptionGroup[];
   /** #1009 S3: the last save was rejected by the server; the draft is intact. */
   readonly saveFailed?: boolean;
+  /** #1369: la entidad guardada cuya receta muestra la pestaña (read-only). */
+  readonly recipeAgregado?: Agregado | null;
+  /** #1369: abrir el modal «Simular cambio de receta». Ausente ⇒ botón oculto. */
+  readonly onSimulateChange?: () => void;
 };
 
 const TABS: { id: AgregadoEditorTab; label: string }[] = [
   { id: 'general', label: 'General' },
   { id: 'components', label: 'Piezas' },
   { id: 'hardware', label: 'Herrajes' },
+  { id: 'recipe', label: 'Receta' },
 ];
 
 export function AgregadoEditorForm({
@@ -73,6 +79,8 @@ export function AgregadoEditorForm({
   resolveImageUrl,
   optionGroups,
   saveFailed = false,
+  recipeAgregado,
+  onSimulateChange,
 }: AgregadoEditorFormProps): ReactNode {
 
   const hardwareRoles = useMemo(
@@ -173,6 +181,8 @@ export function AgregadoEditorForm({
   const tabBadge: Partial<Record<AgregadoEditorTab, number>> = {
     components: draft.components.length,
     hardware: draft.hardwareLines.length + totalHardwarePlacements,
+    // #1369: la pestaña muestra la receta GUARDADA (no el borrador).
+    recipe: recipeAgregado?.rigidMembers?.length,
   };
 
   const tabDefs: readonly TabDefinition<AgregadoEditorTab>[] = TABS.map(
@@ -633,6 +643,15 @@ export function AgregadoEditorForm({
         </div>
       )}
       </form>
+
+      {/* Tab: Receta (#1369) — read-only sobre la entidad guardada */}
+      {editorTab === 'recipe' && (
+        <AgregadoRecipePanel
+          saved={recipeAgregado ?? null}
+          catalogHardware={catalogHardware}
+          onSimulateChange={onSimulateChange}
+        />
+      )}
 
       <ModuleComponentAdderModal
         open={pickerOpen}

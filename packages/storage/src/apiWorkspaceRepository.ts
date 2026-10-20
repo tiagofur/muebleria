@@ -40,6 +40,8 @@ import type {
   ReworkAction,
   UnitQcChecklistItem,
   SurveyElementInput,
+  RecipeChangeSimulationResponse,
+  Agregado,
 } from '@granete/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
@@ -65,7 +67,8 @@ import {
 } from './workspaceRepository';
 import { GraneteApiClient } from './apiClient';
 import type { ApiError } from './openapi/generated/types';
-import { CatalogEntityVersionUnknownError, GraneteApiError, HardwareVersionUnknownError, ModuleVersionUnknownError } from './apiErrors';
+import { CatalogEntityVersionUnknownError, GraneteApiError, HardwareVersionUnknownError, ModuleVersionUnknownError, GraneteNetworkError } from './apiErrors';
+import { parseRecipeChangeSimulationResponse } from '@granete/domain';
 import type {
   CatalogModule,
   ProductionRelease,
@@ -81,6 +84,7 @@ export interface ReleaseBomContextView {
 
 
 import {
+  agregadoFromApi,
   agregadoToApi,
   ambientCategoryToApi,
   ambientMaterialToApi,
@@ -928,6 +932,96 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       console.error(`API create error ${pathCollection}:`, err);
       throw err instanceof Error ? err : new Error(String(err));
     }
+  }
+
+  /**
+   * #1369 — dry-run de cambio de receta de un agregado: POST
+   * /catalog/agregados/{id}/recipe-change/simulate. El backend resuelve
+   * actual y candidata y devuelve el diff clasificado; nunca muta. La
+   * respuesta se valida con el parser fail-closed del contrato
+   * (parseRecipeChangeSimulationResponse) antes de salir del repositorio.
+   */
+  async simulateAgregadoRecipeChange(
+    id: string,
+    req: {
+      readonly candidate: Agregado;
+      readonly params?: { readonly widthMm: number; readonly depthMm: number; readonly heightMm: number };
+      readonly variantSelections?: Record<string, number>;
+    },
+  ): Promise<RecipeChangeSimulationResponse> {
+    let res: Response;
+    try {
+      res = await this.fetch(
+        `${this.baseUrl}/catalog/agregados/${encodeURIComponent(id)}/recipe-change/simulate`,
+        {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify({
+            candidate: agregadoToApi(req.candidate),
+            ...(req.params ? { params: req.params } : {}),
+            ...(req.variantSelections ? { variantSelections: req.variantSelections } : {}),
+          }),
+        },
+      );
+    } catch (err) {
+      if (err instanceof TypeError) throw new GraneteNetworkError(err);
+      throw err;
+    }
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => null)) as
+        | { code?: string; message?: string; fieldErrors?: Record<string, string>; requestId?: string; retryable?: boolean; details?: Record<string, unknown> }
+        | null;
+      if (payload && payload.code) {
+        throw new GraneteApiError(res.status, {
+          code: payload.code as ApiError['code'],
+          message: payload.message ?? 'la operación sobre la receta falló',
+          fieldErrors: payload.fieldErrors ?? {},
+          requestId: payload.requestId ?? '',
+          retryable: payload.retryable ?? res.status >= 500,
+          details: payload.details ?? {},
+        });
+      }
+      throw new Error(`recipe change failed: ${res.status}`);
+    }
+    return parseRecipeChangeSimulationResponse(await res.json());
+  }
+
+  /**
+   * #1369 — aplicar la receta candidata: PUT por entidad con el If-Match de la
+   * simulación (la versión congelada al simular). Stale → 412 GraneteApiError:
+   * la UI ofrece re-simular; nunca sobrescribe en silencio (#443).
+   */
+  async applyAgregadoRecipe(id: string, expectedVersion: number, agregado: Agregado): Promise<Agregado> {
+    const headers = this.getHeaders();
+    headers['If-Match'] = `"v${expectedVersion}"`;
+    let res: Response;
+    try {
+      res = await this.fetch(`${this.baseUrl}/catalog/agregados/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(agregadoToApi(agregado)),
+      });
+    } catch (err) {
+      if (err instanceof TypeError) throw new GraneteNetworkError(err);
+      throw err;
+    }
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => null)) as
+        | { code?: string; message?: string; fieldErrors?: Record<string, string>; requestId?: string; retryable?: boolean; details?: Record<string, unknown> }
+        | null;
+      if (payload && payload.code) {
+        throw new GraneteApiError(res.status, {
+          code: payload.code as ApiError['code'],
+          message: payload.message ?? 'la operación sobre la receta falló',
+          fieldErrors: payload.fieldErrors ?? {},
+          requestId: payload.requestId ?? '',
+          retryable: payload.retryable ?? res.status >= 500,
+          details: payload.details ?? {},
+        });
+      }
+      throw new Error(`recipe change failed: ${res.status}`);
+    }
+    return agregadoFromApi((await res.json()) as Record<string, unknown>);
   }
 
   async saveCatalog(catalog: Catalog): Promise<void> {

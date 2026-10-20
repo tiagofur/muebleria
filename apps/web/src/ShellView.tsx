@@ -18,6 +18,7 @@ import {
 } from 'react';
 import { useLocation } from 'react-router-dom';
 import { FileQuestion } from 'lucide-react';
+import type { RecipeChangeActions } from './stores/catalog/shared';
 import type {
   Catalog,
   Component,
@@ -273,6 +274,8 @@ export interface ShellViewCtx {
   readonly commandItems: CommandPaletteItem[];
   readonly components: readonly Component[];
   readonly createAgregado: (item: Agregado) => void;
+  readonly simulateAgregadoRecipe: RecipeChangeActions['simulate'];
+  readonly applyAgregadoRecipe: RecipeChangeActions['apply'];
   readonly createAmbientCategory: (draft: CategoryDraft) => void;
   readonly createAmbientMaterial: (draft: AmbientMaterialDraft) => Promise<void>;
   readonly createCategory: (draft: CategoryDraft) => void;
@@ -598,6 +601,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     commandItems,
     components,
     createAgregado,
+    simulateAgregadoRecipe,
+    applyAgregadoRecipe,
     createAmbientCategory,
     createAmbientMaterial,
     createCategory,
@@ -2370,6 +2375,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           catalogHardware={hardware}
           onCreate={createAgregado}
           onUpdate={updateAgregado}
+          onSimulateRecipe={(req) => simulateAgregadoRecipe({ ...req, id: routeEntityId ?? '' })}
+          onApplyRecipe={applyAgregadoRecipe}
           onDelete={deleteAgregado}
           onDuplicate={duplicateAgregado}
           canMutate={canMutateModules}
