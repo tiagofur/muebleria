@@ -1062,6 +1062,16 @@ function componentInstanceFromApi(
   );
   const notes =
     str(overridesRaw?.notes) || undefined;
+  // #1369/#670: reglas de receta del agregado (deben sobrevivir el round-trip)
+  const widthRule = overridesRaw?.widthRule as
+    | import('@granete/domain').AssemblyDimensionRule
+    | undefined;
+  const lengthRule = overridesRaw?.lengthRule as
+    | import('@granete/domain').AssemblyDimensionRule
+    | undefined;
+  const placementRule = overridesRaw?.placementRule as
+    | import('@granete/domain').AssemblyAnchorRule
+    | undefined;
   const hasOverrides =
     Array.isArray(edgesRaw) ||
     hardwarePlacementsRaw !== undefined ||
@@ -1073,7 +1083,10 @@ function componentInstanceFromApi(
     rotateX !== undefined ||
     rotateY !== undefined ||
     rotateZ !== undefined ||
-    Boolean(notes);
+    Boolean(notes) ||
+    widthRule !== undefined ||
+    lengthRule !== undefined ||
+    placementRule !== undefined;
   return {
     componentId: str(raw.componentId ?? raw.component_id),
     quantity: num(raw.quantity, 1),
@@ -1097,6 +1110,9 @@ function componentInstanceFromApi(
           rotateX,
           rotateY,
           rotateZ,
+          widthRule,
+          lengthRule,
+          placementRule,
           hardwarePlacements: Array.isArray(hardwarePlacementsRaw)
             ? hardwarePlacementsRaw.map(hardwarePlacementFromApi)
             : undefined,
