@@ -37,6 +37,10 @@ vi.mock('../../preview3d', async (importOriginal) => {
         readonly planYMm: number;
       }) => void;
       selectedModuleKeys?: readonly string[];
+      modules?: readonly {
+        readonly key: string;
+        readonly assemblies?: readonly { readonly assemblyInstanceId: string }[];
+      }[];
       selectedPartId?: string | null;
       selectedHardwareId?: string | null;
       showDragGuides?: boolean;
@@ -46,6 +50,10 @@ vi.mock('../../preview3d', async (importOriginal) => {
       ) => void;
       onSelectPart?: (partId: string | null) => void;
       onSelectHardware?: (hardwareId: string | null) => void;
+      selectedAssemblyMember?: import('../../preview3d').AssemblyMemberSelection | null;
+      onSelectAssemblyMember?: (
+        selection: import('../../preview3d').AssemblyMemberSelection,
+      ) => void;
       cameraView?: { readonly type: string; readonly ts: number } | null;
       keyboardNavActive?: boolean;
       onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
@@ -66,11 +74,25 @@ vi.mock('../../preview3d', async (importOriginal) => {
         data-ambient-floor={props.ambientFloor?.id ?? ''}
         data-ambient-wall={props.ambientWall?.id ?? ''}
         data-selected-keys={props.selectedModuleKeys?.join('|') ?? ''}
+        data-assembly-ids={
+          props.modules
+            ?.flatMap((m) => (m.assemblies ?? []).map((a) => `${m.key}:${a.assemblyInstanceId}`))
+            .join('|') ?? ''
+        }
         data-camera-view={props.cameraView?.type ?? ''}
         data-keyboard-nav={props.keyboardNavActive === false ? 'false' : 'true'}
         data-fit-center-x={props.cameraView?.type === 'fit-selection' ? '1' : '0'}
         data-selected-part={props.selectedPartId ?? ''}
         data-selected-hardware={props.selectedHardwareId ?? ''}
+        data-selected-assembly-member={
+          props.selectedAssemblyMember
+            ? `${props.selectedAssemblyMember.assemblyInstanceId}/${
+                props.selectedAssemblyMember.kind === 'rigid'
+                  ? props.selectedAssemblyMember.memberId
+                  : props.selectedAssemblyMember.componentId
+              }`
+            : ''
+        }
         data-show-guides={props.showDragGuides ? 'true' : 'false'}
         data-show-ceiling={props.showCeiling ? 'true' : 'false'}
         data-paint-hover={
@@ -210,6 +232,36 @@ vi.mock('../../preview3d', async (importOriginal) => {
           >
             mock select hardware
           </button>
+        ) : null}
+        {props.onSelectAssemblyMember ? (
+          <>
+            <button
+              type="button"
+              data-testid="mock-select-assembly-member"
+              onClick={() =>
+                props.onSelectAssemblyMember!({
+                  kind: 'rigid',
+                  assemblyInstanceId: 'inst-drawer-1',
+                  memberId: 'runner-left',
+                })
+              }
+            >
+              mock select assembly member
+            </button>
+            <button
+              type="button"
+              data-testid="mock-select-assembly-member-b"
+              onClick={() =>
+                props.onSelectAssemblyMember!({
+                  kind: 'rigid',
+                  assemblyInstanceId: 'inst-drawer-2',
+                  memberId: 'runner-left',
+                })
+              }
+            >
+              mock select assembly member (other drawer)
+            </button>
+          </>
         ) : null}
         {props.onBoardPaintDrop ? (
           <button
@@ -2475,7 +2527,7 @@ describe('ProjectSpatialStudio F143 — modo detalle', () => {
     fireEvent.click(screen.getByTestId('spatial-studio-detail-toggle'));
     expect(
       screen.getByTestId('spatial-studio-detail-hint').textContent,
-    ).toContain('pieza o herraje');
+    ).toContain('pieza, herraje o miembro de conjunto');
     fireEvent.click(screen.getByTestId('mock-select-part'));
     expect(
       screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-part'),
@@ -2490,6 +2542,215 @@ describe('ProjectSpatialStudio F143 — modo detalle', () => {
       screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-part'),
     ).toBe('');
     expect(screen.getByTestId('spatial-studio-selection-count')).toBeTruthy();
+  });
+});
+
+// ── #670: miembro exacto de un conjunto en modo detalle ─────────────────────
+
+describe('ProjectSpatialStudio #670 — miembro de conjunto en modo detalle', () => {
+  // Rigid-members-only recipe: enough to project assemblies without boards.
+  const runner = {
+    id: 'hw-runner-500',
+    code: 'RUN-500',
+    name: 'Corredera 500',
+    unit: 'piece' as const,
+    costPerUnit: 10,
+    active: true,
+    previewShape: 'slide' as const,
+    previewSizeMm: 500,
+    previewDiameterMm: 45,
+    previewColor: '#888888',
+  };
+  const drawerKit = {
+    id: 'hw-kit-drawer',
+    code: 'KIT-D',
+    name: 'Kit cajón',
+    unit: 'set' as const,
+    costPerUnit: 40,
+    active: true,
+  };
+  const drawerRecipe = {
+    id: 'agr-drawer',
+    code: 'AGR-D',
+    name: 'Cajón',
+    active: true,
+    components: [],
+    hardwareLines: [],
+    commercialKitHardwareId: 'hw-kit-drawer',
+    rigidMembers: [
+      {
+        memberId: 'runner-left',
+        role: 'guide_left',
+        source: { kind: 'fixed' as const, fixed: { hardwareId: 'hw-runner-500' } },
+        placement: {
+          x: { ref: 'min' as const, offsetMm: 0 },
+          y: { ref: 'min' as const, offsetMm: 0 },
+          z: { ref: 'min' as const, offsetMm: 0 },
+        },
+        bomRole: 'included_in_kit' as const,
+      },
+    ],
+  };
+  const drawerInstance = (id: string, zFormula: string) => ({
+    id,
+    agregadoId: 'agr-drawer',
+    quantity: 1,
+    position: { xFormula: '0', yFormula: '0', zFormula },
+    dimensions: { widthFormula: 'PW', heightFormula: '200', depthFormula: 'PD' },
+  });
+  // Two drawers from ONE recipe on the same unit: identical memberIds, distinct instances.
+  const modDrawer: Module = {
+    ...modA,
+    id: 'm-drawer',
+    code: 'MOD-D',
+    // modA's FRENTE hardware line targets a board group; the BOM would reject it.
+    hardwareLines: [],
+    agregados: [drawerInstance('inst-drawer-1', '100'), drawerInstance('inst-drawer-2', '350')],
+  };
+  // The shared fixture has no structure 'st1'; a resolvable BOM is required
+  // here because resolveItemBom drops assemblies when the BOM throws.
+  const sideComponent = {
+    id: 'c-costado',
+    code: 'CST',
+    name: 'Costado',
+    placement: 'lateral_izquierdo' as const,
+    geometry: {
+      kind: 'rectangular_board' as const,
+      lengthMm: 720,
+      widthMm: 560,
+      thicknessMm: 15,
+      lengthFormula: 'H',
+      widthFormula: 'D',
+    },
+    defaultEdges: [
+      { side: 'L1' as const, enabled: false },
+      { side: 'L2' as const, enabled: false },
+      { side: 'W1' as const, enabled: false },
+      { side: 'W2' as const, enabled: false },
+    ],
+    optionRoles: ['FRENTE'],
+    active: true,
+  };
+  const carcass = {
+    id: 'st1',
+    code: 'ST-1',
+    name: 'Casco',
+    components: [{ componentId: 'c-costado', quantity: 2 }],
+  };
+  const catalogDrawer = {
+    ...catalog,
+    modules: [modDrawer],
+    structures: [carcass],
+    components: [sideComponent],
+    hardware: [runner, drawerKit],
+    agregados: [drawerRecipe],
+  };
+  const projectDrawer: Project = {
+    ...placedProject,
+    items: placedProject.items.map((it) => ({ ...it, moduleId: 'm-drawer' })),
+  };
+
+  async function setup() {
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectDrawer}
+        modules={[modDrawer]}
+        catalog={catalogDrawer}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    // The scene is React.lazy: wait for it instead of racing the Suspense fallback.
+    await screen.findByTestId('spatial-studio-scene');
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+  }
+
+  const sceneAttr = () =>
+    screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-assembly-member');
+
+  it('fuera del modo detalle la escena no recibe el pick de miembro', async () => {
+    await setup();
+    expect(screen.queryByTestId('mock-select-assembly-member')).toBeNull();
+    expect(sceneAttr()).toBe('');
+  });
+
+  it('en modo detalle, un clic sobre un miembro abre el inspector del nodo exacto y sigue a la instancia correcta', async () => {
+    await setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-detail-toggle'));
+    expect(screen.getByTestId('spatial-studio-detail-hint').textContent).toContain(
+      'miembro de conjunto',
+    );
+
+    // Both drawers are projected into the unit's scene entry.
+    expect(
+      screen.getByTestId('spatial-studio-scene').getAttribute('data-assembly-ids'),
+    ).toBe('it-a#0:inst-drawer-1|it-a#0:inst-drawer-2|it-b#0:inst-drawer-1|it-b#0:inst-drawer-2');
+
+    fireEvent.click(screen.getByTestId('mock-select-assembly-member'));
+    expect(sceneAttr()).toBe('inst-drawer-1/runner-left');
+    const ins = 'spatial-studio-assembly-member-inspector';
+    expect(screen.getByTestId(ins).getAttribute('data-kind')).toBe('rigid');
+    expect(screen.getByTestId(`${ins}-instance`).textContent).toBe('inst-drawer-1');
+    expect(screen.getByTestId(`${ins}-agregado`).textContent).toBe('agr-drawer');
+    expect(screen.getByTestId(`${ins}-code`).textContent).toBe('runner-left');
+    expect(screen.getByTestId(`${ins}-hardware`).textContent).toBe('RUN-500 · Corredera 500');
+    // The compact part/hardware card is replaced by the member inspector.
+    expect(screen.queryByTestId('spatial-studio-detail-card')).toBeNull();
+
+    // Same memberId on the sibling drawer → the inspector moves to THAT instance.
+    fireEvent.click(screen.getByTestId('mock-select-assembly-member-b'));
+    expect(sceneAttr()).toBe('inst-drawer-2/runner-left');
+    expect(screen.getByTestId(`${ins}-instance`).textContent).toBe('inst-drawer-2');
+
+    // Re-clicking the selected node toggles it off.
+    fireEvent.click(screen.getByTestId('mock-select-assembly-member-b'));
+    expect(sceneAttr()).toBe('');
+    expect(screen.queryByTestId(ins)).toBeNull();
+  });
+
+  it('seleccionar una pieza o herraje reemplaza al miembro, y ESC vuelve a la unidad', async () => {
+    await setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-detail-toggle'));
+    const ins = 'spatial-studio-assembly-member-inspector';
+
+    fireEvent.click(screen.getByTestId('mock-select-assembly-member'));
+    expect(screen.getByTestId(ins)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('mock-select-part'));
+    expect(sceneAttr()).toBe('');
+    expect(screen.queryByTestId(ins)).toBeNull();
+    expect(screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-part')).toBe(
+      'part-x',
+    );
+
+    fireEvent.click(screen.getByTestId('mock-select-assembly-member'));
+    expect(screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-part')).toBe('');
+    fireEvent.click(screen.getByTestId('mock-select-hardware'));
+    expect(sceneAttr()).toBe('');
+
+    fireEvent.click(screen.getByTestId('mock-select-assembly-member'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(sceneAttr()).toBe('');
+    expect(screen.queryByTestId(ins)).toBeNull();
+    expect(screen.getByTestId('spatial-studio-selection-count')).toBeTruthy();
+  });
+
+  it('el botón de limpiar del inspector y salir del modo detalle descartan la selección', async () => {
+    await setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-detail-toggle'));
+    const ins = 'spatial-studio-assembly-member-inspector';
+
+    fireEvent.click(screen.getByTestId('mock-select-assembly-member'));
+    fireEvent.click(screen.getByTestId(`${ins}-clear`));
+    expect(sceneAttr()).toBe('');
+    expect(screen.queryByTestId(ins)).toBeNull();
+
+    fireEvent.click(screen.getByTestId('mock-select-assembly-member'));
+    expect(sceneAttr()).toBe('inst-drawer-1/runner-left');
+    fireEvent.click(screen.getByTestId('spatial-studio-detail-toggle'));
+    expect(sceneAttr()).toBe('');
+    expect(screen.queryByTestId('mock-select-assembly-member')).toBeNull();
   });
 });
 

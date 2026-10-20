@@ -470,18 +470,30 @@ export type FurnitureScene3DProps = {
 
 export { BoardMesh } from './BoardMesh';
 
+/** Raycast no-op: the object stays visible but can never be a pointer target. */
+const NO_RAYCAST = () => null;
+
 function OuterGhost({
   width,
   height,
   depth,
   highlighted = false,
   invalid = false,
+  pickThrough = false,
 }: {
   readonly width: number;
   readonly height: number;
   readonly depth: number;
   readonly highlighted?: boolean;
   readonly invalid?: boolean;
+  /**
+   * When the scene offers part/hardware/member picking (detail mode), the
+   * ghost box must not be a pointer target: it encloses every node of the
+   * module and its parent group owns the module onClick, so a raycast hit on
+   * the box would select the module and swallow the click meant for the part
+   * inside. Outside picking modes it stays a convenient fat click target.
+   */
+  readonly pickThrough?: boolean;
 }): ReactNode {
   const W = Math.max(width, 1);
   const H = Math.max(height, 1);
@@ -490,7 +502,7 @@ function OuterGhost({
   const color = invalid ? '#ef4444' : highlighted ? '#f5c542' : '#6b7280';
   const opacity = invalid ? 0.5 : highlighted ? 0.45 : 0.18;
   return (
-    <mesh position={[W / 2, H / 2, D / 2]}>
+    <mesh position={[W / 2, H / 2, D / 2]} raycast={pickThrough ? NO_RAYCAST : undefined}>
       <boxGeometry args={[W, H, D]} />
       <meshBasicMaterial
         color={color}
@@ -1399,6 +1411,7 @@ function ModuleGroup({
           depth={mod.depth}
           highlighted={moduleSelected}
           invalid={draggingInvalid && moduleSelected}
+          pickThrough={Boolean(onSelectPart || onSelectHardwareId || onSelectAssemblyMember)}
         />
       ) : null}
       {(mod.baseClearanceMm ?? 0) > 0 ? (

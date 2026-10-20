@@ -1915,7 +1915,10 @@ async function pickUnoccludedPixel(
   const box = await page.locator(canvasSelector).boundingBox();
   if (!box) return { ok: false, error: `canvas not visible: ${canvasSelector}` };
   const pick = await page.evaluate(
-    ({ target, width, height }) => {
+    ({ target, canvasSelector, box }) => {
+      const width = box.width;
+      const height = box.height;
+      const canvasEl = document.querySelector(canvasSelector);
       type V3 = {
         x: number;
         y: number;
@@ -1954,6 +1957,31 @@ async function pickUnoccludedPixel(
       }
       // Fresh raycaster so the R3F shared one is never mutated by the test.
       const raycaster = new sharedRaycaster.constructor();
+      // R3F only raycasts objects that carry pointer handlers (its "interaction"
+      // set), so decorative meshes without handlers — the module OuterGhost
+      // wireframe box, helpers — never occlude a click. Mirror that here or the
+      // picker rejects pixels the real click would accept.
+      const interactive: Obj[] = [];
+      scene.traverse((o) => {
+        const handlers = (o as unknown as { __r3f?: { handlers?: Record<string, unknown> } }).__r3f
+          ?.handlers;
+        if (handlers && Object.keys(handlers).length > 0) interactive.push(o);
+      });
+      const raycastTargets = interactive.length > 0 ? interactive : (scene.children ?? []);
+      // R3F delivers an onClick to the FIRST intersection (distance order)
+      // whose own-or-ancestor chain carries an onClick handler; objects whose
+      // chain only has onPointerDown/Over (module drag group → ghost box) are
+      // skipped. Mirror that exactly.
+      const clickHandlerChainOwner = (o: Obj): Obj | null => {
+        let cursor: Obj | null | undefined = o;
+        while (cursor) {
+          const handlers = (cursor as unknown as { __r3f?: { handlers?: Record<string, unknown> } })
+            .__r3f?.handlers;
+          if (handlers && handlers.onClick) return cursor;
+          cursor = cursor.parent;
+        }
+        return null;
+      };
 
       let targetObj: Obj | null = null;
       const seen: string[] = [];
@@ -2041,15 +2069,36 @@ async function pickUnoccludedPixel(
       let firstHit = 'none';
       for (const c of candidates) {
         raycaster.setFromCamera({ x: c.x, y: c.y }, camera);
-        const hits = raycaster.intersectObjects(scene.children ?? [], true);
-        if (hits.length === 0) continue;
-        const hitObject = hits[0]!.object;
+        const hits = raycaster.intersectObjects(raycastTargets, true);
+        const clickHit = hits.find((h) => clickHandlerChainOwner(h.object) !== null);
+        if (!clickHit) continue;
+        const hitObject = clickHit.object;
+        // Silhouette edges are sub-pixel lotteries between the test raycast and
+        // the browser's: require the target to win on the 4 neighbours too.
+        const neighbourhoodOwnsTarget = () => {
+          const dx = 3 / width;
+          const dy = 3 / height;
+          for (const [ox, oy] of [[dx, 0], [-dx, 0], [0, dy], [0, -dy]] as const) {
+            raycaster.setFromCamera({ x: c.x + ox, y: c.y + oy }, camera);
+            const nh = raycaster
+              .intersectObjects(raycastTargets, true)
+              .find((h) => clickHandlerChainOwner(h.object) !== null);
+            if (!nh || !inTarget(nh.object)) return false;
+          }
+          return true;
+        };
         if (firstHit === 'none') firstHit = JSON.stringify(hitObject.userData ?? {}).slice(0, 160);
-        if (inTarget(hitObject)) {
+        if (inTarget(hitObject) && neighbourhoodOwnsTarget()) {
+          const px = ((c.x + 1) / 2) * width;
+          const py = ((1 - c.y) / 2) * height;
+          // The scene says the node is in front; the DOM must agree that no
+          // toolbar/chip overlays this pixel, or the click never reaches R3F.
+          const domHit = document.elementFromPoint(box.x + px, box.y + py);
+          if (!canvasEl || domHit !== canvasEl) continue;
           return {
             ok: true as const,
-            x: ((c.x + 1) / 2) * width,
-            y: ((1 - c.y) / 2) * height,
+            x: px,
+            y: py,
             hit: JSON.stringify(hitObject.userData ?? {}).slice(0, 160),
           };
         }
@@ -2068,7 +2117,7 @@ async function pickUnoccludedPixel(
         },
       };
     },
-    { target, width: box.width, height: box.height },
+    { target, canvasSelector, box },
   );
   return { ...pick, box };
 }
@@ -2078,27 +2127,121 @@ async function pickUnoccludedPixel(
  * current camera first, then the viewer's camera presets, until the node has
  * an unoccluded pixel. Throws with the raycast diagnostics otherwise.
  */
-async function clickAssemblyNode(
+async function clickAssemblyNodeIn(
   page: Page,
-  viewerTestId: string,
+  surface: {
+    readonly canvasSelector: string;
+    /** Camera preset buttons to try, in order, when the node is occluded. */
+    readonly cameraPresetTestIds: readonly string[];
+  },
   target: AssemblyNodeTarget,
 ) {
-  const canvasSelector = `[data-testid="${viewerTestId}-viewport"] canvas`;
-  const views = [null, 'front', 'isometric', 'side', 'top'] as const;
+  const presets: readonly (string | null)[] = [null, ...surface.cameraPresetTestIds];
   const attempts: Record<string, unknown> = {};
-  for (const view of views) {
-    if (view) {
-      await page.getByTestId(`${viewerTestId}-camera-${view}`).click();
+  for (const preset of presets) {
+    if (preset) {
+      await page.getByTestId(preset).click();
       await settleCanvas(page);
     }
-    const pick = await pickUnoccludedPixel(page, canvasSelector, target);
-    attempts[view ?? 'current'] = pick.ok ? 'ok' : pick;
+    const pick = await pickUnoccludedPixel(page, surface.canvasSelector, target);
+    attempts[preset ?? 'current'] = pick.ok ? 'ok' : pick;
     if (pick.ok && pick.box) {
       await page.mouse.click(pick.box.x + pick.x, pick.box.y + pick.y);
       return pick;
     }
   }
   throw new Error(`could not click ${JSON.stringify(target)}: ${JSON.stringify(attempts)}`);
+}
+
+/** Furniture3DViewer surface (catalog modals): `${testId}-viewport` + `${testId}-camera-*`. */
+async function clickAssemblyNode(
+  page: Page,
+  viewerTestId: string,
+  target: AssemblyNodeTarget,
+) {
+  return clickAssemblyNodeIn(
+    page,
+    {
+      canvasSelector: `[data-testid="${viewerTestId}-viewport"] canvas`,
+      cameraPresetTestIds: ['front', 'isometric', 'side', 'top'].map(
+        (view) => `${viewerTestId}-camera-${view}`,
+      ),
+    },
+    target,
+  );
+}
+
+/** Proyectar studio surface: scene canvas + `spatial-studio-cam-*` presets. */
+const STUDIO_SURFACE = {
+  canvasSelector: '[data-testid="spatial-studio-scene"] canvas',
+  // "Enfocar" frames the selected unit (the room-wide presets leave a 720 mm
+  // cabinet a few pixels tall); the directional presets follow as fallbacks.
+  cameraPresetTestIds: [
+    'spatial-studio-cmd-fit',
+    'spatial-studio-cam-front',
+    'spatial-studio-cam-iso',
+    'spatial-studio-cam-side',
+    'spatial-studio-cam-top',
+  ],
+} as const;
+
+/**
+ * Drawer seed with TWO instances of the SAME agregado on one module: identical
+ * memberIds / componentIds, distinct assemblyInstanceIds (FI-A / FI-B). The seed
+ * cabinet carries a door that hides the interior from every camera (the raycast
+ * picker proved it: first hit = "Puerta Gabinete"), so the module is the open
+ * carcass and both drawers sit between the side panels like real ones.
+ */
+function openCarcassTwoDrawersWorkspace() {
+  const workspace = createDrawerAssemblySeedWorkspace();
+  const drawerModule = workspace.catalog.modules[0] as {
+    id: string;
+    baseMode?: string;
+    components?: readonly { componentId: string }[];
+    agregados?: unknown[];
+  };
+  // Door AND shelf go: both sit in front of / above the lower drawer from every
+  // studio camera (the raycast picker named them as first hits).
+  drawerModule.components = (drawerModule.components ?? []).filter(
+    (c) => c.componentId !== 'comp-gab-puerta' && c.componentId !== 'comp-gab-entrepano',
+  );
+  // Without a FRENTE component the inserted project item gets no FRENTE finish,
+  // and the automatic plinth board (ZOCLO-AUTO) needs ZOCLO or that fallback:
+  // the BOM would throw and Proyectar would show a ghost box. Open carcass, no plinth.
+  drawerModule.baseMode = 'none';
+  // Runners float clear of the 15 mm side panels: the procedural 'slide'
+  // preview is centred on the member origin, so an inset equal to the panel
+  // thickness would bury half of each runner inside the panel and leave only a
+  // sub-pixel sliver for a click.
+  const insetDrawer = (id: string, zFormula: string) => ({
+    id,
+    agregadoId: 'agr-drawer-system',
+    quantity: 1,
+    position: { xFormula: '40', yFormula: '0', zFormula },
+    dimensions: { widthFormula: 'PW-80', heightFormula: '200', depthFormula: 'PD' },
+  });
+  // Upper drawer high enough to leave a clear line of sight to the lower one.
+  drawerModule.agregados = [insetDrawer('inst-drawer-1', '100'), insetDrawer('inst-drawer-2', '450')];
+  // The synthetic recipe puts the bottom board 15 mm above the runner origin,
+  // i.e. right on top of the runners as seen from the studio cameras (all above
+  // eye level). Lift and narrow the board in THIS workspace copy so every
+  // runner keeps a clear line of sight; Scenarios 7–9 keep the canonical recipe.
+  const recipe = workspace.catalog.agregados.find((a) => a.id === 'agr-drawer-system') as {
+    components?: { overrides?: Record<string, unknown> }[];
+  };
+  const bottom = recipe.components?.[0];
+  if (bottom?.overrides) {
+    bottom.overrides = {
+      ...bottom.overrides,
+      widthRule: { source: 'assembly_width', multiplier: 1.0, offsetMm: -120 },
+      placementRule: {
+        x: { ref: 'min', offsetMm: 60 },
+        y: { ref: 'min', offsetMm: 5 },
+        z: { ref: 'min', offsetMm: 60 },
+      },
+    };
+  }
+  return { workspace, drawerModule };
 }
 
 test('Point 13: WebGL real — clicking a rigid member opens the exact-node inspector (Agregado 3D modal)', async ({
@@ -2173,28 +2316,7 @@ test('Point 14: WebGL real — two drawers from one recipe: the inspector follow
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(err.message));
 
-  // Second instance of the SAME agregado on the same module: identical
-  // memberIds / componentIds, distinct assemblyInstanceIds. The seed cabinet
-  // carries a door that hides the interior from every camera (the raycast
-  // picker proved it: first hit = "Puerta Gabinete"), so this module is the
-  // open carcass, and both drawers sit between the side panels like real ones.
-  const customWs = createDrawerAssemblySeedWorkspace();
-  const drawerModule = customWs.catalog.modules[0] as {
-    id: string;
-    components?: readonly { componentId: string }[];
-    agregados?: unknown[];
-  };
-  drawerModule.components = (drawerModule.components ?? []).filter(
-    (c) => c.componentId !== 'comp-gab-puerta',
-  );
-  const insetDrawer = (id: string, zFormula: string) => ({
-    id,
-    agregadoId: 'agr-drawer-system',
-    quantity: 1,
-    position: { xFormula: '18', yFormula: '0', zFormula },
-    dimensions: { widthFormula: 'PW-36', heightFormula: '200', depthFormula: 'PD' },
-  });
-  drawerModule.agregados = [insetDrawer('inst-drawer-1', '100'), insetDrawer('inst-drawer-2', '350')];
+  const { workspace: customWs, drawerModule } = openCarcassTwoDrawersWorkspace();
 
   await seedGuestWorkspace(page, customWs);
   await page.goto('/modules');
@@ -2273,6 +2395,106 @@ test('Point 14: WebGL real — two drawers from one recipe: the inspector follow
   });
   await expect(page.getByTestId(inspector)).toHaveCount(0);
   await expect(page.getByTestId(`${viewer}-part-inspector-title`)).toBeVisible();
+
+  expect(pageErrors, `page errors: ${pageErrors.join(' | ')}`).toEqual([]);
+});
+
+test('Point 15: WebGL real — Proyectar detail mode: a click on an assembly member opens the exact-node inspector in the studio (FI-A ≠ FI-B)', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const pageErrors: string[] = [];
+  page.on('pageerror', (err) => pageErrors.push(err.message));
+
+  // Same open carcass with two inset drawers, now inserted into the real
+  // Proyectar studio (the engineering WebGL surface named by #670 item 7).
+  const { workspace: customWs } = openCarcassTwoDrawersWorkspace();
+  await page.addInitScript((wsJson) => {
+    try {
+      sessionStorage.setItem('granete_session', 'guest');
+      sessionStorage.setItem('granete_proyectar_visible', '1');
+      localStorage.setItem('granete_guest_workspace', wsJson);
+      localStorage.setItem('muebles_workspace_v1', wsJson);
+    } catch {
+      /* storage unavailable */
+    }
+  }, JSON.stringify(customWs));
+
+  await page.goto('/quotes');
+  const draftCard = page.locator('.project-card', { hasText: 'Demo plantilla' }).first();
+  await draftCard.waitFor({ timeout: 20_000 });
+  await draftCard.click();
+  await page.waitForSelector('.workspace-chrome, .project-detail', { timeout: 20_000 });
+  await page.waitForSelector('[data-testid="project-chrome-projectar"]', { timeout: 20_000 });
+  await page.click('[data-testid="project-chrome-projectar"]');
+  await waitForStudioCanvas(page);
+  await insertFirstLibraryCard(page);
+  await page.getByTestId('spatial-studio-cmd-fit').click();
+  await settleCanvas(page);
+
+  const inspector = 'spatial-studio-assembly-member-inspector';
+
+  // Outside detail mode a member click is not even offered.
+  await expect(page.getByTestId(inspector)).toHaveCount(0);
+  await page.getByTestId('spatial-studio-detail-toggle').click();
+  await expect(page.getByTestId('spatial-studio-detail-hint')).toContainText(
+    'miembro de conjunto',
+  );
+
+
+
+  // F143 regression guard: a real click on a cabinet board must reach the
+  // part (the module's OuterGhost used to swallow every detail-mode click).
+  await clickAssemblyNodeIn(page, STUDIO_SURFACE, {
+    kind: 'board-outside-assemblies',
+    excludePartIdPrefix: 'inst-drawer-',
+  });
+  await expect(page.getByTestId('spatial-studio-detail-card')).toBeVisible();
+  await expect(page.getByTestId(inspector)).toHaveCount(0);
+
+  // Rigid member of FI-A. The studio cameras look at the unit from its right,
+  // so the LEFT runner is the one with an unoccluded line of sight.
+  await clickAssemblyNodeIn(page, STUDIO_SURFACE, {
+    kind: 'rigid',
+    assemblyInstanceId: 'inst-drawer-1',
+    memberId: 'runner-left',
+  });
+  await expect(page.getByTestId(inspector)).toHaveAttribute('data-kind', 'rigid');
+  await expect(page.getByTestId(`${inspector}-instance`)).toHaveText('inst-drawer-1');
+  await expect(page.getByTestId(`${inspector}-code`)).toHaveText('runner-left');
+  await expect(page.getByTestId(`${inspector}-agregado`)).toHaveText('agr-drawer-system');
+  await expect(page.getByTestId(`${inspector}-hardware`)).toHaveText(
+    /^RUN-(400|500) · Runner (400|500)mm$/,
+  );
+  await expect(page.getByTestId(`${inspector}-render-status`)).toContainText('Estado 3D:');
+  // The compact part/hardware card is not shown for a member.
+  await expect(page.getByTestId('spatial-studio-detail-card')).toHaveCount(0);
+
+  // Same memberId on FI-B → the inspector moves to the other instance.
+  await clickAssemblyNodeIn(page, STUDIO_SURFACE, {
+    kind: 'rigid',
+    assemblyInstanceId: 'inst-drawer-2',
+    memberId: 'runner-left',
+  });
+  await expect(page.getByTestId(`${inspector}-code`)).toHaveText('runner-left');
+  await expect(page.getByTestId(`${inspector}-instance`)).toHaveText('inst-drawer-2');
+
+  // Fabricated bottom of the upper drawer (visible from above; the lower one
+  // sits underneath it).
+  await clickAssemblyNodeIn(page, STUDIO_SURFACE, {
+    kind: 'fabricated',
+    assemblyInstanceId: 'inst-drawer-2',
+    componentId: 'comp-bottom-panel',
+  });
+  await expect(page.getByTestId(inspector)).toHaveAttribute('data-kind', 'fabricated');
+  await expect(page.getByTestId(`${inspector}-code`)).toHaveText('comp-bottom-panel');
+  await expect(page.getByTestId(`${inspector}-instance`)).toHaveText('inst-drawer-2');
+
+  // ESC steps back from the member to the unit without leaving the studio.
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId(inspector)).toHaveCount(0);
+  await expect(page.getByTestId('spatial-studio-selection-bar')).toBeVisible();
+  await expect(page.getByTestId('spatial-studio-detail-hint')).toBeVisible();
 
   expect(pageErrors, `page errors: ${pageErrors.join(' | ')}`).toEqual([]);
 });

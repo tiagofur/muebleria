@@ -121,8 +121,12 @@ import {
   canUseWebGL,
   materialColorMap,
   materialTextureMap,
+  AssemblyMemberInspector,
+  assemblyMemberSelectionEquals,
+  findSelectedAssemblyMember,
   DEFAULT_MATERIAL_SURFACE_MODE,
   DEFAULT_SCENE_LIGHTING_MODE,
+  type AssemblyMemberSelection,
   type BoardColorMode,
   type MaterialSurfaceMode,
   type PaintDrop,
@@ -471,6 +475,13 @@ export function ProjectSpatialStudio({
   const [detailMode, setDetailMode] = useState(false);
   const [detailPartId, setDetailPartId] = useState<string | null>(null);
   const [detailHardwareId, setDetailHardwareId] = useState<string | null>(null);
+  /**
+   * #670 — miembro exacto de un conjunto (instancia + miembro/tablero) en modo
+   * detalle. Tres cajones de la misma receta comparten ids de miembro: la
+   * instancia forma parte de la identidad.
+   */
+  const [detailAssemblyMember, setDetailAssemblyMember] =
+    useState<AssemblyMemberSelection | null>(null);
   /** Rol de acabado (optionGroup.code) con el selector visual abierto. */
   const [finishSelectorCode, setFinishSelectorCode] = useState<string | null>(
     null,
@@ -687,9 +698,10 @@ export function ProjectSpatialStudio({
           setPrecisionOpen(false);
           return;
         }
-        if (detailPartId || detailHardwareId) {
+        if (detailPartId || detailHardwareId || detailAssemblyMember) {
           setDetailPartId(null);
           setDetailHardwareId(null);
+          setDetailAssemblyMember(null);
           return;
         }
         if (selection.keys.length > 0) {
@@ -1042,8 +1054,38 @@ export function ProjectSpatialStudio({
         return { kind: 'hardware' as const, placement, hardware };
       }
     }
+    if (detailAssemblyMember) {
+      // Resolve against THIS unit's assemblies only: the selection carries the
+      // instance id, so a sibling drawer sharing the member id never matches.
+      const resolved = findSelectedAssemblyMember(mod.assemblies, detailAssemblyMember);
+      if (resolved) {
+        return {
+          kind: 'assembly' as const,
+          assemblies: mod.assemblies ?? [],
+          selection: detailAssemblyMember,
+        };
+      }
+    }
     return null;
-  }, [detailMode, selectedKey, detailPartId, detailHardwareId, preview.modules, catalog.hardware]);
+  }, [
+    detailMode,
+    selectedKey,
+    detailPartId,
+    detailHardwareId,
+    detailAssemblyMember,
+    preview.modules,
+    catalog.hardware,
+  ]);
+
+  // A re-resolve can drop the exact instance/member (unit removed, recipe
+  // changed): clear instead of letting a stale selection linger in the panel.
+  useEffect(() => {
+    if (!detailAssemblyMember) return;
+    const mod = preview.modules.find((m) => m.instanceKey === selectedKey);
+    if (!mod || !findSelectedAssemblyMember(mod.assemblies, detailAssemblyMember)) {
+      setDetailAssemblyMember(null);
+    }
+  }, [detailAssemblyMember, preview.modules, selectedKey]);
 
   const pricingCatalog = useMemo((): Catalog => {
     return {
@@ -2081,12 +2123,26 @@ export function ProjectSpatialStudio({
 
   const handleSceneSelectPart = (partId: string | null) => {
     setDetailPartId(partId);
-    if (partId) setDetailHardwareId(null);
+    if (partId) {
+      setDetailHardwareId(null);
+      setDetailAssemblyMember(null);
+    }
   };
 
   const handleSceneSelectHardware = (hardwareId: string | null) => {
     setDetailHardwareId(hardwareId);
-    if (hardwareId) setDetailPartId(null);
+    if (hardwareId) {
+      setDetailPartId(null);
+      setDetailAssemblyMember(null);
+    }
+  };
+
+  const handleSceneSelectAssemblyMember = (selection: AssemblyMemberSelection) => {
+    setDetailAssemblyMember((prev) =>
+      assemblyMemberSelectionEquals(prev, selection) ? null : selection,
+    );
+    setDetailPartId(null);
+    setDetailHardwareId(null);
   };
 
 
@@ -4200,6 +4256,10 @@ export function ProjectSpatialStudio({
                 isolateSelected={detailMode}
                 selectedHardwareId={detailMode ? detailHardwareId : null}
                 onSelectHardware={detailMode ? handleSceneSelectHardware : undefined}
+                selectedAssemblyMember={detailMode ? detailAssemblyMember : null}
+                onSelectAssemblyMember={
+                  detailMode ? handleSceneSelectAssemblyMember : undefined
+                }
                 showDragGuides
                 wallDragEnabled={canEdit}
                 wallDragByKey={wallDragByKey}
@@ -5263,15 +5323,24 @@ export function ProjectSpatialStudio({
                     trackUsability('bom_detail', { open: !detailMode });
                     setDetailPartId(null);
                     setDetailHardwareId(null);
+                    setDetailAssemblyMember(null);
                   }}
-                  title="Modo detalle: hacer clic en una pieza o herraje del mueble para inspeccionarlo"
+                  title="Modo detalle: hacer clic en una pieza, herraje o miembro de conjunto del mueble para inspeccionarlo"
                   data-testid="spatial-studio-detail-toggle"
                 >
                   <Scan size={14} strokeWidth={1.5} aria-hidden /> Ver piezas
                 </button>
               </div>
 
-              {detailTarget ? (
+              {detailTarget?.kind === 'assembly' ? (
+                <AssemblyMemberInspector
+                  assemblies={detailTarget.assemblies}
+                  selection={detailTarget.selection}
+                  hardwareCatalog={catalog.hardware}
+                  onClear={() => setDetailAssemblyMember(null)}
+                  testId="spatial-studio-assembly-member-inspector"
+                />
+              ) : detailTarget ? (
                 <div
                   className="spatial-studio__detail-card"
                   data-testid="spatial-studio-detail-card"
@@ -5296,8 +5365,8 @@ export function ProjectSpatialStudio({
                 </div>
               ) : detailMode ? (
                 <p className="spatial-studio__hint" data-testid="spatial-studio-detail-hint">
-                  Detalle: hacé clic en una pieza o herraje del mueble en el
-                  canvas. ESC vuelve a la unidad.
+                  Detalle: hacé clic en una pieza, herraje o miembro de conjunto
+                  del mueble en el canvas. ESC vuelve a la unidad.
                 </p>
               ) : null}
 
