@@ -187,6 +187,12 @@ func (s *Server) HandleAgregadoRecipeSimulation(w http.ResponseWriter, r *http.R
 		respondWithError(w, http.StatusNotFound, "agregado not found")
 		return
 	}
+	// #1369 (verificación en DB real): la receta vigente vive en la revisión
+	// actual, no en la fila del catálogo — sin esta hidratación el simulate
+	// ve una receta vacía y el diff no describe el cambio real.
+	if rev, revErr := s.Store.GetAgregadoCurrentRevision(r.Context(), id); revErr == nil && rev != nil {
+		*current = rev.Recipe.ToAgregado(current.ID, current.Code, current.Name)
+	}
 
 	params := engine.AssemblyResolutionParams{
 		WidthMm:  float64(current.WidthMm),

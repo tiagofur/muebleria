@@ -1059,7 +1059,7 @@ func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
 		// #1177 grant: the panel's explicit "Quitar del proyecto" — terminal
 		// :remove lifecycle command, every guard owned server-side (If-Match,
 		// owner scope, live roles, audit).
-		{"remove furniture instance (#1177)", http.MethodPost, "/api/furniture-instances/" + projectID + ":remove", true},		{"quote-line materialize stays denied", http.MethodPost, "/api/projects/" + projectID + "/quote-lines/" + projectID + ":materialize", false},
+		{"remove furniture instance (#1177)", http.MethodPost, "/api/furniture-instances/" + projectID + ":remove", true}, {"quote-line materialize stays denied", http.MethodPost, "/api/projects/" + projectID + "/quote-lines/" + projectID + ":materialize", false},
 		{"reset working copy", http.MethodPost, "/api/designs/" + designID + "/working-copy:reset", false},
 		{"publish revision (#392)", http.MethodPost, "/api/designs/" + designID + "/revisions", false},
 		// #668 hardware asset revision read-only authorization grant

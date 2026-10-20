@@ -333,10 +333,11 @@ type stubStore struct {
 	listComponents []domain.Component
 	listAgregados  []domain.Agregado
 	// #1369 recipe simulation
-	agregadoReturnedByID *domain.Agregado
-	agregadoGetByIDErr   error
-	listHardwares        []domain.Hardware
-	listOptionGroups     []domain.OptionGroup
+	agregadoReturnedByID    *domain.Agregado
+	agregadoGetByIDErr      error
+	agregadoCurrentRevision *domain.AgregadoRevision
+	listHardwares           []domain.Hardware
+	listOptionGroups        []domain.OptionGroup
 	// #913 / HW-PROFILE catalog surface hooks.
 	listHardwareProfiles                      []domain.HardwareProfile
 	hardwareProfileReturnedByID               *domain.HardwareProfile

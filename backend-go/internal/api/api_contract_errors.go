@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/tiagofur/muebles-backend/internal/domain"
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
 func defaultErrorCode(status int) openapi.ApiErrorCode {

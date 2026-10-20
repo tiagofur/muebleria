@@ -5,6 +5,7 @@ package api
 // las firmas son las de la sub-interface en store_modules.go
 import (
 	"context"
+	"errors"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
@@ -160,6 +161,15 @@ func (s *stubStore) ListAgregados(context.Context) ([]domain.Agregado, error) {
 		return s.listAgregados, nil
 	}
 	return []domain.Agregado{}, nil
+}
+
+func (s *stubStore) GetAgregadoCurrentRevision(context.Context, string) (*domain.AgregadoRevision, error) {
+	if s.agregadoCurrentRevision != nil {
+		return s.agregadoCurrentRevision, nil
+	}
+	// Sin revisión en el stub: el handler cae al fallback inline (campos del
+	// agregado devuelto por GetAgregadoByID).
+	return nil, errors.New("agregado revision not found")
 }
 
 func (s *stubStore) GetAgregadoByID(context.Context, string) (*domain.Agregado, error) {

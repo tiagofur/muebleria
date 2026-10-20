@@ -19,6 +19,7 @@ type ModuleStore interface {
 	// Catalog: agregados (reusable sub-assemblies)
 	ListAgregados(ctx context.Context) ([]domain.Agregado, error)
 	GetAgregadoByID(ctx context.Context, id string) (*domain.Agregado, error)
+	GetAgregadoCurrentRevision(ctx context.Context, agregadoID string) (*domain.AgregadoRevision, error)
 	CreateAgregado(ctx context.Context, a *domain.Agregado) error
 	UpdateAgregado(ctx context.Context, id string, expectedVersion int64, a *domain.Agregado) error
 	UpdateAgregadoWithRevision(ctx context.Context, id string, expectedVersion int64, a *domain.Agregado, createdBy *string) error

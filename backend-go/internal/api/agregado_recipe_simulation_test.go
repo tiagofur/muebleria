@@ -144,6 +144,58 @@ func TestRecipeSimulation_RejectedVariantIsPartiallyInvalidWithAlternatives(t *t
 	}
 }
 
+// La receta vigente vive en la revisión actual, no en la fila del catálogo:
+// con revisión presente, el simulate hidrata LA RECETA DE LA REVISIÓN (no los
+// campos inline del agregado) — exactamente lo que la DB real expuso.
+func TestRecipeSimulation_UsesCurrentRevisionRecipe(t *testing.T) {
+	store := &stubStore{agregadoReturnedByID: recipeSimStubAgregado()}
+	kit := "kit-drawer"
+	revRecipe := domain.AgregadoRecipePayload{
+		CommercialKitHardwareID: &kit,
+		RigidMembers: []domain.AgregadoRigidMember{{
+			MemberID: "runner-solo",
+			Role:     "guide_left",
+			Source:   domain.RigidMemberSource{Kind: domain.RigidMemberSourceFixed, Fixed: &domain.FixedHardwareSource{HardwareID: "hw-runner-500"}},
+			Placement: domain.AssemblyAnchorRule{
+				X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+				Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+				Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+			},
+			BOMRole: domain.BOMRoleIncludedInKit,
+		}},
+	}
+	store.agregadoCurrentRevision = &domain.AgregadoRevision{
+		AgregadoID: "agr-sim", RevisionNumber: 4, Recipe: revRecipe,
+	}
+	srv := &Server{Store: store}
+
+	body := candidateJSON(t, func(*domain.Agregado) {})
+	body = strings.TrimSuffix(body, "}") + `,"params":{"widthMm":600,"depthMm":550,"heightMm":200}}`
+	rr := recipeSimRequest(t, srv, string(domain.RoleIngeniero), body)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	var res recipeChangeSimulationResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// Current = receta de la revisión (runner-solo); candidata = los 2 del
+	// stub ⇒ runner-solo sale (removed) y los otros entran (added). Si el
+	// handler usara los campos inline del agregado, runner-solo no existiría.
+	removed := false
+	for _, m := range res.Diff.Members {
+		if m.MemberID == "runner-solo" && m.Change == engine.ChangeAdded {
+			t.Fatalf("runner-solo vive en la revisión: no debe aparecer como añadido")
+		}
+		if m.Change == engine.ChangeRemoved && m.MemberID == "runner-solo" {
+			removed = true
+		}
+	}
+	if !removed {
+		t.Fatalf("el diff no usa la receta de la revisión como current: %+v", res.Diff.Members)
+	}
+}
+
 func TestRecipeSimulation_ErrorsAreExplicit(t *testing.T) {
 	t.Run("404 when the agregado does not exist", func(t *testing.T) {
 		store := &stubStore{agregadoGetByIDErr: errors.New("agregado not found")}
