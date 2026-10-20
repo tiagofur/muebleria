@@ -928,6 +928,11 @@ function componentInstanceToApi(
   if (c.overrides?.hardwarePlacements && c.overrides.hardwarePlacements.length > 0) {
     overrides.hardwarePlacements = c.overrides.hardwarePlacements;
   }
+  // #1369/#670: reglas de receta del agregado — sin round-trip el candidato
+  // simulado/aplicado pierde las dimensiones de sus tableros (0 × 0).
+  if (c.overrides?.widthRule) overrides.widthRule = c.overrides.widthRule;
+  if (c.overrides?.lengthRule) overrides.lengthRule = c.overrides.lengthRule;
+  if (c.overrides?.placementRule) overrides.placementRule = c.overrides.placementRule;
   // Legacy snake_case duplicates (length_formula, rotate_x, …) dropped
   // (#497 T3 contract): the server reads ONLY the camelCase overrides bag
   // (domain.ComponentInstance json tags) — the duplicated keys were dead
