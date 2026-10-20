@@ -147,6 +147,26 @@ export interface WorkspaceRepository {
     selection: import('@granete/domain').MachineOutputSelection,
     expectedVersion: number,
   ): Promise<import('@granete/domain').MachineOutputSelectionRecord>;
+  /**
+   * #1369 — dry-run de cambio de receta de un agregado (server mode only;
+   * ausente en modo guest: sin backend no hay resolución autoritativa).
+   */
+  simulateAgregadoRecipeChange?(
+    id: string,
+    req: {
+      readonly candidate: import('@granete/domain').Agregado;
+      readonly params?: { readonly widthMm: number; readonly depthMm: number; readonly heightMm: number };
+      readonly variantSelections?: Record<string, number>;
+    },
+  ): Promise<import('@granete/domain').RecipeChangeSimulationResponse>;
+  /**
+   * #1369 — aplicar la receta candidata con If-Match (server mode only).
+   */
+  applyAgregadoRecipe?(
+    id: string,
+    expectedVersion: number,
+    agregado: import('@granete/domain').Agregado,
+  ): Promise<import('@granete/domain').Agregado>;
   /** Load full workspace; missing file → seed workspace. */
   load(): Promise<Workspace>;
 

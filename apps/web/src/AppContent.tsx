@@ -84,6 +84,7 @@ import {
 } from '@granete/ui';
 import {
   GraneteApiClient,
+  GraneteApiError,
 } from '@granete/storage';
 import { useExportHandlers } from './exports/useExportHandlers';
 import { useMachineOutputSelections } from './exports/useMachineOutputSelections';
@@ -283,6 +284,40 @@ export function AppContent({
         getProjectStoreState().projects ?? []
       ).filter((p) => p.status === 'draft').length,
     baseUrl: DEFAULT_API_BASE,
+    // #1369: en guest (LocalStorageRepository) no hay backend: el store
+    // responde 'invalid' con el mensaje y la UI lo explica.
+    simulateAgregadoRecipeChange: (id, req) => {
+      const repo = getRepository();
+      if (typeof repo.simulateAgregadoRecipeChange !== 'function') {
+        return Promise.reject(
+          new GraneteApiError(501, {
+            code: 'METHOD_NOT_ALLOWED',
+            message: 'La simulación de receta requiere una sesión con servidor.',
+            fieldErrors: {},
+            requestId: '',
+            retryable: false,
+            details: {},
+          }),
+        );
+      }
+      return repo.simulateAgregadoRecipeChange(id, req);
+    },
+    applyAgregadoRecipe: (id, expectedVersion, a) => {
+      const repo = getRepository();
+      if (typeof repo.applyAgregadoRecipe !== 'function') {
+        return Promise.reject(
+          new GraneteApiError(501, {
+            code: 'METHOD_NOT_ALLOWED',
+            message: 'La aplicación de receta requiere una sesión con servidor.',
+            fieldErrors: {},
+            requestId: '',
+            retryable: false,
+            details: {},
+          }),
+        );
+      }
+      return repo.applyAgregadoRecipe(id, expectedVersion, a);
+    },
   });
   const catalog = useCatalogStore((s) => s.catalog);
   const catalogActions = useCatalogStore();
@@ -1136,6 +1171,8 @@ export function AppContent({
   const toggleComponentActive = catalogActions.toggleComponentActive;
   const createAgregado = catalogActions.createAgregado;
   const updateAgregado = catalogActions.updateAgregado;
+  const simulateAgregadoRecipe = catalogActions.simulateAgregadoRecipe;
+  const applyAgregadoRecipe = catalogActions.applyAgregadoRecipe;
   const deleteAgregado = catalogActions.deleteAgregado;
   const createCustomer = useCallback(
     (draft: CustomerDraft) => {
@@ -1783,6 +1820,8 @@ export function AppContent({
     commandItems,
     components,
     createAgregado,
+    simulateAgregadoRecipe,
+    applyAgregadoRecipe,
     createAmbientCategory,
     createAmbientMaterial,
     createCategory,

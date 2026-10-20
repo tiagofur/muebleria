@@ -25,6 +25,7 @@ import type {
   ModuleCategory,
   OptionGroup,
   Structure,
+  RecipeChangeSimulationResponse,
 } from '@granete/domain';
 import {
   type ComponentDraft,
@@ -48,6 +49,42 @@ export type ToastFn = (input: {
   readonly message: string;
 }) => void;
 
+/** #1369 — resultados del flujo de cambio de receta (transporte mapeado por el store). */
+export type RecipeSimResult =
+  | { readonly ok: true; readonly response: RecipeChangeSimulationResponse }
+  | { readonly ok: false; readonly kind: 'invalid' | 'network'; readonly message: string };
+
+export type RecipeApplyResult =
+  | { readonly ok: true; readonly applied: Agregado }
+  | { readonly ok: false; readonly kind: 'conflict' | 'not_found' | 'network'; readonly message: string };
+
+export interface ApiCatalogDeps {
+  readonly simulateAgregadoRecipeChange: (
+    id: string,
+    req: {
+      readonly candidate: Agregado;
+      readonly params?: { readonly widthMm: number; readonly depthMm: number; readonly heightMm: number };
+      readonly variantSelections?: Record<string, number>;
+    },
+  ) => Promise<RecipeChangeSimulationResponse>;
+  readonly applyAgregadoRecipe: (id: string, expectedVersion: number, agregado: Agregado) => Promise<Agregado>;
+}
+
+export interface RecipeChangeActions {
+  readonly simulate: (req: {
+    readonly id: string;
+    readonly candidate: Agregado;
+    readonly params?: { readonly widthMm: number; readonly depthMm: number; readonly heightMm: number };
+    readonly variantSelections?: Record<string, number>;
+  }) => Promise<RecipeSimResult>;
+  readonly apply: (req: {
+    readonly id: string;
+    readonly expectedVersion: number;
+    readonly candidate: Agregado;
+  }) => Promise<RecipeApplyResult>;
+}
+
+
 export interface CatalogStoreDeps {
   /** Generates UUIDs for new entities. Default: crypto.randomUUID. */
   readonly newId?: () => string;
@@ -63,6 +100,10 @@ export interface CatalogStoreDeps {
   readonly fetchImpl?: typeof fetch;
   /** Base URL of the backend API. */
   readonly baseUrl: string;
+  /** #1369: dry-run de cambio de receta de un agregado (backend dry-run, sin mutar). */
+  readonly simulateAgregadoRecipeChange?: ApiCatalogDeps['simulateAgregadoRecipeChange'];
+  /** #1369: aplicar la receta candidata con If-Match (PUT por entidad, #443). */
+  readonly applyAgregadoRecipe?: ApiCatalogDeps['applyAgregadoRecipe'];
 }
 
 export interface CatalogState {
@@ -143,6 +184,10 @@ export interface CatalogState {
   // --- Agregados ---
   readonly createAgregado: (item: Agregado) => void;
   readonly updateAgregado: (item: Agregado) => void;
+  /** #1369: simular un cambio de receta (dry-run clasificado; server authority). */
+  readonly simulateAgregadoRecipe: RecipeChangeActions['simulate'];
+  /** #1369: aplicar la receta candidata con If-Match; 412 → re-simular. */
+  readonly applyAgregadoRecipe: RecipeChangeActions['apply'];
   /** Auth: also DELETE /catalog/agregados/{id}. */
   readonly deleteAgregado: (id: string) => Promise<void>;
   /** Deep-copy with a fresh id/code and regenerated nested ids (#1009 S5). */

@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react';
 import type { Agregado, Component, Hardware, OptionGroup } from '@granete/domain';
-import { Box, ChevronLeft, Copy, Layers, MoreHorizontal, Pencil, Settings2, Trash2 } from 'lucide-react';
+import { Box, ChevronLeft, Copy, Layers, MoreHorizontal, Pencil, Settings2, Trash2, FlaskConical } from 'lucide-react';
 import { DropdownMenu } from '../../common/DropdownMenu';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
 import { optionRoleLabel } from '../../optionGroups/optionRoleLabel';
@@ -17,6 +17,8 @@ export type AgregadoDetailViewProps = {
   readonly onBack: () => void;
   readonly onEdit: (a: Agregado) => void;
   readonly onView3D?: (a: Agregado) => void;
+  /** #1369: abrir el modal «Simular cambio de receta». Ausente ⇒ botón oculto. */
+  readonly onSimulateChange?: () => void;
   readonly onDelete?: (id: string) => void;
   /** Deep-copy request — the screen/store owns the copy (#1009 S5). */
   readonly onDuplicate?: (id: string) => void;
@@ -55,6 +57,7 @@ export function AgregadoDetailView({
   onBack,
   onEdit,
   onView3D,
+  onSimulateChange,
   onDelete,
   onDuplicate,
   canMutate,
@@ -118,6 +121,17 @@ export function AgregadoDetailView({
             Vista 3D
           </button>
         ) : null}
+        {canMutate && onSimulateChange ? (
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={onSimulateChange}
+            data-testid="agregado-detail-simulate"
+          >
+            <FlaskConical size={16} strokeWidth={1.5} aria-hidden />
+            Simular cambio
+          </button>
+        ) : null}
         {canMutate ? (
           <>
             <button
@@ -175,8 +189,25 @@ export function AgregadoDetailView({
     </p>
   ) : null;
 
+  // #1369: tarjeta «Receta» — visibilidad de la receta guardada sin abrir el editor.
+  const recipeCard = (
+    <section className="surface-card agregado-recipe-card" aria-label="Receta" data-testid="agregado-detail-recipe-card">
+      <h3 className="eng-detail__panel-title">
+        <FlaskConical size={15} style={{ display: 'inline', marginRight: 6 }} />
+        Receta
+      </h3>
+      <p className="agregado-recipe-card__summary">
+        {(a.rigidMembers ?? []).length} miembros · {(a.variantSets ?? []).length} sets de variantes ·{' '}
+        {a.commercialKitHardwareId
+          ? `Kit: ${catalogHardware.find((h) => h.id === a.commercialKitHardwareId)?.code ?? a.commercialKitHardwareId}`
+          : 'Sin kit comercial'}
+      </p>
+    </section>
+  );
+
   const primary = (
     <>
+      {recipeCard}
       {/* Components */}
       <section className="surface-card surface-card--lg" aria-label="Piezas de tablero">
         <h3 className="eng-detail__panel-title">

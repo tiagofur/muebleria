@@ -9,7 +9,9 @@ import {
   duplicateComponent,
   duplicateModule as deepCopyModule,
   suggestDuplicateCode,
+  Agregado,
 } from '@granete/domain';
+import { GraneteApiError } from '@granete/storage';
 import type { ModuleCategory } from '@granete/domain';
 
 import { draftToComponent, draftToModule, draftToStructure } from '../catalogMappers';
@@ -34,6 +36,8 @@ type EntitiesSlice = Pick<
   | 'duplicateComponent'
   | 'createAgregado'
   | 'updateAgregado'
+  | 'simulateAgregadoRecipe'
+  | 'applyAgregadoRecipe'
   | 'deleteAgregado'
   | 'duplicateAgregado'
 >;
@@ -281,6 +285,63 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
         }),
         '✓ Cambios guardados',
       );
+    },
+
+    // #1369: dry-run de cambio de receta — el backend resuelve y clasifica; nunca muta.
+    simulateAgregadoRecipe: async (req) => {
+      const sim = ctx.deps.simulateAgregadoRecipeChange;
+      if (!sim) {
+        return { ok: false, kind: 'invalid', message: 'La simulación de receta no está disponible en esta sesión.' };
+      }
+      try {
+        const response = await sim(req.id, {
+          candidate: req.candidate,
+          params: req.params,
+          variantSelections: req.variantSelections,
+        });
+        return { ok: true, response };
+      } catch (err) {
+        if (err instanceof GraneteApiError) {
+          return { ok: false, kind: 'invalid', message: err.payload.message };
+        }
+        return { ok: false, kind: 'network', message: 'Sin conexión. Revisá tu conexión e intentá de nuevo.' };
+      }
+    },
+
+    // #1369: aplicar la candidata con el If-Match de la simulación; 412 stale
+    // ⇒ conflicto y re-simular. El PUT ya persistió: el estado local se
+    // actualiza sin re-persistir.
+    applyAgregadoRecipe: async (req) => {
+      const apply = ctx.deps.applyAgregadoRecipe;
+      if (!apply) {
+        return { ok: false, kind: 'network', message: 'La aplicación de receta no está disponible en esta sesión.' };
+      }
+      let applied: Agregado;
+      try {
+        applied = await apply(req.id, req.expectedVersion, req.candidate);
+      } catch (err) {
+        if (err instanceof GraneteApiError) {
+          if (err.status === 412 || err.status === 409) {
+            return { ok: false, kind: 'conflict', message: 'Otra persona modificó esta receta mientras la revisabas. No se aplicó ningún cambio.' };
+          }
+          if (err.status === 404) {
+            return { ok: false, kind: 'not_found', message: 'El agregado ya no existe en el servidor.' };
+          }
+          return { ok: false, kind: 'network', message: err.payload.message };
+        }
+        return { ok: false, kind: 'network', message: 'Se cortó la conexión al aplicar. El agregado quedó como estaba.' };
+      }
+      const st = ctx.get();
+      if (st.catalog) {
+        ctx.set({
+          catalog: {
+            ...st.catalog,
+            agregados: (st.catalog.agregados ?? []).map((a) => (a.id === applied.id ? applied : a)),
+          },
+        });
+      }
+      ctx.toast({ type: 'success', message: `✓ Receta de "${applied.code}" actualizada` });
+      return { ok: true, applied };
     },
 
     deleteAgregado: async (id) => {
