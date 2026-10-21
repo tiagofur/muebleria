@@ -226,6 +226,105 @@ describe('PlatformScreen audit UX', () => {
     expect(new Headers(request?.init?.headers).get('Idempotency-Key')).toMatch(/^web:/);
   });
 
+  it('#1382: provisions with the library type chosen in the radio cards (standard by default)', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const bootstrapUser = {
+      id: '22222222-2222-4222-8222-222222222222',
+      email: 'owner@example.com',
+      name: 'Ana Owner',
+      platform_admin: false,
+      account_status: 'active',
+      created_at: '2026-08-30T00:00:00Z',
+      memberships: [],
+    };
+    const jsonOk = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith('/platform/organizations')) return jsonOk([organization]);
+      if (url.endsWith('/platform/users')) return jsonOk([bootstrapUser]);
+      if (url.endsWith('/organizations') && init?.method === 'POST') {
+        return jsonOk({
+          organization: { ...organization, name: 'Taller Custom', library_type: 'custom', version: 2 },
+          readiness: {
+            organization_id: organization.id,
+            organization_version: 2,
+            ready: true,
+            checks: [],
+            checked_at: '2026-08-30T00:00:00Z',
+          },
+        }, 201);
+      }
+      return jsonOk([]);
+    }));
+    const actor = userEvent.setup();
+    render(<PlatformScreen baseUrl="http://api.test" token="t" />);
+
+    await actor.click(await screen.findByRole('button', { name: /Nueva Organización/ }));
+    const group = screen.getByRole('radiogroup', { name: 'Tipo de Librería de Manufactura' });
+    expect(group).toBeTruthy();
+    const standard = screen.getByRole('radio', { name: /Biblioteca estándar/ }) as HTMLInputElement;
+    const custom = screen.getByRole('radio', { name: /Biblioteca personalizada/ }) as HTMLInputElement;
+    expect(standard.checked).toBe(true);
+    expect(custom.checked).toBe(false);
+
+    await actor.type(screen.getByLabelText(/Nombre del Taller/), 'Taller Custom');
+    await actor.clear(screen.getByLabelText(/Slug identificador/));
+    await actor.type(screen.getByLabelText(/Slug identificador/), 'taller-custom');
+    await actor.selectOptions(await screen.findByLabelText(/Administrador inicial/), bootstrapUser.id);
+    await actor.click(custom);
+    expect(custom.checked).toBe(true);
+    await actor.click(screen.getByRole('button', { name: /^Crear Organización$/ }));
+
+    expect(await screen.findByText('✓ Organización activa y lista para operar')).toBeTruthy();
+    const request = requests.find(({ url, init }) => url.endsWith('/organizations') && init?.method === 'POST');
+    expect(JSON.parse(String(request?.init?.body))).toEqual(expect.objectContaining({ library_type: 'custom' }));
+  });
+
+  it('#1382: edit modal reflects the current library type and sends the change', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const standardOrg = { ...organization, library_type: 'standard' };
+    const jsonOk = (body: unknown) => new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith(`/platform/organizations/${organization.id}`) && init?.method === 'PATCH') {
+        return jsonOk({ ...standardOrg, library_type: 'custom', version: 2 });
+      }
+      if (url.endsWith('/platform/organizations')) return jsonOk([standardOrg]);
+      if (url.endsWith(`/organizations/${organization.id}/readiness`)) {
+        return jsonOk({
+          organization_id: organization.id,
+          organization_version: 1,
+          ready: true,
+          checks: [],
+          checked_at: '2026-09-02T11:00:00Z',
+        });
+      }
+      return jsonOk([]);
+    }));
+    const actor = userEvent.setup();
+    render(<PlatformScreen baseUrl="http://api.test" token="t" />);
+
+    expect(await screen.findByText('Estándar')).toBeTruthy();
+    await actor.click(await screen.findByRole('button', { name: 'Editar' }));
+    const standard = screen.getByRole('radio', { name: /Biblioteca estándar/ }) as HTMLInputElement;
+    const custom = screen.getByRole('radio', { name: /Biblioteca personalizada/ }) as HTMLInputElement;
+    expect(standard.checked).toBe(true);
+    await actor.click(custom);
+    await actor.click(screen.getByRole('button', { name: 'Guardar Cambios' }));
+
+    expect(await screen.findByText('✓ Organización actualizada')).toBeTruthy();
+    const patch = requests.find(({ init }) => init?.method === 'PATCH');
+    expect(JSON.parse(String(patch?.init?.body))).toEqual(expect.objectContaining({ library_type: 'custom' }));
+  });
+
   it('never presents failed authoritative readiness as active and labels lifecycle controls', async () => {
     const jsonOk = (body: unknown) => new Response(JSON.stringify(body), {
       status: 200,
