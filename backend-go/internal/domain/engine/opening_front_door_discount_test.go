@@ -76,3 +76,52 @@ func TestOpeningProfileDoorDiscountValidation(t *testing.T) {
 		t.Fatalf("valid door discount rejected: %v", err)
 	}
 }
+
+// #1337/#1393 — a VERIFIED profile whose legacy pair can never produce an
+// effective discount (the pin rule: front > 0 and grip >= 0) used to pass
+// authoring and then fail at every freeze; the write boundary refuses it.
+func TestOpeningProfileVerifiedPairRequiresEffectiveDiscount(t *testing.T) {
+	base := func() domain.OpeningProfile {
+		return domain.OpeningProfile{
+			Code: "X", Name: "X", GripType: "gola", CrossSectionShape: "L",
+			CompatiblePlacements: []string{"top"}, DatasheetStatus: "verified",
+			ProfileHeightMm: openingProfileFloatPtr(56.5), ProfileDepthMm: openingProfileFloatPtr(27.2),
+			GeometryOrigin: "datasheet 8006",
+		}
+	}
+	zeroFront, gripFour, negativeGrip, validFront, thirtyTwo :=
+		0, 4, -1, 66, 32
+
+	// front 0 / grip 4 / door nil: complete but never pinnable — rejected.
+	p := base()
+	p.FrontReductionMm = &zeroFront
+	p.GripClearanceMm = &gripFour
+	if err := domain.ValidateOpeningProfile(p); err == nil {
+		t.Fatal("verified pair with front 0 must fail closed (it can never pin)")
+	}
+
+	// negative grip never produces an effective discount either.
+	p = base()
+	p.FrontReductionMm = &validFront
+	p.GripClearanceMm = &negativeGrip
+	if err := domain.ValidateOpeningProfile(p); err == nil {
+		t.Fatal("verified pair with negative grip must fail closed")
+	}
+
+	// The valid pair keeps passing (existing verified profiles unaffected).
+	p = base()
+	p.FrontReductionMm = &validFront
+	p.GripClearanceMm = &gripFour
+	if err := domain.ValidateOpeningProfile(p); err != nil {
+		t.Fatalf("verified pair front 66 / grip 4 rejected: %v", err)
+	}
+
+	// solo-door (declared number, no pair) keeps passing — #1316 winner.
+	p = base()
+	p.DoorReductionMm = &thirtyTwo
+	if err := domain.ValidateOpeningProfile(p); err != nil {
+		t.Fatalf("verified solo-door profile rejected: %v", err)
+	}
+}
+
+func openingProfileFloatPtr(v float64) *float64 { return &v }

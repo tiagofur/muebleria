@@ -170,6 +170,78 @@ func TestHandleDesignOpeningPutRejectsInvalidAndKeepsPersisted(t *testing.T) {
 	}
 }
 
+// #1337/#1393 — a verified profile whose legacy pair never produces an
+// effective discount (front 0 / grip 4 / door nil) passes the engine
+// validation but fails the pin rule at the persistence boundary. The write
+// answers 422 (never a 500) and the persisted selection stays intact.
+func TestHandleDesignOpeningPutPinWithoutEffectiveDiscountResponds422(t *testing.T) {
+	store := openingDesignStub()
+	for i := range store.openingProfiles {
+		if store.openingProfiles[i].ID == "profile.gola-l.alu" {
+			store.openingProfiles[i].FrontReductionMm = openingTestIntPtr(0)
+			store.openingProfiles[i].GripClearanceMm = openingTestIntPtr(4)
+			store.openingProfiles[i].DoorReductionMm = nil
+		}
+	}
+	existing := designWCWithDims(map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0})
+	handle := domain.DesignOpeningSelection{System: "handle"}
+	existing.AuthoringDefaults.Opening = &handle
+	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{"d1137000-0000-0000-0000-000000000001": *existing}
+	srv := &Server{Store: store}
+
+	rr := openingRequest(t, srv, http.MethodPut, `{"system":"gola","profileId":"profile.gola-l.alu","placements":["top"]}`)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusUnprocessableEntity, rr.Body.String())
+	}
+	var got struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Code != "INVALID_OPENING_CONFIGURATION" {
+		t.Fatalf("unexpected rejection code: %s", rr.Body.String())
+	}
+	// The rejection happened at the persistence boundary (the engine
+	// validation has no effective-discount rule) — and it never persisted.
+	readback := openingRequest(t, srv, http.MethodGet, "")
+	if readback.Code != http.StatusOK || !strings.Contains(readback.Body.String(), `"system":"handle"`) {
+		t.Fatalf("the persisted selection must survive: %s", readback.Body.String())
+	}
+}
+
+// #1316/#1393 — a profile declaring ONLY the workshop door discount (nil
+// legacy pair) still pins and resolves: 720 − 70 = 650.
+func TestHandleDesignOpeningPutPinsDeclaredDoorDiscount(t *testing.T) {
+	store := openingDesignStub()
+	for i := range store.openingProfiles {
+		if store.openingProfiles[i].ID == "profile.gola-l.alu" {
+			seventy := 70
+			store.openingProfiles[i].FrontReductionMm = nil
+			store.openingProfiles[i].GripClearanceMm = nil
+			store.openingProfiles[i].DoorReductionMm = &seventy
+		}
+	}
+	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{
+		"d1137000-0000-0000-0000-000000000001": *designWCWithDims(map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}),
+	}
+	srv := &Server{Store: store}
+
+	rr := openingRequest(t, srv, http.MethodPut, `{"system":"gola","profileId":"profile.gola-l.alu","placements":["top"]}`)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if pin := store.setOpeningCmd.Opening.ProfilePin; pin == nil || pin.DoorReductionMm == nil || *pin.DoorReductionMm != 70 {
+		t.Fatalf("the pin must freeze the declared door discount: %+v", pin)
+	}
+	if !strings.Contains(rr.Body.String(), `"heightMm":650`) {
+		t.Fatalf("the declared discount must drive the resolve (720−70=650): %s", rr.Body.String())
+	}
+}
+
 func TestHandleDesignOpeningGetRebuildsFromAuthoritativeState(t *testing.T) {
 	store := openingDesignStub()
 	existing := designWCWithDims(map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0})

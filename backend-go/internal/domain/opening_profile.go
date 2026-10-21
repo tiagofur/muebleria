@@ -201,6 +201,16 @@ func ValidateOpeningProfile(p OpeningProfile) error {
 		if p.DoorReductionMm == nil && (p.FrontReductionMm == nil || p.GripClearanceMm == nil) {
 			return fmt.Errorf("un perfil con ficha verificada exige un descuento de puerta (o el par de ficha frontal + holgura)")
 		}
+		// #1337/#1393: un perfil verificado cuyo par nunca produce un descuento
+		// efectivo (la regla del congelamiento: front > 0 y holgura >= 0)
+		// pasaría el authoring y fallaría en cada pin — se rechaza en la
+		// frontera de escritura con el mismo contrato de pinHasEffectiveDiscount.
+		if p.DoorReductionMm == nil && *p.FrontReductionMm <= 0 {
+			return fmt.Errorf("un perfil con ficha verificada exige un descuento frontal del par mayor a 0")
+		}
+		if p.DoorReductionMm == nil && *p.GripClearanceMm < 0 {
+			return fmt.Errorf("un perfil con ficha verificada no puede declarar una holgura de grip negativa")
+		}
 		if strings.TrimSpace(p.GeometryOrigin) == "" {
 			return fmt.Errorf("un perfil con ficha verificada requiere el origen auditable de sus valores")
 		}
