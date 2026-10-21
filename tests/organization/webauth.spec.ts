@@ -184,15 +184,15 @@ test('logout en una pestaña corta la sesión compartida: la otra termina en log
 });
 
 test('FAIL CLOSED sin Web Locks: la rotación se rechaza aunque IndexedDB exista (sin fallback de lease)', async ({ page }) => {
+  // Login normal: el shell renderiza y la sesión queda activa en memoria.
+  await login(page);
+
   const refreshRequests: string[] = [];
   page.on('request', (request) => {
     if (new URL(request.url()).pathname.endsWith('/auth/refresh')) {
       refreshRequests.push(request.url());
     }
   });
-
-  // Login normal: el shell renderiza y la sesión queda activa en memoria.
-  await login(page);
 
   // #460 segunda revisión: navigator.locks es el ÚNICO mecanismo de
   // exclusión aceptado. Sin él, refresh/logout fail closed — no
