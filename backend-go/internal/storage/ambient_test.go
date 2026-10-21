@@ -78,7 +78,7 @@ func migratedConnectStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) 
 		t.Fatalf("seed fixture membership: %v", err)
 	}
 	if _, err := seedTx.Exec(context.Background(), `
-		UPDATE organizations SET status='active', status_reason=NULL WHERE id=$1`, storage.InitialOrganizationID); err != nil {
+		UPDATE organizations SET status='active', status_reason=NULL, library_type='custom' WHERE id=$1`, storage.InitialOrganizationID); err != nil {
 		t.Fatalf("activate fixture organization: %v", err)
 	}
 	if err := seedTx.Commit(context.Background()); err != nil {

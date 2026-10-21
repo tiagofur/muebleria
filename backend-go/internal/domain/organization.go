@@ -84,6 +84,24 @@ type OrganizationEntitlements struct {
 	UpdatedAt            time.Time                     `json:"updated_at"`
 }
 
+type LibraryType string
+
+const (
+	LibraryTypeStandard LibraryType = "standard"
+	LibraryTypeCustom   LibraryType = "custom"
+)
+
+func IsValidLibraryType(t LibraryType) bool {
+	return t == LibraryTypeStandard || t == LibraryTypeCustom
+}
+
+// AllowsGeometryAuthoring reports whether the organization may author catalog
+// geometry (modules, structures, components). An empty value is treated as
+// standard so legacy rows fail closed.
+func (t LibraryType) AllowsGeometryAuthoring() bool {
+	return t == LibraryTypeCustom
+}
+
 type Organization struct {
 	ID                   string             `json:"id"`
 	Name                 string             `json:"name"`
@@ -91,6 +109,7 @@ type Organization struct {
 	Type                 OrganizationType   `json:"type"`
 	LicensePlan          LicensePlan        `json:"license_plan"`
 	LicenseExpiresAt     *time.Time         `json:"license_expires_at,omitempty"`
+	LibraryType          LibraryType        `json:"library_type"`
 	Status               OrganizationStatus `json:"status"`
 	CredentialVersion    int64              `json:"credential_version"`
 	StatusChangedAt      time.Time          `json:"status_changed_at"`

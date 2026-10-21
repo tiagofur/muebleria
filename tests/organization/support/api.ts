@@ -69,7 +69,7 @@ async function seedDistinctModule(token: string, id: string, tenant: 'A' | 'B'):
     // module sorts first (catalog order changes across shards, and a
     // dimensionless module makes every later materialize/quote freeze fail
     // closed, which is the server behaving correctly).
-    widthMm: 600, heightMm: 720, depthMm: 560,
+    externalDims: { width: 600, height: 720, depth: 560 },
   }] });
 }
 

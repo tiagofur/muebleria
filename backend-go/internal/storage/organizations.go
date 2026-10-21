@@ -27,7 +27,7 @@ var (
 	ErrOrganizationStatusConflict = errors.New("organization status conflict")
 )
 
-const organizationColumns = `id, name, slug, type, license_plan, license_expires_at,
+const organizationColumns = `id, name, slug, type, license_plan, license_expires_at, library_type,
 	status, credential_version, status_changed_at, status_changed_by::text,
 	status_reason, suspended_at, offboarding_started_at, terminated_at,
 	parent_organization_id, created_at, updated_at, version`
@@ -41,7 +41,7 @@ func stringValue(value *string) string {
 
 func scanOrganization(row pgx.Row) (*domain.Organization, error) {
 	var o domain.Organization
-	err := row.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
+	err := row.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt, &o.LibraryType,
 		&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
 		&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
 		&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
@@ -73,7 +73,7 @@ func (s *PostgresStore) ListOrganizations(ctx context.Context) ([]domain.Organiz
 	out := []domain.Organization{}
 	for rows.Next() {
 		var o domain.Organization
-		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt, &o.LibraryType,
 			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
 			&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
 			&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version); err != nil {
@@ -106,13 +106,17 @@ func (s *PostgresStore) CreateOrganization(ctx context.Context, o *domain.Organi
 	if statusChangedBy == "" && hasActor && actor.UserID != "" {
 		statusChangedBy = actor.UserID
 	}
+	libType := string(o.LibraryType)
+	if libType == "" {
+		libType = string(domain.LibraryTypeStandard)
+	}
 	err := s.db(ctx).QueryRow(ctx, `
 		SELECT `+organizationColumns+`
 		FROM command_create_organization(
-			$1, $2, $3, $4, $5, $6, $7, nullif($8, '')::uuid, $9
+			$1, $2, $3, $4, $5, $6, $7, nullif($8, '')::uuid, $9, $10
 		)`,
-		o.Name, o.Slug, o.Type, plan, o.LicenseExpiresAt, status, stringValue(o.StatusReason), statusChangedBy, o.ParentOrganizationID).
-		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
+		o.Name, o.Slug, o.Type, plan, o.LicenseExpiresAt, status, stringValue(o.StatusReason), statusChangedBy, o.ParentOrganizationID, libType).
+		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt, &o.LibraryType,
 			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
 			&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
 			&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
@@ -146,7 +150,7 @@ func (s *PostgresStore) ListConnectedOrganizations(ctx context.Context, parentOr
 	out := []domain.Organization{}
 	for rows.Next() {
 		var o domain.Organization
-		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt, &o.LibraryType,
 			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
 			&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
 			&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version); err != nil {
@@ -159,7 +163,7 @@ func (s *PostgresStore) ListConnectedOrganizations(ctx context.Context, parentOr
 
 const membershipWithOrgColumns = `
 	m.id, m.organization_id, m.user_id, m.roles, m.status, m.joined_at, m.suspended_at, m.suspended_by::text, m.suspension_reason, m.left_at, m.left_by::text, m.leave_reason, m.created_at, m.updated_at, m.version, m.credential_version, m.sessions_revoked_at,
-	o.id, o.name, o.slug, o.type, o.license_plan, o.license_expires_at,
+	o.id, o.name, o.slug, o.type, o.license_plan, o.license_expires_at, o.library_type,
 	o.status, o.credential_version, o.status_changed_at, o.status_changed_by::text,
 	o.status_reason, o.suspended_at, o.offboarding_started_at, o.terminated_at,
 	o.parent_organization_id, o.created_at, o.updated_at, o.version`
@@ -443,22 +447,30 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 // parent link is NOT mutable here — it is set at creation (#326) and only
 // returned by the scan.
 func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organization) error {
+	libType := string(o.LibraryType)
+	if libType == "" {
+		libType = string(domain.LibraryTypeStandard)
+	}
 	return s.db(ctx).QueryRow(ctx, `
 		SELECT `+organizationColumns+`
-		FROM command_update_organization_metadata($1, $2, $3, $4, NULL)`,
-		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt).
-		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
+		FROM command_update_organization_metadata($1, $2, $3, $4, NULL, $5)`,
+		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt, libType).
+		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt, &o.LibraryType,
 			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
 			&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
 			&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
 }
 
 func (s *PostgresStore) UpdateOrganizationVersion(ctx context.Context, o *domain.Organization, expectedVersion int64) error {
+	libType := string(o.LibraryType)
+	if libType == "" {
+		libType = string(domain.LibraryTypeStandard)
+	}
 	err := s.db(ctx).QueryRow(ctx, `
 		SELECT `+organizationColumns+`
-		FROM command_update_organization_metadata($1, $2, $3, $4, $5)`,
-		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt, expectedVersion).
-		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
+		FROM command_update_organization_metadata($1, $2, $3, $4, $5, $6)`,
+		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt, expectedVersion, libType).
+		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt, &o.LibraryType,
 			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
 			&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
 			&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)

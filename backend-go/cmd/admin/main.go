@@ -749,6 +749,7 @@ func runCreateOrg(args []string) {
 	adminEmail := fs.String("admin-email", "", "existing active bootstrap administrator email (required)")
 	idempotencyKey := fs.String("idempotency-key", "", "stable retry key, 16-128 URL-safe characters (required)")
 	license := fs.String("license", string(domain.LicensePlanNone), "trial|pro|none")
+	libraryType := fs.String("library-type", string(domain.LibraryTypeStandard), "standard|custom")
 	_ = fs.Parse(args)
 
 	if *name == "" || *slug == "" || *adminEmail == "" || !cliIdempotencyKeyPattern.MatchString(*idempotencyKey) {
@@ -765,6 +766,10 @@ func runCreateOrg(args []string) {
 	if !domain.IsValidLicensePlan(plan) {
 		fatal(fmt.Errorf("invalid license %q (trial|pro|none)", *license))
 	}
+	lib := domain.LibraryType(*libraryType)
+	if !domain.IsValidLibraryType(lib) {
+		fatal(fmt.Errorf("invalid library-type %q (standard|custom)", *libraryType))
+	}
 
 	store, closeStore, err := openStore()
 	if err != nil {
@@ -779,7 +784,7 @@ func runCreateOrg(args []string) {
 	command := application.ProvisionOrganizationCommand{
 		ActorUserID: admin.ID, BootstrapAdminUserID: admin.ID,
 		Name: strings.TrimSpace(*name), Slug: strings.TrimSpace(*slug), Type: kind,
-		LicensePlan: plan, AllowEmptyCatalog: true,
+		LicensePlan: plan, LibraryType: lib, AllowEmptyCatalog: true,
 	}
 	result, replayed, err := provisionOrganizationIdempotently(ctx, store, command, *idempotencyKey)
 	if err != nil {

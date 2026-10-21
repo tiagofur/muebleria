@@ -100,6 +100,7 @@ type ProvisionOrganizationCommand struct {
 	Type                 domain.OrganizationType
 	LicensePlan          domain.LicensePlan
 	LicenseExpiresAt     *time.Time
+	LibraryType          domain.LibraryType
 	BootstrapAdminUserID string
 	ParentOrganizationID *string
 	CloneCatalogFrom     string
@@ -191,6 +192,12 @@ func (s *OrganizationService) ProvisionOrganization(ctx context.Context, cmd Pro
 	if !domain.IsValidOrganizationType(cmd.Type) || !domain.IsValidLicensePlan(cmd.LicensePlan) {
 		return nil, fmt.Errorf("%w: invalid organization type or license plan", ErrInvalidOrganizationCommand)
 	}
+	if cmd.LibraryType == "" {
+		cmd.LibraryType = domain.LibraryTypeStandard
+	}
+	if !domain.IsValidLibraryType(cmd.LibraryType) {
+		return nil, fmt.Errorf("%w: invalid library type", ErrInvalidOrganizationCommand)
+	}
 	entitlements := DefaultOrganizationEntitlements(cmd.Type, cmd.LicensePlan)
 	if cmd.Entitlements != nil {
 		entitlements = *cmd.Entitlements
@@ -214,7 +221,7 @@ func (s *OrganizationService) ProvisionOrganization(ctx context.Context, cmd Pro
 		}
 		org := domain.Organization{
 			Name: cmd.Name, Slug: cmd.Slug, Type: cmd.Type,
-			LicensePlan: cmd.LicensePlan, LicenseExpiresAt: cmd.LicenseExpiresAt,
+			LicensePlan: cmd.LicensePlan, LicenseExpiresAt: cmd.LicenseExpiresAt, LibraryType: cmd.LibraryType,
 			Status:               domain.OrganizationStatusProvisioning,
 			ParentOrganizationID: cmd.ParentOrganizationID,
 		}

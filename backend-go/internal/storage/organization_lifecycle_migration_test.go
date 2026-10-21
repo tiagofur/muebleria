@@ -139,7 +139,7 @@ func TestOrganizationLifecycleMigration_NormalizesHistoricalPartialFixture(t *te
 
 func TestOrganizationLifecycleStorage_TransitionsEpochAndReadiness(t *testing.T) {
 	pool := multiOrgFreshMigrationDB(t)
-	identityApplyThrough(t, pool, 101)
+	identityApplyThrough(t, pool, 167)
 	ctx := context.Background()
 	store := &storage.PostgresStore{Pool: pool}
 	const (

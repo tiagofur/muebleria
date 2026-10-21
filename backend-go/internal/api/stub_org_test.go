@@ -36,6 +36,7 @@ func (s *stubStore) GetOrganizationByID(_ context.Context, _ string) (*domain.Or
 			LicensePlan:      plan,
 			LicenseExpiresAt: s.orgLicenseExpiresAt,
 			Status:           domain.OrganizationStatusActive, CredentialVersion: 1,
+			LibraryType: domain.LibraryTypeCustom,
 		}, nil
 	}
 	return nil, errors.New("organization not found")

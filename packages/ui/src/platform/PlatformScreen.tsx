@@ -20,6 +20,7 @@ import {
 import { PageHeader, Modal, PageLoading, EmptyState } from '../common';
 import { useStepUp } from '../security';
 import { WorkspaceTabs } from '../common/Tabs';
+import { LibraryTypeCards, type LibraryTypeValue } from './LibraryTypeCards';
 import { roleLabelEs } from '@granete/domain';
 import {
   GraneteApiClient,
@@ -91,11 +92,13 @@ export function PlatformScreen({
   const [newExpiry, setNewExpiry] = useState('');
   const [cloneFromOrgId, setCloneFromOrgId] = useState('');
   const [newBootstrapAdminUserId, setNewBootstrapAdminUserId] = useState('');
+  const [newLibraryType, setNewLibraryType] = useState<LibraryTypeValue>('standard');
 
   // Edit form state
   const [editName, setEditName] = useState('');
   const [editPlan, setEditPlan] = useState('trial');
   const [editExpiry, setEditExpiry] = useState('');
+  const [editLibraryType, setEditLibraryType] = useState<LibraryTypeValue>('standard');
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -224,6 +227,7 @@ export function PlatformScreen({
           license_plan: newPlan,
           bootstrap_admin_user_id: newBootstrapAdminUserId,
           license_expires_at: newExpiry ? new Date(`${newExpiry}T23:59:59Z`).toISOString() : null,
+          library_type: newLibraryType,
           ...(cloneFromOrgId ? { clone_catalog_from: cloneFromOrgId } : {}),
       });
       if (result.organization.status !== 'active' || !result.readiness.ready) {
@@ -236,6 +240,7 @@ export function PlatformScreen({
       setNewExpiry('');
       setCloneFromOrgId('');
       setNewBootstrapAdminUserId('');
+      setNewLibraryType('standard');
       await loadOrganizations();
     } catch (err) {
       setModalError(err instanceof Error ? err.message : 'Error al crear organización');
@@ -256,6 +261,7 @@ export function PlatformScreen({
           name: editName.trim(),
           license_plan: editPlan,
           license_expires_at: editExpiry ? new Date(`${editExpiry}T23:59:59Z`).toISOString() : null,
+          library_type: editLibraryType,
         }, key));
       if (!updated) { setSubmitting(false); return; }
       showToast('✓ Organización actualizada');
@@ -449,6 +455,12 @@ export function PlatformScreen({
                           </span>
                         </div>
                         <div>
+                          <strong>Librería:</strong>{' '}
+                          <span className="platform-chip platform-chip--plan">
+                            {org.library_type === 'custom' ? 'Personalizada' : 'Estándar'}
+                          </span>
+                        </div>
+                        <div>
                           <strong>Vence:</strong>{' '}
                           {org.license_expires_at
                             ? new Date(org.license_expires_at).toLocaleDateString()
@@ -476,6 +488,7 @@ export function PlatformScreen({
                             setEditName(org.name);
                             setEditPlan(currentPlan);
                             setEditExpiry(currentExpiry ? currentExpiry.slice(0, 10) : '');
+                            setEditLibraryType(org.library_type === 'custom' ? 'custom' : 'standard');
                           }}
                         >
                           <Edit2 size={13} strokeWidth={1.5} aria-hidden="true" /> Editar
@@ -778,6 +791,13 @@ export function PlatformScreen({
             </div>
           </div>
 
+          <LibraryTypeCards
+            idPrefix="org-create"
+            value={newLibraryType}
+            onChange={setNewLibraryType}
+            disabled={submitting}
+          />
+
           <div className="platform-form-group">
             <label className="platform-label" htmlFor="org-bootstrap-admin">
               Administrador inicial *
@@ -900,6 +920,13 @@ export function PlatformScreen({
               <option value="none">Sin licencia</option>
             </select>
           </div>
+
+          <LibraryTypeCards
+            idPrefix="org-edit"
+            value={editLibraryType}
+            onChange={setEditLibraryType}
+            disabled={submitting}
+          />
 
           <div className="platform-form-group">
             <label className="platform-label" htmlFor="edit-expiry">

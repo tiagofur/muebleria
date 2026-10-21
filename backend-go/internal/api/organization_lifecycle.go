@@ -84,6 +84,14 @@ func (s *Server) HandleProvisionOrganization(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		cmd.BootstrapAdminUserID = strings.TrimSpace(*body.BootstrapAdminUserID)
+		if body.LibraryType != nil {
+			libraryType := domain.LibraryType(strings.TrimSpace(*body.LibraryType))
+			if !domain.IsValidLibraryType(libraryType) {
+				respondWithError(w, http.StatusBadRequest, "library_type inválido")
+				return
+			}
+			cmd.LibraryType = libraryType
+		}
 		if body.CloneCatalogFrom != nil {
 			source, err := s.resolveOrganizationReference(r, strings.TrimSpace(*body.CloneCatalogFrom))
 			if err != nil {

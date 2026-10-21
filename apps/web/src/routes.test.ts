@@ -226,6 +226,18 @@ describe('plant board route (F093)', () => {
       expect(navBlockedForSession('auth', 'user', 'library', true)).toBe(false);
       expect(navFromPath('/library')).toBe('library');
     });
+
+    it('#1382: standard-library workshops bounce geometry authoring deep links', () => {
+      for (const navId of ['modules', 'structures', 'components', 'addOns', 'finishes'] as const) {
+        expect(navBlockedForSession('auth', ['admin'], navId, false, 'standard')).toBe(true);
+        expect(navBlockedForSession('auth', ['admin'], navId, false, 'custom')).toBe(false);
+        expect(navBlockedForSession('auth', ['admin'], navId, false, undefined)).toBe(false);
+      }
+      // Price and policy screens stay reachable on the standard library.
+      for (const navId of ['materials', 'edges', 'hardware', 'settings'] as const) {
+        expect(navBlockedForSession('auth', ['admin'], navId, false, 'standard')).toBe(false);
+      }
+    });
   });
 });
 

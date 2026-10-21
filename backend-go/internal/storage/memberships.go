@@ -14,7 +14,7 @@ func scanMembershipWithOrg(row pgx.Row) (*domain.MembershipWithOrg, error) {
 	var m domain.MembershipWithOrg
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.SuspendedAt, &m.SuspendedBy, &m.SuspensionReason, &m.LeftAt, &m.LeftBy, &m.LeaveReason, &m.CreatedAt, &m.UpdatedAt, &m.Version, &m.CredentialVersion, &m.SessionsRevokedAt,
 		&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
-		&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt,
+		&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.LibraryType,
 		&m.Organization.Status, &m.Organization.CredentialVersion, &m.Organization.StatusChangedAt,
 		&m.Organization.StatusChangedBy, &m.Organization.StatusReason, &m.Organization.SuspendedAt,
 		&m.Organization.OffboardingStartedAt, &m.Organization.TerminatedAt,
@@ -55,7 +55,7 @@ func (s *PostgresStore) ListMembershipsByUser(ctx context.Context, userID string
 		var m domain.MembershipWithOrg
 		if err := rows.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.SuspendedAt, &m.SuspendedBy, &m.SuspensionReason, &m.LeftAt, &m.LeftBy, &m.LeaveReason, &m.CreatedAt, &m.UpdatedAt, &m.Version, &m.CredentialVersion, &m.SessionsRevokedAt,
 			&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
-			&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt,
+			&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.LibraryType,
 			&m.Organization.Status, &m.Organization.CredentialVersion, &m.Organization.StatusChangedAt,
 			&m.Organization.StatusChangedBy, &m.Organization.StatusReason, &m.Organization.SuspendedAt,
 			&m.Organization.OffboardingStartedAt, &m.Organization.TerminatedAt,

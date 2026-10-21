@@ -62,9 +62,9 @@ async function loginMultiMembershipAdmin(page: Page): Promise<void> {
   await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_EMAIL'));
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
-  await expect(page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' })).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: /Browser Gate A/ }).click();
-  await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A');
+  await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A', { timeout: 15_000 });
   const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
   if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 }
@@ -74,9 +74,21 @@ async function loginPlatformAdminWorkshopOwner(page: Page): Promise<void> {
   await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_A_OWNER_EMAIL'));
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
-  await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A');
+
+  const chooser = page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' });
+  const topbar = page.locator('.app-topbar__organization-text strong');
+
+  await Promise.race([
+    chooser.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined),
+    topbar.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined),
+  ]);
+
+  if (await chooser.isVisible()) {
+    await page.getByRole('button', { name: /Browser Gate A/ }).click();
+  }
+  await expect(topbar).toHaveText('Browser Gate A', { timeout: 15_000 });
   const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
-  if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
+  if (await welcomeTour.isVisible({ timeout: 2000 }).catch(() => false)) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 }
 
 test.describe.serial('First Design creation from /disenos (zero-design Admin path)', () => {

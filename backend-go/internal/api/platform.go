@@ -115,6 +115,10 @@ func randomToken32() (string, error) {
 type PlatformOrgDTO = openapi.PlatformOrganization
 
 func toPlatformOrgDTO(o domain.Organization, memberCount int) PlatformOrgDTO {
+	libraryType := string(o.LibraryType)
+	if libraryType == "" {
+		libraryType = string(domain.LibraryTypeStandard)
+	}
 	return PlatformOrgDTO{
 		ID:                   o.ID,
 		Name:                 o.Name,
@@ -122,6 +126,7 @@ func toPlatformOrgDTO(o domain.Organization, memberCount int) PlatformOrgDTO {
 		Type:                 string(o.Type),
 		LicensePlan:          string(o.LicensePlan),
 		LicenseExpiresAt:     formatOptionalTime(o.LicenseExpiresAt),
+		LibraryType:          &libraryType,
 		Status:               openapi.OrganizationStatus(o.Status),
 		ParentOrganizationID: o.ParentOrganizationID,
 		CreatedAt:            o.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -166,7 +171,7 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 	if !decodeGeneratedJSONBody(w, r, &raw) {
 		return
 	}
-	allowed := map[string]bool{"name": true, "license_plan": true, "license_expires_at": true}
+	allowed := map[string]bool{"name": true, "license_plan": true, "license_expires_at": true, "library_type": true}
 	for key := range raw {
 		if !allowed[key] {
 			respondWithError(w, http.StatusBadRequest, "invalid request body")
@@ -230,6 +235,26 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 		}
 	}
 
+	var libraryTypeChanged bool
+	var previousLibraryType domain.LibraryType
+	if rawLibrary, ok := raw["library_type"]; ok {
+		var libraryStr string
+		if err := json.Unmarshal(rawLibrary, &libraryStr); err != nil {
+			respondWithError(w, http.StatusBadRequest, "library_type inválido")
+			return
+		}
+		next := domain.LibraryType(libraryStr)
+		if !domain.IsValidLibraryType(next) {
+			respondWithError(w, http.StatusBadRequest, "library_type inválido")
+			return
+		}
+		previousLibraryType = org.LibraryType
+		if org.LibraryType != next {
+			libraryTypeChanged = true
+		}
+		org.LibraryType = next
+	}
+
 	if err := s.Store.UpdateOrganizationVersion(r.Context(), org, expectedVersion); err != nil {
 		if errors.Is(err, storage.ErrVersionConflict) {
 			respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "La organización fue modificada por otra sesión", nil)
@@ -252,6 +277,15 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 		if err := s.auditRequired(r.Context(), "organization_license_updated", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
 			"license_plan":       string(org.LicensePlan),
 			"license_expires_at": org.LicenseExpiresAt,
+		}); err != nil {
+			respondWithInternalError(w, err, "platform update organization audit")
+			return
+		}
+	}
+	if libraryTypeChanged {
+		if err := s.auditRequired(r.Context(), "organization_library_type_changed", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
+			"previous_library_type": string(previousLibraryType),
+			"library_type":          string(org.LibraryType),
 		}); err != nil {
 			respondWithInternalError(w, err, "platform update organization audit")
 			return
