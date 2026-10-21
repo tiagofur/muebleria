@@ -2752,6 +2752,44 @@ describe('ProjectSpatialStudio #670 — miembro de conjunto en modo detalle', ()
     expect(sceneAttr()).toBe('');
     expect(screen.queryByTestId('mock-select-assembly-member')).toBeNull();
   });
+
+  it('cerrar y reabrir el studio descarta el miembro seleccionado (sin estado fantasma #670)', async () => {
+    const onClose = vi.fn();
+    const base = (open: boolean) => (
+      <ProjectSpatialStudio
+        open={open}
+        project={projectDrawer}
+        modules={[modDrawer]}
+        catalog={catalogDrawer}
+        canEdit
+        onClose={onClose}
+        onChangeLayout={vi.fn()}
+      />
+    );
+    const { rerender } = render(base(true));
+    await screen.findByTestId('spatial-studio-scene');
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-detail-toggle'));
+    fireEvent.click(screen.getByTestId('mock-select-assembly-member'));
+    expect(
+      screen.getByTestId('spatial-studio-assembly-member-inspector'),
+    ).toBeTruthy();
+
+    // Se cierra con el miembro todavía seleccionado: el contenedor mantiene el
+    // studio montado con open=false entre sesiones.
+    rerender(base(false));
+    expect(screen.queryByTestId('project-spatial-studio')).toBeNull();
+    rerender(base(true));
+    await screen.findByTestId('spatial-studio-scene');
+
+    // El miembro no sobrevive: el primer ESC limpia la selección (sin click
+    // nuevo) y el segundo cierra. Con el estado fantasma, el primer ESC lo
+    // consumía en silencio y el studio necesitaba un ESC extra para cerrar.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ── F144: precisión + dimensiones libres + undo por intención ──────────────
