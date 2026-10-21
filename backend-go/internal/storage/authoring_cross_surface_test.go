@@ -63,18 +63,10 @@ func TestFurnitureAuthoringCrossSurfaceChain(t *testing.T) {
 
 	seedComponentFromFixture(t, store, fixture.ComponentShelf)
 	seedComponentFromFixture(t, store, fixture.ComponentDoor)
-	if _, err := realStore.Pool.Exec(context.Background(),
-		`UPDATE organizations SET library_type = 'custom' WHERE id = $1`,
-		connectStoreInitialActor.OrganizationID); err != nil {
-		t.Fatalf("set custom library type: %v", err)
-	}
 	t.Cleanup(func() {
 		cleanupConnectStoreFixture(t, `DELETE FROM modules WHERE id = $1`, moduleID)
 		cleanupConnectStoreFixture(t, `DELETE FROM components WHERE id IN ($1::uuid, $2::uuid)`,
 			fixture.ComponentShelf["id"], fixture.ComponentDoor["id"])
-		_, _ = realStore.Pool.Exec(context.Background(),
-			`UPDATE organizations SET library_type = 'standard' WHERE id = $1`,
-			connectStoreInitialActor.OrganizationID)
 	})
 
 	// Segment 0 — the catalog revision BEFORE the authored save.

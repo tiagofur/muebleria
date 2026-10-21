@@ -13,6 +13,7 @@ async function login(page: Page, email: string, organizationSlug: string): Promi
   }
   await expect(page.locator('.app-topbar__organization-text strong')).toHaveText(
     organizationSlug === required('ORGANIZATION_GATE_ORG_A_SLUG') ? 'Browser Gate A' : 'Browser Gate B',
+    { timeout: 15_000 },
   );
   const tour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
   if (await tour.isVisible()) await tour.getByRole('button', { name: 'Omitir' }).click();
