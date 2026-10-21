@@ -57,11 +57,19 @@ module Granete
 
           unless target_furniture && furniture_metadata?(model, target_furniture)
             @logger.warn('toggle_door_motion_no_furniture', instance_ref: instance_ref)
+            execute_bridge(dialog, 'onDoorMotionFailed',
+                           { 'message' => 'No se encontró el mueble; volvé a seleccionarlo en el ambiente.' })
             return
           end
 
           adapter = presentation_motion_adapter_for(target_furniture, open_angle_deg)
           motion_id = "door-slot-#{slot_index}"
+          if adapter.motions.empty?
+            @logger.warn('toggle_door_motion_no_doors', slot_index: slot_index)
+            execute_bridge(dialog, 'onDoorMotionFailed',
+                           { 'message' => 'Este mueble no tiene puertas para abrir.' })
+            return
+          end
           # The per-door side arrives with EVERY toggle (card convention /
           # authored data) — the cached adapter never freezes a side.
           is_open = adapter.toggle_motion(motion_id, swing_side)

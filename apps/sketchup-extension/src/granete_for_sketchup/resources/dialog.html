@@ -1690,6 +1690,12 @@
             }
           },
 
+          onDoorMotionFailed: function (payload) {
+            if (window.GraneteUI.inspector && window.GraneteUI.inspector.onDoorMotionFailed) {
+              window.GraneteUI.inspector.onDoorMotionFailed(payload);
+            }
+          },
+
           onAllDoorsClosed: function () {
             if (window.GraneteUI.inspector && window.GraneteUI.inspector.onAllDoorsClosed) {
               window.GraneteUI.inspector.onAllDoorsClosed();

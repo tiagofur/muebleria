@@ -148,6 +148,24 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
     assert fresh.entities_valid?
   end
 
+  # #1387 review: el bridge emite hacia window.<callback> pero quien
+  # delega a GraneteUI.inspector es dialog.html — un callback nuevo sin su
+  # wrapper allá es código muerto (fue exactamente el blocker de la ronda 1).
+  MOTION_CALLBACKS = %w[onDoorMotionToggled onDoorMotionFailed onAllDoorsClosed].freeze
+
+  def test_dialog_html_delegates_every_motion_callback
+    dialog_html = File.read(
+      File.expand_path('../../src/granete_for_sketchup/resources/dialog.html', __dir__)
+    )
+    inspector_js = File.read(
+      File.expand_path('../../src/granete_for_sketchup/resources/js/granete-inspector.js', __dir__)
+    )
+    MOTION_CALLBACKS.each do |callback|
+      assert_includes inspector_js, "#{callback}: function", "el inspector JS debe consumir #{callback}"
+      assert_includes dialog_html, "#{callback}: function", "dialog.html debe delegar #{callback} a GraneteUI.inspector"
+    end
+  end
+
   def test_failed_toggle_reaches_the_dialog_instead_of_dying_silently
     host = host_with([DeletedDoor.new])
     dialog = FakeDialog.new('d1')
