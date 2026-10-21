@@ -70,7 +70,7 @@ export function hasAnyEdgeEnabled(edges: readonly EdgeAssignment[]): boolean {
 export type { Grain };
 
 /**
- * Safely evaluates simple math formulas involving W, H, D, T, B, PW, PH, PD variables and numbers.
+ * Safely evaluates simple math formulas involving W, H, D, T, B, PW, PH, PD, N variables and numbers.
  * B = plinth / toe-kick height (zoclo), mm.
  */
 export function evaluatePartFormula(
@@ -85,6 +85,8 @@ export function evaluatePartFormula(
     T?: number;
     B?: number;
     i?: number;
+    /** Total copies of the component instance (#1383); 0 where it doesn't apply. */
+    N?: number;
   },
   contextInfo?: { structureCode: string; partDescription: string; field: 'length' | 'width' | 'x' | 'y' | 'z' }
 ): number {
@@ -99,8 +101,8 @@ export function evaluatePartFormula(
   // Validate allowed characters: digits, decimal point, W/H/D/P/T/B/L/i, operators, whitespace.
   // Decimal point is required for literals like "1.5" or "W * 1.5" (half-thickness, margins, etc.).
   const clean = trimmed.replace(/\s+/g, '');
-  if (!/^[0-9.WHDTPBLi+\-*/()]+$/.test(clean)) {
-    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números (con decimal), W, H, D, P, T, B, L, i y operadores (+, -, *, /, paréntesis).`, {
+  if (!/^[0-9.WHDTPBLiN+\-*/()]+$/.test(clean)) {
+    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números (con decimal), W, H, D, P, T, B, L, i, N y operadores (+, -, *, /, paréntesis).`, {
       ...contextInfo,
       field: contextInfo?.field,
     });
@@ -126,7 +128,8 @@ export function evaluatePartFormula(
     .replace(/L/g, String(dims.D))
     .replace(/T/g, String(t))
     .replace(/B/g, String(b))
-    .replace(/i/g, String(dims.i ?? 0));
+    .replace(/i/g, String(dims.i ?? 0))
+    .replace(/N/g, String(dims.N ?? 0));
 
   try {
     // Safe evaluation using Function context

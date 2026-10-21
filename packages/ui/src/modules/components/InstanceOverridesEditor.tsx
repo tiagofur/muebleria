@@ -119,7 +119,7 @@ export function InstanceOverridesEditor({
           </div>
 
           <p className="instance-overrides__hint">
-            Vacío = del catálogo / ubicación. Variables: PW, PH, PD, T, i.
+            Vacío = del catálogo / ubicación. Variables: PW, PH, PD, T, i, N (copias del componente).
           </p>
 
           <div className="module-editor__grid">
