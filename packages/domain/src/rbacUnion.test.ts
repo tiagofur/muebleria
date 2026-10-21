@@ -53,6 +53,38 @@ describe('navIdsForRoles — unión de navegación', () => {
   });
 });
 
+describe('navIdsForRoles — library entitlement (#1382)', () => {
+  const authoring = ['modules', 'structures', 'components', 'addOns', 'finishes'];
+
+  it('standard oculta la autoría de geometría aunque el rol la permita', () => {
+    expect(navIdsForRoles(['admin']).has('modules')).toBe(true);
+    const standard = navIdsForRoles(['admin'], { libraryType: 'standard' });
+    for (const id of authoring) expect(standard.has(id)).toBe(false);
+    expect(rolesCanAccessNav(['ingeniero'], 'structures', { libraryType: 'standard' })).toBe(false);
+  });
+
+  it('standard conserva precios, herrajes y configuración del taller', () => {
+    const standard = navIdsForRoles(['admin'], { libraryType: 'standard' });
+    for (const id of ['materials', 'edges', 'hardware', 'settings', 'quotes']) {
+      expect(standard.has(id)).toBe(true);
+    }
+  });
+
+  it('custom mantiene la autoría completa', () => {
+    const custom = navIdsForRoles(['admin'], { libraryType: 'custom' });
+    for (const id of authoring) expect(custom.has(id)).toBe(true);
+  });
+
+  it('libraryType ausente no cambia el comportamiento previo', () => {
+    expect(navIdsForRoles(['admin'], {}).has('modules')).toBe(true);
+    expect(navIdsForRoles(['admin'], { libraryType: null }).has('modules')).toBe(true);
+  });
+
+  it('guest/local conserva la herramienta completa aunque se pase standard', () => {
+    expect(navIdsForRoles([], { libraryType: 'standard' }).has('modules')).toBe(true);
+  });
+});
+
 describe('rolesAllScopedBySector', () => {
   it('gate aplica sólo si TODOS los roles son sector-scoped', () => {
     expect(rolesAllScopedBySector(['produccion', 'almacen'])).toBe(true);

@@ -811,9 +811,27 @@ export function anyRole(
   return false;
 }
 
+/**
+ * Nav sections that author catalog geometry. Hidden for organizations on the
+ * canonical Granete Standard library (#1382); the server enforces the same rule.
+ */
+export const GEOMETRY_AUTHORING_NAV_IDS: readonly string[] = [
+  'modules',
+  'structures',
+  'components',
+  'addOns',
+  'finishes',
+];
+
+export interface NavAccessOptions {
+  /** Organization library entitlement; 'standard' hides geometry authoring. */
+  libraryType?: string | null;
+}
+
 /** Union of the nav sections each role may open (guest = all). */
 export function navIdsForRoles(
   roles: readonly (string | null | undefined)[],
+  options?: NavAccessOptions,
 ): ReadonlySet<string> {
   const hasNull = roles.length === 0 || roles.some((r) => r == null);
   if (hasNull) {
@@ -824,6 +842,9 @@ export function navIdsForRoles(
   for (const role of roles) {
     for (const id of navIdsForRole(role)) out.add(id);
   }
+  if (options?.libraryType === 'standard') {
+    for (const id of GEOMETRY_AUTHORING_NAV_IDS) out.delete(id);
+  }
   return out;
 }
 
@@ -831,8 +852,9 @@ export function navIdsForRoles(
 export function rolesCanAccessNav(
   roles: readonly (string | null | undefined)[],
   navId: string,
+  options?: NavAccessOptions,
 ): boolean {
-  return navIdsForRoles(roles).has(navId);
+  return navIdsForRoles(roles, options).has(navId);
 }
 
 /**

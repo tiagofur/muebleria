@@ -519,14 +519,18 @@ export function AppContent({
   const enterSupportSession = useWorkspaceStore((st) => st.enterSupportSession);
   const isPlatformAdmin = Boolean(authUser?.platform_admin);
   const allowedNavIds = useMemo(() => {
-    const ids = new Set(navIdsForRoles(session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : []));
+    const ids = new Set(
+      navIdsForRoles(session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [], {
+        libraryType: session === 'auth' ? activeOrg?.library_type : null,
+      }),
+    );
     if (session === 'auth' && authUser?.platform_admin) {
       ids.add('platform');
       // #1184: el hub Biblioteca también es del bibliotecario.
       ids.add('library');
     }
     return ids;
-  }, [session, authUser]);
+  }, [session, authUser, activeOrg?.library_type]);
   // F094 — own station assignments (Mi Estación). Loaded for scoped
   // operator roles; null = unrestricted / local mode.
   const isSectorScoped = rolesAllScopedBySector(actorRoles);
@@ -836,18 +840,24 @@ export function AppContent({
     }
     const blocked =
       (session === 'auth' || session === 'guest') &&
-      navBlockedForSession(session, actorRoles, resolved, isPlatformAdmin);
+      navBlockedForSession(session, actorRoles, resolved, isPlatformAdmin, activeOrg?.library_type);
     if (blocked) {
+      const standardLibraryBlock =
+        session === 'auth' &&
+        activeOrg?.library_type === 'standard' &&
+        !navBlockedForSession(session, actorRoles, resolved, isPlatformAdmin, null);
       toast({
         type: 'error',
         message:
           session === 'guest'
             ? 'Esta sección necesita sesión con el servidor. Salí del modo local y entrá con tu cuenta.'
-            : 'No tenés permiso para esta sección. Pedile a un admin que te asigne el puesto correcto.',
+            : standardLibraryBlock
+              ? 'Tu taller usa la biblioteca estándar de Granete. Esta sección requiere el módulo de personalización de biblioteca.'
+              : 'No tenés permiso para esta sección. Pedile a un admin que te asigne el puesto correcto.',
       });
       navigate(pathForNav('home'), { replace: true });
     }
-  }, [location.pathname, navigate, session, actorRole, toast, actorRoles, isPlatformAdmin]);
+  }, [location.pathname, navigate, session, actorRole, toast, actorRoles, isPlatformAdmin, activeOrg?.library_type]);
 
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
   const [showOnboardingTour, setShowOnboardingTour] = useState(false);

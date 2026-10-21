@@ -53,6 +53,7 @@ export function navBlockedForSession(
   roles: readonly (string | null | undefined)[] | string | null | undefined,
   navId: AppNavId,
   isPlatformAdmin?: boolean,
+  libraryType?: string | null,
 ): boolean {
   if (navId === 'platform') {
     return session !== 'auth' || !isPlatformAdmin;
@@ -65,7 +66,7 @@ export function navBlockedForSession(
   // Multi-role union (ADR-0005): accept a legacy single role too.
   const roleSet =
     typeof roles === 'string' ? [roles] : session === 'auth' ? (roles ?? []) : [];
-  return !rolesCanAccessNav(roleSet, navId);
+  return !rolesCanAccessNav(roleSet, navId, { libraryType });
 }
 
 /** Sections that support `/section/:id` deep links for entity rows. */
