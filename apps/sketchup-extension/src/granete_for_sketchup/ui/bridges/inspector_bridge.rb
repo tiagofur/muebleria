@@ -73,10 +73,12 @@ module Granete
           @logger.info('toggle_door_motion_executed', slot_index: slot_index, isOpen: is_open)
         rescue StandardError => e
           @logger.error('toggle_door_motion_failed', error: e)
+          execute_bridge(dialog, 'onDoorMotionFailed',
+                         { 'message' => 'La apertura no se aplicó; se reconstruyó la vista. Probá de nuevo.' })
         end
 
         def handle_close_all_doors(dialog, _raw_payload = nil)
-          @motion_adapters&.each_value(&:close_all)
+          @motion_adapters&.each_value { |adapter| adapter.close_all if adapter.entities_valid? }
           execute_bridge(dialog, 'onAllDoorsClosed', {})
           @logger.info('close_all_doors_executed')
         rescue StandardError => e
@@ -89,7 +91,9 @@ module Granete
           @motion_adapters ||= {}
           key = furniture_key(furniture_entity)
           adapter = @motion_adapters[key]
-          return adapter if adapter
+          # A rebuild (Inspector apply, #1387) deletes the door entities the
+          # cached adapter tracks: reuse only a cache over living entities.
+          return adapter if adapter&.entities_valid?
 
           door_entities, hardware_by_host = inspect_furniture_door_actors(furniture_entity)
           motions = []

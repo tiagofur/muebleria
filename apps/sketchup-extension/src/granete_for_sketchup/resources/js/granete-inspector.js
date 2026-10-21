@@ -1869,6 +1869,11 @@
         btn.className = p.isOpen ? "btn btn-sm btn-secondary door-toggle-motion-btn" : "btn btn-sm btn-ghost door-toggle-motion-btn";
       }
     },
+    onDoorMotionFailed: function (payload) {
+      var p = typeof payload === "string" ? JSON.parse(payload) : (payload || {});
+      window.GraneteUI.doorMotionStates = {};
+      if (deps.showToast) deps.showToast("error", p.message || "La apertura no se aplicó. Probá de nuevo.");
+    },
     onAllDoorsClosed: function () {
       window.GraneteUI.doorMotionStates = {};
       var btns = document.querySelectorAll('.door-toggle-motion-btn');
