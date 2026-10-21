@@ -1204,6 +1204,32 @@ const compDespensaRespaldo: Component = {
   rotateY: 180,
   rotateZ: 0,
 };
+// #1389: mirrors the REAL catalog's COM-ENT-REG v25 (Taller inicial) so the
+// demo despensa distributes shelves exactly like the authored one. H in spatial
+// formulas is the part thickness, so z centers each board on PH/(N+1)*(i+1).
+const compDespensaEntrepano: Component = {
+  id: 'comp-despensa-entrepano',
+  code: 'COM-DES-ENT',
+  name: 'Entrepaño Despensa',
+  placement: 'interno',
+  geometry: {
+    kind: 'rectangular_board',
+    lengthMm: 418,
+    widthMm: 570,
+    thicknessMm: 15,
+    lengthFormula: 'PW - 2*T',
+    widthFormula: 'PD - 5 - T - 35',
+  },
+  defaultEdges: edgesAll(true, true, true, true),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: 'T+5',
+  zFormula: 'PH/(N+1)*(i+1) - H/2',
+  rotateX: 0,
+  rotateY: 90,
+  rotateZ: 0,
+};
 const structDespensa: Structure = {
   id: 'struct-despensa-600',
   code: 'EST-DES-600',
@@ -1226,6 +1252,29 @@ export const seedModDespensa: Module = {
   structureId: 'struct-despensa-600',
   hardwareLines: [
     { id: 'des-h01', quantity: 4, optionRole: 'BISAGRA' },
+  ],
+  // #1389: shelf row at module level (like the REAL MOD-DES-2P v194 — the body
+  // comes from the structure, the entrepaño is a module component so the
+  // componentQuantity binding can drive its count).
+  components: [
+    { componentId: 'comp-despensa-entrepano', quantity: 4 },
+  ],
+  parameterDefinitions: [
+    {
+      name: 'entrepanos',
+      label: 'Entrepaños',
+      type: 'number',
+      defaultValue: 4,
+      unit: 'count',
+      integer: true,
+      min: 0,
+      max: 8,
+      step: 1,
+      category: 'configuration',
+      required: true,
+      sortOrder: 10,
+      binding: { version: 1, kind: 'componentQuantity', componentId: 'comp-despensa-entrepano' },
+    },
   ],
   presets: [
     { id: 'des-preset-2100', name: 'Alto 2100', width: 600, height: 2100, depth: 600 },
@@ -1270,6 +1319,7 @@ export const plantillaCatalogWithModules: Catalog = {
     compDespensaCostado,
     compDespensaBase,
     compDespensaRespaldo,
+    compDespensaEntrepano,
   ],
 };
 

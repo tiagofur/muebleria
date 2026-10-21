@@ -43,8 +43,9 @@ func TestCleanDemoData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("clean dry-run: %v", err)
 	}
-	if dry.Deleted["material_boards"] != 3 || dry.Deleted["modules"] != 5 {
-		t.Fatalf("dry-run: report %+v (quería boards=3, modules=5)", dry.Deleted)
+	// 6 demo modules: GAB, CAJ, COMP, BAJO-ZOCLO, BAJO-PERFIL + DES (#1389).
+	if dry.Deleted["material_boards"] != 3 || dry.Deleted["modules"] != 6 {
+		t.Fatalf("dry-run: report %+v (quería boards=3, modules=6)", dry.Deleted)
 	}
 	if n := count(demoBoards); n != 3 {
 		t.Fatalf("dry-run modificó la base: quedan %d tableros demo (quería 3 — sin cambios)", n)
