@@ -55,12 +55,18 @@ var (
 	seedModComp       = "a0000006-0000-0000-0000-000000000003"
 	seedModBajoZoclo  = "a0000006-0000-0000-0000-000000000004"
 	seedModBajoPerfil = "a0000006-0000-0000-0000-000000000005"
+	// #1389 despensa demo (parity with TS fixture seedModDespensa / COM-ENT-REG).
+	seedModDespensa       = "a0000006-0000-0000-0000-000000000006"
+	seedHwLineDespensaBis = "a00000c0-0006-0000-0000-000000000001"
 	// Structure
 	seedStruct    = "a0000007-0000-0000-0000-000000000001"
 	seedStructPre = "a0000007-0000-0000-0000-000000000002"
 	// Composed GAB body (EST-GAB-01) — parity with TS fixture struct-gab-01.
 	seedStructGab    = "a0000007-0000-0000-0000-000000000003"
 	seedStructGabPre = "a0000007-0000-0000-0000-000000000004"
+	// Despensa body (EST-DES-600) — parity with TS fixture struct-despensa-600.
+	seedStructDespensa    = "a0000007-0000-0000-0000-000000000005"
+	seedStructDespensaPre = "a0000007-0000-0000-0000-000000000006"
 	// Components (different prefix from migration 000016's a1…)
 	seedCompPuerta    = "a0000008-0000-0000-0000-000000000001"
 	seedCompEntrepano = "a0000008-0000-0000-0000-000000000002"
@@ -74,6 +80,11 @@ var (
 	seedCompGabManguete  = "a0000008-0000-0000-0000-000000000009"
 	seedCompGabPuerta    = "a0000008-0000-0000-0000-00000000000a"
 	seedCompGabEntrepano = "a0000008-0000-0000-0000-00000000000b"
+	// Despensa components — parity with TS fixture comp-despensa-*.
+	seedCompDespensaCostado   = "a0000008-0000-0000-0000-00000000000c"
+	seedCompDespensaBase      = "a0000008-0000-0000-0000-00000000000d"
+	seedCompDespensaRespaldo  = "a0000008-0000-0000-0000-00000000000e"
+	seedCompDespensaEntrepano = "a0000008-0000-0000-0000-00000000000f"
 	// Project
 	seedProj     = "a0000009-0000-0000-0000-000000000001"
 	seedProjItem = "a0000009-0000-0000-0000-000000000002"
@@ -356,6 +367,11 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	// Composed body for MOD-GAB-01 (parity with the TS fixture) — must run in
 	// the same tx so a fresh seed never exposes the flat-only module.
 	if err := ensureComposedGabModule(ctx, tx, org, now); err != nil {
+		return err
+	}
+	// #1389: the demo despensa with the configurable «Entrepaños» row rides
+	// the same fresh tx.
+	if err := ensureDespensaModule(ctx, tx, org, now); err != nil {
 		return err
 	}
 
@@ -786,6 +802,11 @@ func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 	if err := ensureComposedGabModule(ctx, tx, org, now); err != nil {
 		return err
 	}
+	// #1389: fresh seed and upgrade both provision the demo despensa with the
+	// configurable «Entrepaños» row.
+	if err := ensureDespensaModule(ctx, tx, org, now); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 
@@ -799,6 +820,12 @@ func (s *PostgresStore) ensureComposedGabCatalog(ctx context.Context) error {
 	}
 	defer tx.Rollback(ctx)
 	if err := ensureComposedGabModule(ctx, tx, OrgFromCtx(ctx), time.Now().UTC()); err != nil {
+		return err
+	}
+	// #1389: the demo despensa upgrade does not belong to the GAB body — it
+	// rides the same fallback tx so a DB upgraded before this change still
+	// gets the configurable shelf row.
+	if err := ensureDespensaModule(ctx, tx, OrgFromCtx(ctx), time.Now().UTC()); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -1152,6 +1179,223 @@ func ensureComposedGabModule(ctx context.Context, tx pgx.Tx, org string, now tim
 		if err != nil {
 			return fmt.Errorf("ensure gab module_components %s: %w", l.componentID, err)
 		}
+	}
+	return nil
+}
+
+// ensureDespensaModule provisions the demo despensa (MOD-DES-001) with the
+// configurable «Entrepaños» row — #1389 parity with the TS fixture
+// (plantillaDemo seedModDespensa) and the REAL catalog contract
+// (MOD-DES v194 binding + COM-ENT-REG v25 formulas). The shelf lives at
+// MODULE level so the componentQuantity binding drives its count; the body
+// comes from the structure, exactly like the authored despensas.
+//
+// Idempotent and guarded: every row upserts with a conflict guard, and a
+// workshop-owned MOD-DES-001 (one with authored parameter_definitions) is left
+// completely untouched — the demo components, structure, parameter and shelf
+// row are never grafted onto authored content.
+func ensureDespensaModule(ctx context.Context, tx pgx.Tx, org string, now time.Time) error {
+	var moduleID string
+	var authoredParams []byte
+	err := tx.QueryRow(ctx, `
+		SELECT id, parameter_definitions FROM modules
+		WHERE organization_id = $1 AND code = 'MOD-DES-001'`, org).Scan(&moduleID, &authoredParams)
+	moduleExists := err == nil
+	if err != nil && err != pgx.ErrNoRows {
+		return fmt.Errorf("find MOD-DES-001: %w", err)
+	}
+	if moduleExists && len(authoredParams) > 0 {
+		return nil
+	}
+
+	seedCompDespCostado := SeededIDForOrg(org, seedCompDespensaCostado)
+	seedCompDespBase := SeededIDForOrg(org, seedCompDespensaBase)
+	seedCompDespRespaldo := SeededIDForOrg(org, seedCompDespensaRespaldo)
+	seedCompDespEntrepano := SeededIDForOrg(org, seedCompDespensaEntrepano)
+
+	allEdges, _ := json.Marshal([]domain.EdgeAssignment{
+		{Side: "L1", Enabled: true}, {Side: "L2", Enabled: true},
+		{Side: "W1", Enabled: true}, {Side: "W2", Enabled: true},
+	})
+	baseEdges, _ := json.Marshal([]domain.EdgeAssignment{
+		{Side: "L1", Enabled: true}, {Side: "L2", Enabled: true},
+		{Side: "W1", Enabled: false}, {Side: "W2", Enabled: false},
+	})
+	noEdges, _ := json.Marshal([]domain.EdgeAssignment{
+		{Side: "L1", Enabled: false}, {Side: "L2", Enabled: false},
+		{Side: "W1", Enabled: false}, {Side: "W2", Enabled: false},
+	})
+
+	// Mirror of the TS fixture comp-despensa-*; the entrepaño mirrors the REAL
+	// COM-ENT-REG v25 (T = resolved material thickness, H = part thickness in
+	// spatial formulas, N = shelf copies after bindings).
+	comps := []struct {
+		id, code, name, placement      string
+		lengthMm, widthMm, thicknessMm int
+		lengthFormula, widthFormula    string
+		xFormula, yFormula, zFormula   string
+		rotateX, rotateY, rotateZ      int
+		edges                          []byte
+	}{
+		{seedCompDespCostado, "COM-DES-COS", "Costado Despensa", "lateral_izquierdo",
+			2100, 600, 18, "PH", "PD",
+			"i * (PW - T)", "0", "0", 90, 180, 90, allEdges},
+		{seedCompDespBase, "COM-DES-BAS", "Base Despensa", "base",
+			569, 600, 18, "PW - 31", "PD",
+			"T", "0", "0", 0, 90, 0, baseEdges},
+		{seedCompDespRespaldo, "COM-DES-RES", "Respaldo Despensa", "trasera",
+			2069, 569, 18, "PH - 31", "PW - 31",
+			"T", "0", "T", 90, 180, 0, noEdges},
+		{seedCompDespEntrepano, "COM-DES-ENT", "Entrepaño Despensa", "interno",
+			418, 570, 15, "PW - 2*T", "PD - 5 - T - 35",
+			"T", "T+5", "PH/(N+1)*(i+1) - H/2", 0, 90, 0, allEdges},
+	}
+	componentIDs := make(map[string]string, len(comps))
+	for _, c := range comps {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO components (id, organization_id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm,
+				length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z,
+				default_edges, option_roles, active, created_at, updated_at)
+			VALUES (CASE WHEN EXISTS (SELECT 1 FROM components WHERE id = $1) THEN gen_random_uuid() ELSE $1::uuid END,
+				$20,$2,$3,$4,'rectangular_board',$5,$6,$7,NULLIF($8,''),NULLIF($9,''),NULLIF($10,''),NULLIF($11,''),NULLIF($12,''),
+				$13,$14,$15,$16,$17,true,$18,$19)
+			ON CONFLICT (organization_id, code) DO NOTHING`,
+			c.id, c.code, c.name, c.placement, c.lengthMm, c.widthMm, c.thicknessMm,
+			c.lengthFormula, c.widthFormula, c.xFormula, c.yFormula, c.zFormula,
+			c.rotateX, c.rotateY, c.rotateZ, c.edges, []string{"INTERIOR"}, now, now, org)
+		if err != nil {
+			return fmt.Errorf("ensure despensa component %s: %w", c.code, err)
+		}
+		var componentID string
+		if err := tx.QueryRow(ctx,
+			`SELECT id FROM components WHERE organization_id = $1 AND code = $2`,
+			org, c.code).Scan(&componentID); err != nil {
+			return fmt.Errorf("resolve despensa component %s: %w", c.code, err)
+		}
+		componentIDs[c.code] = componentID
+	}
+
+	// Structure body 600×2100×600 with its commercial preset.
+	_, err = tx.Exec(ctx, `
+		INSERT INTO structures (id, organization_id, code, name, width_mm, height_mm, depth_mm, notes, active, created_at, updated_at)
+		VALUES (CASE WHEN EXISTS (SELECT 1 FROM structures WHERE id = $1) THEN gen_random_uuid() ELSE $1::uuid END,
+			$4,'EST-DES-600','Cuerpo Despensa 600',600,2100,600,'',true,$2,$3)
+		ON CONFLICT (organization_id, code) DO NOTHING`,
+		SeededIDForOrg(org, seedStructDespensa), now, now, org)
+	if err != nil {
+		return fmt.Errorf("ensure despensa structure: %w", err)
+	}
+	var structureID string
+	if err := tx.QueryRow(ctx,
+		`SELECT id FROM structures WHERE organization_id = $1 AND code = 'EST-DES-600'`,
+		org).Scan(&structureID); err != nil {
+		return fmt.Errorf("resolve despensa structure: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO structure_presets (id, organization_id, structure_id, name, width_mm, height_mm, depth_mm)
+		SELECT CASE WHEN EXISTS (SELECT 1 FROM structure_presets WHERE id = $1) THEN gen_random_uuid() ELSE $1::uuid END,
+			$3,$2,'600×2100×600',600,2100,600
+		WHERE NOT EXISTS (
+			SELECT 1 FROM structure_presets WHERE organization_id = $3 AND structure_id = $2 AND name = '600×2100×600'
+		)`,
+		SeededIDForOrg(org, seedStructDespensaPre), structureID, org)
+	if err != nil {
+		return fmt.Errorf("ensure despensa structure preset: %w", err)
+	}
+	structLinks := []struct {
+		componentID string
+		quantity    int
+		placement   string
+	}{
+		{componentIDs["COM-DES-COS"], 2, "lateral_izquierdo"},
+		{componentIDs["COM-DES-BAS"], 1, "base"},
+		{componentIDs["COM-DES-RES"], 1, "trasera"},
+	}
+	for _, l := range structLinks {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO structure_components (organization_id, structure_id, component_id, quantity, placement_override)
+			SELECT $5,$1,$2,$3,$4
+			WHERE NOT EXISTS (SELECT 1 FROM structure_components WHERE structure_id = $1 AND component_id = $2)`,
+			structureID, l.componentID, l.quantity, l.placement, org)
+		if err != nil {
+			return fmt.Errorf("ensure despensa structure_components %s: %w", l.componentID, err)
+		}
+	}
+
+	// «Entrepaños» 0–8 (default 4) bound to the shelf row — same shape the
+	// authored MOD-DES v194 persists. The binding points at the resolved
+	// per-org component id (#964).
+	paramsJSON, err := json.Marshal([]domain.FurnitureParameterDefinition{{
+		Name:         "entrepanos",
+		Label:        "Entrepaños",
+		SortOrder:    10,
+		Type:         domain.FurnitureParameterTypeNumber,
+		DefaultValue: float64(4),
+		Required:     true,
+		Unit:         domain.FurnitureParameterUnitCount,
+		Category:     domain.FurnitureParameterCategoryConfiguration,
+		Min:          seedF64(0),
+		Max:          seedF64(8),
+		Step:         seedF64(1),
+		Integer:      true,
+		Binding: &domain.FurnitureParameterBinding{
+			Version:     domain.FurnitureParameterBindingVersion,
+			Kind:        domain.FurnitureParameterBindingComponentQuantity,
+			ComponentID: componentIDs["COM-DES-ENT"],
+		},
+	}})
+	if err != nil {
+		return fmt.Errorf("marshal despensa parameter_definitions: %w", err)
+	}
+
+	if !moduleExists {
+		moduleID = SeededIDForOrg(org, seedModDespensa)
+		_, err = tx.Exec(ctx, `
+			INSERT INTO modules (id, organization_id, code, name, base_labor_cost, width_mm, height_mm, depth_mm,
+				notes, furniture_type, structure_id, parameter_definitions, created_at, updated_at)
+			VALUES ($1,$7,$2,'Despensa 2 Puertas 600 x 2100 x 600 mm',0,600,2100,600,
+				'Despensa (alto) demo: cuerpo alto tipo pantry.','alto',$3,$4,$5,$6)`,
+			moduleID, "MOD-DES-001", structureID, paramsJSON, now, now, org)
+		if err != nil {
+			return fmt.Errorf("ensure despensa module: %w", err)
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO hardware_lines (id, organization_id, module_id, quantity, option_role)
+			VALUES ($1,$3,$2,4,'BISAGRA')`,
+			SeededIDForOrg(org, seedHwLineDespensaBis), moduleID, org)
+		if err != nil {
+			return fmt.Errorf("ensure despensa hardware line: %w", err)
+		}
+	} else {
+		// Demo despensa without parameters (pre-#1389 row): adopt the body
+		// if it has none and declare the parameter.
+		_, err = tx.Exec(ctx, `
+			UPDATE modules SET structure_id = COALESCE(structure_id, $1),
+				parameter_definitions = $2, updated_at = $3
+			WHERE id = $4 AND organization_id = $5`,
+			structureID, paramsJSON, now, moduleID, org)
+		if err != nil {
+			return fmt.Errorf("ensure despensa module params: %w", err)
+		}
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO module_components (organization_id, module_id, component_id, quantity, placement_override)
+		SELECT $3,$1,$2,4,'interno'
+		WHERE NOT EXISTS (SELECT 1 FROM module_components WHERE module_id = $1 AND component_id = $2)`,
+		moduleID, componentIDs["COM-DES-ENT"], org)
+	if err != nil {
+		return fmt.Errorf("ensure despensa module_components: %w", err)
+	}
+	// Commercial preset (TS fixture des-preset-2100): resolve selects size
+	// from Module.Presets when any exist.
+	_, err = tx.Exec(ctx, `
+		INSERT INTO module_presets (organization_id, module_id, name, width_mm, height_mm, depth_mm)
+		SELECT $2,$1,'Alto 2100',600,2100,600
+		WHERE NOT EXISTS (SELECT 1 FROM module_presets WHERE module_id = $1 AND name = 'Alto 2100')`,
+		moduleID, org)
+	if err != nil {
+		return fmt.Errorf("ensure despensa module preset: %w", err)
 	}
 	return nil
 }
