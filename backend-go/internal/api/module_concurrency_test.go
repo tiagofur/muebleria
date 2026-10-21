@@ -15,6 +15,12 @@ import (
 // typed 422 envelope as the furniture read surface.
 
 func newModuleMutationServer(store *stubStore) *Server {
+	if store.getOrgByID == nil {
+		store.getOrgByID = &domain.Organization{
+			ID: storage.InitialOrganizationID, Type: domain.OrganizationTypeFactory,
+			Status: domain.OrganizationStatusActive, LibraryType: domain.LibraryTypeCustom,
+		}
+	}
 	return &Server{Store: store}
 }
 
@@ -144,7 +150,7 @@ func TestHandleModulePutWithoutIfMatchNeverCallsStore(t *testing.T) {
 // PUT of a module the server does not know stays a 404 (no precondition
 // demanded) so the client can fall back to POST create.
 func TestHandleModulePutMissingStays404WithoutPrecondition(t *testing.T) {
-	srv := &Server{Store: &stubStore{}}
+	srv := newModuleMutationServer(&stubStore{})
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/modules/missing", strings.NewReader(modulePutBody)), "eng", string(domain.RoleIngeniero))
 	req.SetPathValue("id", "missing")
 	rr := httptest.NewRecorder()

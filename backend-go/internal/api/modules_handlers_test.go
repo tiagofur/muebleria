@@ -20,7 +20,8 @@ func TestHandleModuleByIDUpdateCleansReplacedImage(t *testing.T) {
 			ImageURL: "/api/media/mod-old.webp",
 		},
 	}
-	srv := &Server{Store: store, MediaDir: dir}
+	srv := newModuleMutationServer(store)
+	srv.MediaDir = dir
 
 	body := strings.NewReader(`{"code":"MC","name":"N","base_labor_cost":0,"width_mm":100,"height_mm":100,"depth_mm":100,"image_url":"/api/media/mod-new.webp"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/modules/mod1", body), "eng", string(domain.RoleIngeniero))
@@ -48,7 +49,8 @@ func TestHandleModuleByIDDeleteRemovesImage(t *testing.T) {
 			ImageURL: "/api/media/mod-del.jpg",
 		},
 	}
-	srv := &Server{Store: store, MediaDir: dir}
+	srv := newModuleMutationServer(store)
+	srv.MediaDir = dir
 
 	req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/modules/mod1", nil), "eng", string(domain.RoleIngeniero))
 	req.SetPathValue("id", "mod1")
@@ -69,7 +71,7 @@ func TestHandleModuleByIDDeleteRemovesImage(t *testing.T) {
 // Soft delete (DeactivateMaterialBoard) must NOT touch the file: the row may
 // be reactivated later and the image should still be there.
 func TestHandleComponentsAmbiguousRolesRejected400(t *testing.T) {
-	srv := &Server{Store: &stubStore{}}
+	srv := newModuleMutationServer(&stubStore{})
 	body := strings.NewReader(`{"code":"AMB","name":"Ambigua","placement":"puerta","geometry_kind":"rectangular_board","thickness_mm":18,"option_roles":["FRONT","BODY"],"active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/components", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("Content-Type", "application/json")
@@ -86,7 +88,7 @@ func TestHandleComponentsAmbiguousRolesRejected400(t *testing.T) {
 }
 
 func TestHandleComponentsEmptyRolesRejected400(t *testing.T) {
-	srv := &Server{Store: &stubStore{}}
+	srv := newModuleMutationServer(&stubStore{})
 	body := strings.NewReader(`{"code":"VAC","name":"Vacía","placement":"puerta","geometry_kind":"rectangular_board","thickness_mm":18,"option_roles":["","  "],"active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/components", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("Content-Type", "application/json")

@@ -72,7 +72,11 @@ func toOpenAPIOrganization(o domain.Organization) openapi.OrganizationSummary {
 		value := o.LicenseExpiresAt.UTC().Format(time.RFC3339Nano)
 		license.ExpiresAt = &value
 	}
-	return openapi.OrganizationSummary{ID: o.ID, Name: o.Name, Slug: o.Slug, Type: string(o.Type), Status: openapi.OrganizationStatus(o.Status), License: license}
+	libraryType := string(o.LibraryType)
+	if libraryType == "" {
+		libraryType = string(domain.LibraryTypeStandard)
+	}
+	return openapi.OrganizationSummary{ID: o.ID, Name: o.Name, Slug: o.Slug, Type: string(o.Type), Status: openapi.OrganizationStatus(o.Status), License: license, LibraryType: &libraryType}
 }
 
 type LicenseDTO = openapi.License

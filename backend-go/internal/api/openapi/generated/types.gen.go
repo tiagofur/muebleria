@@ -101,12 +101,13 @@ type License struct {
 }
 
 type OrganizationSummary struct {
-	ID      string             `json:"id"`
-	Name    string             `json:"name"`
-	Slug    string             `json:"slug"`
-	Type    string             `json:"type"`
-	Status  OrganizationStatus `json:"status"`
-	License License            `json:"license"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	Slug        string             `json:"slug"`
+	Type        string             `json:"type"`
+	Status      OrganizationStatus `json:"status"`
+	License     License            `json:"license"`
+	LibraryType *string            `json:"library_type,omitempty"`
 }
 
 type Membership struct {
@@ -321,6 +322,7 @@ type PlatformOrganization struct {
 	Status               OrganizationStatus `json:"status"`
 	LicensePlan          string             `json:"license_plan"`
 	LicenseExpiresAt     *string            `json:"license_expires_at,omitempty"`
+	LibraryType          *string            `json:"library_type,omitempty"`
 	ParentOrganizationID *string            `json:"parent_organization_id,omitempty"`
 	MemberCount          int64              `json:"member_count"`
 	CreatedAt            string             `json:"created_at"`
@@ -399,6 +401,7 @@ type ProvisionOrganizationRequest struct {
 	Type                 OrganizationType                   `json:"type"`
 	LicensePlan          string                             `json:"license_plan"`
 	LicenseExpiresAt     *string                            `json:"license_expires_at,omitempty"`
+	LibraryType          *string                            `json:"library_type,omitempty"`
 	BootstrapAdminUserID *string                            `json:"bootstrap_admin_user_id,omitempty"`
 	CloneCatalogFrom     *string                            `json:"clone_catalog_from,omitempty"`
 	MaxActiveMembers     *int64                             `json:"max_active_members,omitempty"`
@@ -482,6 +485,7 @@ type UpdatePlatformOrganizationRequest struct {
 	Name             *string `json:"name,omitempty"`
 	LicensePlan      *string `json:"license_plan,omitempty"`
 	LicenseExpiresAt *string `json:"license_expires_at,omitempty"`
+	LibraryType      *string `json:"library_type,omitempty"`
 }
 
 type SupportSessionResponse struct {

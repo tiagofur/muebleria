@@ -14,6 +14,19 @@ import (
 // // categorías (F025) y componentes (F050). Consumidos por routes_catalog.go.
 // --- MODULES / TEMPLATES ---
 
+// requireGeometryAuthoring blocks geometry authoring for organizations on the
+// canonical Granete Standard library (#1382). Fails closed: a missing or
+// unreadable organization is treated as standard.
+func (s *Server) requireGeometryAuthoring(w http.ResponseWriter, r *http.Request) bool {
+	org, err := s.Store.GetOrganizationByID(r.Context(), storage.OrgFromCtx(r.Context()))
+	if err != nil || org == nil || !org.LibraryType.AllowsGeometryAuthoring() {
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden,
+			"Tu taller usa la biblioteca estándar de Granete. La edición de muebles, estructuras y componentes requiere el módulo de personalización de biblioteca.", nil)
+		return false
+	}
+	return true
+}
+
 func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -25,7 +38,7 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, catalog.Modules)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar muebles plantilla") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar muebles plantilla") || !s.requireGeometryAuthoring(w, r) {
 			return
 		}
 		var m domain.Module
@@ -72,7 +85,7 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar muebles plantilla") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar muebles plantilla") || !s.requireGeometryAuthoring(w, r) {
 			return
 		}
 		// Existence first: PUT of a module the server does not know must stay
@@ -123,7 +136,7 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar muebles plantilla") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar muebles plantilla") || !s.requireGeometryAuthoring(w, r) {
 			return
 		}
 		// Physical delete: capture the image URL before deleting the row, then
@@ -166,7 +179,7 @@ func (s *Server) HandleStructures(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar estructuras") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar estructuras") || !s.requireGeometryAuthoring(w, r) {
 			return
 		}
 		var st domain.Structure
@@ -207,7 +220,7 @@ func (s *Server) HandleStructureByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, st)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar estructuras") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar estructuras") || !s.requireGeometryAuthoring(w, r) {
 			return
 		}
 		expectedVersion, ok := RequireIfMatch(w, r)
@@ -240,7 +253,7 @@ func (s *Server) HandleStructureByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, st)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar estructuras") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar estructuras") || !s.requireGeometryAuthoring(w, r) {
 			return
 		}
 		expectedVersion, ok := RequireIfMatch(w, r)
@@ -398,7 +411,7 @@ func (s *Server) HandleComponents(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar componentes") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar componentes") || !s.requireGeometryAuthoring(w, r) {
 			return
 		}
 		var c domain.Component
@@ -446,7 +459,7 @@ func (s *Server) HandleComponentByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar componentes") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar componentes") || !s.requireGeometryAuthoring(w, r) {
 			return
 		}
 		expectedVersion, ok := RequireIfMatch(w, r)
@@ -483,7 +496,7 @@ func (s *Server) HandleComponentByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar componentes") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar componentes") || !s.requireGeometryAuthoring(w, r) {
 			return
 		}
 		expectedVersion, ok := RequireIfMatch(w, r)

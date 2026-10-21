@@ -41,7 +41,7 @@ func TestHandleModuleByIDWireCarriesHardwarePlacements(t *testing.T) {
 	}`
 
 	store := &stubStore{moduleReturnedByID: &domain.Module{ID: "mod858"}}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 
 	put := withClaims(httptest.NewRequest("PUT", "/api/catalog/modules/mod858", strings.NewReader(wireBody)), "eng", string(domain.RoleIngeniero))
 	put.SetPathValue("id", "mod858")

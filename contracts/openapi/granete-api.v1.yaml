@@ -7368,6 +7368,13 @@
           },
           "license": {
             "$ref": "#/components/schemas/License"
+          },
+          "library_type": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "custom"
+            ]
           }
         }
       },
@@ -8256,6 +8263,13 @@
             ],
             "format": "date-time"
           },
+          "library_type": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "custom"
+            ]
+          },
           "parent_organization_id": {
             "type": [
               "string",
@@ -8506,6 +8520,13 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "library_type": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "custom"
+            ]
           },
           "bootstrap_admin_user_id": {
             "type": "string",
@@ -8836,6 +8857,13 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "library_type": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "custom"
+            ]
           }
         }
       },
