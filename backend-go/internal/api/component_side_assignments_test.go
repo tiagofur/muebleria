@@ -48,7 +48,7 @@ func TestHandleComponentSideAssignments(t *testing.T) {
 			{ID: "a1", ComponentID: "c1", Side: "left", ProfileID: "p1"},
 		}}
 		req, rec := sideAssignmentRequest(http.MethodGet, "/api/catalog/components/c1/side-assignments", nil)
-		(&Server{Store: store}).HandleComponentSideAssignments(rec, req)
+		newModuleMutationServer(store).HandleComponentSideAssignments(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -62,7 +62,7 @@ func TestHandleComponentSideAssignments(t *testing.T) {
 		store := &stubStore{}
 		req, rec := sideAssignmentRequest(http.MethodPut, "/api/catalog/components/c1/side-assignments",
 			map[string]any{"side": "left", "profileId": "p1"})
-		(&Server{Store: store}).HandleComponentSideAssignments(rec, req)
+		newModuleMutationServer(store).HandleComponentSideAssignments(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -76,7 +76,7 @@ func TestHandleComponentSideAssignments(t *testing.T) {
 		store := &stubStore{}
 		req, rec := sideAssignmentRequest(http.MethodPut, "/api/catalog/components/c1/side-assignments",
 			map[string]any{"side": "L1", "profileId": "p1"})
-		(&Server{Store: store}).HandleComponentSideAssignments(rec, req)
+		newModuleMutationServer(store).HandleComponentSideAssignments(rec, req)
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -89,7 +89,7 @@ func TestHandleComponentSideAssignments(t *testing.T) {
 		store := &stubStore{setComponentSideAssignmentErr: storage.ErrAssignmentReferenceInvalid}
 		req, rec := sideAssignmentRequest(http.MethodPut, "/api/catalog/components/c1/side-assignments",
 			map[string]any{"side": "left", "profileId": "p-other-org"})
-		(&Server{Store: store}).HandleComponentSideAssignments(rec, req)
+		newModuleMutationServer(store).HandleComponentSideAssignments(rec, req)
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -102,7 +102,7 @@ func TestHandleComponentSideAssignments(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.SetPathValue("id", "c1")
 		rec := httptest.NewRecorder()
-		(&Server{Store: store}).HandleComponentSideAssignments(rec, req)
+		newModuleMutationServer(store).HandleComponentSideAssignments(rec, req)
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("status = %d", rec.Code)
 		}
@@ -114,14 +114,14 @@ func TestHandleComponentSideAssignments(t *testing.T) {
 	t.Run("DELETE removes one side and maps unknown to 404", func(t *testing.T) {
 		store := &stubStore{}
 		req, rec := sideAssignmentRequest(http.MethodDelete, "/api/catalog/components/c1/side-assignments/left", nil)
-		(&Server{Store: store}).HandleComponentSideAssignments(rec, req)
+		newModuleMutationServer(store).HandleComponentSideAssignments(rec, req)
 		if rec.Code != http.StatusOK || store.removeAssignmentSide != "left" {
 			t.Fatalf("status = %d side=%q", rec.Code, store.removeAssignmentSide)
 		}
 
 		store = &stubStore{removeAssignmentErr: errors.New("component side assignment not found")}
 		req, rec = sideAssignmentRequest(http.MethodDelete, "/api/catalog/components/c1/side-assignments/top", nil)
-		(&Server{Store: store}).HandleComponentSideAssignments(rec, req)
+		newModuleMutationServer(store).HandleComponentSideAssignments(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("status = %d", rec.Code)
 		}
