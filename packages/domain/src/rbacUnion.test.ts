@@ -80,6 +80,11 @@ describe('navIdsForRoles — library entitlement (#1382)', () => {
     expect(navIdsForRoles(['admin'], { libraryType: null }).has('modules')).toBe(true);
   });
 
+  it('un libraryType desconocido se trata como estándar (fail-closed)', () => {
+    expect(navIdsForRoles(['admin'], { libraryType: 'enterprise' }).has('modules')).toBe(false);
+    expect(rolesCanAccessNav(['ingeniero'], 'addOns', { libraryType: '' })).toBe(false);
+  });
+
   it('guest/local conserva la herramienta completa aunque se pase standard', () => {
     expect(navIdsForRoles([], { libraryType: 'standard' }).has('modules')).toBe(true);
   });
