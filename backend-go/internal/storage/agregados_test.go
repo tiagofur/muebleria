@@ -2,10 +2,12 @@ package storage_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 func TestAgregados_MigrationIsAdditiveAndReRunSafe(t *testing.T) {
@@ -164,7 +166,7 @@ func TestAgregados_CascadeDeleteWithRevisions(t *testing.T) {
 		_, err := store.GetAgregadoByID(txCtx, id)
 		return err
 	})
-	if err == nil || !strings.Contains(err.Error(), "not found") {
+	if !errors.Is(err, storage.ErrAgregadoNotFound) {
 		t.Fatalf("expected agregado to be not found, got err: %v", err)
 	}
 
@@ -175,5 +177,37 @@ func TestAgregados_CascadeDeleteWithRevisions(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("expected revision to be deleted with parent, got err: %v", err)
+	}
+}
+
+// #1369 P2: every "no such agregado" path returns the typed sentinel so the
+// API maps it with errors.Is — the plain read, the guarded update (through the
+// row-exists disambiguation) and the SQL cascade delete (RAISE EXCEPTION text).
+func TestAgregados_NotFoundIsTyped(t *testing.T) {
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
+	missing := uniqueID("agr-missing")
+
+	err := withinTenantTxErr(t, store, actor, func(txCtx context.Context) error {
+		_, err := store.GetAgregadoByID(txCtx, missing)
+		return err
+	})
+	if !errors.Is(err, storage.ErrAgregadoNotFound) {
+		t.Fatalf("GetAgregadoByID(missing) = %v, want ErrAgregadoNotFound", err)
+	}
+
+	err = withinTenantTxErr(t, store, actor, func(txCtx context.Context) error {
+		ghost := &domain.Agregado{ID: missing, Code: uniqueID("AGR-MISSING"), Name: "fantasma", Active: true}
+		return store.UpdateAgregado(txCtx, missing, 1, ghost)
+	})
+	if !errors.Is(err, storage.ErrAgregadoNotFound) {
+		t.Fatalf("UpdateAgregado(missing) = %v, want ErrAgregadoNotFound (not a version conflict)", err)
+	}
+
+	err = withinTenantTxErr(t, store, actor, func(txCtx context.Context) error {
+		return store.DeleteAgregado(txCtx, missing, 0)
+	})
+	if !errors.Is(err, storage.ErrAgregadoNotFound) {
+		t.Fatalf("DeleteAgregado(missing) = %v, want ErrAgregadoNotFound", err)
 	}
 }
