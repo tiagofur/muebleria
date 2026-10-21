@@ -145,7 +145,7 @@ describe('AgregadoDetailView', () => {
     );
 
     const card = screen.getByTestId('agregado-detail-recipe-card');
-    expect(card.textContent).toContain('1 miembros · 1 sets de variantes · Kit: CORR-450');
+    expect(card.textContent).toContain('1 miembro · 1 set de variantes · Kit: CORR-450');
     expect(container.querySelector('.eng-detail__secondary')?.contains(card)).toBe(true);
     expect(container.querySelector('.eng-detail__primary')?.contains(card)).toBe(false);
   });
