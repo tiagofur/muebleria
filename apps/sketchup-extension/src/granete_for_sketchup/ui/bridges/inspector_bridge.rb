@@ -111,9 +111,16 @@ module Granete
 
         # One adapter's exception must not abort the rest of the sweep:
         # the remaining adapters still close, and the caller hears back
-        # either way. Returns true when the adapter failed.
-        def close_all_adapter_safely(_key, adapter)
-          adapter.close_all if adapter.entities_valid?
+        # either way. A dead entry (tracked entities deleted by a rebuild,
+        # #1387) is EVICTED here so the session-long map stops growing —
+        # lazy invalidation in presentation_motion_adapter_for re-scans it
+        # on the next toggle as before. Returns true when the adapter failed.
+        def close_all_adapter_safely(key, adapter)
+          if adapter.entities_valid?
+            adapter.close_all
+          else
+            @motion_adapters.delete(key)
+          end
           false
         rescue StandardError => e
           @logger.error('close_all_doors_adapter_failed', error: e)

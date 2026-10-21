@@ -4,14 +4,15 @@ require 'json'
 require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/motion/presentation_motion_adapter'
 require_relative '../../src/granete_for_sketchup/ui/bridges/inspector_bridge'
+require_relative '../../src/granete_for_sketchup/ui/bridges/observer_bridge'
 
 # #1387 — the Inspector caches one motion adapter per furniture entity. A
 # rebuild (Inspector apply) DELETES the door/hardware entities the cached
 # adapter tracks: the bridge must re-scan instead of toggling dead entities
 # (whose Ruby wrappers still respond to :transformation but raise on use),
 # and a failed toggle must reach the dialog instead of dying silently.
-# #1393 — the close-all sweep isolates one adapter's failure and always
-# reports back to the dialog.
+# #1393 — the close-all sweep isolates adapter failures, evicts dead cache
+# entries, and a model rebind drops the whole map.
 class InspectorBridgeMotionCacheTest < Minitest::Test
   LiveDoor = Struct.new(:persistent_id, :valid?, :transformation)
   FakeFurniture = Struct.new(:persistent_id)
@@ -39,13 +40,14 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
   class TrackedDoor
     attr_reader :transform_writes
 
-    def initialize(persistent_id)
+    def initialize(persistent_id, valid: true)
       @persistent_id = persistent_id
+      @valid = valid
       @transform_writes = []
     end
 
     def valid?
-      true
+      @valid
     end
 
     def transformation
@@ -140,6 +142,36 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
     end
   end
 
+  # #1393 — ObserverBridge host: enough surface for rebind_model to run and
+  # prove the motion cache is dropped when the document changes.
+  class FakeSelection
+    def add_observer(_observer); end
+
+    def remove_observer(_observer); end
+  end
+
+  class FakeRebindModel
+    def selection
+      @selection ||= FakeSelection.new
+    end
+  end
+
+  class RebindHost
+    include Granete::SketchUpExtension::UserInterface::ObserverBridge
+
+    def initialize
+      @observed_model = FakeRebindModel.new
+      @selection_observer = Object.new
+      @motion_adapters = { 4_242 => :adapter_of_the_old_model }
+    end
+
+    def refresh_binding_status; end
+
+    def refresh_project_furniture; end
+
+    def offer_migration_if_legacy(_model); end
+  end
+
   def furniture
     @furniture ||= FakeFurniture.new(4_242)
   end
@@ -228,6 +260,27 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
     assert(host.logger.events.any? { |(level, event, _)| level == :error && event == 'toggle_door_motion_failed' })
   end
 
+  # #1393 — the sweep closes every LIVING adapter, evicts the dead entry
+  # (tracked entities deleted by a rebuild) without touching it, and still
+  # reports success to the dialog because everything audible did close.
+  def test_close_all_closes_only_the_live_adapter_and_evicts_the_dead_one
+    dead_door = TrackedDoor.new(1, valid: false)
+    live_door = TrackedDoor.new(2)
+    host = MultiFurnitureHost.new(111 => [dead_door], 222 => [live_door])
+    host.send(:presentation_motion_adapter_for, FakeFurniture.new(111), 110.0)
+    host.send(:presentation_motion_adapter_for, FakeFurniture.new(222), 110.0)
+    cache = host.instance_variable_get(:@motion_adapters)
+    assert_equal [111, 222], cache.keys.sort
+
+    host.handle_close_all_doors(FakeDialog.new('d1'))
+
+    cache = host.instance_variable_get(:@motion_adapters)
+    assert_equal [222], cache.keys, 'el sweep debe evictar la entrada con entidades muertas'
+    assert_empty dead_door.transform_writes, 'las entidades borradas nunca reciben poses'
+    assert_equal 1, live_door.transform_writes.length, 'el mueble vivo debe recibir su pose cerrada'
+    assert(host.bridge_calls.any? { |(name, _)| name == 'onAllDoorsClosed' })
+  end
+
   # #1393 — one adapter raising must not abort the rest: the healthy doors
   # still close, the dialog is notified (Spanish toast via the existing
   # onDoorMotionFailed callback) and onAllDoorsClosed is NOT announced,
@@ -250,5 +303,16 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
     refute(host.bridge_calls.any? { |(name, _)| name == 'onAllDoorsClosed' },
            'con fallo parcial no puede anunciarse que todo quedó cerrado')
     assert(host.logger.events.any? { |(level, event, _)| level == :error && event == 'close_all_doors_adapter_failed' })
+  end
+
+  # #1393 — a model switch/reopen invalidates every cached adapter at once:
+  # they all track entities of the OLD model, so rebind drops the whole map
+  # and the next toggle re-scans the fresh document.
+  def test_rebind_model_drops_cached_motion_adapters_of_the_old_model
+    host = RebindHost.new
+
+    host.rebind_model(FakeRebindModel.new)
+
+    assert_empty host.instance_variable_get(:@motion_adapters)
   end
 end
