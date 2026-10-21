@@ -74,7 +74,7 @@ export function previewPartForComponent(
 
   // Geometry: parent dims back-fill W/H/D when a component has no size yet,
   // mirroring bom.ts geomDims ({W:PW, H:PH, D:PD, ...}).
-  const geomDims = { W: PW, H: PH, D: PD, PW, PH, PD, T };
+  const geomDims = { W: PW, H: PH, D: PD, PW, PH, PD, T, N: quantity };
   const lengthFormula = input.lengthFormula?.trim();
   const widthFormula = input.widthFormula?.trim();
   const geomCtx = (field: 'length' | 'width') => ({
@@ -95,7 +95,7 @@ export function previewPartForComponent(
 
   // Spatial: per-axis formula wins, otherwise the placement pose.
   // Inside spatial formulas H = thickness (bom.ts:411 `const H = T`).
-  const spatialDims = { W: widthMm, H: thicknessMm, D: lengthMm, PW, PH, PD, T, i };
+  const spatialDims = { W: widthMm, H: thicknessMm, D: lengthMm, PW, PH, PD, T, i, N: quantity };
   const ctx = (field: 'x' | 'y' | 'z') => ({
     structureCode: input.code ?? '',
     partDescription: input.description ?? '',

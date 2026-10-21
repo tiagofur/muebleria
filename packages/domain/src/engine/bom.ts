@@ -490,7 +490,8 @@ function expandComponentInstances(
     const T = getComponentThickness(component, optionChoices ?? {}, catalog);
 
     // Context for geometry evaluation (parent dims + T + B zoclo)
-    const geomDims = { W: PW, H: PH, D: PD, PW, PH, PD, T, B };
+    // N = this instance's copy total (#1383), mirroring the Go geomDims.
+    const geomDims = { W: PW, H: PH, D: PD, PW, PH, PD, T, B, N: instance.quantity };
 
     // Resolve dimensions (W and D of component)
     let lengthMm = 0; // component depth (D)
@@ -528,7 +529,9 @@ function expandComponentInstances(
     for (let i = 0; i < instance.quantity; i++) {
       const copyIndex = copyCounters.get(component.id) ?? 0;
       copyCounters.set(component.id, copyIndex + 1);
-      const spatialDims = { W: widthMm, H, D: lengthMm, PW, PH, PD, T, B, i };
+      // N = copies of THIS instance (#1383): a shelf row distributes with
+      // z = PH/(N+1)*(i+1) without hardcoding the divisor.
+      const spatialDims = { W: widthMm, H, D: lengthMm, PW, PH, PD, T, B, i, N: instance.quantity };
       const placementPose = defaultPoseForPlacement(
         placement,
         { PW, PH, PD, T },

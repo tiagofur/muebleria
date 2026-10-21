@@ -7,7 +7,7 @@
 | Término | Significado |
 |---------|-------------|
 | **Estructura** | Cuerpo reutilizable del taller (cuerpo base de gabinete, alacena, etc.). Se compone de instancias de componentes del catálogo. |
-| **Componente** | Pieza atómica paramétrica con geometría y posición calculada por fórmulas ($W, H, D, PW, PH, PD, T, i$). |
+| **Componente** | Pieza atómica paramétrica con geometría y posición calculada por fórmulas ($W, H, D, PW, PH, PD, T, i$; $N$ = copias del componente tras bindings, #1383). |
 | **Preset de medida** | Valores de ingeniería (ancho, alto, profundidad) para probar la respuesta dimensional del cuerpo. |
 | **Vista 3D** | Pestaña interactiva en el editor (`StructuresScreen`) para inspeccionar el despiece del cuerpo ensamblado en 3D (`Furniture3DViewer`). |
 | **Pin de revisión** | (#108) Congelamiento de versión de la estructura en cotización/proyecto para inmunidad a cambios futuros del catálogo. |

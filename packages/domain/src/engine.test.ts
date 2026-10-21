@@ -253,6 +253,39 @@ function miniModuleWithPart(opts: {
 }
 
 describe('resolveBom', () => {
+  it('distributes copies by height with the N variable (#1383)', () => {
+    const catalog = miniCatalog();
+    const catalogWithShelf = {
+      ...catalog,
+      components: [
+        ...(catalog.components ?? []),
+        {
+        id: 'comp-ent',
+        code: 'COM-ENT',
+        name: 'Entrepaño',
+        placement: 'interno' as ComponentPlacement,
+        geometry: { kind: 'rectangular_board', lengthMm: 564, widthMm: 482, thicknessMm: 18 },
+        defaultEdges: MOCK_TEST_EDGES,
+        // PH = module height (2100), N = instance.quantity (4), i = copy.
+        zFormula: 'PH/(N+1)*(i+1)',
+        optionRoles: ['INTERIOR'],
+        active: true,
+      } as Component,
+      ],
+    };
+    const module = miniModule({
+      externalDims: { width: 600, height: 2100, depth: 550 },
+      components: [{ componentId: 'comp-ent', quantity: 4 }],
+    });
+
+    const bom = resolveBom(module, { INTERIOR: 'mat-a', BISAGRA: 'hw-a' }, catalogWithShelf);
+    const zs = bom.boardParts
+      .filter((p) => p.description === 'Entrepaño')
+      .map((p) => p.z ?? 0)
+      .sort((a, b) => (a ?? 0) - (b ?? 0));
+    expect(zs).toEqual([420, 840, 1260, 1680]);
+  });
+
   it('assigns material by optionRole', () => {
     const catalog = miniCatalog();
     const module = miniModule();
@@ -2004,6 +2037,23 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
       expect(evaluatePartFormula('.5', dims)).toBe(1); // 0.5 → 1 mm
       expect(evaluatePartFormula('B', { ...dims, B: 100 })).toBe(100);
       expect(evaluatePartFormula('H - B', { ...dims, B: 100 })).toBe(620);
+    });
+
+    it('exposes N (copy total) to distribute copies by height (#1383)', () => {
+      const shelfDims = { W: 564, H: 18, D: 482, PW: 600, PH: 2100, PD: 550, T: 18, N: 4 };
+      // Same expectations as the Go twin (layout_test.go): Go and TS must
+      // never diverge on the shared formula language.
+      expect(evaluatePartFormula('PH/(N+1)*(i+1)', { ...shelfDims, i: 0 })).toBe(420);
+      expect(evaluatePartFormula('PH/(N+1)*(i+1)', { ...shelfDims, i: 1 })).toBe(840);
+      expect(evaluatePartFormula('PH/(N+1)*(i+1)', { ...shelfDims, i: 2 })).toBe(1260);
+      expect(evaluatePartFormula('PH/(N+1)*(i+1)', { ...shelfDims, i: 3 })).toBe(1680);
+      expect(evaluatePartFormula('N', shelfDims)).toBe(4);
+      expect(evaluatePartFormula('PW - 2*T', shelfDims)).toBe(564);
+      expect(() => evaluatePartFormula('n', shelfDims)).toThrow(ValidationError);
+      // Nota: 'NN' difiere del Go por diseño del evaluador TS (sustitución →
+      // '44'); el rechazo de basura sin operador es sólo del parser Go.
+      // Without N the formula degrades to N=0 — never a crash.
+      expect(evaluatePartFormula('PH/(N+1)*(i+1)', { ...dims, i: 1 })).toBe(1440);
     });
 
     it('throws ValidationError for invalid characters or injection attempts', () => {
