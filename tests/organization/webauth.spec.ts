@@ -211,12 +211,19 @@ test('FAIL CLOSED sin Web Locks: la rotación se rechaza aunque IndexedDB exista
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   const chooser = page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' });
-  if (await chooser.isVisible({ timeout: 2000 }).catch(() => false)) {
+  const topbar = page.locator('.app-topbar__organization-text strong');
+
+  await Promise.race([
+    chooser.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined),
+    topbar.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined),
+  ]);
+
+  if (await chooser.isVisible()) {
     await page.getByRole('button', { name: /Browser Gate A/ }).click();
   }
-  await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A', { timeout: 15_000 });
+  await expect(topbar).toHaveText('Browser Gate A', { timeout: 15_000 });
   const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
-  if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
+  if (await welcomeTour.isVisible({ timeout: 2000 }).catch(() => false)) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 
   // IndexedDB está DISPONIBLE y aún así no se usa como fallback.
   expect(await page.evaluate(() => typeof indexedDB)).toBe('object');

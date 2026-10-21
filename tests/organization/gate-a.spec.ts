@@ -7,16 +7,21 @@ async function login(page: Page, email: string, organizationSlug: string): Promi
   await page.getByLabel('Email').fill(email);
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  const orgName = organizationSlug === required('ORGANIZATION_GATE_ORG_A_SLUG') ? 'Browser Gate A' : 'Browser Gate B';
   const chooser = page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' });
+  const topbar = page.locator('.app-topbar__organization-text strong');
+
+  await Promise.race([
+    chooser.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined),
+    topbar.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined),
+  ]);
+
   if (await chooser.isVisible()) {
-    await page.getByRole('button', { name: new RegExp(organizationSlug === required('ORGANIZATION_GATE_ORG_A_SLUG') ? 'Browser Gate A' : 'Browser Gate B') }).click();
+    await page.getByRole('button', { name: new RegExp(orgName) }).click();
   }
-  await expect(page.locator('.app-topbar__organization-text strong')).toHaveText(
-    organizationSlug === required('ORGANIZATION_GATE_ORG_A_SLUG') ? 'Browser Gate A' : 'Browser Gate B',
-    { timeout: 15_000 },
-  );
+  await expect(topbar).toHaveText(orgName, { timeout: 15_000 });
   const tour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
-  if (await tour.isVisible()) await tour.getByRole('button', { name: 'Omitir' }).click();
+  if (await tour.isVisible({ timeout: 2000 }).catch(() => false)) await tour.getByRole('button', { name: 'Omitir' }).click();
 }
 
 test.describe.serial('Gate A #462 browser gaps', () => {

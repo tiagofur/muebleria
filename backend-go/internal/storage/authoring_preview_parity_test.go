@@ -39,6 +39,7 @@ func (s *previewParityStore) GetOrganizationByID(_ context.Context, orgID string
 		ID: orgID, Name: "Taller Preview", Slug: "taller-preview",
 		Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanPro,
 		LicenseExpiresAt: &expires, Status: domain.OrganizationStatusActive, CredentialVersion: 1,
+		LibraryType: domain.LibraryTypeCustom,
 	}, nil
 }
 
