@@ -842,7 +842,11 @@ export function navIdsForRoles(
   for (const role of roles) {
     for (const id of navIdsForRole(role)) out.add(id);
   }
-  if (options?.libraryType === 'standard') {
+  // Fail closed on any known entitlement other than 'custom'. A null/undefined
+  // value (organization not loaded yet) keeps the previous behaviour so a
+  // custom workshop is not bounced off a deep link while its org hydrates;
+  // the server guard is the authority either way.
+  if (options?.libraryType != null && options.libraryType !== 'custom') {
     for (const id of GEOMETRY_AUTHORING_NAV_IDS) out.delete(id);
   }
   return out;

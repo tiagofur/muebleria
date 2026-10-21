@@ -33,7 +33,7 @@ func (s *Server) HandleComponentSideAssignments(w http.ResponseWriter, r *http.R
 		respondWithJSON(w, http.StatusOK, assignments)
 	case http.MethodPut:
 		claims := claimsFromRequest(r)
-		if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "sólo roles con permiso de catálogo pueden asignar perfiles por lado") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "sólo roles con permiso de catálogo pueden asignar perfiles por lado") || !s.requireGeometryAuthoringFor(w, r, "componentes") {
 			return
 		}
 		var body componentSideAssignmentBody
@@ -62,7 +62,7 @@ func (s *Server) HandleComponentSideAssignments(w http.ResponseWriter, r *http.R
 		respondWithJSON(w, http.StatusOK, assignment)
 	case http.MethodDelete:
 		claims := claimsFromRequest(r)
-		if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "sólo roles con permiso de catálogo pueden quitar asignaciones por lado") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "sólo roles con permiso de catálogo pueden quitar asignaciones por lado") || !s.requireGeometryAuthoringFor(w, r, "componentes") {
 			return
 		}
 		side := r.PathValue("side")

@@ -18,10 +18,17 @@ import (
 // canonical Granete Standard library (#1382). Fails closed: a missing or
 // unreadable organization is treated as standard.
 func (s *Server) requireGeometryAuthoring(w http.ResponseWriter, r *http.Request) bool {
+	return s.requireGeometryAuthoringFor(w, r, "muebles, estructuras y componentes")
+}
+
+// requireGeometryAuthoringFor is requireGeometryAuthoring with the authoring
+// surface named in the refusal, so the message matches what the actor tried
+// to edit (agregados, acabados, asignaciones por lado de un componente...).
+func (s *Server) requireGeometryAuthoringFor(w http.ResponseWriter, r *http.Request, surface string) bool {
 	org, err := s.Store.GetOrganizationByID(r.Context(), storage.OrgFromCtx(r.Context()))
 	if err != nil || org == nil || !org.LibraryType.AllowsGeometryAuthoring() {
 		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden,
-			"Tu taller usa la biblioteca estándar de Granete. La edición de muebles, estructuras y componentes requiere el módulo de personalización de biblioteca.", nil)
+			"Tu taller usa la biblioteca estándar de Granete. La edición de "+surface+" requiere el módulo de personalización de biblioteca.", nil)
 		return false
 	}
 	return true

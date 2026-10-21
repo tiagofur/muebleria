@@ -72,31 +72,31 @@ func TestAgregadoByID_StoreErrorsMapByType(t *testing.T) {
 	})
 
 	t.Run("PUT typed not-found → 404; version conflict → 412; other → 500", func(t *testing.T) {
-		rec := agregadoByIDRequest(t, &Server{Store: &updateAgregadoStubStore{updateErr: storage.ErrAgregadoNotFound}}, http.MethodPut, putBody, `"v1"`)
+		rec := agregadoByIDRequest(t, &Server{Store: &updateAgregadoStubStore{stubStore: stubStore{getOrgByID: customLibraryOrg()}, updateErr: storage.ErrAgregadoNotFound}}, http.MethodPut, putBody, `"v1"`)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("not found: status = %d body=%s", rec.Code, rec.Body.String())
 		}
-		rec = agregadoByIDRequest(t, &Server{Store: &updateAgregadoStubStore{updateErr: storage.ErrVersionConflict}}, http.MethodPut, putBody, `"v1"`)
+		rec = agregadoByIDRequest(t, &Server{Store: &updateAgregadoStubStore{stubStore: stubStore{getOrgByID: customLibraryOrg()}, updateErr: storage.ErrVersionConflict}}, http.MethodPut, putBody, `"v1"`)
 		if rec.Code != http.StatusPreconditionFailed {
 			t.Fatalf("version conflict: status = %d body=%s", rec.Code, rec.Body.String())
 		}
-		rec = agregadoByIDRequest(t, &Server{Store: &updateAgregadoStubStore{updateErr: errors.New("revision insert: deadlock detected")}}, http.MethodPut, putBody, `"v1"`)
+		rec = agregadoByIDRequest(t, &Server{Store: &updateAgregadoStubStore{stubStore: stubStore{getOrgByID: customLibraryOrg()}, updateErr: errors.New("revision insert: deadlock detected")}}, http.MethodPut, putBody, `"v1"`)
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("store failure: status = %d body=%s", rec.Code, rec.Body.String())
 		}
 	})
 
 	t.Run("DELETE typed not-found → 404; in use keeps the count → 409; other → 500", func(t *testing.T) {
-		rec := agregadoByIDRequest(t, &Server{Store: &deleteAgregadoStubStore{deleteErr: storage.ErrAgregadoNotFound}}, http.MethodDelete, "", "")
+		rec := agregadoByIDRequest(t, &Server{Store: &deleteAgregadoStubStore{stubStore: stubStore{getOrgByID: customLibraryOrg()}, deleteErr: storage.ErrAgregadoNotFound}}, http.MethodDelete, "", "")
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("not found: status = %d body=%s", rec.Code, rec.Body.String())
 		}
 		inUse := fmt.Errorf("%w: agregado in use by 2 módulo(s)", storage.ErrAgregadoInUse)
-		rec = agregadoByIDRequest(t, &Server{Store: &deleteAgregadoStubStore{deleteErr: inUse}}, http.MethodDelete, "", "")
+		rec = agregadoByIDRequest(t, &Server{Store: &deleteAgregadoStubStore{stubStore: stubStore{getOrgByID: customLibraryOrg()}, deleteErr: inUse}}, http.MethodDelete, "", "")
 		if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "2 módulo(s)") {
 			t.Fatalf("in use: status = %d body=%s", rec.Code, rec.Body.String())
 		}
-		rec = agregadoByIDRequest(t, &Server{Store: &deleteAgregadoStubStore{deleteErr: errors.New("connection reset by peer")}}, http.MethodDelete, "", "")
+		rec = agregadoByIDRequest(t, &Server{Store: &deleteAgregadoStubStore{stubStore: stubStore{getOrgByID: customLibraryOrg()}, deleteErr: errors.New("connection reset by peer")}}, http.MethodDelete, "", "")
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("store failure: status = %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -106,6 +106,7 @@ func TestAgregadoByID_StoreErrorsMapByType(t *testing.T) {
 func TestAgregadoDelete_HandlerSupportsOptionalIfMatch(t *testing.T) {
 	t.Run("DELETE sin If-Match invoca DeleteAgregado con version 0 y responde 200", func(t *testing.T) {
 		store := &deleteAgregadoStubStore{}
+		store.getOrgByID = customLibraryOrg()
 		server := &Server{Store: store}
 
 		req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/agregados/agr-1", nil), "user-1", string(domain.RoleAdmin))
@@ -124,6 +125,7 @@ func TestAgregadoDelete_HandlerSupportsOptionalIfMatch(t *testing.T) {
 
 	t.Run("DELETE con If-Match válido pasa la versión y responde 200", func(t *testing.T) {
 		store := &deleteAgregadoStubStore{}
+		store.getOrgByID = customLibraryOrg()
 		server := &Server{Store: store}
 
 		req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/agregados/agr-1", nil), "user-1", string(domain.RoleAdmin))
@@ -142,7 +144,8 @@ func TestAgregadoDelete_HandlerSupportsOptionalIfMatch(t *testing.T) {
 	})
 
 	t.Run("DELETE con version conflict responde 412", func(t *testing.T) {
-		store := &deleteAgregadoStubStore{deleteErr: storage.ErrVersionConflict}
+		store := &deleteAgregadoStubStore{stubStore: stubStore{getOrgByID: customLibraryOrg()}, deleteErr: storage.ErrVersionConflict}
+		store.getOrgByID = customLibraryOrg()
 		server := &Server{Store: store}
 
 		req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/agregados/agr-1", nil), "user-1", string(domain.RoleAdmin))
