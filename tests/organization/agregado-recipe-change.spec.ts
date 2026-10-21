@@ -256,7 +256,7 @@ test.describe.serial('Agregado — simular cambio de receta en browser real (#13
     const before = await readAgregado(token);
 
     await openDetail(page);
-    await expect(recipeCard(page)).toContainText(`2 miembros · 1 sets de variantes · Kit: ${KIT_CODES[KIT_A]}`);
+    await expect(recipeCard(page)).toContainText(`2 miembros · 1 set de variantes · Kit: ${KIT_CODES[KIT_A]}`);
 
     await openModal(page);
     await sim(page, 'kit-select').selectOption(KIT_B);
@@ -515,7 +515,7 @@ test.describe.serial('Agregado — simular cambio de receta en browser real (#13
     expect(after.variant_sets?.[0]?.variants).toEqual([{ nominalDimensionMm: 450, hardwareId: RUNNER_450 }]);
     expect(after.rigid_members?.map((m) => m.memberId)).toEqual(['runner-left', 'runner-right']);
     await page.reload();
-    await expect(recipeCard(page)).toContainText(`2 miembros · 1 sets de variantes · Kit: ${KIT_CODES[KIT_B]}`, {
+    await expect(recipeCard(page)).toContainText(`2 miembros · 1 set de variantes · Kit: ${KIT_CODES[KIT_B]}`, {
       timeout: 20_000,
     });
   });

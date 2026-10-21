@@ -363,9 +363,14 @@ describe('RecipeChangeSimulationModal (#1369 slice 2)', () => {
     await userEvent.click(screen.getByTestId('rcm-primary'));
     await waitFor(() => expect(text('rcm-primary')).toBe('Confirmar y aplicar'));
     await userEvent.click(screen.getByTestId('rcm-primary'));
-    await waitFor(() =>
-      expect(screen.getByText('Otra persona modificó esta receta mientras la revisabas. No se aplicó ningún cambio.')).toBeTruthy(),
-    );
+    // #1369 P2: el conflicto se anuncia a lectores aunque su texto viva en el
+    // footer (el banner superior se reserva para errores de simulate).
+    const conflictNote = await waitFor(() => {
+      const el = screen.getByText('Otra persona modificó esta receta mientras la revisabas. No se aplicó ningún cambio.');
+      expect(el.getAttribute('role')).toBe('alert');
+      return el;
+    });
+    expect(conflictNote).toBeTruthy();
     expect(text('rcm-diff')).toContain('runner-right'); // diff intacto (atenuado)
 
     // «Volver a simular» es la primary del estado de conflicto.
@@ -400,5 +405,48 @@ describe('RecipeChangeSimulationModal (#1369 slice 2)', () => {
     await waitFor(() => expect(text('rcm-banner')).toContain('Sin conexión'));
     expect((screen.getByTestId('rcm-primary') as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByTestId('rcm-diff')).toBeNull();
+  });
+
+  it('P2: al aparecer las alternativas el foco va al primer radio', async () => {
+    renderModal({ onSimulate: async () => ({ ok: true, response: rejectedDiff }) });
+    await userEvent.click(screen.getByTestId('rcm-primary'));
+    const radio = await waitFor(() => screen.getByTestId('rcm-alternative-vs-depth-450') as HTMLInputElement);
+    expect(document.activeElement).toBe(radio);
+  });
+
+  it('P2: los radios de alternativas se deshabilitan mientras se aplica', async () => {
+    // Estado «valid» con un rechazo que SÍ tiene alternativa: Confirmar queda
+    // habilitado una vez elegida, y durante el apply los radios se congelan
+    // como los selects.
+    const pickable: RecipeChangeSimulationResponse = {
+      ...rejectedDiff,
+      diff: {
+        ...rejectedDiff.diff,
+        state: 'valid',
+        candidateResolved: true,
+        summary: { added: 0, removed: 0, moved: 0, resized: 0, rejected: 1, totalChanges: 1 },
+      },
+    };
+    let resolveApply: (r: RecipeApplyResult) => void = () => undefined;
+    renderModal({
+      onSimulate: async () => ({ ok: true, response: pickable }),
+      onApply: () =>
+        new Promise<RecipeApplyResult>((res) => {
+          resolveApply = res;
+        }),
+    });
+    await userEvent.click(screen.getByTestId('rcm-primary'));
+    await waitFor(() => expect(text('rcm-primary')).toBe('Confirmar y aplicar'));
+
+    // Confirmar exige la alternativa (missingPick); elegirla re-simula.
+    await userEvent.click(screen.getByTestId('rcm-alternative-vs-depth-450'));
+    await waitFor(() => expect((screen.getByTestId('rcm-primary') as HTMLButtonElement).disabled).toBe(false));
+
+    await userEvent.click(screen.getByTestId('rcm-primary'));
+    const radio = screen.getByTestId('rcm-alternative-vs-depth-450') as HTMLInputElement;
+    expect(radio.disabled).toBe(true);
+
+    resolveApply({ ok: true, applied: saved });
+    await waitFor(() => expect(screen.getByTestId('rcm-applied')).toBeTruthy());
   });
 });

@@ -301,8 +301,21 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
         });
         return { ok: true, response };
       } catch (err) {
+        // Mismo patrón que el apply: copy en español por tipo de error; el
+        // mensaje crudo del servidor (inglés) no va al banner salvo como
+        // detalle secundario del 422, que dice POR QUÉ la candidata no vale.
         if (err instanceof GraneteApiError) {
-          return { ok: false, kind: 'invalid', message: err.payload.message };
+          if (err.status === 404) {
+            return { ok: false, kind: 'invalid', message: 'El agregado ya no existe. Recargá el catálogo.' };
+          }
+          if (err.status === 422) {
+            return {
+              ok: false,
+              kind: 'invalid',
+              message: `La receta candidata no es válida. ${err.payload.message}`,
+            };
+          }
+          return { ok: false, kind: 'invalid', message: 'No se pudo simular el cambio. Probá de nuevo.' };
         }
         return { ok: false, kind: 'network', message: 'Sin conexión. Revisá tu conexión e intentá de nuevo.' };
       }

@@ -100,6 +100,52 @@ function Chip({ change }: { readonly change: string }) {
   );
 }
 
+/** #1369 P2 — alternativas de un set rechazado: fieldset + radios. El foco va
+ * al primer radio al aparecer el fieldset (el diseño pide una decisión ahí
+ * mismo, no tabular a ciegas) y los radios se deshabilitan mientras hay una
+ * operación en curso, igual que los selects. */
+function RecipeAlternatives({
+  name,
+  nominals,
+  selected,
+  busy,
+  autoFocus,
+  onPick,
+  testId,
+}: {
+  readonly name: string;
+  readonly nominals: readonly number[];
+  readonly selected: number | undefined;
+  readonly busy: boolean;
+  readonly autoFocus: boolean;
+  readonly onPick: (nominal: number) => void;
+  readonly testId: string;
+}): ReactNode {
+  const firstRadioRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (autoFocus) firstRadioRef.current?.focus();
+  }, [autoFocus]);
+  return (
+    <fieldset className="recipe-sim__alternatives">
+      <legend>Elegí una alternativa válida:</legend>
+      {nominals.map((n, i) => (
+        <label key={n} className="recipe-sim__radio">
+          <input
+            ref={autoFocus && i === 0 ? firstRadioRef : undefined}
+            type="radio"
+            name={name}
+            checked={selected === n}
+            disabled={busy}
+            onChange={() => onPick(n)}
+            data-testid={`${testId}-${n}`}
+          />
+          {fmtMm(n)} mm
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
 function DiffGroup({
   title,
   rows,
@@ -262,6 +308,11 @@ export function RecipeChangeSimulationModal({
   // authority — aplicar con un If-Match viejo devuelve 412 y el flujo entra a
   // conflicto (re-simular). No hay polling que lo anticipe.
   const rejected = (simulated?.diff.variants ?? []).filter((v) => v.change === 'rejected');
+  // El foco automático va sólo al PRIMER set con alternativas: con varios
+  // rechazados, un fieldset por set no pelea por el foco entre sí.
+  const firstPickableSetId = rejected.find(
+    (v) => v.rejection && v.rejection.fittingNominals.length > 0,
+  )?.variantSetId;
   const missingPick = rejected.some(
     (v) => v.rejection && selections[v.variantSetId] === undefined && v.rejection.fittingNominals.length > 0,
   );
@@ -319,7 +370,10 @@ export function RecipeChangeSimulationModal({
       dataTestId={testId}
       footer={
         <div className="recipe-sim__footer">
-          <p className="recipe-sim__consequence">
+          {/* #1369 P2: en conflicto el mensaje vive acá (el banner superior se
+              reserva para errores de simulate) — con role="alert" para que los
+              lectores lo anuncien igual que el resto de los banners. */}
+          <p className="recipe-sim__consequence" role={conflict ? 'alert' : undefined}>
             {phase === 'applied'
               ? 'La receta quedó guardada en el servidor.'
               : noChanges
@@ -530,24 +584,18 @@ export function RecipeChangeSimulationModal({
                       </span>
                     </div>
                     {v.rejection && v.rejection.fittingNominals.length > 0 ? (
-                      <fieldset className="recipe-sim__alternatives">
-                        <legend>Elegí una alternativa válida:</legend>
-                        {v.rejection.fittingNominals.map((n) => (
-                          <label key={n} className="recipe-sim__radio">
-                            <input
-                              type="radio"
-                              name={`${testId}-alt-${v.variantSetId}`}
-                              checked={selections[v.variantSetId] === n}
-                              onChange={() => {
-                                pendingResimulate.current = true;
-                                setSelections((prev) => ({ ...prev, [v.variantSetId]: n }));
-                              }}
-                              data-testid={`${testId}-alternative-${v.variantSetId}-${n}`}
-                            />
-                            {fmtMm(n)} mm
-                          </label>
-                        ))}
-                      </fieldset>
+                      <RecipeAlternatives
+                        name={`${testId}-alt-${v.variantSetId}`}
+                        nominals={v.rejection.fittingNominals}
+                        selected={selections[v.variantSetId]}
+                        busy={busy}
+                        autoFocus={v.variantSetId === firstPickableSetId}
+                        onPick={(n) => {
+                          pendingResimulate.current = true;
+                          setSelections((prev) => ({ ...prev, [v.variantSetId]: n }));
+                        }}
+                        testId={`${testId}-alternative-${v.variantSetId}`}
+                      />
                     ) : (
                       <p className="recipe-sim__no-fit">
                         Ninguna alternativa cabe con estas dimensiones. Cambiá las medidas o la receta.

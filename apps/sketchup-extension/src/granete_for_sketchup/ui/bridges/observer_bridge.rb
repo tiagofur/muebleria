@@ -64,6 +64,11 @@ module Granete
           @observed_model = new_model
           attach_model_observers(@observed_model)
           @builder_model = nil
+          # Cached motion adapters track entities of the PREVIOUS model
+          # (#1393): switching or reopening a document invalidates them
+          # wholesale, so the map is dropped and the next toggle re-scans
+          # the fresh model instead of touching foreign entities.
+          @motion_adapters&.clear
           check_current_selection(@dialog) if @dialog&.visible?
           refresh_binding_status
           # The Project Furniture panel follows the binding of whichever
