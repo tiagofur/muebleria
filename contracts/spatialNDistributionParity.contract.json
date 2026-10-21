@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.spatialNDistributionParity.v1",
+  "comment": [
+    "#1393/#1383 — Contrato de paridad TS/Go de la variable espacial N (cantidad de copias).",
+    "TS: packages/domain/src/spatialNDistributionParity.contract.test.ts (evaluatePartFormula).",
+    "Go: backend-go/internal/domain/engine/spatial_n_distribution_parity_contract_test.go (evaluatePartFormula).",
+    "Regla: expected congelados; si un motor diverge, se alinea el motor — nunca el expected.",
+    "N = cantidad total de copias de la instancia de componente (>= 1); i = índice de copia (0-based).",
+    "La fórmula distribuida PH/(N+1)*(i+1) reparte N entrepanos uniformes en una torre de altura PH.",
+    "Fuera de alcance: paridad de rechazo del parser ('NN'/'n') — el sustitutivo TS acepta 'NN' por",
+    "diseño (ver la nota #1383 en engine.test.ts); eso vive en los tests gemelos, no acá."
+  ],
+  "dims": { "W": 564, "H": 18, "D": 482, "PW": 600, "PH": 2100, "PD": 550, "T": 18 },
+  "cases": [
+    { "name": "N=4 distributes the 2100 tower (copy 1)", "formula": "PH/(N+1)*(i+1)", "N": 4, "i": 0, "expectedMm": 420 },
+    { "name": "N=4 distributes the 2100 tower (copy 2)", "formula": "PH/(N+1)*(i+1)", "N": 4, "i": 1, "expectedMm": 840 },
+    { "name": "N=4 distributes the 2100 tower (copy 3)", "formula": "PH/(N+1)*(i+1)", "N": 4, "i": 2, "expectedMm": 1260 },
+    { "name": "N=4 distributes the 2100 tower (copy 4)", "formula": "PH/(N+1)*(i+1)", "N": 4, "i": 3, "expectedMm": 1680 },
+    { "name": "N=1 centers the single shelf", "formula": "PH/(N+1)*(i+1)", "N": 1, "i": 0, "expectedMm": 1050 },
+    { "name": "N evaluates to the copy count", "formula": "N", "N": 4, "i": 0, "expectedMm": 4 }
+  ]
+}
