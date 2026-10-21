@@ -10,6 +10,8 @@ require_relative '../../src/granete_for_sketchup/ui/bridges/inspector_bridge'
 # adapter tracks: the bridge must re-scan instead of toggling dead entities
 # (whose Ruby wrappers still respond to :transformation but raise on use),
 # and a failed toggle must reach the dialog instead of dying silently.
+# #1393 — the close-all sweep isolates one adapter's failure and always
+# reports back to the dialog.
 class InspectorBridgeMotionCacheTest < Minitest::Test
   LiveDoor = Struct.new(:persistent_id, :valid?, :transformation)
   FakeFurniture = Struct.new(:persistent_id)
@@ -27,6 +29,38 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
       name == :transformation || super
     end
 
+    def transformation
+      raise TypeError, 'reference to deleted Entity'
+    end
+  end
+
+  # #1393 — a door that records every closed-pose write so the close-all
+  # sweep is observable without a real Geom layer.
+  class TrackedDoor
+    attr_reader :transform_writes
+
+    def initialize(persistent_id)
+      @persistent_id = persistent_id
+      @transform_writes = []
+    end
+
+    def valid?
+      true
+    end
+
+    def transformation
+      'canonical-closed-pose'
+    end
+
+    def transformation=(transform)
+      @transform_writes << transform
+    end
+  end
+
+  # #1393 — entities report valid?, but reading the pose explodes mid
+  # close_all (the real host can raise between the validity check and the
+  # transform write).
+  class ExplodingDoor < TrackedDoor
     def transformation
       raise TypeError, 'reference to deleted Entity'
     end
@@ -89,6 +123,20 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
 
     def furniture_metadata?(_model, _target)
       true
+    end
+  end
+
+  # #1393 — one cached adapter per furniture entity, each with its own door
+  # set, so the close-all sweep can be exercised over several entries.
+  class MultiFurnitureHost < MotionHost
+    def initialize(doors_by_furniture)
+      super(doors: [], hardware_by_host: {})
+      @doors_by_furniture = doors_by_furniture
+    end
+
+    def inspect_furniture_door_actors(furniture_entity)
+      @scan_count += 1
+      [@doors_by_furniture.fetch(furniture_entity.persistent_id, []), {}]
     end
   end
 
@@ -178,5 +226,29 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
     failed = host.bridge_calls.select { |(name, _)| name == 'onDoorMotionFailed' }
     assert_equal 1, failed.length, "expected onDoorMotionFailed, got #{host.bridge_calls.inspect}"
     assert(host.logger.events.any? { |(level, event, _)| level == :error && event == 'toggle_door_motion_failed' })
+  end
+
+  # #1393 — one adapter raising must not abort the rest: the healthy doors
+  # still close, the dialog is notified (Spanish toast via the existing
+  # onDoorMotionFailed callback) and onAllDoorsClosed is NOT announced,
+  # because not everything actually closed.
+  def test_close_all_isolates_a_raising_adapter_and_notifies_the_dialog
+    exploding_door = ExplodingDoor.new(3)
+    live_door = TrackedDoor.new(4)
+    host = MultiFurnitureHost.new(333 => [exploding_door], 444 => [live_door])
+    host.send(:presentation_motion_adapter_for, FakeFurniture.new(333), 110.0)
+    host.send(:presentation_motion_adapter_for, FakeFurniture.new(444), 110.0)
+
+    host.handle_close_all_doors(FakeDialog.new('d1'))
+
+    assert_equal 1, live_door.transform_writes.length,
+                 'la excepción de un adaptador no debe abortar el cierre de los demás'
+    failed = host.bridge_calls.select { |(name, _)| name == 'onDoorMotionFailed' }
+    assert_equal 1, failed.length, "expected onDoorMotionFailed, got #{host.bridge_calls.inspect}"
+    assert_instance_of String, failed.first[1]['message']
+    refute_empty failed.first[1]['message']
+    refute(host.bridge_calls.any? { |(name, _)| name == 'onAllDoorsClosed' },
+           'con fallo parcial no puede anunciarse que todo quedó cerrado')
+    assert(host.logger.events.any? { |(level, event, _)| level == :error && event == 'close_all_doors_adapter_failed' })
   end
 end

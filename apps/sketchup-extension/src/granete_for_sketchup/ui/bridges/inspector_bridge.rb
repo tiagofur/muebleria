@@ -86,14 +86,39 @@ module Granete
         end
 
         def handle_close_all_doors(dialog, _raw_payload = nil)
-          @motion_adapters&.each_value { |adapter| adapter.close_all if adapter.entities_valid? }
+          any_failed = false
+          (@motion_adapters || {}).each do |key, adapter|
+            any_failed = true if close_all_adapter_safely(key, adapter)
+          end
+          if any_failed
+            # Partial failure: the doors that did close stay closed, but the
+            # open ones keep their real pose — announcing onAllDoorsClosed
+            # would desync the JS buttons from the model. The existing door
+            # motion failure callback shows the Spanish toast.
+            execute_bridge(dialog, 'onDoorMotionFailed',
+                           { 'message' => 'No todas las puertas se cerraron; probá de nuevo.' })
+            return
+          end
           execute_bridge(dialog, 'onAllDoorsClosed', {})
           @logger.info('close_all_doors_executed')
         rescue StandardError => e
           @logger.error('close_all_doors_failed', error: e)
+          execute_bridge(dialog, 'onDoorMotionFailed',
+                         { 'message' => 'No se pudieron cerrar las puertas; probá de nuevo.' })
         end
 
         private
+
+        # One adapter's exception must not abort the rest of the sweep:
+        # the remaining adapters still close, and the caller hears back
+        # either way. Returns true when the adapter failed.
+        def close_all_adapter_safely(_key, adapter)
+          adapter.close_all if adapter.entities_valid?
+          false
+        rescue StandardError => e
+          @logger.error('close_all_doors_adapter_failed', error: e)
+          true
+        end
 
         def presentation_motion_adapter_for(furniture_entity, open_angle_deg)
           @motion_adapters ||= {}
