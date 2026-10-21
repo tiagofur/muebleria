@@ -23,6 +23,16 @@ module Granete
           @open_states = {} # motion_id / door_slot -> Float (current progress)
         end
 
+        # True when every tracked host entity still exists in the model.
+        # A rebuild of the unit (Inspector apply, #1387) deletes the door and
+        # hardware instances a cached adapter tracks — the bridge must
+        # re-scan instead of toggling dead entities (whose wrappers still
+        # respond to :transformation but raise on use).
+        def entities_valid?
+          tracked = @component_map.values + @hardware_by_host.values.flatten
+          tracked.all? { |entity| entity.nil? || (entity.respond_to?(:valid?) && entity.valid?) }
+        end
+
         def register_closed_transform(entity)
           return unless entity.respond_to?(:transformation)
 

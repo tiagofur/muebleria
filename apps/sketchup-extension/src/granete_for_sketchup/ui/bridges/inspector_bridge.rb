@@ -57,11 +57,19 @@ module Granete
 
           unless target_furniture && furniture_metadata?(model, target_furniture)
             @logger.warn('toggle_door_motion_no_furniture', instance_ref: instance_ref)
+            execute_bridge(dialog, 'onDoorMotionFailed',
+                           { 'message' => 'No se encontró el mueble; volvé a seleccionarlo en el ambiente.' })
             return
           end
 
           adapter = presentation_motion_adapter_for(target_furniture, open_angle_deg)
           motion_id = "door-slot-#{slot_index}"
+          if adapter.motions.empty?
+            @logger.warn('toggle_door_motion_no_doors', slot_index: slot_index)
+            execute_bridge(dialog, 'onDoorMotionFailed',
+                           { 'message' => 'Este mueble no tiene puertas para abrir.' })
+            return
+          end
           # The per-door side arrives with EVERY toggle (card convention /
           # authored data) — the cached adapter never freezes a side.
           is_open = adapter.toggle_motion(motion_id, swing_side)
@@ -73,10 +81,12 @@ module Granete
           @logger.info('toggle_door_motion_executed', slot_index: slot_index, isOpen: is_open)
         rescue StandardError => e
           @logger.error('toggle_door_motion_failed', error: e)
+          execute_bridge(dialog, 'onDoorMotionFailed',
+                         { 'message' => 'La apertura no se aplicó; se reconstruyó la vista. Probá de nuevo.' })
         end
 
         def handle_close_all_doors(dialog, _raw_payload = nil)
-          @motion_adapters&.each_value(&:close_all)
+          @motion_adapters&.each_value { |adapter| adapter.close_all if adapter.entities_valid? }
           execute_bridge(dialog, 'onAllDoorsClosed', {})
           @logger.info('close_all_doors_executed')
         rescue StandardError => e
@@ -89,7 +99,9 @@ module Granete
           @motion_adapters ||= {}
           key = furniture_key(furniture_entity)
           adapter = @motion_adapters[key]
-          return adapter if adapter
+          # A rebuild (Inspector apply, #1387) deletes the door entities the
+          # cached adapter tracks: reuse only a cache over living entities.
+          return adapter if adapter&.entities_valid?
 
           door_entities, hardware_by_host = inspect_furniture_door_actors(furniture_entity)
           motions = []
