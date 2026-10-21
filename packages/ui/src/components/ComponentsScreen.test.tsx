@@ -978,6 +978,36 @@ describe('ComponentsScreen', () => {
     );
   });
 
+  it('validates formulas knowing N: PH / N * (i + 1) saves (#1383)', () => {
+    const onUpdate = vi.fn();
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentEditId="c1"
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+    fireEvent.click(screen.getByTestId('component-geometry-advanced-toggle'));
+    // Sin N en sampleDims, `PH / N` evaluaba PH/0 → Infinity → inválida
+    // aunque en runtime N = cantidad de copias (≥ 1).
+    fireEvent.change(screen.getByTestId('input-z-formula'), {
+      target: { value: 'PH / N * (i + 1)' },
+    });
+    fireEvent.click(screen.getByTestId('save-btn'));
+
+    expect(screen.queryByTestId('form-error')).toBeNull();
+    expect(onUpdate).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({ zFormula: 'PH / N * (i + 1)' }),
+    );
+  });
+
   it('allows base length/width 0 when formulas are set (C8)', () => {
     const onCreate = vi.fn();
     render(

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -372,6 +373,22 @@ func (s *Server) handleDesignOpeningPut(w http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		if err == storage.ErrWorkingCopyVersionConflict || err == storage.ErrWorkingCopyPreconditionRequired {
 			respondWithDesignError(w, err)
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidDesignCommand) {
+			// #1337/#1393 — el rechazo de dominio en la frontera de
+			// persistencia (p.ej. un pin congelado que nunca produce un
+			// descuento de puerta efectivo) es error de input del cliente:
+			// 422, nunca 500. El storage valida ANTES del UPDATE, así que la
+			// selección persistida queda intacta.
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "INVALID_OPENING_CONFIGURATION",
+				"message": "la configuración de apertura no es válida: " + err.Error(),
+				"details": map[string]any{
+					"system":    selection.System,
+					"profileId": selection.ProfileID,
+				},
+			})
 			return
 		}
 		respondWithInternalError(w, err, "design opening write")

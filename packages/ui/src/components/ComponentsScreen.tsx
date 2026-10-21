@@ -440,6 +440,8 @@ export function ComponentsScreen({
     }
 
     // Validate non-empty formulas against sample container dims (C3).
+    // #1383 — N = cantidad de copias (≥ 1 en runtime): sin N, `PH/N` se
+    // marcaría inválida aquí aunque resuelve bien en el BOM.
     const sampleDims = {
       W: containerDims.PW,
       H: containerDims.PH,
@@ -449,6 +451,7 @@ export function ComponentsScreen({
       PD: containerDims.PD,
       T: draft.thicknessMm > 0 ? draft.thicknessMm : 18,
       i: 0,
+      N: 1,
     };
     const formulaChecks: readonly {
       readonly label: string;

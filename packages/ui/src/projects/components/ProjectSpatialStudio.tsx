@@ -614,6 +614,10 @@ export function ProjectSpatialStudio({
       setDetailMode(false);
       setDetailPartId(null);
       setDetailHardwareId(null);
+      // #670 — el studio sigue montado con open=false entre sesiones: sin este
+      // clear, un miembro de conjunto seleccionado sobrevive cerrar→reabrir y
+      // el inspector reaparece sin click (estado fantasma).
+      setDetailAssemblyMember(null);
       setCommandStatus(null);
       setPasteCursorByWall({});
       return;
