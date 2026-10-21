@@ -338,3 +338,62 @@ func TestUpdateOrganization_ScanMatchesColumns(t *testing.T) {
 		t.Fatalf("update did not persist: %+v", got)
 	}
 }
+
+// #1382 follow-up (pre-sale review 2026-10-21): a metadata update that does
+// not specify the library type must keep the persisted entitlement. The Go
+// layer used to coerce "" into 'standard' before calling the SQL command,
+// which would have silently stripped a custom entitlement from any caller
+// updating with a partial Organization; the command's
+// COALESCE(NULLIF(p_library_type, ''), library_type) is the contract.
+func TestUpdateOrganizationVersion_UnspecifiedLibraryTypeKeepsCustom(t *testing.T) {
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
+
+	org := &domain.Organization{
+		Name: "Fábrica Custom", Slug: "fabrica-custom",
+		Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusProvisioning,
+		LibraryType: domain.LibraryTypeCustom,
+	}
+	if err := isolationRuntimeError(fixture, fixture.platformActor, func(txCtx context.Context) error { return store.CreateOrganization(txCtx, org) }); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	current := isolationRuntimeValue(t, fixture, fixture.platformActor, func(txCtx context.Context) (*domain.Organization, error) {
+		return store.GetOrganizationByID(txCtx, org.ID)
+	})
+	if current == nil || current.LibraryType != domain.LibraryTypeCustom {
+		t.Fatalf("created organization must persist custom, got %+v", current)
+	}
+
+	partial := &domain.Organization{
+		ID: org.ID, Name: "Fábrica Custom Renombrada",
+		LicensePlan: current.LicensePlan, LicenseExpiresAt: current.LicenseExpiresAt,
+	}
+	if err := isolationRuntimeError(fixture, fixture.platformActor, func(txCtx context.Context) error {
+		return store.UpdateOrganizationVersion(txCtx, partial, current.Version)
+	}); err != nil {
+		t.Fatalf("update without library type: %v", err)
+	}
+	if partial.LibraryType != domain.LibraryTypeCustom || partial.Name != "Fábrica Custom Renombrada" {
+		t.Fatalf("unspecified library type must keep custom, got %+v", partial)
+	}
+	kept := isolationRuntimeValue(t, fixture, fixture.platformActor, func(txCtx context.Context) (*domain.Organization, error) {
+		return store.GetOrganizationByID(txCtx, org.ID)
+	})
+	if kept == nil || kept.LibraryType != domain.LibraryTypeCustom {
+		t.Fatalf("custom entitlement was stripped by a partial update: %+v", kept)
+	}
+
+	// An explicit downgrade is still an ordinary metadata change.
+	partial.LibraryType = domain.LibraryTypeStandard
+	if err := isolationRuntimeError(fixture, fixture.platformActor, func(txCtx context.Context) error {
+		return store.UpdateOrganizationVersion(txCtx, partial, kept.Version)
+	}); err != nil {
+		t.Fatalf("explicit downgrade: %v", err)
+	}
+	downgraded := isolationRuntimeValue(t, fixture, fixture.platformActor, func(txCtx context.Context) (*domain.Organization, error) {
+		return store.GetOrganizationByID(txCtx, org.ID)
+	})
+	if downgraded == nil || downgraded.LibraryType != domain.LibraryTypeStandard {
+		t.Fatalf("explicit standard must persist, got %+v", downgraded)
+	}
+}

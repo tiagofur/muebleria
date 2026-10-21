@@ -447,10 +447,11 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 // parent link is NOT mutable here — it is set at creation (#326) and only
 // returned by the scan.
 func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organization) error {
+	// An unspecified library type keeps the persisted value: the SQL command
+	// applies COALESCE(NULLIF(p_library_type, ''), library_type). Coercing to
+	// 'standard' here would silently strip a custom entitlement from any
+	// caller that updates metadata with a partial Organization (#1382).
 	libType := string(o.LibraryType)
-	if libType == "" {
-		libType = string(domain.LibraryTypeStandard)
-	}
 	return s.db(ctx).QueryRow(ctx, `
 		SELECT `+organizationColumns+`
 		FROM command_update_organization_metadata($1, $2, $3, $4, NULL, $5)`,
@@ -462,10 +463,11 @@ func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organi
 }
 
 func (s *PostgresStore) UpdateOrganizationVersion(ctx context.Context, o *domain.Organization, expectedVersion int64) error {
+	// An unspecified library type keeps the persisted value: the SQL command
+	// applies COALESCE(NULLIF(p_library_type, ''), library_type). Coercing to
+	// 'standard' here would silently strip a custom entitlement from any
+	// caller that updates metadata with a partial Organization (#1382).
 	libType := string(o.LibraryType)
-	if libType == "" {
-		libType = string(domain.LibraryTypeStandard)
-	}
 	err := s.db(ctx).QueryRow(ctx, `
 		SELECT `+organizationColumns+`
 		FROM command_update_organization_metadata($1, $2, $3, $4, $5, $6)`,
