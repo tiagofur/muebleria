@@ -336,8 +336,12 @@ type stubStore struct {
 	agregadoReturnedByID    *domain.Agregado
 	agregadoGetByIDErr      error
 	agregadoCurrentRevision *domain.AgregadoRevision
-	listHardwares           []domain.Hardware
-	listOptionGroups        []domain.OptionGroup
+	// #1369 P1: fallo real de lectura de la revisión (conexión, JSONB
+	// corrupto) — distinto de «no hay revisión», que el stub responde con el
+	// sentinel tipado.
+	agregadoCurrentRevisionErr error
+	listHardwares              []domain.Hardware
+	listOptionGroups           []domain.OptionGroup
 	// #913 / HW-PROFILE catalog surface hooks.
 	listHardwareProfiles                      []domain.HardwareProfile
 	hardwareProfileReturnedByID               *domain.HardwareProfile
