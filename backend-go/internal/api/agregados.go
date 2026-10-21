@@ -25,7 +25,13 @@ func (s *Server) HandleAgregados(w http.ResponseWriter, r *http.Request) {
 		// #1369: la receta vigente vive en la revisión actual — hidratar para
 		// que la UI (pestaña Receta, modal, preview) la vea completa.
 		for i := range list {
-			hydrateAgregadoRecipe(&list[i], s.Store, r.Context())
+			if err := hydrateAgregadoRecipe(&list[i], s.Store, r.Context()); err != nil {
+				// Un error real de lectura invalida TODA la lista: servir
+				// agregados con la receta silenciosamente vacía haría que el
+				// próximo guardado borre la receta (variante del bug #1052).
+				respondWithInternalError(w, err, "agregados list recipe hydrate")
+				return
+			}
 		}
 		respondWithJSON(w, http.StatusOK, list)
 
@@ -76,7 +82,13 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// #1369: hidratar la receta vigente desde la revisión (ver simulate).
-		hydrateAgregadoRecipe(a, s.Store, r.Context())
+		if err := hydrateAgregadoRecipe(a, s.Store, r.Context()); err != nil {
+			// Sin receta visible la UI muestra «0 miembros» y el próximo PUT
+			// (If-Match aún válido) guardaría la receta vacía: 500, nunca un
+			// agregado que mintió sobre su propia receta.
+			respondWithInternalError(w, err, "agregado get recipe hydrate")
+			return
+		}
 		respondWithJSON(w, http.StatusOK, a)
 
 	case http.MethodPut:
@@ -160,10 +172,21 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 // hydrateAgregadoRecipe reemplaza los campos de receta del agregado por los de
 // su revisión actual, preservando identidad, versión, estado y auditoría. La
 // receta vive SOLO en agregado_revisions (la fila del catálogo no la trae).
-func hydrateAgregadoRecipe(a *domain.Agregado, store CatalogStore, ctx context.Context) {
+//
+// ErrAgregadoRevisionNotFound es el único «sin receta, queda tal cual»; cualquier
+// otro error (conexión, JSONB corrupto) vuelve al caller: responder el agregado
+// con la receta vacía haría que el próximo PUT la borre en silencio y que el
+// simulate produzca un diff falso.
+func hydrateAgregadoRecipe(a *domain.Agregado, store CatalogStore, ctx context.Context) error {
 	rev, err := store.GetAgregadoCurrentRevision(ctx, a.ID)
-	if err != nil || rev == nil {
-		return // agregado sin receta: queda tal cual
+	if err != nil {
+		if errors.Is(err, domain.ErrAgregadoRevisionNotFound) {
+			return nil // agregado sin receta: queda tal cual
+		}
+		return err
+	}
+	if rev == nil {
+		return nil
 	}
 	keptVersion, keptActive := a.Version, a.Active
 	keptRevID := a.CurrentRevisionID
@@ -175,6 +198,7 @@ func hydrateAgregadoRecipe(a *domain.Agregado, store CatalogStore, ctx context.C
 	a.CommercialKitHardwareID = recipe.CommercialKitHardwareID
 	a.WidthMm, a.HeightMm, a.DepthMm = recipe.WidthMm, recipe.HeightMm, recipe.DepthMm
 	a.Version, a.Active, a.CurrentRevisionID = keptVersion, keptActive, keptRevID
+	return nil
 }
 
 // --- #1369 slice 1: recipe change simulation (dry-run) ---
@@ -237,7 +261,12 @@ func (s *Server) HandleAgregadoRecipeSimulation(w http.ResponseWriter, r *http.R
 	// #1369 (verificación en DB real): la receta vigente vive en la revisión
 	// actual, no en la fila del catálogo — sin esta hidratación el simulate
 	// ve una receta vacía y el diff no describe el cambio real.
-	hydrateAgregadoRecipe(current, s.Store, r.Context())
+	if err := hydrateAgregadoRecipe(current, s.Store, r.Context()); err != nil {
+		// Un fallo de lectura no es una receta vacía: el diff sobre un
+		// «current» inventado sería falso (todo «added»).
+		respondWithInternalError(w, err, "agregado recipe simulation")
+		return
+	}
 
 	params := engine.AssemblyResolutionParams{
 		WidthMm:  float64(current.WidthMm),

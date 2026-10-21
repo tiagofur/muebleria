@@ -199,7 +199,9 @@ export function AgregadoDetailView({
         Receta
       </h3>
       <p className="agregado-recipe-card__summary">
-        {(a.rigidMembers ?? []).length} miembros · {(a.variantSets ?? []).length} sets de variantes ·{' '}
+        {/* #1369 P2: 1 miembro / 1 set de variantes — pluralización correcta. */}
+        {(a.rigidMembers ?? []).length} {(a.rigidMembers ?? []).length === 1 ? 'miembro' : 'miembros'} ·{' '}
+        {(a.variantSets ?? []).length} {(a.variantSets ?? []).length === 1 ? 'set de variantes' : 'sets de variantes'} ·{' '}
         {a.commercialKitHardwareId
           ? `Kit: ${catalogHardware.find((h) => h.id === a.commercialKitHardwareId)?.code ?? a.commercialKitHardwareId}`
           : 'Sin kit comercial'}

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createSeedWorkspace, GraneteApiError } from '@granete/storage';
 import type { ApiError } from '@granete/storage';
-import type { Catalog } from '@granete/domain';
+import type { Agregado, Catalog } from '@granete/domain';
 
 import { createCatalogStore, type CatalogStoreDeps } from './catalogStore';
 import { useUiStore } from './uiStore';
@@ -1994,5 +1994,80 @@ describe('catalogStore — module version concurrency (#497)', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(toasts.find((t) => t.type === 'error')?.message).toMatch(/Error de conexión/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1369 P2 — simulate de receta de agregado: errores mapeados a copy en
+// español por tipo (mismo patrón que el apply); el mensaje crudo del servidor
+// (inglés) no va al banner salvo como detalle del 422.
+// ---------------------------------------------------------------------------
+
+describe('catalogStore — simulate receta de agregado (#1369)', () => {
+  const simReq = {
+    id: 'agr-1',
+    candidate: { id: 'agr-1', code: 'AGR-1', name: 'Cajón' } as Agregado,
+  };
+
+  function apiError(status: number, message: string): GraneteApiError {
+    return new GraneteApiError(status, {
+      code: 'BAD_REQUEST',
+      message,
+      fieldErrors: {},
+      requestId: 'req-test',
+      retryable: false,
+      details: {},
+    });
+  }
+
+  it('404 → «El agregado ya no existe. Recargá el catálogo.» (no el mensaje crudo)', async () => {
+    const { deps } = makeDeps({
+      simulateAgregadoRecipeChange: async () => {
+        throw apiError(404, 'agregado not found');
+      },
+    });
+    const store = createCatalogStore({ deps });
+    const res = await store.getState().simulateAgregadoRecipe(simReq);
+    expect(res).toEqual({ ok: false, kind: 'invalid', message: 'El agregado ya no existe. Recargá el catálogo.' });
+  });
+
+  it('422 → «La receta candidata no es válida.» conservando el detalle del servidor', async () => {
+    const { deps } = makeDeps({
+      simulateAgregadoRecipeChange: async () => {
+        throw apiError(422, 'RECIPE_CANDIDATE_INVALID: unknown variant set vs-ghost');
+      },
+    });
+    const store = createCatalogStore({ deps });
+    const res = await store.getState().simulateAgregadoRecipe(simReq);
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.message).toBe('La receta candidata no es válida. RECIPE_CANDIDATE_INVALID: unknown variant set vs-ghost');
+    }
+  });
+
+  it('otro error de API (500) → «No se pudo simular el cambio. Probá de nuevo.»', async () => {
+    const { deps } = makeDeps({
+      simulateAgregadoRecipeChange: async () => {
+        throw apiError(500, 'internal server error');
+      },
+    });
+    const store = createCatalogStore({ deps });
+    const res = await store.getState().simulateAgregadoRecipe(simReq);
+    expect(res).toEqual({ ok: false, kind: 'invalid', message: 'No se pudo simular el cambio. Probá de nuevo.' });
+  });
+
+  it('red cortada → mensaje de red existente', async () => {
+    const { deps } = makeDeps({
+      simulateAgregadoRecipeChange: async () => {
+        throw new TypeError('fetch failed');
+      },
+    });
+    const store = createCatalogStore({ deps });
+    const res = await store.getState().simulateAgregadoRecipe(simReq);
+    expect(res).toEqual({
+      ok: false,
+      kind: 'network',
+      message: 'Sin conexión. Revisá tu conexión e intentá de nuevo.',
+    });
   });
 });
