@@ -693,14 +693,16 @@ func expandComponentInstances(
 			}
 		}
 		// Parent dims + part thickness + plinth height B (TS geomDims parity:
-		// W/H/D, PW/PH/PD, T, B). Length/width formulas evaluate once with
-		// i=0 (same as typical non-spatial use).
+		// W/H/D, PW/PH/PD, T, B, N). Length/width formulas evaluate once with
+		// i=0 (same as typical non-spatial use); N is this instance's copy
+		// total (#1383).
 		evalDims := formulaDims{
 			W: dims.W, H: dims.H, D: dims.D,
 			PW: dims.W, PH: dims.H, PD: dims.D,
 			T: effectiveT,
 			B: baseClearance,
 			I: 0,
+			N: inst.Quantity,
 		}
 		if lengthFormula != "" {
 			v, err := evaluatePartFormula(lengthFormula, evalDims)
@@ -752,9 +754,13 @@ type formulaDims struct {
 	B int
 	// HW is the hardware preview size for hardware relative-position formulas.
 	HW int
+	// N is the total copies of the component instance after parameter
+	// bindings (#1383): lets a formula distribute the copies (a shelf row
+	// declares z = PH/(N+1)*(i+1)). 0 where copies don't apply.
+	N int
 }
 
-// evaluatePartFormula evaluates simple math with W/H/D/PW/PH/PD/T/B/HW/i (TS parity).
+// evaluatePartFormula evaluates simple math with W/H/D/PW/PH/PD/T/B/HW/i/N (TS parity).
 func evaluatePartFormula(formula string, dims formulaDims) (int, error) {
 	trimmed := strings.TrimSpace(formula)
 	if trimmed == "" {
@@ -765,6 +771,7 @@ func evaluatePartFormula(formula string, dims formulaDims) (int, error) {
 		// Allow '.' for decimal literals (e.g. "1.5", "W * 1.5") — parser already handles them.
 		if unicode.IsDigit(r) || r == '.' || r == 'W' || r == 'H' || r == 'D' ||
 			r == 'P' || r == 'T' || r == 'B' || r == 'L' || r == 'i' ||
+			r == 'N' ||
 			r == '+' || r == '-' || r == '*' || r == '/' || r == '(' || r == ')' {
 			continue
 		}
@@ -928,6 +935,10 @@ func (p *formulaParser) parseFactor() (float64, error) {
 	if p.s[p.i] == 'i' {
 		p.i++
 		return float64(p.dims.I), nil
+	}
+	if p.s[p.i] == 'N' {
+		p.i++
+		return float64(p.dims.N), nil
 	}
 	start := p.i
 	for p.i < len(p.s) && (unicode.IsDigit(rune(p.s[p.i])) || p.s[p.i] == '.') {

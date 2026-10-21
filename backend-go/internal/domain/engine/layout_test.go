@@ -2,6 +2,8 @@ package engine
 
 import (
 	"math"
+	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -486,6 +488,169 @@ func TestResolveFurnitureLayoutMaterialChoices(t *testing.T) {
 	if _, err := ResolveFurnitureLayout(module, catalog, nil,
 		map[string]string{"FRENTE": "mat-inactive"}); err == nil {
 		t.Fatal("inactive material choice must fail loudly")
+	}
+}
+
+// #1383: N is the instance's copy total — a shelf row declares
+// z = PH/(N+1)*(i+1) and the engine distributes the copies by height.
+func shelfTowerCatalog(shelfQuantity int) (domain.Module, domain.Catalog) {
+	lateral := domain.Component{
+		ID: "comp-side", Code: "LAT", Name: "Lateral", Placement: domain.PlacementLateralIzquierdo,
+		GeometryKind: "rectangular_board", ThicknessMm: 18,
+		OptionRoles:   []string{"LATERAL"},
+		LengthFormula: "PH - 2*T", WidthFormula: "PD", Active: true,
+	}
+	right := lateral
+	right.ID = "comp-side-r"
+	right.Code = "LAT-R"
+	right.Placement = domain.PlacementLateralDerecho
+
+	shelf := domain.Component{
+		ID: "comp-ent", Code: "ENT", Name: "Entrepaño", Placement: domain.PlacementInterno,
+		GeometryKind: "rectangular_board", ThicknessMm: 18,
+		OptionRoles:   []string{"INTERIOR"},
+		LengthFormula: "PW - 2*T", WidthFormula: "PD - T",
+		// Distribution by height: PH is the module height, N the copy total.
+		ZFormula: "PH/(N+1)*(i+1)",
+		Active:   true,
+	}
+
+	structure := domain.Structure{
+		ID: "st-1", Code: "CUERPO-TORRE", Name: "Cuerpo Torre", Active: true,
+		Components: []domain.ComponentInstance{
+			{ComponentID: "comp-side", Quantity: 1},
+			{ComponentID: "comp-side-r", Quantity: 1},
+			{ComponentID: "comp-ent", Quantity: shelfQuantity},
+		},
+	}
+
+	module := domain.Module{
+		ID: "mod-1", Code: "TORRE-600", Name: "Torre 600",
+		WidthMm: 600, HeightMm: 2100, DepthMm: 550, StructureID: "st-1",
+	}
+
+	catalog := domain.Catalog{
+		Structures: []domain.Structure{structure},
+		Components: []domain.Component{lateral, right, shelf},
+	}
+	return module, catalog
+}
+
+func shelfHeights(t *testing.T, module domain.Module, catalog domain.Catalog) []float64 {
+	t.Helper()
+	layout, err := ResolveFurnitureLayout(module, catalog, nil, nil)
+	if err != nil {
+		t.Fatalf("resolve layout: %v", err)
+	}
+	var zs []float64
+	for _, c := range layout.Components {
+		if c.Name == "Entrepaño" {
+			zs = append(zs, c.Transform.TranslationMm[2])
+		}
+	}
+	sort.Float64s(zs)
+	return zs
+}
+
+func TestResolveFurnitureLayoutShelfDistributionFormula(t *testing.T) {
+	t.Run("N=4 distributes by height (2100/5 steps)", func(t *testing.T) {
+		module, catalog := shelfTowerCatalog(4)
+		zs := shelfHeights(t, module, catalog)
+		want := []float64{420, 840, 1260, 1680}
+		if !reflect.DeepEqual(zs, want) {
+			t.Fatalf("shelf z = %v, want %v", zs, want)
+		}
+	})
+
+	t.Run("N=1 centers the single shelf", func(t *testing.T) {
+		module, catalog := shelfTowerCatalog(1)
+		zs := shelfHeights(t, module, catalog)
+		if !reflect.DeepEqual(zs, []float64{1050}) {
+			t.Fatalf("shelf z = %v, want [1050]", zs)
+		}
+	})
+}
+
+// The real pipeline for a configurable shelf row: the shelf lives as a
+// MODULE-level component (the authoring surface for doors/shelves), the
+// parameter binding (componentQuantity) rewrites that instance BEFORE the
+// layout — including removing it at 0. Persisted quantity 0 stays invalid by
+// design; the bound value never reaches that validation because 0 drops the
+// instance.
+func boundShelfModule() (domain.Module, domain.Catalog) {
+	module, catalog := shelfTowerCatalog(0)
+	// Strip the structure shelf: the row is authored at module level.
+	structure := catalog.Structures[0]
+	structure.Components = structure.Components[:2]
+	catalog.Structures = []domain.Structure{structure}
+	module.Components = []domain.ComponentInstance{
+		{ComponentID: "comp-ent", Quantity: 4},
+	}
+	module.ParameterDefinitions = []domain.FurnitureParameterDefinition{{
+		Name:         "entrepanos",
+		Label:        "Entrepaños",
+		Type:         domain.FurnitureParameterTypeNumber,
+		Category:     domain.FurnitureParameterCategoryConfiguration,
+		DefaultValue: float64(4),
+		Min:          floatPtr(0),
+		Max:          floatPtr(8),
+		Step:         floatPtr(1),
+		Integer:      true,
+		Binding: &domain.FurnitureParameterBinding{
+			Version: 1, Kind: domain.FurnitureParameterBindingComponentQuantity, ComponentID: "comp-ent",
+		},
+	}}
+	return module, catalog
+}
+
+func TestComponentQuantityBindingDrivesShelfCount(t *testing.T) {
+	module, catalog := boundShelfModule()
+
+	t.Run("entrepanos=6 distributes 2100/7", func(t *testing.T) {
+		bound := ApplyEvaluatedComponentBindings(module, map[string]any{"entrepanos": float64(6)})
+		zs := shelfHeights(t, bound, catalog)
+		want := []float64{300, 600, 900, 1200, 1500, 1800}
+		if !reflect.DeepEqual(zs, want) {
+			t.Fatalf("shelf z = %v, want %v", zs, want)
+		}
+	})
+
+	t.Run("entrepanos=0 removes the row entirely", func(t *testing.T) {
+		bound := ApplyEvaluatedComponentBindings(module, map[string]any{"entrepanos": float64(0)})
+		if zs := shelfHeights(t, bound, catalog); len(zs) != 0 {
+			t.Fatalf("expected no shelf boards, got z = %v", zs)
+		}
+	})
+
+	t.Run("entrepanos=1 centers", func(t *testing.T) {
+		bound := ApplyEvaluatedComponentBindings(module, map[string]any{"entrepanos": float64(1)})
+		zs := shelfHeights(t, bound, catalog)
+		if !reflect.DeepEqual(zs, []float64{1050}) {
+			t.Fatalf("shelf z = %v, want [1050]", zs)
+		}
+	})
+}
+
+func TestEvaluatePartFormulaSupportsCopyCountN(t *testing.T) {
+	dims := formulaDims{PW: 600, PH: 2100, PD: 550, T: 18, I: 2, N: 4}
+	v, err := evaluatePartFormula("PH/(N+1)*(i+1)", dims)
+	if err != nil || v != 1260 {
+		t.Fatalf("PH/(N+1)*(i+1) = %d, %v; want 1260", v, err)
+	}
+	v, err = evaluatePartFormula("N", dims)
+	if err != nil || v != 4 {
+		t.Fatalf("N = %d, %v; want 4", v, err)
+	}
+	v, err = evaluatePartFormula("PW-2*T", dims)
+	if err != nil || v != 564 {
+		t.Fatalf("PW-2*T = %d, %v; want 564", v, err)
+	}
+	// Lowercase n stays forbidden (the variable is the uppercase N only).
+	if _, err := evaluatePartFormula("n", dims); err == nil {
+		t.Fatal("lowercase n must be rejected")
+	}
+	if _, err := evaluatePartFormula("NN", dims); err == nil {
+		t.Fatal("NN without operator must be rejected")
 	}
 }
 

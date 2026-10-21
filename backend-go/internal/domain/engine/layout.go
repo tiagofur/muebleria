@@ -802,10 +802,11 @@ func expandLayoutInstances(
 		t := float64(effectiveT)
 
 		// Geometry formulas evaluate against the parent furniture dims.
+		// N = this instance's copy total (#1383).
 		geomDims := formulaDims{
 			W: dims.WidthMm, H: dims.HeightMm, D: dims.DepthMm,
 			PW: dims.WidthMm, PH: dims.HeightMm, PD: dims.DepthMm,
-			T: effectiveT, B: baseClearance,
+			T: effectiveT, B: baseClearance, N: inst.Quantity,
 		}
 		lengthMm := float64(comp.LengthMm)
 		widthMm := float64(comp.WidthMm)
@@ -881,7 +882,7 @@ func expandLayoutInstances(
 			spatialDims := formulaDims{
 				W: int(math.Round(widthMm)), H: effectiveT, D: int(math.Round(lengthMm)),
 				PW: dims.WidthMm, PH: dims.HeightMm, PD: dims.DepthMm,
-				T: effectiveT, B: baseClearance, I: i,
+				T: effectiveT, B: baseClearance, I: i, N: copies,
 			}
 			pose := defaultPoseForPlacement(placement, float64(dims.WidthMm), float64(dims.HeightMm), float64(dims.DepthMm), t, i, copies)
 
