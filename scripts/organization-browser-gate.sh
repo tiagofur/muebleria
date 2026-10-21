@@ -525,10 +525,12 @@ curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/health" >/dev/null \
   --email "${ORGANIZATION_GATE_A_OWNER_EMAIL}") >/dev/null
 (cd "${ROOT}/backend-go" && "${GATE_ADMIN_ENV[@]}" go run ./cmd/admin create-org \
   --name "Browser Gate A" --slug browser-gate-a --type factory \
+  --library-type custom \
   --admin-email "${ORGANIZATION_GATE_A_OWNER_EMAIL}" \
   --idempotency-key browser-gate-a-bootstrap --license trial) >/dev/null
 (cd "${ROOT}/backend-go" && "${GATE_ADMIN_ENV[@]}" go run ./cmd/admin create-org \
   --name "Browser Gate B" --slug browser-gate-b --type factory \
+  --library-type custom \
   --admin-email "${ORGANIZATION_GATE_B_OWNER_EMAIL}" \
   --idempotency-key browser-gate-b-bootstrap --license pro) >/dev/null
 SETUP_READBACK="$(docker exec "${CONTAINER}" psql -At -U postgres -d granete_gate \
