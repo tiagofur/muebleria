@@ -82,8 +82,11 @@ func assertDespensaProvisioned(t *testing.T, pool *pgxpool.Pool) despensaSeedRow
 	if rows.shelfLinks != 1 || rows.shelfQuantity != 4 {
 		t.Fatalf("la fila de entrepaños debe ser 1 module_component ×4, hay %d links qty %d", rows.shelfLinks, rows.shelfQuantity)
 	}
-	if rows.presets != 1 {
-		t.Fatalf("MOD-DES-001 debe tener 1 preset comercial, tiene %d", rows.presets)
+	// Like MOD-GAB-01 / MOD-CAJ-01 the demo despensa carries no module preset
+	// (resolve falls back to externalDims); the browser specs clone the first
+	// catalog module as a template without dropping preset ids.
+	if rows.presets != 0 {
+		t.Fatalf("MOD-DES-001 no debe sembrar presets de módulo, tiene %d", rows.presets)
 	}
 	return rows
 }
@@ -135,8 +138,8 @@ func TestSeedDespensaEntrepanosFresh(t *testing.T) {
 	if module == nil {
 		t.Fatal("MOD-DES-001 no aparece en el catálogo leído bajo el rol runtime")
 	}
-	if len(module.Presets) != 1 {
-		t.Fatalf("MOD-DES-001 debe exponer 1 preset, expone %d", len(module.Presets))
+	if len(module.Presets) != 0 {
+		t.Fatalf("MOD-DES-001 no debe exponer presets, expone %d", len(module.Presets))
 	}
 	choices := despensaCatalogChoices(t, catalog)
 
@@ -155,7 +158,7 @@ func TestSeedDespensaEntrepanosFresh(t *testing.T) {
 			t.Fatalf("entrepanos=%d: err=%v issues=%v", count, err, issues)
 		}
 		bound := engine.ApplyEvaluatedComponentBindings(*module, values)
-		bom, err := engine.ResolveBom(bound, choices, catalog, module.Presets[0].ID)
+		bom, err := engine.ResolveBom(bound, choices, catalog)
 		if err != nil {
 			t.Fatalf("entrepanos=%d: ResolveBom: %v", count, err)
 		}

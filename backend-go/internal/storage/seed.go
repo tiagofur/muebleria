@@ -1387,15 +1387,10 @@ func ensureDespensaModule(ctx context.Context, tx pgx.Tx, org string, now time.T
 	if err != nil {
 		return fmt.Errorf("ensure despensa module_components: %w", err)
 	}
-	// Commercial preset (TS fixture des-preset-2100): resolve selects size
-	// from Module.Presets when any exist.
-	_, err = tx.Exec(ctx, `
-		INSERT INTO module_presets (organization_id, module_id, name, width_mm, height_mm, depth_mm)
-		SELECT $2,$1,'Alto 2100',600,2100,600
-		WHERE NOT EXISTS (SELECT 1 FROM module_presets WHERE module_id = $1 AND name = 'Alto 2100')`,
-		moduleID, org)
-	if err != nil {
-		return fmt.Errorf("ensure despensa module preset: %w", err)
-	}
+	// No module preset on purpose (like MOD-GAB-01 / MOD-CAJ-01): the resolve
+	// falls back to externalDims, and the browser specs clone the catalog's
+	// first module (by name — this one when the demo GAB/CAJ are gone) as a
+	// template WITHOUT dropping preset ids, so a seeded preset here collides
+	// on module_presets at CreateModule.
 	return nil
 }
