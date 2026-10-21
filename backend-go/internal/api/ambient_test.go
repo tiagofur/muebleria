@@ -19,7 +19,7 @@ import (
 
 func TestHandleAmbientMaterials_IngenieroCreateReturns201(t *testing.T) {
 	store := &stubStore{}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	body := strings.NewReader(`{"id":"a1","code":"FLR-OAK","name":"Roble","surface_type":"floor","active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/ambient-materials", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("Content-Type", "application/json")
@@ -47,7 +47,7 @@ func TestHandleAmbientMaterials_IngenieroCreateReturns201(t *testing.T) {
 
 func TestHandleAmbientMaterials_VendedorCreateReturns403(t *testing.T) {
 	store := &stubStore{}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	body := strings.NewReader(`{"id":"a1","code":"FLR","name":"X","surface_type":"floor","active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/ambient-materials", body), "v1", string(domain.RoleVendedor))
 	req.Header.Set("Content-Type", "application/json")
@@ -71,7 +71,7 @@ func TestHandleAmbientMaterials_ListReturns200(t *testing.T) {
 			{ID: "a3", Code: "FLR2", Name: "Floor 2", SurfaceType: domain.AmbientSurfaceFloor},
 		},
 	}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/ambient-materials", nil), "v1", string(domain.RoleVendedor))
 	rr := httptest.NewRecorder()
 
@@ -90,7 +90,7 @@ func TestHandleAmbientMaterials_ListReturns200(t *testing.T) {
 }
 
 func TestHandleAmbientMaterials_DuplicateKeyReturns409(t *testing.T) {
-	srv := &Server{Store: &stubStore{createAmbientErr: dupErr("error creating ambient material")}}
+	srv := newModuleMutationServer(&stubStore{createAmbientErr: dupErr("error creating ambient material")})
 	body := strings.NewReader(`{"id":"a1","code":"DUP","name":"Dup","surface_type":"floor","active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/ambient-materials", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("Content-Type", "application/json")
@@ -115,7 +115,7 @@ func TestHandleAmbientMaterialByID_GetReturns200(t *testing.T) {
 			PreviewTextureURL: "/api/media/oak.webp",
 		},
 	}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/ambient-materials/a1", nil), "v1", string(domain.RoleVendedor))
 	req.SetPathValue("id", "a1")
 	rr := httptest.NewRecorder()
@@ -135,7 +135,7 @@ func TestHandleAmbientMaterialByID_GetReturns200(t *testing.T) {
 }
 
 func TestHandleAmbientMaterialByID_GetNotFoundReturns404(t *testing.T) {
-	srv := &Server{Store: &stubStore{ambientGetByIDErr: errNotFound()}}
+	srv := newModuleMutationServer(&stubStore{ambientGetByIDErr: errNotFound()})
 	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/ambient-materials/missing", nil), "eng", string(domain.RoleIngeniero))
 	req.SetPathValue("id", "missing")
 	rr := httptest.NewRecorder()
@@ -148,7 +148,7 @@ func TestHandleAmbientMaterialByID_GetNotFoundReturns404(t *testing.T) {
 }
 
 func TestHandleAmbientMaterialByID_VendedorPutReturns403(t *testing.T) {
-	srv := &Server{Store: &stubStore{ambientReturnedByID: &domain.AmbientMaterial{ID: "a1"}}}
+	srv := newModuleMutationServer(&stubStore{ambientReturnedByID: &domain.AmbientMaterial{ID: "a1"}})
 	body := strings.NewReader(`{"code":"C","name":"N","surface_type":"floor","active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-materials/a1", body), "v1", string(domain.RoleVendedor))
 	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
@@ -177,7 +177,8 @@ func TestHandleAmbientMaterialByID_UpdateCleansReplacedTexture(t *testing.T) {
 			PreviewTextureURL: "/api/media/oldtex.webp",
 		},
 	}
-	srv := &Server{Store: store, MediaDir: dir}
+	srv := newModuleMutationServer(store)
+	srv.MediaDir = dir
 	body := strings.NewReader(`{"code":"C","name":"N","surface_type":"floor","active":true,"preview_texture_url":"/api/media/newtex.webp"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-materials/a1", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
@@ -209,7 +210,8 @@ func TestHandleAmbientMaterialByID_UpdateKeepsSameTexture(t *testing.T) {
 			PreviewTextureURL: "/api/media/keep.webp",
 		},
 	}
-	srv := &Server{Store: store, MediaDir: dir}
+	srv := newModuleMutationServer(store)
+	srv.MediaDir = dir
 	body := strings.NewReader(`{"code":"C","name":"N","surface_type":"floor","active":true,"preview_texture_url":"/api/media/keep.webp"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-materials/a1", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
@@ -231,7 +233,7 @@ func TestHandleAmbientMaterialByID_UpdateKeepsSameTexture(t *testing.T) {
 // the core nullable-PBR requirement from spec #4150 / design #4151).
 func TestHandleAmbientMaterialByID_UpdatePreservesZeroRoughness(t *testing.T) {
 	store := &stubStore{ambientReturnedByID: &domain.AmbientMaterial{ID: "a1"}}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	body := strings.NewReader(`{"code":"C","name":"N","surface_type":"floor","active":true,"preview_roughness":0}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-materials/a1", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
@@ -256,7 +258,7 @@ func TestHandleAmbientMaterialByID_UpdatePreservesZeroRoughness(t *testing.T) {
 // PUT must decode an omitted PBR field to a nil pointer (undefined, not 0).
 func TestHandleAmbientMaterialByID_UpdateOmittedPBRIsNil(t *testing.T) {
 	store := &stubStore{ambientReturnedByID: &domain.AmbientMaterial{ID: "a1"}}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	body := strings.NewReader(`{"code":"C","name":"N","surface_type":"floor","active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-materials/a1", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
@@ -280,7 +282,7 @@ func TestHandleAmbientMaterialByID_UpdateOmittedPBRIsNil(t *testing.T) {
 
 func TestHandleAmbientMaterialByID_DeleteDeactivates(t *testing.T) {
 	store := &stubStore{}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/ambient-materials/a1", nil), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.SetPathValue("id", "a1")
@@ -305,7 +307,7 @@ func TestHandleAmbientCategories_ListReturns200(t *testing.T) {
 			{ID: "c2", Name: "Metales", SortOrder: 1},
 		},
 	}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/ambient-categories", nil), "v1", string(domain.RoleVendedor))
 	rr := httptest.NewRecorder()
 
@@ -325,7 +327,7 @@ func TestHandleAmbientCategories_ListReturns200(t *testing.T) {
 
 func TestHandleAmbientCategories_IngenieroCreateReturns201(t *testing.T) {
 	store := &stubStore{}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	body := strings.NewReader(`{"id":"c1","name":"Maderas","sort_order":0}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/ambient-categories", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("Content-Type", "application/json")
@@ -343,7 +345,7 @@ func TestHandleAmbientCategories_IngenieroCreateReturns201(t *testing.T) {
 
 func TestHandleAmbientCategories_VendedorCreateReturns403(t *testing.T) {
 	store := &stubStore{}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	body := strings.NewReader(`{"id":"c1","name":"Maderas"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/ambient-categories", body), "v1", string(domain.RoleVendedor))
 	req.Header.Set("Content-Type", "application/json")
@@ -363,7 +365,7 @@ func TestHandleAmbientCategoryByID_GetReturns200(t *testing.T) {
 			Name: "Maderas",
 		},
 	}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/ambient-categories/c1", nil), "v1", string(domain.RoleVendedor))
 	req.SetPathValue("id", "c1")
 	rr := httptest.NewRecorder()
@@ -379,7 +381,7 @@ func TestHandleAmbientCategoryByID_UpdateAndDeletes(t *testing.T) {
 	store := &stubStore{
 		ambientCategoryReturnedByID: &domain.AmbientCategory{ID: "c1", Name: "Maderas"},
 	}
-	srv := &Server{Store: store}
+	srv := newModuleMutationServer(store)
 	body := strings.NewReader(`{"name":"Maderas Nobles"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-categories/c1", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version

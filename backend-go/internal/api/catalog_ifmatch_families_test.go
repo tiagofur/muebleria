@@ -39,7 +39,7 @@ func TestCatalogSimpleFamilies_IfMatchGuardsWrites(t *testing.T) {
 				req := withClaims(httptest.NewRequest(http.MethodPut, tc.path, strings.NewReader(tc.body)), "eng", catalogPerm())
 				req.SetPathValue("id", "x1")
 				rr := httptest.NewRecorder()
-				tc.handle(&Server{Store: store}, rr, req)
+				tc.handle(newModuleMutationServer(store), rr, req)
 				if rr.Code != http.StatusPreconditionRequired {
 					t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 				}
@@ -77,7 +77,7 @@ func TestCatalogSimpleFamilies_IfMatchGuardsWrites(t *testing.T) {
 				req.Header.Set("If-Match", `"v1"`)
 				req.SetPathValue("id", "x1")
 				rr := httptest.NewRecorder()
-				tc.handle(&Server{Store: tc.store}, rr, req)
+				tc.handle(newModuleMutationServer(tc.store), rr, req)
 				if rr.Code != http.StatusPreconditionFailed {
 					t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 				}
@@ -108,7 +108,7 @@ func TestCatalogSimpleFamilies_IfMatchGuardsWrites(t *testing.T) {
 				req := withClaims(httptest.NewRequest(http.MethodDelete, tc.path, nil), "admin", role)
 				req.SetPathValue("id", "x1")
 				rr := httptest.NewRecorder()
-				tc.handle(&Server{Store: store}, rr, req)
+				tc.handle(newModuleMutationServer(store), rr, req)
 				if rr.Code != http.StatusPreconditionRequired {
 					t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 				}

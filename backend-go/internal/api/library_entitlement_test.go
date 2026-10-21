@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // #1382: organizations on the canonical Standard library cannot author
 // catalog geometry; the server enforces it independently of the UI.
 
-func geometryWriteStatus(t *testing.T, lib domain.LibraryType, method, path, id string, handler func(*Server) http.HandlerFunc) int {
+func geometryWriteStatus(t *testing.T, lib domain.LibraryType, method, path, id string, handler func(*Server) http.HandlerFunc) (int, string) {
 	t.Helper()
 	store := &stubStore{getOrgByID: &domain.Organization{
 		ID: "org-1", Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanPro,
@@ -24,8 +25,21 @@ func geometryWriteStatus(t *testing.T, lib domain.LibraryType, method, path, id 
 	}
 	rr := httptest.NewRecorder()
 	handler(&Server{Store: store})(rr, req)
-	return rr.Code
+	return rr.Code, rr.Body.String()
 }
+
+// customLibraryOrg is the organization stub a handler test needs to pass the
+// geometry guard when the test is not about the entitlement itself.
+func customLibraryOrg() *domain.Organization {
+	return &domain.Organization{
+		ID: storage.InitialOrganizationID, Type: domain.OrganizationTypeFactory,
+		Status: domain.OrganizationStatusActive, LibraryType: domain.LibraryTypeCustom,
+	}
+}
+
+// guardRefusal is the fragment every entitlement refusal carries; asserting it
+// proves the 403 came from the library guard and not from role permissions.
+const guardRefusal = "biblioteca estándar de Granete"
 
 func TestStandardLibraryBlocksGeometryAuthoring(t *testing.T) {
 	cases := []struct {
@@ -44,14 +58,52 @@ func TestStandardLibraryBlocksGeometryAuthoring(t *testing.T) {
 		{"create component", http.MethodPost, "/api/catalog/components", "", func(s *Server) http.HandlerFunc { return s.HandleComponents }},
 		{"update component", http.MethodPut, "/api/catalog/components/c1", "c1", func(s *Server) http.HandlerFunc { return s.HandleComponentByID }},
 		{"delete component", http.MethodDelete, "/api/catalog/components/c1", "c1", func(s *Server) http.HandlerFunc { return s.HandleComponentByID }},
+		// Surfaces the UI hides for standard workshops but the server left open
+		// until the 2026-10-21 pre-sale review: agregados, component side
+		// assignments (part of the component definition) and finishes.
+		{"create agregado", http.MethodPost, "/api/catalog/agregados", "", func(s *Server) http.HandlerFunc { return s.HandleAgregados }},
+		{"update agregado", http.MethodPut, "/api/catalog/agregados/a1", "a1", func(s *Server) http.HandlerFunc { return s.HandleAgregadoByID }},
+		{"delete agregado", http.MethodDelete, "/api/catalog/agregados/a1", "a1", func(s *Server) http.HandlerFunc { return s.HandleAgregadoByID }},
+		{"set component side assignment", http.MethodPut, "/api/catalog/components/c1/side-assignments", "c1", func(s *Server) http.HandlerFunc { return s.HandleComponentSideAssignments }},
+		{"remove component side assignment", http.MethodDelete, "/api/catalog/components/c1/side-assignments/front", "c1", func(s *Server) http.HandlerFunc { return s.HandleComponentSideAssignments }},
+		{"create ambient material", http.MethodPost, "/api/catalog/ambient-materials", "", func(s *Server) http.HandlerFunc { return s.HandleAmbientMaterials }},
+		{"update ambient material", http.MethodPut, "/api/catalog/ambient-materials/am1", "am1", func(s *Server) http.HandlerFunc { return s.HandleAmbientMaterialByID }},
+		{"delete ambient material", http.MethodDelete, "/api/catalog/ambient-materials/am1", "am1", func(s *Server) http.HandlerFunc { return s.HandleAmbientMaterialByID }},
+		{"create ambient category", http.MethodPost, "/api/catalog/ambient-categories", "", func(s *Server) http.HandlerFunc { return s.HandleAmbientCategories }},
+		{"update ambient category", http.MethodPut, "/api/catalog/ambient-categories/ac1", "ac1", func(s *Server) http.HandlerFunc { return s.HandleAmbientCategoryByID }},
+		{"delete ambient category", http.MethodDelete, "/api/catalog/ambient-categories/ac1", "ac1", func(s *Server) http.HandlerFunc { return s.HandleAmbientCategoryByID }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := geometryWriteStatus(t, domain.LibraryTypeStandard, tc.method, tc.path, tc.id, tc.handler); got != http.StatusForbidden {
-				t.Fatalf("standard library: status = %d, want 403", got)
+			if got, body := geometryWriteStatus(t, domain.LibraryTypeStandard, tc.method, tc.path, tc.id, tc.handler); got != http.StatusForbidden || !strings.Contains(body, guardRefusal) {
+				t.Fatalf("standard library: status = %d body = %s, want 403 from the library guard", got, body)
 			}
-			if got := geometryWriteStatus(t, "", tc.method, tc.path, tc.id, tc.handler); got != http.StatusForbidden {
-				t.Fatalf("empty library type must fail closed: status = %d, want 403", got)
+			if got, body := geometryWriteStatus(t, "", tc.method, tc.path, tc.id, tc.handler); got != http.StatusForbidden || !strings.Contains(body, guardRefusal) {
+				t.Fatalf("empty library type must fail closed: status = %d body = %s, want 403 from the library guard", got, body)
+			}
+		})
+	}
+}
+
+func TestGeometryGuardNamesTheSurface(t *testing.T) {
+	cases := []struct {
+		name    string
+		method  string
+		path    string
+		id      string
+		surface string
+		handler func(*Server) http.HandlerFunc
+	}{
+		{"module", http.MethodPost, "/api/catalog/modules", "", "muebles, estructuras y componentes", func(s *Server) http.HandlerFunc { return s.HandleModules }},
+		{"agregado", http.MethodPost, "/api/catalog/agregados", "", "agregados", func(s *Server) http.HandlerFunc { return s.HandleAgregados }},
+		{"side assignment", http.MethodPut, "/api/catalog/components/c1/side-assignments", "c1", "componentes", func(s *Server) http.HandlerFunc { return s.HandleComponentSideAssignments }},
+		{"finish", http.MethodPost, "/api/catalog/ambient-materials", "", "acabados", func(s *Server) http.HandlerFunc { return s.HandleAmbientMaterials }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, body := geometryWriteStatus(t, domain.LibraryTypeStandard, tc.method, tc.path, tc.id, tc.handler)
+			if !strings.Contains(body, "La edición de "+tc.surface+" requiere") {
+				t.Fatalf("refusal must name the surface %q, got %s", tc.surface, body)
 			}
 		})
 	}

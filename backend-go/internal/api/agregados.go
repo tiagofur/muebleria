@@ -30,7 +30,7 @@ func (s *Server) HandleAgregados(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") || !s.requireGeometryAuthoringFor(w, r, "agregados") {
 			return
 		}
 		var a domain.Agregado
@@ -80,7 +80,7 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, a)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") || !s.requireGeometryAuthoringFor(w, r, "agregados") {
 			return
 		}
 		expectedVersion, ok := RequireIfMatch(w, r)
@@ -121,7 +121,7 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, a)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") || !s.requireGeometryAuthoringFor(w, r, "agregados") {
 			return
 		}
 		var expectedVersion int64
