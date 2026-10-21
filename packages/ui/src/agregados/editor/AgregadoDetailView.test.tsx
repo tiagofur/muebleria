@@ -111,6 +111,45 @@ describe('AgregadoDetailView', () => {
     expect(screen.getByTestId('agregado-detail-hardware')).toBeTruthy();
   });
 
+  // #1369 P2: la tarjeta «Receta» es un resumen de referencia — vive en la
+  // columna secundaria junto a las dimensiones, no delante de la composición.
+  it('renders the recipe summary card in the secondary column (#1369)', () => {
+    const { container } = render(
+      <AgregadoDetailView
+        agregado={{
+          ...mockAgregado,
+          rigidMembers: [
+            {
+              memberId: 'runner-left',
+              role: 'runner_left',
+              source: { kind: 'variant', variant: { variantSetId: 'vs-depth' } },
+              placement: {
+                x: { ref: 'min', offsetMm: 0 },
+                y: { ref: 'min', offsetMm: 0 },
+                z: { ref: 'min', offsetMm: 0 },
+              },
+              bomRole: 'included_in_kit',
+            },
+          ],
+          variantSets: [
+            { id: 'vs-depth', dimension: 'depth', variants: [{ nominalDimensionMm: 450, hardwareId: 'hw-1' }] },
+          ],
+          commercialKitHardwareId: 'hw-1',
+        }}
+        catalogComponents={mockCatalogComponents}
+        catalogHardware={mockCatalogHardware}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    const card = screen.getByTestId('agregado-detail-recipe-card');
+    expect(card.textContent).toContain('1 miembros · 1 sets de variantes · Kit: CORR-450');
+    expect(container.querySelector('.eng-detail__secondary')?.contains(card)).toBe(true);
+    expect(container.querySelector('.eng-detail__primary')?.contains(card)).toBe(false);
+  });
+
   // #529: la apertura autorizada se ve en el detalle sin entrar a Editar.
   it('shows the authored opening in the detail without editing (#529)', () => {
     const withRotate: Agregado = {

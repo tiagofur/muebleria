@@ -426,6 +426,9 @@ export {
   AgregadosScreen,
   type AgregadosScreenProps,
   type AgregadoDraft,
+  type RecipeApplyResult,
+  type RecipeSimRequest,
+  type RecipeSimResult,
 } from './agregados';
 
 export {

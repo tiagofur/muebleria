@@ -38,6 +38,9 @@ import {
   type StructureDraft,
   type CategoryDraft,
   type AmbientMaterialDraft,
+  type RecipeApplyResult,
+  type RecipeSimRequest,
+  type RecipeSimResult,
 } from '@granete/ui';
 
 /**
@@ -49,14 +52,12 @@ export type ToastFn = (input: {
   readonly message: string;
 }) => void;
 
-/** #1369 — resultados del flujo de cambio de receta (transporte mapeado por el store). */
-export type RecipeSimResult =
-  | { readonly ok: true; readonly response: RecipeChangeSimulationResponse }
-  | { readonly ok: false; readonly kind: 'invalid' | 'network'; readonly message: string };
-
-export type RecipeApplyResult =
-  | { readonly ok: true; readonly applied: Agregado }
-  | { readonly ok: false; readonly kind: 'conflict' | 'not_found' | 'network'; readonly message: string };
+/**
+ * #1369 — resultados del flujo de cambio de receta. La definición vive en el
+ * modal (@granete/ui): el store mapea el transporte a ESA forma, por eso se
+ * re-exporta en vez de duplicarla acá.
+ */
+export type { RecipeApplyResult, RecipeSimRequest, RecipeSimResult };
 
 export interface ApiCatalogDeps {
   readonly simulateAgregadoRecipeChange: (
@@ -71,12 +72,7 @@ export interface ApiCatalogDeps {
 }
 
 export interface RecipeChangeActions {
-  readonly simulate: (req: {
-    readonly id: string;
-    readonly candidate: Agregado;
-    readonly params?: { readonly widthMm: number; readonly depthMm: number; readonly heightMm: number };
-    readonly variantSelections?: Record<string, number>;
-  }) => Promise<RecipeSimResult>;
+  readonly simulate: (req: RecipeSimRequest) => Promise<RecipeSimResult>;
   readonly apply: (req: {
     readonly id: string;
     readonly expectedVersion: number;

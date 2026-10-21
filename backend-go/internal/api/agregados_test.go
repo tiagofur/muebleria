@@ -2,8 +2,12 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -21,6 +25,82 @@ func (s *deleteAgregadoStubStore) DeleteAgregado(_ context.Context, id string, e
 	s.lastID = id
 	s.lastVersion = expectedVersion
 	return s.deleteErr
+}
+
+type updateAgregadoStubStore struct {
+	stubStore
+	updateErr error
+}
+
+func (s *updateAgregadoStubStore) UpdateAgregadoWithRevision(_ context.Context, _ string, _ int64, _ *domain.Agregado, _ *string) error {
+	return s.updateErr
+}
+
+func agregadoByIDRequest(t *testing.T, server *Server, method string, body string, ifMatch string) *httptest.ResponseRecorder {
+	t.Helper()
+	var reader io.Reader
+	if body != "" {
+		reader = strings.NewReader(body)
+	}
+	req := withClaims(httptest.NewRequest(method, "/api/catalog/agregados/agr-1", reader), "user-1", string(domain.RoleAdmin))
+	req.SetPathValue("id", "agr-1")
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if ifMatch != "" {
+		req.Header.Set("If-Match", ifMatch)
+	}
+	rec := httptest.NewRecorder()
+	server.HandleAgregadoByID(rec, req)
+	return rec
+}
+
+// #1369 P2: the handler maps store failures by typed error, never by message
+// text — a failing store reads as 500, only the typed not-found reads as 404.
+func TestAgregadoByID_StoreErrorsMapByType(t *testing.T) {
+	putBody := `{"id":"agr-1","code":"AGR-1","name":"Uno"}`
+
+	t.Run("GET typed not-found → 404; any other store error → 500", func(t *testing.T) {
+		rec := agregadoByIDRequest(t, &Server{Store: &stubStore{agregadoGetByIDErr: storage.ErrAgregadoNotFound}}, http.MethodGet, "", "")
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("not found: status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		rec = agregadoByIDRequest(t, &Server{Store: &stubStore{agregadoGetByIDErr: errors.New("connection reset by peer")}}, http.MethodGet, "", "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("store failure: status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("PUT typed not-found → 404; version conflict → 412; other → 500", func(t *testing.T) {
+		rec := agregadoByIDRequest(t, &Server{Store: &updateAgregadoStubStore{updateErr: storage.ErrAgregadoNotFound}}, http.MethodPut, putBody, `"v1"`)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("not found: status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		rec = agregadoByIDRequest(t, &Server{Store: &updateAgregadoStubStore{updateErr: storage.ErrVersionConflict}}, http.MethodPut, putBody, `"v1"`)
+		if rec.Code != http.StatusPreconditionFailed {
+			t.Fatalf("version conflict: status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		rec = agregadoByIDRequest(t, &Server{Store: &updateAgregadoStubStore{updateErr: errors.New("revision insert: deadlock detected")}}, http.MethodPut, putBody, `"v1"`)
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("store failure: status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("DELETE typed not-found → 404; in use keeps the count → 409; other → 500", func(t *testing.T) {
+		rec := agregadoByIDRequest(t, &Server{Store: &deleteAgregadoStubStore{deleteErr: storage.ErrAgregadoNotFound}}, http.MethodDelete, "", "")
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("not found: status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		inUse := fmt.Errorf("%w: agregado in use by 2 módulo(s)", storage.ErrAgregadoInUse)
+		rec = agregadoByIDRequest(t, &Server{Store: &deleteAgregadoStubStore{deleteErr: inUse}}, http.MethodDelete, "", "")
+		if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "2 módulo(s)") {
+			t.Fatalf("in use: status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		rec = agregadoByIDRequest(t, &Server{Store: &deleteAgregadoStubStore{deleteErr: errors.New("connection reset by peer")}}, http.MethodDelete, "", "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("store failure: status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
 }
 
 func TestAgregadoDelete_HandlerSupportsOptionalIfMatch(t *testing.T) {

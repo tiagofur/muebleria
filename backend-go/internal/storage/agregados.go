@@ -13,6 +13,17 @@ import (
 
 // --- AGREGADOS (reusable sub-assemblies catalog entity) ---
 
+var (
+	// ErrAgregadoNotFound is the typed not-found of the agregados catalog so
+	// handlers can map it with errors.Is instead of matching the message text.
+	// The text stays the historical one the delete SQL function also raises.
+	ErrAgregadoNotFound = errors.New("agregado not found")
+	// ErrAgregadoInUse: delete_catalog_agregado refuses to cascade while modules,
+	// structures or published assembly snapshots still reference the agregado.
+	// The wrapped message keeps the referencing count the function reports.
+	ErrAgregadoInUse = errors.New("agregado in use")
+)
+
 func (s *PostgresStore) ListAgregados(ctx context.Context) ([]domain.Agregado, error) {
 	query := `
 		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, presentation_motion, current_revision_id, created_at, updated_at, version
@@ -50,7 +61,7 @@ func (s *PostgresStore) GetAgregadoByID(ctx context.Context, id string) (*domain
 	a, err := scanAgregado(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("agregado not found")
+			return nil, ErrAgregadoNotFound
 		}
 		return nil, err
 	}
@@ -129,7 +140,7 @@ func (s *PostgresStore) UpdateAgregado(ctx context.Context, id string, expectedV
 		return fmt.Errorf("error updating agregado: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return s.disambiguateRowNotFound(ctx, "agregados", id, fmt.Errorf("agregado not found"))
+		return s.disambiguateRowNotFound(ctx, "agregados", id, ErrAgregadoNotFound)
 	}
 	a.ID = id
 	a.Version = expectedVersion + 1
@@ -160,7 +171,7 @@ func (s *PostgresStore) DeactivateAgregado(ctx context.Context, id string, expec
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return s.disambiguateRowNotFound(ctx, "agregados", id, fmt.Errorf("agregado not found"))
+		return s.disambiguateRowNotFound(ctx, "agregados", id, ErrAgregadoNotFound)
 	}
 	return nil
 }
@@ -176,10 +187,13 @@ func (s *PostgresStore) DeleteAgregado(ctx context.Context, id string, expectedV
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "agregado not found") {
-			return fmt.Errorf("agregado not found")
+			return ErrAgregadoNotFound
 		}
 		if strings.Contains(msg, "agregado version conflict") {
 			return ErrVersionConflict
+		}
+		if strings.Contains(msg, "agregado in use") {
+			return fmt.Errorf("%w: %s", ErrAgregadoInUse, msg)
 		}
 		return err
 	}

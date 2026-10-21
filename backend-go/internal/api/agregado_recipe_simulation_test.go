@@ -10,6 +10,7 @@ import (
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // #1369 slice 1 — POST /api/catalog/agregados/{id}/recipe-change/simulate: a
@@ -198,10 +199,17 @@ func TestRecipeSimulation_UsesCurrentRevisionRecipe(t *testing.T) {
 
 func TestRecipeSimulation_ErrorsAreExplicit(t *testing.T) {
 	t.Run("404 when the agregado does not exist", func(t *testing.T) {
-		store := &stubStore{agregadoGetByIDErr: errors.New("agregado not found")}
+		store := &stubStore{agregadoGetByIDErr: storage.ErrAgregadoNotFound}
 		rr := recipeSimRequest(t, &Server{Store: store}, string(domain.RoleIngeniero), candidateJSON(t, func(*domain.Agregado) {}))
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("status = %d", rr.Code)
+		}
+	})
+	t.Run("500 when the store fails for another reason — never disguised as 404", func(t *testing.T) {
+		store := &stubStore{agregadoGetByIDErr: errors.New("connection reset by peer")}
+		rr := recipeSimRequest(t, &Server{Store: store}, string(domain.RoleIngeniero), candidateJSON(t, func(*domain.Agregado) {}))
+		if rr.Code != http.StatusInternalServerError {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 		}
 	})
 	t.Run("403 for a role that cannot mutate the catalog", func(t *testing.T) {

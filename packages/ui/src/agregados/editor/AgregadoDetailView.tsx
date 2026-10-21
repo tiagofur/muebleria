@@ -189,7 +189,9 @@ export function AgregadoDetailView({
     </p>
   ) : null;
 
-  // #1369: tarjeta «Receta» — visibilidad de la receta guardada sin abrir el editor.
+  // #1369: tarjeta «Receta» — visibilidad de la receta guardada sin abrir el
+  // editor. Vive en la columna secundaria junto a las dimensiones: es un
+  // resumen de referencia, no la composición que el usuario recorre.
   const recipeCard = (
     <section className="surface-card agregado-recipe-card" aria-label="Receta" data-testid="agregado-detail-recipe-card">
       <h3 className="eng-detail__panel-title">
@@ -207,7 +209,6 @@ export function AgregadoDetailView({
 
   const primary = (
     <>
-      {recipeCard}
       {/* Components */}
       <section className="surface-card surface-card--lg" aria-label="Piezas de tablero">
         <h3 className="eng-detail__panel-title">
@@ -295,32 +296,35 @@ export function AgregadoDetailView({
   );
 
   const secondary = (
-    <section className="surface-card" aria-label="Dimensiones externas">
-      <h3 className="eng-detail__panel-title">Dimensiones externas</h3>
-      <dl className="eng-detail__defs">
-        <div>
-          <dt>Ancho (W)</dt>
-          <dd>{a.externalDims?.width ?? '—'} mm</dd>
-        </div>
-        <div>
-          <dt>Alto (H)</dt>
-          <dd>{a.externalDims?.height ?? '—'} mm</dd>
-        </div>
-        <div>
-          <dt>Profundidad (D)</dt>
-          <dd>{a.externalDims?.depth ?? '—'} mm</dd>
-        </div>
-        <div data-testid="agregado-detail-apertura">
-          <dt>Apertura</dt>
-          <dd>{aperturaSummary(a)}</dd>
-        </div>
-      </dl>
-      {a.description && (
-        <p className="eng-detail__notes" style={{ marginTop: 12 }}>
-          {a.description}
-        </p>
-      )}
-    </section>
+    <>
+      <section className="surface-card" aria-label="Dimensiones externas">
+        <h3 className="eng-detail__panel-title">Dimensiones externas</h3>
+        <dl className="eng-detail__defs">
+          <div>
+            <dt>Ancho (W)</dt>
+            <dd>{a.externalDims?.width ?? '—'} mm</dd>
+          </div>
+          <div>
+            <dt>Alto (H)</dt>
+            <dd>{a.externalDims?.height ?? '—'} mm</dd>
+          </div>
+          <div>
+            <dt>Profundidad (D)</dt>
+            <dd>{a.externalDims?.depth ?? '—'} mm</dd>
+          </div>
+          <div data-testid="agregado-detail-apertura">
+            <dt>Apertura</dt>
+            <dd>{aperturaSummary(a)}</dd>
+          </div>
+        </dl>
+        {a.description && (
+          <p className="eng-detail__notes" style={{ marginTop: 12 }}>
+            {a.description}
+          </p>
+        )}
+      </section>
+      {recipeCard}
+    </>
   );
 
   return (

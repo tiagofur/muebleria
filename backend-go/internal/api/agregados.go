@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -65,6 +64,14 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		a, err := s.Store.GetAgregadoByID(r.Context(), id)
 		if err != nil {
+			if errors.Is(err, storage.ErrAgregadoNotFound) {
+				respondWithError(w, http.StatusNotFound, "agregado not found")
+				return
+			}
+			respondWithInternalError(w, err, "agregado get")
+			return
+		}
+		if a == nil {
 			respondWithError(w, http.StatusNotFound, "agregado not found")
 			return
 		}
@@ -92,7 +99,7 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 			createdBy = &claims.UserID
 		}
 		if err := s.Store.UpdateAgregadoWithRevision(r.Context(), id, expectedVersion, &a, createdBy); err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if errors.Is(err, storage.ErrAgregadoNotFound) {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
@@ -126,11 +133,11 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 			expectedVersion = v
 		}
 		if err := s.Store.DeleteAgregado(r.Context(), id, expectedVersion); err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if errors.Is(err, storage.ErrAgregadoNotFound) {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			if strings.Contains(err.Error(), "in use") {
+			if errors.Is(err, storage.ErrAgregadoInUse) {
 				respondWithError(w, http.StatusConflict, err.Error())
 				return
 			}
@@ -213,7 +220,17 @@ func (s *Server) HandleAgregadoRecipeSimulation(w http.ResponseWriter, r *http.R
 		return
 	}
 	current, err := s.Store.GetAgregadoByID(r.Context(), id)
-	if err != nil || current == nil {
+	if err != nil {
+		if errors.Is(err, storage.ErrAgregadoNotFound) {
+			respondWithError(w, http.StatusNotFound, "agregado not found")
+			return
+		}
+		// A failing store is not "no such agregado": the client must not be
+		// told the entity vanished when the server could not read it.
+		respondWithInternalError(w, err, "agregado recipe simulation")
+		return
+	}
+	if current == nil {
 		respondWithError(w, http.StatusNotFound, "agregado not found")
 		return
 	}
