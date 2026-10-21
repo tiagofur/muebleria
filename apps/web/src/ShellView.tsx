@@ -2367,6 +2367,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         />
       ) : null}
       {navId === 'addOns' ? (
+        // #1369 P2: el id viaja en la request que arma AgregadosScreen
+        // (saved.id, el agregado objetivo del modal). Sobrescribirlo acá con
+        // routeEntityId lo aplastaba a '' cuando la ruta no tenía entidad
+        // seleccionada y el simulate fallaba con «not found».
         <AgregadosScreen
           agregados={agregados}
           openAgregadoId={navId === 'addOns' ? routeEntityId : null}
@@ -2375,7 +2379,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           catalogHardware={hardware}
           onCreate={createAgregado}
           onUpdate={updateAgregado}
-          onSimulateRecipe={(req) => simulateAgregadoRecipe({ ...req, id: routeEntityId ?? '' })}
+          onSimulateRecipe={simulateAgregadoRecipe}
           onApplyRecipe={applyAgregadoRecipe}
           onDelete={deleteAgregado}
           onDuplicate={duplicateAgregado}
