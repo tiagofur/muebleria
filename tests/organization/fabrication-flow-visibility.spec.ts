@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 /**
  * #768 — browser E2E of the compact "Preparación para fabricar" stepper:
@@ -138,7 +138,7 @@ test.describe.serial('Preparación para fabricar: stepper compacto Ingeniería/P
         // BODY choice this spec provides. Sharding surfaced the coupling.
         ...catalog.modules,
         {
-          ...template,
+          ...moduleCreatePayload(template),
           id: FLOW_MODULE,
           code: 'FLOW-768',
           name: 'Módulo Flujo 768',

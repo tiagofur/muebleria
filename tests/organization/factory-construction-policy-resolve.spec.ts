@@ -24,7 +24,7 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { ensurePublishedStandardRelease, putWorkingCopyCurrent, required } from './support/api';
+import { ensurePublishedStandardRelease, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 const apiBase = required('ORGANIZATION_API_BASE');
 
@@ -384,7 +384,7 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
       modules: [
         ...catalog.modules.filter((m) => m.id !== FREEZE_MODULE),
         {
-          ...catalog.modules[0]!,
+          ...moduleCreatePayload(catalog.modules[0]!),
           id: FREEZE_MODULE,
           code: 'FRZ-GAB-600',
           name: 'Gabinete Congelado 600',

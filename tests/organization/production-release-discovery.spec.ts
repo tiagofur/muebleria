@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { Client } from 'pg';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { putWorkingCopyCurrent, required } from './support/api';
+import { putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 const STRUCTURE_ID = '89800000-0000-4000-8000-000000000001';
 const HARDWARE_ID = '89800000-0000-4000-8000-000000000002';
@@ -127,7 +127,7 @@ async function prepareCatalog(): Promise<number> {
       }],
     modules: [
       {
-        ...template,
+        ...moduleCreatePayload(template),
         id: MODULE_ID,
         code: MODULE_CODE,
         name: 'Discovery P1 module',

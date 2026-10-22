@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 // #1263 — the opening BOM vertical walk against the real backend: select a
 // gola (Cymisa 8006 datasheet slice) on a design, save the intent, resolve
@@ -143,7 +143,7 @@ test('1263: gola selection resolves its BOM and the quote freezes it with exact 
     modules: [
       ...catalog.modules,
       {
-        ...template,
+        ...moduleCreatePayload(template),
         id: OPENING_MODULE_ID,
         code: '1263-GOLA',
         name: 'Gabinete gola 1263',

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { inflateRawSync } from 'node:zlib';
 import { parseKdtPanelBytes } from '@granete/excel';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 /**
  * #1070 browser E2E — the «Descargar programas KDT (.zip)» button never dies
@@ -240,7 +240,7 @@ test.describe.serial('Descarga de programas KDT nunca queda muda (#1070)', () =>
           // Structure module (the proven quote→release path); the hinge
           // placement rides the MODULE-level component instance overrides
           // ("mod-" boards also expand on structure modules).
-          ...template,
+          ...moduleCreatePayload(template),
           id: MODULE_ID,
           code: 'KDT-1070',
           name: 'Módulo KDT 1070',

@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { expect, test, type Download, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 /**
  * #740 PR 1 — browser E2E of the DURABLE per-release Engineering state:
@@ -160,7 +160,7 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
         // this spec quotes its own module; later residents quote the seed.
         ...catalog.modules,
         {
-          ...template,
+          ...moduleCreatePayload(template),
           id: STATE_MODULE,
           code: 'ENG-740-STATE-MOD',
           name: 'Módulo Estado Ingeniería 740',

@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { expect, test, type Page, type Request } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 /**
  * #642 / 2A browser E2E against the real Go backend + PostgreSQL (no mocks
@@ -72,7 +72,7 @@ async function prepareListFixture(): Promise<SeedListFixture> {
     hardware: [...catalog.hardware, { id: REC_HW, code: 'LIST-HW', name: 'Herraje', unit: 'piece', costPerUnit: 10, active: true }],
     modules: [
       {
-        ...template,
+        ...moduleCreatePayload(template),
         id: GATE_MODULE_A_ID,
         structureId: REC_STRUCT,
         components: [],
