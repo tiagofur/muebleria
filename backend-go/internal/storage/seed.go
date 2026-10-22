@@ -1390,7 +1390,11 @@ func ensureDespensaModule(ctx context.Context, tx pgx.Tx, org string, now time.T
 	// No module preset on purpose (like MOD-GAB-01 / MOD-CAJ-01): the resolve
 	// falls back to externalDims, and the browser specs clone the catalog's
 	// first module (by name — this one when the demo GAB/CAJ are gone) as a
-	// template WITHOUT dropping preset ids, so a seeded preset here collides
-	// on module_presets at CreateModule.
+	// template; dragging seeded preset ids collided on module_presets at
+	// CreateModule (#1398 — the specs now use moduleCreatePayload and the
+	// collision answers a typed 409, but the seed stays preset-free anyway).
+	// Guard edge (documented, intentional): a MOD-DES-001 whose
+	// parameter_definitions is NULL or empty does NOT count as workshop-owned
+	// above, so this seed still grafts the demo parameter on upgrade.
 	return nil
 }

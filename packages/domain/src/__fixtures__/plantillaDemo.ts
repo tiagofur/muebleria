@@ -1276,6 +1276,10 @@ export const seedModDespensa: Module = {
       binding: { version: 1, kind: 'componentQuantity', componentId: 'comp-despensa-entrepano' },
     },
   ],
+  // El preset se conserva SOLO en este fixture TS (preview/demo del editor);
+  // el seed Go siembra MOD-DES-001 sin presets a propósito — divergencia
+  // intencional, no drift (#1398): los ids de presets son identidad del
+  // cliente y un clon de plantilla no debe arrastrarlos.
   presets: [
     { id: 'des-preset-2100', name: 'Alto 2100', width: 600, height: 2100, depth: 600 },
   ],

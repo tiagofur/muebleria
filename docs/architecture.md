@@ -662,6 +662,28 @@ asumido es de UX, no de corrección: en red floja un reintento de algo que ya se
 guardó aparece como conflicto que se reconcilia solo; si eso molesta, cablear
 `RequireIdempotency` en `routes_catalog.go` es la mejora, no un cambio de contrato.
 
+**Ids de filas hijas del módulo (decisión #1398, 2026-10-21):** los ids de
+`presets`, `hardware_lines` y `board_parts` son identidad del CLIENTE. En
+create/update, un UUID válido se honra tal cual; un id vacío o no-UUID lo
+genera el servidor. Los presets son identidad estable a propósito:
+`project_items.measure_preset_id` los referencia y deben sobrevivir las
+ediciones del módulo. Unicidad la impone la base: un cliente que clona otro
+módulo como plantilla SIN quitar los ids de sus filas hijas choca con la PK y
+recibe 409 tipado que nombra las filas hijas (no el código del módulo, no un
+500). Relacionado: cuando un statement falla a mitad del handler, la
+transacción del tenant queda abortada y el `COMMIT` final del middleware
+falla ("commit unexpectedly resulted in rollback"); en ese caso el middleware
+entrega la respuesta 4xx que el handler ya renderizó (la transacción se
+revierte igual y nada posterior al statement pudo escribirse) y registra el
+fallo — un fallo de commit bajo una respuesta 2xx/5xx sigue siendo 500.
+Consecuencia para los tests de browser: no clonar `catalog.modules[0]` a
+crudo; usar `moduleCreatePayload` (`tests/organization/support/api.ts`), que
+desnuda los ids de las filas hijas. Pruebas:
+`backend-go/internal/api/modules_child_row_conflict_test.go`,
+`backend-go/internal/storage/module_child_row_ids_test.go`,
+`backend-go/internal/api/middleware_test.go`
+(`TestAuthMiddleware_FlushesRendered4xxWhenCommitRolledBack`).
+
 ### Commands
 
 Acciones sensibles usan endpoints/servicios explícitos:
