@@ -183,27 +183,46 @@ test('logout en una pestaña corta la sesión compartida: la otra termina en log
   await expect(tabB.locator('.app-topbar__organization-text strong')).toHaveCount(0);
 });
 
-test('FAIL CLOSED sin Web Locks: la rotación se rechaza aunque IndexedDB exista (sin fallback de lease)', async ({ page }) => {
-  // Login normal: el shell renderiza y la sesión queda activa en memoria.
-  await login(page);
+test('FAIL CLOSED sin Web Locks: la rotación se rechaza aunque IndexedDB exista (sin fallback de lease)', async ({ context }) => {
+  // #460 segunda revisión: navigator.locks es el ÚNICO mecanismo de
+  // exclusión aceptado. Sin él, refresh/logout/select-org fail closed — no
+  // existe fallback de lease (TTL) cuyo takeover pudiera re-crear dos
+  // mutaciones coexistentes (falso REFRESH_REUSED).
+  await context.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'locks', {
+      configurable: true,
+      get: () => undefined,
+    });
+  });
 
   const refreshRequests: string[] = [];
+  const page = await context.newPage();
   page.on('request', (request) => {
     if (new URL(request.url()).pathname.endsWith('/auth/refresh')) {
       refreshRequests.push(request.url());
     }
   });
 
-  // #460 segunda revisión: navigator.locks es el ÚNICO mecanismo de
-  // exclusión aceptado. Sin él, refresh/logout fail closed — no
-  // existe fallback de lease (TTL) cuyo takeover pudiera re-crear dos
-  // mutaciones coexistentes (falso REFRESH_REUSED).
-  await page.evaluate(() => {
-    Object.defineProperty(Navigator.prototype, 'locks', {
-      configurable: true,
-      get: () => undefined,
-    });
-  });
+  // Login con el OWNER de Browser Gate A (membresía única → sin select-org,
+  // que también corre bajo el lock). El login mismo no usa lock: la sesión
+  // queda en memoria y el shell renderiza. El owner vuelve a ser
+  // single-membership porque las orgs del spec de entitlement usan su
+  // usuario admin dedicado (#460).
+  await page.goto('/');
+  await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_A_OWNER_EMAIL'));
+  await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  const chooser = page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' });
+  if (await chooser.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await page.getByRole('button', { name: /Browser Gate A/ }).click();
+  }
+  await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A', { timeout: 15_000 });
+  // Membresía única: el chooser no participa en este login — si volviera a
+  // aparecer (regresión multi-membresía), select-org correría con locks
+  // deshabilitados y fallaría closed antes de alcanzar el topbar.
+  await expect(chooser).toHaveCount(0);
+  const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
+  if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 
   // IndexedDB está DISPONIBLE y aún así no se usa como fallback.
   expect(await page.evaluate(() => typeof indexedDB)).toBe('object');
@@ -216,7 +235,9 @@ test('FAIL CLOSED sin Web Locks: la rotación se rechaza aunque IndexedDB exista
   });
 
   // Sin primitiva segura la mutación NO se ejecuta: no hubo rotación alguna
-  // (fail closed) — el access local sigue y el server quedó intacto.
+  // (fail closed) — el access local sigue y el server quedó intacto. La
+  // captura cubre TODO el flujo (desde antes de la navegación): cero
+  // requests a /auth/refresh en toda la sesión sin locks.
   expect(outcome).not.toBe('refreshed');
   expect(refreshRequests).toHaveLength(0);
 });
