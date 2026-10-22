@@ -1,7 +1,7 @@
 {
   "default_seconds": 20.0,
   "files": {
-    "tests/organization/agregado-recipe-change.spec.ts": 30.6,
+    "tests/organization/agregado-recipe-change.spec.ts": 37.3,
     "tests/organization/bootstrap.spec.ts": 1.8,
     "tests/organization/demo-flow-happy-path.spec.ts": 7.9,
     "tests/organization/demo-golden-path.spec.ts": 21.3,
@@ -41,6 +41,6 @@
     "tests/organization/switch.spec.ts": 9.2,
     "tests/organization/webauth.spec.ts": 25.6
   },
-  "measured_from": "CI run 37052922890 (PR #970, 105 tests, 9.6m, workers:1)",
+  "measured_from": "CI run 37052922890 (PR #970, 105 tests, 9.6m, workers:1); agregado-recipe-change.spec.ts re-medido en la corrida final de PR #1380 (37.3 s)",
   "schema": 1
 }
