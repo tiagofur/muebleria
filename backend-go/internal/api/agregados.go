@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,21 +16,15 @@ import (
 func (s *Server) HandleAgregados(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		list, err := s.Store.ListAgregados(r.Context())
+		// #1369/#1393: filas + receta vigente en UNA transacción. Antes la
+		// hidratación pagaba un runInTenantTx POR agregado (N+1 de
+		// transacciones); un error real de lectura sigue invalidando TODA la
+		// lista — servir agregados con la receta silenciosamente vacía haría
+		// que el próximo guardado borre la receta (variante del bug #1052).
+		list, err := s.Store.ListAgregadosWithRecipes(r.Context())
 		if err != nil {
 			respondWithInternalError(w, err, "agregados list")
 			return
-		}
-		// #1369: la receta vigente vive en la revisión actual — hidratar para
-		// que la UI (pestaña Receta, modal, preview) la vea completa.
-		for i := range list {
-			if err := hydrateAgregadoRecipe(&list[i], s.Store, r.Context()); err != nil {
-				// Un error real de lectura invalida TODA la lista: servir
-				// agregados con la receta silenciosamente vacía haría que el
-				// próximo guardado borre la receta (variante del bug #1052).
-				respondWithInternalError(w, err, "agregados list recipe hydrate")
-				return
-			}
 		}
 		respondWithJSON(w, http.StatusOK, list)
 
@@ -68,7 +61,13 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		a, err := s.Store.GetAgregadoByID(r.Context(), id)
+		// #1369/#1393: fila + receta vigente en UNA transacción — la lectura
+		// separada dejaba una ventana donde un PUT concurrente servía versión
+		// vieja con receta nueva. Sin receta visible la UI muestra «0
+		// miembros» y el próximo PUT (If-Match aún válido) guardaría la receta
+		// vacía: un fallo real de lectura es 500, nunca un agregado que mintió
+		// sobre su propia receta.
+		a, err := s.Store.GetAgregadoByIDWithRecipe(r.Context(), id)
 		if err != nil {
 			if errors.Is(err, storage.ErrAgregadoNotFound) {
 				respondWithError(w, http.StatusNotFound, "agregado not found")
@@ -79,14 +78,6 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 		}
 		if a == nil {
 			respondWithError(w, http.StatusNotFound, "agregado not found")
-			return
-		}
-		// #1369: hidratar la receta vigente desde la revisión (ver simulate).
-		if err := hydrateAgregadoRecipe(a, s.Store, r.Context()); err != nil {
-			// Sin receta visible la UI muestra «0 miembros» y el próximo PUT
-			// (If-Match aún válido) guardaría la receta vacía: 500, nunca un
-			// agregado que mintió sobre su propia receta.
-			respondWithInternalError(w, err, "agregado get recipe hydrate")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, a)
@@ -167,40 +158,6 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// --- #1369: hidratación de la receta vigente ---
-
-// hydrateAgregadoRecipe reemplaza los campos de receta del agregado por los de
-// su revisión actual, preservando identidad, versión, estado y auditoría. La
-// receta vive SOLO en agregado_revisions (la fila del catálogo no la trae).
-//
-// ErrAgregadoRevisionNotFound es el único «sin receta, queda tal cual»; cualquier
-// otro error (conexión, JSONB corrupto) vuelve al caller: responder el agregado
-// con la receta vacía haría que el próximo PUT la borre en silencio y que el
-// simulate produzca un diff falso.
-func hydrateAgregadoRecipe(a *domain.Agregado, store CatalogStore, ctx context.Context) error {
-	rev, err := store.GetAgregadoCurrentRevision(ctx, a.ID)
-	if err != nil {
-		if errors.Is(err, domain.ErrAgregadoRevisionNotFound) {
-			return nil // agregado sin receta: queda tal cual
-		}
-		return err
-	}
-	if rev == nil {
-		return nil
-	}
-	keptVersion, keptActive := a.Version, a.Active
-	keptRevID := a.CurrentRevisionID
-	recipe := rev.Recipe.ToAgregado(a.ID, a.Code, a.Name)
-	a.RigidMembers, a.VariantSets = recipe.RigidMembers, recipe.VariantSets
-	a.CompatibilityRules = recipe.CompatibilityRules
-	a.Components = recipe.Components
-	a.HardwareLines = recipe.HardwareLines
-	a.CommercialKitHardwareID = recipe.CommercialKitHardwareID
-	a.WidthMm, a.HeightMm, a.DepthMm = recipe.WidthMm, recipe.HeightMm, recipe.DepthMm
-	a.Version, a.Active, a.CurrentRevisionID = keptVersion, keptActive, keptRevID
-	return nil
-}
-
 // --- #1369 slice 1: recipe change simulation (dry-run) ---
 
 // recipeChangeSimulationRequest is the wire body of the dry-run. The candidate
@@ -243,28 +200,25 @@ func (s *Server) HandleAgregadoRecipeSimulation(w http.ResponseWriter, r *http.R
 	if !decodeJSONBody(w, r, &req) {
 		return
 	}
-	current, err := s.Store.GetAgregadoByID(r.Context(), id)
+	// #1369/#1393: la receta vigente llega con la fila en la misma transacción
+	// — sin esta hidratación el simulate vería una receta vacía y el diff no
+	// describiría el cambio real; la lectura separada además mezclaba estado
+	// frente a un PUT concurrente.
+	current, err := s.Store.GetAgregadoByIDWithRecipe(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, storage.ErrAgregadoNotFound) {
 			respondWithError(w, http.StatusNotFound, "agregado not found")
 			return
 		}
 		// A failing store is not "no such agregado": the client must not be
-		// told the entity vanished when the server could not read it.
+		// told the entity vanished when the server could not read it. Un fallo
+		// de lectura tampoco es una receta vacía: el diff sobre un «current»
+		// inventado sería falso (todo «added»).
 		respondWithInternalError(w, err, "agregado recipe simulation")
 		return
 	}
 	if current == nil {
 		respondWithError(w, http.StatusNotFound, "agregado not found")
-		return
-	}
-	// #1369 (verificación en DB real): la receta vigente vive en la revisión
-	// actual, no en la fila del catálogo — sin esta hidratación el simulate
-	// ve una receta vacía y el diff no describe el cambio real.
-	if err := hydrateAgregadoRecipe(current, s.Store, r.Context()); err != nil {
-		// Un fallo de lectura no es una receta vacía: el diff sobre un
-		// «current» inventado sería falso (todo «added»).
-		respondWithInternalError(w, err, "agregado recipe simulation")
 		return
 	}
 

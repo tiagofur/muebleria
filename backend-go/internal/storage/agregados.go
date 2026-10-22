@@ -68,6 +68,74 @@ func (s *PostgresStore) GetAgregadoByID(ctx context.Context, id string) (*domain
 	return &a, nil
 }
 
+// agregadosWithRecipeQuery projects the catalog rows together with the JSONB
+// recipe of the current revision in one statement (#1369). The LEFT JOIN keeps
+// the recipe-less agregados (NULL current_revision_id) — a revision referenced
+// but missing cannot exist (fk_agregados_current_revision) and would read as
+// the same legitimate recipe-less case, never as an invented empty recipe.
+const agregadosWithRecipeQuery = `
+	SELECT a.id, a.code, a.name, a.description, a.notes, a.width_mm, a.height_mm, a.depth_mm,
+	       a.components, a.hardware_lines, a.active, a.presentation_motion, a.current_revision_id,
+	       a.created_at, a.updated_at, a.version,
+	       r.recipe
+	FROM agregados a
+	LEFT JOIN agregado_revisions r
+	       ON r.id = a.current_revision_id
+	      AND r.organization_id = a.organization_id
+	      AND r.agregado_id = a.id
+`
+
+// ListAgregadosWithRecipes lists the catalog rows with their current recipes
+// in ONE tenant transaction (#1369): the list endpoint used to pay one
+// runInTenantTx per agregado for the hydration. Errors map exactly like the
+// single-row hydration did (#1399): no recipe → row as-is, real read failure
+// (including a corrupt recipe JSONB) → the error propagates.
+func (s *PostgresStore) ListAgregadosWithRecipes(ctx context.Context) ([]domain.Agregado, error) {
+	return runInTenantTx(s, ctx, func(ctx context.Context) ([]domain.Agregado, error) {
+		rows, err := s.db(ctx).Query(ctx, agregadosWithRecipeQuery+`
+			WHERE a.organization_id = $1
+			ORDER BY a.name ASC, a.id ASC;
+		`, OrgFromCtx(ctx))
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		var list []domain.Agregado
+		for rows.Next() {
+			a, err := scanAgregadoWithCurrentRecipe(rows)
+			if err != nil {
+				return nil, err
+			}
+			list = append(list, a)
+		}
+		if list == nil {
+			list = []domain.Agregado{}
+		}
+		return list, rows.Err()
+	})
+}
+
+// GetAgregadoByIDWithRecipe reads the agregado row and its current recipe in
+// ONE tenant transaction (#1369): the separate row read + revision read let a
+// concurrent PUT serve the old row with the new recipe. Not-found keeps the
+// typed sentinel; recipe semantics are #1399's (see scanAgregadoWithCurrentRecipe).
+func (s *PostgresStore) GetAgregadoByIDWithRecipe(ctx context.Context, id string) (*domain.Agregado, error) {
+	return runInTenantTx(s, ctx, func(ctx context.Context) (*domain.Agregado, error) {
+		row := s.db(ctx).QueryRow(ctx, agregadosWithRecipeQuery+`
+			WHERE a.organization_id = $1 AND a.id = $2;
+		`, OrgFromCtx(ctx), id)
+		a, err := scanAgregadoWithCurrentRecipe(row)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, ErrAgregadoNotFound
+			}
+			return nil, err
+		}
+		return &a, nil
+	})
+}
+
 func (s *PostgresStore) CreateAgregado(ctx context.Context, a *domain.Agregado) error {
 	componentsJSON, err := json.Marshal(a.Components)
 	if err != nil {
@@ -210,44 +278,87 @@ func marshalPresentationMotion(m map[string]any) ([]byte, error) {
 }
 
 func scanAgregado(r rowScanner) (domain.Agregado, error) {
-	var a domain.Agregado
-	var desc *string
-	var notes *string
-	var componentsRaw []byte
-	var hwLinesRaw []byte
-	var presentationMotionRaw []byte
-	err := r.Scan(
-		&a.ID, &a.Code, &a.Name, &desc, &notes, &a.WidthMm, &a.HeightMm, &a.DepthMm, &componentsRaw, &hwLinesRaw, &a.Active,
-		&presentationMotionRaw, &a.CurrentRevisionID, &a.CreatedAt, &a.UpdatedAt,
-		&a.Version,
-	)
-	if err != nil {
-		return a, err
+	var s agregadoRowScan
+	if err := r.Scan(s.dests()...); err != nil {
+		return s.a, err
 	}
-	if desc != nil {
-		a.Description = *desc
+	return s.finalize()
+}
+
+// agregadoRowScan carries the positional destinations of the agregados
+// projection shared by every read so the plain and the recipe-hydrated
+// (#1369) scans can never drift apart.
+type agregadoRowScan struct {
+	a                     domain.Agregado
+	desc                  *string
+	notes                 *string
+	componentsRaw         []byte
+	hwLinesRaw            []byte
+	presentationMotionRaw []byte
+}
+
+func (s *agregadoRowScan) dests() []any {
+	return []any{
+		&s.a.ID, &s.a.Code, &s.a.Name, &s.desc, &s.notes,
+		&s.a.WidthMm, &s.a.HeightMm, &s.a.DepthMm,
+		&s.componentsRaw, &s.hwLinesRaw, &s.a.Active,
+		&s.presentationMotionRaw, &s.a.CurrentRevisionID, &s.a.CreatedAt, &s.a.UpdatedAt,
+		&s.a.Version,
 	}
-	if notes != nil {
-		a.Notes = *notes
+}
+
+func (s *agregadoRowScan) finalize() (domain.Agregado, error) {
+	a := &s.a
+	if s.desc != nil {
+		a.Description = *s.desc
 	}
-	if len(componentsRaw) > 0 {
-		_ = json.Unmarshal(componentsRaw, &a.Components)
+	if s.notes != nil {
+		a.Notes = *s.notes
+	}
+	if len(s.componentsRaw) > 0 {
+		_ = json.Unmarshal(s.componentsRaw, &a.Components)
 	}
 	if a.Components == nil {
 		a.Components = []domain.ComponentInstance{}
 	}
-	if len(hwLinesRaw) > 0 {
-		_ = json.Unmarshal(hwLinesRaw, &a.HardwareLines)
+	if len(s.hwLinesRaw) > 0 {
+		_ = json.Unmarshal(s.hwLinesRaw, &a.HardwareLines)
 	}
 	if a.HardwareLines == nil {
 		a.HardwareLines = []domain.HardwareLine{}
 	}
 	// #529 presentation kinematics: jsonb guarantees valid JSON; a non-object
 	// payload is an honest storage error, never silently dropped.
-	if len(presentationMotionRaw) > 0 && string(presentationMotionRaw) != "null" {
-		if err := json.Unmarshal(presentationMotionRaw, &a.PresentationMotion); err != nil {
-			return a, fmt.Errorf("decoding agregado presentation_motion: %w", err)
+	if len(s.presentationMotionRaw) > 0 && string(s.presentationMotionRaw) != "null" {
+		if err := json.Unmarshal(s.presentationMotionRaw, &a.PresentationMotion); err != nil {
+			return *a, fmt.Errorf("decoding agregado presentation_motion: %w", err)
 		}
+	}
+	return *a, nil
+}
+
+// scanAgregadoWithCurrentRecipe reads the agregados row plus the JSONB recipe
+// of its current revision (LEFT JOIN, same row). #1399 semantics: no current
+// revision is the legitimate recipe-less case and leaves the row as-is; any
+// other failure — connection, a recipe JSONB that no longer unmarshals — is a
+// real error and propagates (never a silently empty recipe).
+func scanAgregadoWithCurrentRecipe(r rowScanner) (domain.Agregado, error) {
+	var s agregadoRowScan
+	var recipeRaw []byte
+	dests := append(s.dests(), &recipeRaw)
+	if err := r.Scan(dests...); err != nil {
+		return s.a, err
+	}
+	a, err := s.finalize()
+	if err != nil {
+		return a, err
+	}
+	if len(recipeRaw) > 0 {
+		var payload domain.AgregadoRecipePayload
+		if err := json.Unmarshal(recipeRaw, &payload); err != nil {
+			return a, fmt.Errorf("unmarshal agregado recipe: %w", err)
+		}
+		a.ApplyRecipe(payload)
 	}
 	return a, nil
 }
