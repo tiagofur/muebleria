@@ -338,15 +338,15 @@ func (s *PostgresStore) loadCatalogModuleDetails(ctx context.Context, m *domain.
 		return err
 	}
 	pRows.Close()
-	hRows, err := s.db(ctx).Query(ctx, `SELECT id, quantity, description_override, option_role, hardware_id FROM hardware_lines WHERE module_id = $1 AND organization_id = $2`, m.ID, OrgFromCtx(ctx))
+	hRows, err := s.db(ctx).Query(ctx, `SELECT id, quantity, description_override, option_role, hardware_id, component_id FROM hardware_lines WHERE module_id = $1 AND organization_id = $2`, m.ID, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
 	defer hRows.Close()
 	for hRows.Next() {
 		var hl domain.HardwareLine
-		var desc, hwID *string
-		if err := hRows.Scan(&hl.ID, &hl.Quantity, &desc, &hl.OptionRole, &hwID); err != nil {
+		var desc, hwID, compID *string
+		if err := hRows.Scan(&hl.ID, &hl.Quantity, &desc, &hl.OptionRole, &hwID, &compID); err != nil {
 			return err
 		}
 		if desc != nil {
@@ -354,6 +354,9 @@ func (s *PostgresStore) loadCatalogModuleDetails(ctx context.Context, m *domain.
 		}
 		if hwID != nil {
 			hl.HardwareID = *hwID
+		}
+		if compID != nil {
+			hl.ComponentID = *compID
 		}
 		m.HardwareLines = append(m.HardwareLines, hl)
 	}

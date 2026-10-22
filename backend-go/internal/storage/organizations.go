@@ -175,6 +175,21 @@ func jsonbRemapKey(col, key, mapTable string) string {
 		FROM jsonb_array_elements(s.%[1]s) el), '[]'::jsonb) END`, col, key, mapTable)
 }
 
+// jsonbRemapHardwareLineLinks remaps BOTH catalog references carried by an
+// agregado's JSONB hardware_lines array: the concrete hardware (#442) and the
+// per-copy component link (#1394). A link that survives provisioning must
+// point at the NEW organization's component copy — keeping the source id
+// would leave a cross-org link the BOM silently reads as zero copies.
+func jsonbRemapHardwareLineLinks(col string) string {
+	return fmt.Sprintf(`CASE WHEN s.%[1]s IS NULL THEN NULL ELSE COALESCE((
+		SELECT jsonb_agg(jsonb_set(
+			jsonb_set(el, '{hardware_id}',
+				COALESCE((SELECT to_jsonb(hm.new_id::text) FROM tmp_hw hm WHERE hm.old_id::text = el->>'hardware_id'), el->'hardware_id')),
+			'{component_id}',
+			COALESCE((SELECT to_jsonb(cm.new_id::text) FROM tmp_comp cm WHERE cm.old_id::text = el->>'component_id'), el->'component_id')))
+		FROM jsonb_array_elements(s.%[1]s) el), '[]'::jsonb) END`, col)
+}
+
 func jsonbRemapParameterDefinitionComponents(col, mapTable string) string {
 	return fmt.Sprintf(`CASE WHEN s.%[1]s IS NULL THEN NULL ELSE COALESCE((
 		SELECT jsonb_agg(
@@ -342,7 +357,7 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 				s.width_mm, s.height_mm, s.depth_mm, %s
 			FROM agregados s JOIN tmp_agr m ON m.old_id = s.id`,
 			jsonbRemapKey("components", "componentId", "tmp_comp"),
-			jsonbRemapKey("hardware_lines", "hardware_id", "tmp_hw"))},
+			jsonbRemapHardwareLineLinks("hardware_lines"))},
 		{"ambient_materials", 2, `INSERT INTO ambient_materials (id, organization_id, code, name, active, surface_type, preview_color,
 				preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness,
 				preview_metalness, preview_clearcoat, category_id)
@@ -406,11 +421,12 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 			SELECT gen_random_uuid(), $2, mm.new_id, s.code, s.description, s.quantity, s.length_mm, s.width_mm, s.option_role,
 				s.edge_l1, s.edge_l2, s.edge_w1, s.edge_w2
 			FROM board_parts s JOIN tmp_modules mm ON mm.old_id = s.module_id`},
-		{"hardware_lines", 1, `INSERT INTO hardware_lines (id, organization_id, module_id, quantity, description_override, option_role, hardware_id)
-			SELECT gen_random_uuid(), $2, mm.new_id, s.quantity, s.description_override, s.option_role, hm.new_id
+		{"hardware_lines", 1, `INSERT INTO hardware_lines (id, organization_id, module_id, quantity, description_override, option_role, hardware_id, component_id)
+			SELECT gen_random_uuid(), $2, mm.new_id, s.quantity, s.description_override, s.option_role, hm.new_id, cm.new_id
 			FROM hardware_lines s
 			JOIN tmp_modules mm ON mm.old_id = s.module_id
-			LEFT JOIN tmp_hw hm ON hm.old_id = s.hardware_id`},
+			LEFT JOIN tmp_hw hm ON hm.old_id = s.hardware_id
+			LEFT JOIN tmp_comp cm ON cm.old_id = s.component_id`},
 		{"module_components", 1, `INSERT INTO module_components (id, organization_id, module_id, component_id, quantity, placement_override,
 				length_formula, width_formula, overrides)
 			SELECT gen_random_uuid(), $2, mm.new_id, cm.new_id, s.quantity, s.placement_override,
