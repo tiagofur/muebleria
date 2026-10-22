@@ -176,7 +176,9 @@ func TestGetFullCatalogParameterDefinitionsStayTenantScoped(t *testing.T) {
 
 func TestModuleParameterDefinitionsStorageRoundTrip(t *testing.T) {
 	pool := multiOrgFreshMigrationDB(t)
-	identityApplyThrough(t, pool, 142)
+	// 168: storage CreateModule/UpdateModule writes hardware_lines.component_id
+	// (#1394) — the partial schema must include the column the layer writes.
+	identityApplyThrough(t, pool, 168)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
 	min, max, step := 0.0, 5.0, 1.0
@@ -271,7 +273,9 @@ func TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions(t *testing.T) 
 	for index, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			pool := multiOrgFreshMigrationDB(t)
-			identityApplyThrough(t, pool, 142)
+			// 168: storage CreateModule/UpdateModule writes hardware_lines.component_id
+			// (#1394) — the partial schema must include the column the layer writes.
+			identityApplyThrough(t, pool, 168)
 			store := &storage.PostgresStore{Pool: pool}
 			ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
 

@@ -17550,6 +17550,9 @@
           },
           "hardware_id": {
             "type": "string"
+          },
+          "component_id": {
+            "type": "string"
           }
         },
         "required": [

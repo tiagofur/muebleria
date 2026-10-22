@@ -297,7 +297,7 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	}
 
 	// HardwareLines
-	hwQuery := `SELECT id, quantity, description_override, option_role, hardware_id FROM hardware_lines WHERE module_id = $1 AND organization_id = $2`
+	hwQuery := `SELECT id, quantity, description_override, option_role, hardware_id, component_id FROM hardware_lines WHERE module_id = $1 AND organization_id = $2`
 	hRows, err := s.db(ctx).Query(ctx, hwQuery, m.ID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
@@ -308,13 +308,17 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 		var hl domain.HardwareLine
 		var desc *string
 		var hwID *string
-		err := hRows.Scan(&hl.ID, &hl.Quantity, &desc, &hl.OptionRole, &hwID)
+		var compID *string
+		err := hRows.Scan(&hl.ID, &hl.Quantity, &desc, &hl.OptionRole, &hwID, &compID)
 		if err == nil {
 			if desc != nil {
 				hl.DescriptionOverride = *desc
 			}
 			if hwID != nil {
 				hl.HardwareID = *hwID
+			}
+			if compID != nil {
+				hl.ComponentID = *compID
 			}
 			m.HardwareLines = append(m.HardwareLines, hl)
 		}
@@ -435,6 +439,14 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		if hl.HardwareID != "" && isValidUUID(hl.HardwareID) {
 			hwID = hl.HardwareID
 		}
+		// #1394: the per-copy component link is written as-is when declared —
+		// no silent NULL coercion (a dropped link would quietly turn a
+		// per-copy line fixed); a malformed or foreign id fails loudly on the
+		// components FK.
+		var compID interface{} = nil
+		if strings.TrimSpace(hl.ComponentID) != "" {
+			compID = hl.ComponentID
+		}
 
 		hlID := hl.ID
 		if !isValidUUID(hlID) {
@@ -442,17 +454,17 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		}
 		if hlID == "" {
 			hwLineQuery := `
-				INSERT INTO hardware_lines (module_id, quantity, description_override, option_role, hardware_id, organization_id)
-				VALUES ($1, $2, $3, $4, $5, $6)
+				INSERT INTO hardware_lines (module_id, quantity, description_override, option_role, hardware_id, component_id, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, hwLineQuery, m.ID, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, OrgFromCtx(ctx)).Scan(&hl.ID)
+			err = tx.QueryRow(ctx, hwLineQuery, m.ID, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, compID, OrgFromCtx(ctx)).Scan(&hl.ID)
 		} else {
 			hwLineQuery := `
-				INSERT INTO hardware_lines (id, module_id, quantity, description_override, option_role, hardware_id, organization_id)
-				VALUES ($1, $2, $3, $4, $5, $6, $7);
+				INSERT INTO hardware_lines (id, module_id, quantity, description_override, option_role, hardware_id, component_id, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 			`
-			_, err = tx.Exec(ctx, hwLineQuery, hlID, m.ID, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, OrgFromCtx(ctx))
+			_, err = tx.Exec(ctx, hwLineQuery, hlID, m.ID, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, compID, OrgFromCtx(ctx))
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting hardware line: %w", err)
@@ -617,23 +629,29 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, expectedVer
 		if hl.HardwareID != "" && isValidUUID(hl.HardwareID) {
 			hwID = hl.HardwareID
 		}
+		// #1394: same no-silent-NULL rule as CreateModule — the FK owns the
+		// loud failure for malformed or foreign component ids.
+		var compID interface{} = nil
+		if strings.TrimSpace(hl.ComponentID) != "" {
+			compID = hl.ComponentID
+		}
 		hlID := hl.ID
 		if !isValidUUID(hlID) {
 			hlID = ""
 		}
 		if hlID == "" {
 			hwLineQuery := `
-				INSERT INTO hardware_lines (module_id, quantity, description_override, option_role, hardware_id, organization_id)
-				VALUES ($1, $2, $3, $4, $5, $6)
+				INSERT INTO hardware_lines (module_id, quantity, description_override, option_role, hardware_id, component_id, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, hwLineQuery, id, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, OrgFromCtx(ctx)).Scan(&hl.ID)
+			err = tx.QueryRow(ctx, hwLineQuery, id, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, compID, OrgFromCtx(ctx)).Scan(&hl.ID)
 		} else {
 			hwLineQuery := `
-				INSERT INTO hardware_lines (id, module_id, quantity, description_override, option_role, hardware_id, organization_id)
-				VALUES ($1, $2, $3, $4, $5, $6, $7);
+				INSERT INTO hardware_lines (id, module_id, quantity, description_override, option_role, hardware_id, component_id, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 			`
-			_, err = tx.Exec(ctx, hwLineQuery, hlID, id, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, OrgFromCtx(ctx))
+			_, err = tx.Exec(ctx, hwLineQuery, hlID, id, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, compID, OrgFromCtx(ctx))
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting hardware line: %w", err)

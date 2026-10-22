@@ -107,7 +107,7 @@ func TestCloneCatalog_RemapsFKsAndJSONB(t *testing.T) {
 		`INSERT INTO agregados (id, code, name, active, components, hardware_lines, organization_id)
 		 VALUES ('cccccccc-0000-0000-0000-000000000004', 'AGR-PUERTA', 'Puerta', true,
 		 '[{"componentId":"cccccccc-0000-0000-0000-000000000002","quantity":1}]'::jsonb,
-		 '[{"id":"hl1","quantity":2,"option_role":"BISAGRAS","hardware_id":"cccccccc-0000-0000-0000-000000000003"}]'::jsonb,
+		 '[{"id":"hl1","quantity":2,"option_role":"BISAGRAS","hardware_id":"cccccccc-0000-0000-0000-000000000003"},{"id":"hl2","quantity":4,"option_role":"SOPORTES","component_id":"cccccccc-0000-0000-0000-000000000002"},{"id":"hl3","quantity":1,"option_role":"OTROS"}]'::jsonb,
 		 '` + multiOrgInitialOrgID + `')`,
 		`INSERT INTO modules (id, code, name, category_id, width_mm, height_mm, depth_mm, agregados, parameter_definitions, organization_id)
 		 VALUES ('cccccccc-0000-0000-0000-000000000005', 'MOD-GAB-01', 'Gabinete', 'cccccccc-0000-0000-0000-000000000001', 600, 720, 500,
@@ -222,6 +222,28 @@ func TestCloneCatalog_RemapsFKsAndJSONB(t *testing.T) {
 			CROSS JOIN LATERAL jsonb_array_elements(a.hardware_lines) el
 			WHERE h.organization_id = $1::uuid AND h.code = 'HW-BIS' AND h.id::text = el->>'hardware_id')`, orgB).Scan(&hwOK); err != nil || !hwOK {
 		t.Fatalf("hardware_lines JSONB no remapeado (err=%v)", err)
+	}
+
+	// #1394: la línea vinculada remapea component_id al clon de la org B, y la
+	// línea SIN claves queda intacta — jsonb_set con NULL sobre clave ausente
+	// devuelve NULL y nullaba cada elemento keyless del arreglo.
+	var linked int
+	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM agregados a
+		JOIN components c ON c.organization_id = $1::uuid AND c.code = 'COMP-SHELF'
+		CROSS JOIN LATERAL jsonb_array_elements(a.hardware_lines) el
+		WHERE a.organization_id = $1::uuid AND a.code = 'AGR-PUERTA'
+			AND el->>'id' = 'hl2' AND el->>'component_id' = c.id::text AND el->>'quantity' = '4'`, orgB).Scan(&linked); err != nil || linked != 1 {
+		t.Fatalf("component_id del JSONB no remapeado al clon (linked=%d err=%v)", linked, err)
+	}
+	var keyless int
+	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM agregados a
+		CROSS JOIN LATERAL jsonb_array_elements(a.hardware_lines) el
+		WHERE a.organization_id = $1::uuid AND a.code = 'AGR-PUERTA'
+			AND el->>'id' = 'hl3' AND el->>'quantity' = '1' AND el->>'option_role' = 'OTROS'
+			AND NOT el ? 'component_id' AND NOT el ? 'hardware_id'`, orgB).Scan(&keyless); err != nil || keyless != 1 {
+		t.Fatalf("la línea sin claves debe sobrevivir intacta (keyless=%d err=%v)", keyless, err)
 	}
 
 	// Piezas del módulo clonadas con FK al módulo nuevo.

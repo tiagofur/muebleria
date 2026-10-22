@@ -123,6 +123,8 @@ function cloneHardwareLine(line: HardwareLine, newId: string): HardwareLine {
     descriptionOverride: line.descriptionOverride,
     optionRole: line.optionRole,
     hardwareId: line.hardwareId,
+    // #1394: the per-copy component link survives duplication.
+    componentId: line.componentId,
   };
 }
 

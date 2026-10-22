@@ -224,6 +224,12 @@ type HardwareLine struct {
 	DescriptionOverride string  `json:"description_override,omitempty"`
 	OptionRole          string  `json:"option_role"`
 	HardwareID          string  `json:"hardware_id,omitempty"`
+	// ComponentID (#1394): optional link to the catalog component this line
+	// belongs to. Set ⇒ the line is PER-COPY: the resolved BOM multiplies the
+	// quantity by that component's effective copies after bindings (the same
+	// N of #1383/#1384); zero copies drop the line. Empty keeps the line
+	// fixed (module bulk hardware) — existing catalogs change no behavior.
+	ComponentID string `json:"component_id,omitempty"`
 }
 
 // ModuleCategory is a node in a user-defined tree (max depth 3).
