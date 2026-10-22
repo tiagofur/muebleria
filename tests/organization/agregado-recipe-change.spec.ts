@@ -4,8 +4,9 @@
  * (PostgreSQL desechable + Go + Chromium). Formaliza la verificación en vivo
  * del 2026-10-20 como regresión permanente e incluye los negativos que la
  * issue exige: variante que no cabe (rechazo, nunca clamp), corte de red al
- * aplicar (estado intacto + reintento), 412 stale con dos pestañas reales y
- * diff vacío.
+ * aplicar (estado intacto + reintento), corte de red al simular (banner de
+ * error sin diff, servidor intacto + reintento), 412 stale con dos pestañas
+ * reales, diff vacío y cancelar/Esc con diff pendiente (nada aplicado).
  *
  * Fixtures autocontenidos por API (la DB del gate no tiene QA-VERIF-1369):
  * la receta se persiste con el PUT guardado — el POST sólo crea la fila sin
@@ -518,5 +519,95 @@ test.describe.serial('Agregado — simular cambio de receta en browser real (#13
     await expect(recipeCard(page)).toContainText(`2 miembros · 1 set de variantes · Kit: ${KIT_CODES[KIT_B]}`, {
       timeout: 20_000,
     });
+  });
+
+  test('cancelar/Esc con diff pendiente: el modal cierra sin aplicar nada', async ({ page }) => {
+    test.setTimeout(120_000);
+    const token = await loginOwner(page);
+    const before = await readAgregado(token);
+    expect(before.commercial_kit_hardware_id).toBe(KIT_B);
+
+    await openDetail(page);
+
+    // «Cancelar» con diff pendiente: la decisión se descarta y el servidor no
+    // cambia (el corte de red al aplicar ya probó el camino feliz del apply).
+    await openModal(page);
+    await sim(page, 'kit-select').selectOption(KIT_C);
+    await sim(page, 'primary').click();
+    await expect(sim(page, 'live')).toHaveText('Simulación lista: 2 cambios');
+    await expect(sim(page, 'primary')).toHaveText('Confirmar y aplicar');
+    await dialog(page).getByRole('button', { name: 'Cancelar' }).click();
+    await expect(dialog(page)).toBeHidden();
+
+    let after = await readAgregado(token);
+    expect(after.version).toBe(before.version);
+    expect(after.commercial_kit_hardware_id).toBe(KIT_B);
+
+    // Esc con diff pendiente: mismo contrato («Esc cierra sin aplicar»).
+    await openModal(page);
+    await sim(page, 'kit-select').selectOption(KIT_C);
+    await sim(page, 'primary').click();
+    await expect(sim(page, 'live')).toHaveText('Simulación lista: 2 cambios');
+    await page.keyboard.press('Escape');
+    await expect(dialog(page)).toBeHidden();
+
+    after = await readAgregado(token);
+    expect(after.version).toBe(before.version);
+    expect(after.commercial_kit_hardware_id).toBe(KIT_B);
+  });
+
+  test('red cortada al simular: banner de error, sin diff y el reintento llega', async ({ page }) => {
+    test.setTimeout(120_000);
+    const token = await loginOwner(page);
+    const before = await readAgregado(token);
+    expect(before.commercial_kit_hardware_id).toBe(KIT_B);
+
+    await openDetail(page);
+    await openModal(page);
+    await sim(page, 'kit-select').selectOption(KIT_A);
+
+    // El corte cae exactamente sobre el POST de simular: el fetch rechaza
+    // como una conexión caída (el resto del tráfico sigue vivo).
+    let cuts = 0;
+    const isSimulate = (url: URL) =>
+      url.pathname.endsWith(`/catalog/agregados/${AGREGADO_ID}/recipe-change/simulate`);
+    const cutSimulate = async (route: import('@playwright/test').Route) => {
+      if (route.request().method() === 'POST') {
+        cuts += 1;
+        await route.abort('connectionfailed');
+        return;
+      }
+      await route.fallback();
+    };
+    await page.route(isSimulate, cutSimulate);
+
+    await sim(page, 'primary').click();
+    await expect(sim(page, 'banner')).toHaveText('Sin conexión. Revisá tu conexión e intentá de nuevo.');
+    await expect(sim(page, 'banner')).toHaveRole('alert');
+    expect(cuts).toBe(1);
+
+    // Sin diff que confirmar: la fase vuelve a selects y la primary a Simular.
+    await expect(sim(page, 'diff')).toHaveCount(0);
+    await expect(sim(page, 'primary')).toHaveText('Simular');
+    await expect(sim(page, 'primary')).toBeEnabled();
+
+    // El servidor quedó intacto: simular nunca escribe y el corte no dejó
+    // nada parcial.
+    const during = await readAgregado(token);
+    expect(during.version).toBe(before.version);
+    expect(during.commercial_kit_hardware_id).toBe(KIT_B);
+
+    // Vuelve la red: simular de nuevo llega y el diff es el del servidor.
+    await page.unroute(isSimulate, cutSimulate);
+    await sim(page, 'primary').click();
+    await expect(sim(page, 'live')).toHaveText('Simulación lista: 2 cambios');
+    const consumo = diffGroup(page, 'Consumo comercial');
+    await expect(consumo).toContainText('Añadido');
+    await expect(consumo).toContainText(KIT_A);
+    await expect(consumo).toContainText(KIT_B);
+
+    const after = await readAgregado(token);
+    expect(after.version).toBe(before.version);
+    expect(after.commercial_kit_hardware_id).toBe(KIT_B);
   });
 });
