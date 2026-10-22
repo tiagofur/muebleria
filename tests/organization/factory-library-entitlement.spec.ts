@@ -51,6 +51,18 @@ test.describe.serial('Factory Library Entitlement E2E (#1382)', () => {
     });
     adminToken = adminLogin.token;
 
+    // #460: dedicated bootstrap admin for BOTH organizations of this spec. The
+    // Gate A owner must keep a single membership (no organization chooser) so
+    // the webauth fail-closed spec can hold it; bootstrapping these orgs with
+    // the owner itself made it multi-membership and broke that invariant.
+    const entitlementAdminEmail = required('ORGANIZATION_GATE_ENTITLEMENT_ADMIN_EMAIL');
+    const entitlementAdmin = (await client.listPlatformUsers(adminToken))
+      .find(({ email }) => email === entitlementAdminEmail);
+    if (!entitlementAdmin) throw new Error('entitlement admin is missing from the gate seeding');
+    if (entitlementAdmin.memberships.length !== 0) {
+      throw new Error('entitlement admin must be dedicated: it starts with no memberships');
+    }
+
     // Provision a standard organization
     const standardResult = await client.provisionOrganization(adminToken, {
       name: standardName,
@@ -58,7 +70,7 @@ test.describe.serial('Factory Library Entitlement E2E (#1382)', () => {
       type: 'factory',
       license_plan: 'trial',
       library_type: 'standard',
-      bootstrap_admin_user_id: adminLogin.user.id,
+      bootstrap_admin_user_id: entitlementAdmin.id,
     });
     standardOrg = standardResult.organization;
     expect(standardOrg.library_type).toBe('standard');
@@ -70,7 +82,7 @@ test.describe.serial('Factory Library Entitlement E2E (#1382)', () => {
       type: 'factory',
       license_plan: 'trial',
       library_type: 'custom',
-      bootstrap_admin_user_id: adminLogin.user.id,
+      bootstrap_admin_user_id: entitlementAdmin.id,
     });
     customOrg = customResult.organization;
     expect(customOrg.library_type).toBe('custom');
@@ -78,7 +90,7 @@ test.describe.serial('Factory Library Entitlement E2E (#1382)', () => {
 
   test('server guard: standard workshop cannot create modules (403 Forbidden)', async () => {
     const workshopLogin = await client.login({
-      email: required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
+      email: required('ORGANIZATION_GATE_ENTITLEMENT_ADMIN_EMAIL'),
       password: required('ORGANIZATION_GATE_PASSWORD'),
       transport: 'web',
       org: standardSlug,
@@ -103,7 +115,7 @@ test.describe.serial('Factory Library Entitlement E2E (#1382)', () => {
 
   test('server guard: custom workshop can create modules (201 Created)', async () => {
     const workshopLogin = await client.login({
-      email: required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
+      email: required('ORGANIZATION_GATE_ENTITLEMENT_ADMIN_EMAIL'),
       password: required('ORGANIZATION_GATE_PASSWORD'),
       transport: 'web',
       org: customSlug,
@@ -125,7 +137,7 @@ test.describe.serial('Factory Library Entitlement E2E (#1382)', () => {
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
-      await login(page, required('ORGANIZATION_GATE_A_OWNER_EMAIL'), standardName);
+      await login(page, required('ORGANIZATION_GATE_ENTITLEMENT_ADMIN_EMAIL'), standardName);
 
       // Nav assertions: geometry links must NOT exist, local shop links MUST exist
       const nav = page.locator('nav');
@@ -155,7 +167,7 @@ test.describe.serial('Factory Library Entitlement E2E (#1382)', () => {
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
-      await login(page, required('ORGANIZATION_GATE_A_OWNER_EMAIL'), customName);
+      await login(page, required('ORGANIZATION_GATE_ENTITLEMENT_ADMIN_EMAIL'), customName);
 
       // Nav assertions: geometry links must now be visible
       const nav = page.locator('nav');
