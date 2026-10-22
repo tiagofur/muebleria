@@ -169,9 +169,13 @@ const membershipWithOrgColumns = `
 	o.parent_organization_id, o.created_at, o.updated_at, o.version`
 
 func jsonbRemapKey(col, key, mapTable string) string {
+	// The CASE guard matters: jsonb_set(el, '{key}', NULL) returns SQL NULL
+	// when the element does not carry the key, so an unconditional jsonb_set
+	// would silently replace every keyless element with null (#1394 review).
 	return fmt.Sprintf(`CASE WHEN s.%[1]s IS NULL THEN NULL ELSE COALESCE((
-		SELECT jsonb_agg(jsonb_set(el, '{%[2]s}',
-			COALESCE((SELECT to_jsonb(mt.new_id::text) FROM %[3]s mt WHERE mt.old_id::text = el->>'%[2]s'), el->'%[2]s')))
+		SELECT jsonb_agg(CASE WHEN el ? '%[2]s' THEN jsonb_set(el, '{%[2]s}',
+			COALESCE((SELECT to_jsonb(mt.new_id::text) FROM %[3]s mt WHERE mt.old_id::text = el->>'%[2]s'), el->'%[2]s'))
+		ELSE el END)
 		FROM jsonb_array_elements(s.%[1]s) el), '[]'::jsonb) END`, col, key, mapTable)
 }
 
@@ -181,12 +185,21 @@ func jsonbRemapKey(col, key, mapTable string) string {
 // point at the NEW organization's component copy — keeping the source id
 // would leave a cross-org link the BOM silently reads as zero copies.
 func jsonbRemapHardwareLineLinks(col string) string {
+	// Same CASE guard as jsonbRemapKey: jsonb_set with a NULL value on an
+	// absent key returns NULL and would null out every keyless line — and
+	// today NO line carries component_id yet (#1394 review).
 	return fmt.Sprintf(`CASE WHEN s.%[1]s IS NULL THEN NULL ELSE COALESCE((
-		SELECT jsonb_agg(jsonb_set(
-			jsonb_set(el, '{hardware_id}',
-				COALESCE((SELECT to_jsonb(hm.new_id::text) FROM tmp_hw hm WHERE hm.old_id::text = el->>'hardware_id'), el->'hardware_id')),
-			'{component_id}',
-			COALESCE((SELECT to_jsonb(cm.new_id::text) FROM tmp_comp cm WHERE cm.old_id::text = el->>'component_id'), el->'component_id')))
+		SELECT jsonb_agg(CASE
+			WHEN el ? 'hardware_id' AND el ? 'component_id' THEN jsonb_set(
+				jsonb_set(el, '{hardware_id}',
+					COALESCE((SELECT to_jsonb(hm.new_id::text) FROM tmp_hw hm WHERE hm.old_id::text = el->>'hardware_id'), el->'hardware_id')),
+				'{component_id}',
+				COALESCE((SELECT to_jsonb(cm.new_id::text) FROM tmp_comp cm WHERE cm.old_id::text = el->>'component_id'), el->'component_id'))
+			WHEN el ? 'hardware_id' THEN jsonb_set(el, '{hardware_id}',
+				COALESCE((SELECT to_jsonb(hm.new_id::text) FROM tmp_hw hm WHERE hm.old_id::text = el->>'hardware_id'), el->'hardware_id'))
+			WHEN el ? 'component_id' THEN jsonb_set(el, '{component_id}',
+				COALESCE((SELECT to_jsonb(cm.new_id::text) FROM tmp_comp cm WHERE cm.old_id::text = el->>'component_id'), el->'component_id'))
+			ELSE el END)
 		FROM jsonb_array_elements(s.%[1]s) el), '[]'::jsonb) END`, col)
 }
 
