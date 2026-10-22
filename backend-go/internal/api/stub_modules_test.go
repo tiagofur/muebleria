@@ -162,24 +162,23 @@ func (s *stubStore) ListAgregados(context.Context) ([]domain.Agregado, error) {
 	return []domain.Agregado{}, nil
 }
 
-func (s *stubStore) GetAgregadoCurrentRevision(context.Context, string) (*domain.AgregadoRevision, error) {
-	if s.agregadoCurrentRevisionErr != nil {
-		return nil, s.agregadoCurrentRevisionErr
+func (s *stubStore) ListAgregadosWithRecipes(context.Context) ([]domain.Agregado, error) {
+	if s.listAgregadosWithRecipesErr != nil {
+		return nil, s.listAgregadosWithRecipesErr
 	}
-	if s.agregadoCurrentRevision != nil {
-		return s.agregadoCurrentRevision, nil
+	if s.listAgregadosWithRecipes != nil {
+		return s.listAgregadosWithRecipes, nil
 	}
-	// Sin revisión en el stub: mismo contrato que la store real — el sentinel
-	// tipado significa «sin receta, queda tal cual»; cualquier otro error es
-	// un fallo de lectura y debe propagarse.
-	return nil, domain.ErrAgregadoRevisionNotFound
+	return []domain.Agregado{}, nil
 }
 
-func (s *stubStore) GetAgregadoByID(context.Context, string) (*domain.Agregado, error) {
+func (s *stubStore) GetAgregadoByIDWithRecipe(context.Context, string) (*domain.Agregado, error) {
+	// La lectura combinada ya entrega la fila con su receta (o el error real):
+	// la distinción «revisión ausente vs error» vive en la store real (#1369).
 	if s.agregadoReturnedByID != nil || s.agregadoGetByIDErr != nil {
 		return s.agregadoReturnedByID, s.agregadoGetByIDErr
 	}
-	s.stubNotUsed("GetAgregadoByID")
+	s.stubNotUsed("GetAgregadoByIDWithRecipe")
 	return nil, nil
 }
 

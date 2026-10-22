@@ -11,11 +11,14 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
-// #1369 P1 — hydrateAgregadoRecipe ya no traga errores reales de DB: sólo el
-// sentinel ErrAgregadoRevisionNotFound significa «sin receta, queda tal cual».
-// Cualquier otro error de lectura debe ser 500: responder el agregado con la
-// receta silenciosamente vacía hace que el próximo PUT (If-Match aún válido)
-// la borre en silencio y que el simulate produzca un diff falso (todo «added»).
+// #1369/#1393 — las lecturas combinadas (fila + receta vigente en UNA
+// transacción) heredan el contrato de hidratación de #1399: cualquier error
+// real de lectura es 500 — responder el agregado con la receta silenciosamente
+// vacía hace que el próximo PUT (If-Match aún válido) la borre en silencio y
+// que el simulate produzca un diff falso (todo «added»). El caso legítimo «sin
+// revisión» NO es un error: la store entrega la fila tal cual (el stub la
+// reproduce devolviendo la fila sin receta; la store real lo prueba contra
+// PostgreSQL en TestAgregadosWithRecipes_*).
 
 func agregadoListRequest(t *testing.T, server *Server) *httptest.ResponseRecorder {
 	t.Helper()
@@ -25,13 +28,13 @@ func agregadoListRequest(t *testing.T, server *Server) *httptest.ResponseRecorde
 	return rec
 }
 
-func TestHydrateAgregadoRecipe_ReaderFailureIs500(t *testing.T) {
+func TestAgregadosCombinedRead_ReaderFailureIs500(t *testing.T) {
 	dbBroken := errors.New("connection reset by peer")
 
 	t.Run("GET list: un error de lectura falla TODA la respuesta (500), nunca una lista con recetas vacías", func(t *testing.T) {
 		store := &stubStore{
-			listAgregados:              []domain.Agregado{{ID: "agr-1", Code: "AGR-1", Name: "Uno", Version: 2}},
-			agregadoCurrentRevisionErr: dbBroken,
+			listAgregadosWithRecipes:    []domain.Agregado{{ID: "agr-1", Code: "AGR-1", Name: "Uno", Version: 2}},
+			listAgregadosWithRecipesErr: dbBroken,
 		}
 		rec := agregadoListRequest(t, &Server{Store: store})
 		if rec.Code != http.StatusInternalServerError {
@@ -41,8 +44,8 @@ func TestHydrateAgregadoRecipe_ReaderFailureIs500(t *testing.T) {
 
 	t.Run("GET by-id: 500 — la UI no debe ver «0 miembros» por un store roto", func(t *testing.T) {
 		store := &stubStore{
-			agregadoReturnedByID:       recipeSimStubAgregado(),
-			agregadoCurrentRevisionErr: dbBroken,
+			agregadoReturnedByID: recipeSimStubAgregado(),
+			agregadoGetByIDErr:   dbBroken,
 		}
 		rec := agregadoByIDRequest(t, &Server{Store: store}, http.MethodGet, "", "")
 		if rec.Code != http.StatusInternalServerError {
@@ -52,8 +55,8 @@ func TestHydrateAgregadoRecipe_ReaderFailureIs500(t *testing.T) {
 
 	t.Run("simulate: 500 sin diff — un current inventado produciría un diff falso", func(t *testing.T) {
 		store := &stubStore{
-			agregadoReturnedByID:       recipeSimStubAgregado(),
-			agregadoCurrentRevisionErr: fmt.Errorf("unmarshal agregado recipe: invalid character 'x'"),
+			agregadoReturnedByID: recipeSimStubAgregado(),
+			agregadoGetByIDErr:   fmt.Errorf("unmarshal agregado recipe: invalid character 'x'"),
 		}
 		rr := recipeSimRequest(t, &Server{Store: store}, string(domain.RoleIngeniero), candidateJSON(t, func(*domain.Agregado) {}))
 		if rr.Code != http.StatusInternalServerError {
@@ -65,14 +68,14 @@ func TestHydrateAgregadoRecipe_ReaderFailureIs500(t *testing.T) {
 	})
 }
 
-func TestHydrateAgregadoRecipe_RevisionNotFoundKeepsRowAsIs(t *testing.T) {
-	// Envuelto a propósito: la distinción es errors.Is, no igualdad de error.
-	sentinel := fmt.Errorf("read revision: %w", domain.ErrAgregadoRevisionNotFound)
+func TestAgregadosCombinedRead_WithoutRecipeKeepsRowAsIs(t *testing.T) {
+	// Sin receta la store combinada entrega la fila tal cual (el stub devuelve
+	// la fila sin receta aplicada); el handler responde 200, nunca 500.
 
 	t.Run("GET by-id: 200 con la fila tal cual (receta inline y versión intactas)", func(t *testing.T) {
 		row := recipeSimStubAgregado()
 		row.Version = 7
-		store := &stubStore{agregadoReturnedByID: row, agregadoCurrentRevisionErr: sentinel}
+		store := &stubStore{agregadoReturnedByID: row}
 		rec := agregadoByIDRequest(t, &Server{Store: store}, http.MethodGet, "", "")
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
@@ -85,8 +88,7 @@ func TestHydrateAgregadoRecipe_RevisionNotFoundKeepsRowAsIs(t *testing.T) {
 
 	t.Run("GET list: 200 con la fila tal cual", func(t *testing.T) {
 		store := &stubStore{
-			listAgregados:              []domain.Agregado{*recipeSimStubAgregado()},
-			agregadoCurrentRevisionErr: sentinel,
+			listAgregadosWithRecipes: []domain.Agregado{*recipeSimStubAgregado()},
 		}
 		rec := agregadoListRequest(t, &Server{Store: store})
 		if rec.Code != http.StatusOK {
@@ -98,7 +100,7 @@ func TestHydrateAgregadoRecipe_RevisionNotFoundKeepsRowAsIs(t *testing.T) {
 	})
 
 	t.Run("simulate: sigue funcionando sin revisión (diff sobre la fila)", func(t *testing.T) {
-		store := &stubStore{agregadoReturnedByID: recipeSimStubAgregado(), agregadoCurrentRevisionErr: sentinel}
+		store := &stubStore{agregadoReturnedByID: recipeSimStubAgregado()}
 		rr := recipeSimRequest(t, &Server{Store: store}, string(domain.RoleIngeniero), candidateJSON(t, func(*domain.Agregado) {}))
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())

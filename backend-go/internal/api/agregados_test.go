@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -101,6 +102,35 @@ func TestAgregadoByID_StoreErrorsMapByType(t *testing.T) {
 			t.Fatalf("store failure: status = %d body=%s", rec.Code, rec.Body.String())
 		}
 	})
+}
+
+// #1373/#443 — cruce borrar-vs-editar a nivel handler: tras el DELETE (hard)
+// de la fila, un PUT que todavía lleva el If-Match viejo NO es un conflicto de
+// versión: la store rechaza con el not-found tipado y el handler responde 404
+// (nunca 409/412/500). La prueba equivalente a nivel storage (la fila no
+// resucita y el error es not-found, no ErrVersionConflict) vive en
+// TestCatalog_UpdateAfterHardDeleteDoesNotResurrect.
+func TestAgregado_PutAfterDeleteIsNotFound(t *testing.T) {
+	putBody := `{"id":"agr-1","code":"AGR-1","name":"Uno"}`
+
+	// 1) El DELETE con el If-Match vigente elimina la fila.
+	deleteStore := &deleteAgregadoStubStore{}
+	deleteStore.getOrgByID = customLibraryOrg()
+	del := agregadoByIDRequest(t, &Server{Store: deleteStore}, http.MethodDelete, "", `"v1"`)
+	if del.Code != http.StatusOK {
+		t.Fatalf("delete: status = %d body=%s", del.Code, del.Body.String())
+	}
+
+	// 2) El editor, que todavía tenía v1, guarda en ciego: la store responde
+	// el not-found del storage (la fila ya no existe) → 404.
+	putStore := &updateAgregadoStubStore{stubStore: stubStore{getOrgByID: customLibraryOrg()}, updateErr: storage.ErrAgregadoNotFound}
+	put := agregadoByIDRequest(t, &Server{Store: putStore}, http.MethodPut, putBody, `"v1"`)
+	if put.Code != http.StatusNotFound {
+		t.Fatalf("put tras delete: status = %d body=%s", put.Code, put.Body.String())
+	}
+	if strings.Contains(put.Body.String(), string(openapi.ApiErrorCodeVersionConflict)) {
+		t.Fatalf("un agregado borrado no es un conflicto de versión: %s", put.Body.String())
+	}
 }
 
 func TestAgregadoDelete_HandlerSupportsOptionalIfMatch(t *testing.T) {

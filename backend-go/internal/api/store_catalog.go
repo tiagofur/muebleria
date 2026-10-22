@@ -10,8 +10,11 @@ import (
 // Contrato: catálogo comercial — tableros, ambientes, categorías, cANTON,
 // edge bands, herrajes, perfiles HW (#913) y side assignments (#915).
 type CatalogStore interface {
-	// #1369: receta vigente del agregado (vive en agregado_revisions).
-	GetAgregadoCurrentRevision(ctx context.Context, agregadoID string) (*domain.AgregadoRevision, error)
+	// #1369/#1393: filas + receta vigente (vive en agregado_revisions) leídas
+	// en UNA transacción — lista sin N+1 de transacciones y detalle sin la
+	// carrera de dos lecturas frente a un PUT concurrente.
+	ListAgregadosWithRecipes(ctx context.Context) ([]domain.Agregado, error)
+	GetAgregadoByIDWithRecipe(ctx context.Context, id string) (*domain.Agregado, error)
 
 	// Catalog: the factory construction policy (#1078/#1218) — the parsed
 	// standard-library overlay; nil when no active overlay governs.

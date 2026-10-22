@@ -258,6 +258,21 @@ func (a Agregado) ToRecipePayload() AgregadoRecipePayload {
 	}
 }
 
+// ApplyRecipe overwrites the recipe-bearing fields of a from a revision
+// payload while preserving identity, version, active state and the audit
+// revision pointer (#1369/#1399). The field set copied here is the single
+// hydration definition: the storage combined reads use it and must never grow
+// a second inline copy that can drift.
+func (a *Agregado) ApplyRecipe(p AgregadoRecipePayload) {
+	recipe := p.ToAgregado(a.ID, a.Code, a.Name)
+	a.RigidMembers, a.VariantSets = recipe.RigidMembers, recipe.VariantSets
+	a.CompatibilityRules = recipe.CompatibilityRules
+	a.Components = recipe.Components
+	a.HardwareLines = recipe.HardwareLines
+	a.CommercialKitHardwareID = recipe.CommercialKitHardwareID
+	a.WidthMm, a.HeightMm, a.DepthMm = recipe.WidthMm, recipe.HeightMm, recipe.DepthMm
+}
+
 // ToAgregado reconstructs an Agregado entity from a recipe payload and identity.
 func (p AgregadoRecipePayload) ToAgregado(id, code, name string) Agregado {
 	return Agregado{

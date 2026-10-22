@@ -332,16 +332,15 @@ type stubStore struct {
 	listStructures []domain.Structure
 	listComponents []domain.Component
 	listAgregados  []domain.Agregado
-	// #1369 recipe simulation
-	agregadoReturnedByID    *domain.Agregado
-	agregadoGetByIDErr      error
-	agregadoCurrentRevision *domain.AgregadoRevision
-	// #1369 P1: fallo real de lectura de la revisión (conexión, JSONB
-	// corrupto) — distinto de «no hay revisión», que el stub responde con el
-	// sentinel tipado.
-	agregadoCurrentRevisionErr error
-	listHardwares              []domain.Hardware
-	listOptionGroups           []domain.OptionGroup
+	// #1369/#1393 combined row+current-recipe reads. The stub hands the row
+	// WITH its recipe already applied (or the real read error): the «revisión
+	// ausente vs error de lectura» distinction lives in the real store.
+	listAgregadosWithRecipes    []domain.Agregado
+	listAgregadosWithRecipesErr error
+	agregadoReturnedByID        *domain.Agregado
+	agregadoGetByIDErr          error
+	listHardwares               []domain.Hardware
+	listOptionGroups            []domain.OptionGroup
 	// #913 / HW-PROFILE catalog surface hooks.
 	listHardwareProfiles                      []domain.HardwareProfile
 	hardwareProfileReturnedByID               *domain.HardwareProfile

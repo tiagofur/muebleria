@@ -146,10 +146,12 @@ func TestRecipeSimulation_RejectedVariantIsPartiallyInvalidWithAlternatives(t *t
 }
 
 // La receta vigente vive en la revisión actual, no en la fila del catálogo:
-// con revisión presente, el simulate hidrata LA RECETA DE LA REVISIÓN (no los
-// campos inline del agregado) — exactamente lo que la DB real expuso.
+// con revisión presente, la lectura combinada (#1369/#1393) entrega el
+// agregado con LA RECETA DE LA REVISIÓN aplicada (no los campos inline de la
+// fila) — exactamente lo que la DB real expuso. domain.ApplyRecipe es el
+// mismo helper que usa la store real, así el stub no deriva una segunda
+// hidratación.
 func TestRecipeSimulation_UsesCurrentRevisionRecipe(t *testing.T) {
-	store := &stubStore{agregadoReturnedByID: recipeSimStubAgregado()}
 	kit := "kit-drawer"
 	revRecipe := domain.AgregadoRecipePayload{
 		CommercialKitHardwareID: &kit,
@@ -165,9 +167,9 @@ func TestRecipeSimulation_UsesCurrentRevisionRecipe(t *testing.T) {
 			BOMRole: domain.BOMRoleIncludedInKit,
 		}},
 	}
-	store.agregadoCurrentRevision = &domain.AgregadoRevision{
-		AgregadoID: "agr-sim", RevisionNumber: 4, Recipe: revRecipe,
-	}
+	row := recipeSimStubAgregado()
+	row.ApplyRecipe(revRecipe)
+	store := &stubStore{agregadoReturnedByID: row}
 	srv := &Server{Store: store}
 
 	body := candidateJSON(t, func(*domain.Agregado) {})
@@ -182,7 +184,7 @@ func TestRecipeSimulation_UsesCurrentRevisionRecipe(t *testing.T) {
 	}
 	// Current = receta de la revisión (runner-solo); candidata = los 2 del
 	// stub ⇒ runner-solo sale (removed) y los otros entran (added). Si el
-	// handler usara los campos inline del agregado, runner-solo no existiría.
+	// simulate usara los campos inline de la fila, runner-solo no existiría.
 	removed := false
 	for _, m := range res.Diff.Members {
 		if m.MemberID == "runner-solo" && m.Change == engine.ChangeAdded {
@@ -194,6 +196,10 @@ func TestRecipeSimulation_UsesCurrentRevisionRecipe(t *testing.T) {
 	}
 	if !removed {
 		t.Fatalf("el diff no usa la receta de la revisión como current: %+v", res.Diff.Members)
+	}
+	// La identidad y la versión viajan de la fila, nunca de la receta.
+	if res.AgregadoID != "agr-sim" || res.CurrentVersion != 3 {
+		t.Fatalf("identity/version = %s/%d, want agr-sim/3", res.AgregadoID, res.CurrentVersion)
 	}
 }
 
