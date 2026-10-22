@@ -574,3 +574,72 @@ describe('parameterDefinitions verbatim round-trip (#497)', () => {
     ).toBe(false);
   });
 });
+
+describe('#1404 hardware line component link', () => {
+  it('moduleToDraft carries componentId and draftToModule round-trips it', () => {
+    const linked: Module = {
+      id: 'm2',
+      code: 'MOD-SOP',
+      name: 'Despensa',
+      hardwareLines: [
+        { id: 'h1', quantity: 4, optionRole: 'BISAGRA', componentId: 'comp-ent' },
+        { id: 'h2', quantity: 2, optionRole: 'FRENTE' },
+      ],
+    };
+    const draft = moduleToDraft(linked);
+    expect(draft.hardwareLines[0]!.componentId).toBe('comp-ent');
+    expect(draft.hardwareLines[1]!.componentId).toBe('');
+
+    const domain = draftToModule('m2', draft);
+    expect(domain.hardwareLines[0]!.componentId).toBe('comp-ent');
+    expect(domain.hardwareLines[1]!.componentId).toBeUndefined();
+  });
+
+  it('unbinding in the draft drops the link instead of sending an empty id', () => {
+    const draft = moduleToDraft({
+      id: 'm2',
+      code: 'MOD-SOP',
+      name: 'Despensa',
+      hardwareLines: [
+        { id: 'h1', quantity: 4, optionRole: 'BISAGRA', componentId: 'comp-ent' },
+      ],
+    });
+    const unbound = {
+      ...draft,
+      hardwareLines: draft.hardwareLines.map((l) =>
+        l.id === 'h1' ? { ...l, componentId: '' } : l,
+      ),
+    };
+    expect(
+      draftToModule('m2', unbound).hardwareLines[0]!.componentId,
+    ).toBeUndefined();
+  });
+
+  it('isModuleDraft accepts restored drafts with and without componentId, rejects junk', () => {
+    const draft = moduleToDraft({
+      id: 'm2',
+      code: 'MOD-SOP',
+      name: 'Despensa',
+      hardwareLines: [
+        { id: 'h1', quantity: 4, optionRole: 'BISAGRA', componentId: 'comp-ent' },
+      ],
+    });
+    expect(isModuleDraft(draft)).toBe(true);
+    // Session drafts saved before #1404 carry no componentId key at all.
+    const legacy = {
+      ...draft,
+      hardwareLines: draft.hardwareLines.map(
+        ({ componentId: _dropped, ...rest }) => rest,
+      ),
+    };
+    expect(isModuleDraft(legacy)).toBe(true);
+    expect(
+      isModuleDraft({
+        ...draft,
+        hardwareLines: [
+          { ...draft.hardwareLines[0]!, componentId: 42 as unknown as string },
+        ],
+      }),
+    ).toBe(false);
+  });
+});

@@ -3,7 +3,7 @@
  */
 
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
-import type { Hardware, OptionGroup } from '@granete/domain';
+import type { Component, Hardware, OptionGroup } from '@granete/domain';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import {
   moduleHardwareGridInputId,
@@ -14,6 +14,8 @@ export type ModuleEditorHardwarePanelProps = {
   readonly hardwareLines: readonly HardwareLineDraft[];
   readonly hardwareRoles: readonly OptionGroup[];
   readonly activeHardware: readonly Hardware[];
+  /** #1404 — catalog components for the optional per-copy link of a line. */
+  readonly catalogComponents: readonly Component[];
   readonly onAdd: () => void;
   readonly onRemove: (id: string) => void;
   readonly onUpdate: (id: string, patch: Partial<HardwareLineDraft>) => void;
@@ -25,6 +27,7 @@ export function ModuleEditorHardwarePanel({
   hardwareLines,
   hardwareRoles,
   activeHardware,
+  catalogComponents,
   onAdd,
   onRemove,
   onUpdate,
@@ -48,6 +51,10 @@ export function ModuleEditorHardwarePanel({
           Agregar herraje
         </button>
       </div>
+      <p className="module-editor__hint" data-testid="module-hardware-component-hint">
+        Si la línea pertenece a un componente replicado, su cantidad escala ×N
+        con las copias (p. ej. soportes de entrepaño).
+      </p>
       {hardwareLines.length === 0 ? (
         <p className="catalog-empty">Sin líneas de herraje.</p>
       ) : (
@@ -161,6 +168,23 @@ export function ModuleEditorHardwarePanel({
                     data-testid={`module-hardware-picker-${line.id}`}
                   />
                 )}
+                <CatalogPicker
+                  id={`hw-component-${line.id}`}
+                  label="Componente (opcional)"
+                  placeholder="Sin componente (no escala)"
+                  searchPlaceholder="Buscar componente…"
+                  value={line.componentId}
+                  onChange={(componentId) =>
+                    onUpdate(line.id, { componentId })
+                  }
+                  items={catalogComponents.map((c) => ({
+                    id: c.id,
+                    code: c.code,
+                    name: c.name,
+                    active: c.active,
+                  }))}
+                  data-testid={`module-hardware-component-${line.id}`}
+                />
                 <div className="catalog-form__field">
                   <label htmlFor={`hw-desc-${line.id}`}>
                     Descripción (opcional)

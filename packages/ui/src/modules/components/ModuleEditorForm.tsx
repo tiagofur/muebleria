@@ -288,6 +288,7 @@ export function ModuleEditorForm({
         hardwareLines={draft.hardwareLines}
         hardwareRoles={hardwareRoles}
         activeHardware={activeHardware}
+        catalogComponents={catalogComponents}
         onAdd={onAddHardware}
         onRemove={onRemoveHardware}
         onUpdate={onUpdateHardware}
