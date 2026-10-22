@@ -79,7 +79,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "    elif args[0] == 'inspect': print('127.0.0.1:56321' if 'HostIp' in ' '.join(args) else '56321')\n"
                 + "    elif args[0] == 'port': print('127.0.0.1:56321')\n"
                 + "    elif args[0] == 'exec' and 'rolcanlogin' in ' '.join(args): print('t|f|f')\n"
-                + "    elif args[0] == 'exec' and 'current_database()' in ' '.join(args): print('granete_gate|2|2')\n"
+                + "    elif args[0] == 'exec' and 'current_database()' in ' '.join(args): print('granete_gate|3|2')\n"
                 + "    elif args[0] == 'exec' and 'psql' in args: print('11111111-1111-4111-8111-111111111111')\n"
                 + "    elif args[0] == 'run': print('synthetic-container')\n"
                 + "    sys.exit(0)\n"
@@ -217,8 +217,8 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
         result, records, survivor = self.run_gate_with_doubles(preflight_exit=0)
         self.assertEqual(result.returncode, 0, result.stderr[-800:])
         self.assertFalse(survivor, 'backend process survived the successful launcher teardown')
-        self.assertEqual(len(records), 8)  # preflight, server, five admin commands, Playwright
-        self.assertEqual(len([r for r in records if './cmd/admin' in r['command']]), 5)
+        self.assertEqual(len(records), 9)  # preflight, server, six admin commands, Playwright
+        self.assertEqual(len([r for r in records if './cmd/admin' in r['command']]), 6)
         runtime = ["127.0.0.1", 56321, "/granete_gate", "granete_app"]
         migration = ["127.0.0.1", 56321, "/granete_gate", "postgres"]
         for record in records:
@@ -305,7 +305,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
             self.assertIn("host_result=NOT_RUN", stopped.stdout)
             records = [json.loads(line) for line in capture.read_text().splitlines()]
             self.assertEqual(len([r for r in records if './cmd/testdb-preflight' in r['command']]), 1)
-            self.assertEqual(len([r for r in records if './cmd/admin' in r['command']]), 5)
+            self.assertEqual(len([r for r in records if './cmd/admin' in r['command']]), 6)
             self.assertEqual(len([r for r in records if r['command'].startswith('pnpm exec')]), 1)
             for path in (server_pid, web_pid, browser_pid):
                 pid = int(path.read_text())

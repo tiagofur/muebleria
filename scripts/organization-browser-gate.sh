@@ -406,6 +406,11 @@ if [ -n "${INTERACTIVE}" ]; then printf '%s\n' "${ORGANIZATION_WEB_PORT}" >"${RU
 ORGANIZATION_GATE_EMAIL="browser-gate@example.com"
 ORGANIZATION_GATE_A_OWNER_EMAIL="browser-gate-a-owner@example.com"
 ORGANIZATION_GATE_B_OWNER_EMAIL="browser-gate-b-owner@example.com"
+# #460: dedicated bootstrap admin for spec-provisioned organizations. The Gate
+# A owner must keep a SINGLE membership (no organization chooser) so the
+# webauth fail-closed spec can hold it; specs that provision their own orgs
+# bootstrap them with this user instead.
+ORGANIZATION_GATE_ENTITLEMENT_ADMIN_EMAIL="browser-gate-entitlement-admin@example.com"
 MEDIA_DIR="${TMP_ROOT}/media"
 mkdir -p "${MEDIA_DIR}"
 
@@ -521,6 +526,8 @@ curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/health" >/dev/null \
   --email "${ORGANIZATION_GATE_A_OWNER_EMAIL}" --name "Browser Gate A Owner") >/dev/null
 (cd "${ROOT}/backend-go" && "${GATE_ADMIN_ENV[@]}" go run ./cmd/admin create \
   --email "${ORGANIZATION_GATE_B_OWNER_EMAIL}" --name "Browser Gate B Owner") >/dev/null
+(cd "${ROOT}/backend-go" && "${GATE_ADMIN_ENV[@]}" go run ./cmd/admin create \
+  --email "${ORGANIZATION_GATE_ENTITLEMENT_ADMIN_EMAIL}" --name "Browser Gate Entitlement Admin") >/dev/null
 (cd "${ROOT}/backend-go" && "${GATE_ADMIN_ENV[@]}" go run ./cmd/admin create-platform-admin \
   --email "${ORGANIZATION_GATE_A_OWNER_EMAIL}") >/dev/null
 (cd "${ROOT}/backend-go" && "${GATE_ADMIN_ENV[@]}" go run ./cmd/admin create-org \
@@ -535,10 +542,10 @@ curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/health" >/dev/null \
   --idempotency-key browser-gate-b-bootstrap --license pro) >/dev/null
 SETUP_READBACK="$(docker exec "${CONTAINER}" psql -At -U postgres -d granete_gate \
   -c "SELECT current_database(),
-      (SELECT count(*) FROM users WHERE email IN ('browser-gate-a-owner@example.com', 'browser-gate-b-owner@example.com')),
+      (SELECT count(*) FROM users WHERE email IN ('browser-gate-a-owner@example.com', 'browser-gate-b-owner@example.com', 'browser-gate-entitlement-admin@example.com')),
       (SELECT count(*) FROM organizations WHERE slug IN ('browser-gate-a', 'browser-gate-b'))")"
-[ "${SETUP_READBACK}" = 'granete_gate|2|2' ] || fail "disposable users and organizations did not match preparation"
-printf '[organization-gate] disposable preparation readback: database=granete_gate users=2 organizations=2\n'
+[ "${SETUP_READBACK}" = 'granete_gate|3|2' ] || fail "disposable users and organizations did not match preparation"
+printf '[organization-gate] disposable preparation readback: database=granete_gate users=3 organizations=2\n'
 # #460 SEC-3: canonical server media names (32 hex chars), placed under each
 # organization's partition like the real upload endpoint does — the browser
 # gate then exercises the signed-grant media flow end to end.
@@ -568,6 +575,7 @@ GATE_BROWSER_ENV=("${GATE_BASE_ENV[@]}"
   ORGANIZATION_GATE_EMAIL="${ORGANIZATION_GATE_EMAIL}"
   ORGANIZATION_GATE_A_OWNER_EMAIL="${ORGANIZATION_GATE_A_OWNER_EMAIL}"
   ORGANIZATION_GATE_B_OWNER_EMAIL="${ORGANIZATION_GATE_B_OWNER_EMAIL}"
+  ORGANIZATION_GATE_ENTITLEMENT_ADMIN_EMAIL="${ORGANIZATION_GATE_ENTITLEMENT_ADMIN_EMAIL}"
   ORGANIZATION_GATE_ORG_A_SLUG=browser-gate-a ORGANIZATION_GATE_ORG_B_SLUG=browser-gate-b
   ORGANIZATION_GATE_ORG_SLUG=browser-gate-a
   ORGANIZATION_GATE_PASSWORD="${ADMIN_PASSWORD}"
