@@ -42,8 +42,13 @@ func TestCreateModule_ChildRowIDs(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create module A with explicit child ids: %v", err)
 	}
-	if moduleA.Presets[0].ID != presetAID || moduleA.HardwareLines[0].ID != hwLineAID || moduleA.BoardParts[0].ID != boardPartAID {
-		t.Fatalf("honored child ids must be echoed, got preset=%s hw=%s part=%s", moduleA.Presets[0].ID, moduleA.HardwareLines[0].ID, moduleA.BoardParts[0].ID)
+	// Honored ids are verified against what the server PERSISTED (a re-read),
+	// not against the request struct — CreateModule does not refresh it.
+	persisted := isolationRuntimeValue(t, fixture, fixture.actorA, func(txCtx context.Context) (*domain.Module, error) {
+		return store.GetModuleByID(txCtx, moduleAID)
+	})
+	if persisted == nil || persisted.Presets[0].ID != presetAID || persisted.HardwareLines[0].ID != hwLineAID || persisted.BoardParts[0].ID != boardPartAID {
+		t.Fatalf("honored child ids must persist, got %+v", persisted)
 	}
 
 	// The template-clone pattern drags module A's real child ids: typed

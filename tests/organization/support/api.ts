@@ -62,7 +62,11 @@ async function seedDistinctModule(token: string, id: string, tenant: 'A' | 'B'):
   const catalog = await repository.getCatalog();
   const template = catalog.modules[0];
   await repository.saveCatalog({ ...catalog, modules: [{
-    ...template, id, code: `GATE-${tenant}`, name: `Mueble real ${tenant}`, hardwareLines: template?.hardwareLines ?? [],
+    // #1398: the template is cloned through moduleCreatePayload — child row
+    // ids (presets/hardware lines/board parts) are never dragged, so a
+    // preset-carrying module sorting first cannot collide on create.
+    ...(template ? moduleCreatePayload(template) : { hardwareLines: [] }),
+    id, code: `GATE-${tenant}`, name: `Mueble real ${tenant}`,
     imageUrl: tenant === 'A' ? GATE_MEDIA_A_URL : GATE_MEDIA_B_URL,
     // #1096/#443: the shared gate module must be a WELL-FORMED commercial
     // entity — explicit valid dimensions, never inherited from whichever

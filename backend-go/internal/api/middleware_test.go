@@ -1280,6 +1280,16 @@ func TestAuthMiddleware_FlushesRendered4xxWhenCommitRolledBack(t *testing.T) {
 		}
 	})
 
+	t.Run("422 rendered by the handler survives the rollback commit too", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		AuthMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			respondWithError(w, http.StatusUnprocessableEntity, "la receta candidata no es válida")
+		})).ServeHTTP(rr, newReq())
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422 (the handler's rejection, not the commit's 500)", rr.Code)
+		}
+	})
+
 	t.Run("200 with a failing commit stays a 500", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		AuthMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
