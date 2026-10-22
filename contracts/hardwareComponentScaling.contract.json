@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.hardwareComponentScaling.v1",
+  "comment": [
+    "#1394 — Contrato de paridad TS/Go: el herraje vinculado a un componente replicado escala por copia ×N.",
+    "TS: packages/domain/src/hardwareComponentScaling.contract.test.ts (resolveBom).",
+    "Go: backend-go/internal/domain/engine/hardware_component_scaling_contract_test.go (ResolveBomWithContext + ResolveReleaseUnit).",
+    "Regla: la línea de herraje con componentId es POR COPIA — la cantidad del BOM multiplica por las copias",
+    "efectivas del componente tras bindings (el mismo N de #1383/#1384). Copias 0 ⇒ la demanda cae (no hay pieza",
+    "física que herrajar). Líneas sin componentId quedan fijas. Expected congelados: si un motor diverge, se",
+    "alinea el motor — nunca el expected. Aditivo: catálogos sin el vínculo no cambian de comportamiento.",
+    "Escenario: despensa 600×2000×550; estructura 2 laterales; el entrepaño es instancia del módulo con binding",
+    "componentQuantity (entrepanos 0–8). Soportes: 4 por entrepaño (vínculo seteado). Tirador: línea general fija."
+  ],
+  "optionChoices": { "INTERIOR": "mat-carcasa" },
+  "dims": { "widthMm": 600, "heightMm": 2000, "depthMm": 550 },
+  "catalog": {
+    "materials": [
+      {
+        "id": "mat-carcasa",
+        "code": "MEL-C",
+        "name": "Melamina Carcasa",
+        "widthMm": 1000,
+        "lengthMm": 1000,
+        "thicknessMm": 18,
+        "grainDefault": false,
+        "boardPrice": 80,
+        "wastePercent": 0,
+        "costPerM2": 80,
+        "defaultEdgeBandId": "edge-pvc",
+        "active": true
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge-pvc",
+        "code": "PVC-08",
+        "name": "Canto PVC 0.8",
+        "costPerMl": 2,
+        "thicknessMm": 0.8,
+        "active": true
+      }
+    ],
+    "hardware": [
+      {
+        "id": "hw-soporte",
+        "code": "HER-SOP-ENT",
+        "name": "Soporte de entrepaño",
+        "unit": "piece",
+        "costPerUnit": 0.8,
+        "active": true
+      },
+      {
+        "id": "hw-tirador",
+        "code": "HER-TIR-GEN",
+        "name": "Tirador general",
+        "unit": "piece",
+        "costPerUnit": 2.5,
+        "active": true
+      }
+    ],
+    "optionGroups": [
+      {
+        "id": "og-interior",
+        "code": "INTERIOR",
+        "name": "Interior",
+        "kind": "board",
+        "required": true,
+        "optionIds": ["mat-carcasa"]
+      }
+    ],
+    "structures": [
+      {
+        "id": "st-despensa",
+        "code": "EST-DES",
+        "name": "Carcasa despensa",
+        "externalDims": { "width": 600, "height": 2000, "depth": 550 },
+        "components": [{ "componentId": "comp-lateral", "quantity": 2 }],
+        "active": true
+      }
+    ],
+    "components": [
+      {
+        "id": "comp-lateral",
+        "code": "LATERAL",
+        "name": "Lateral",
+        "placement": "lateral_izquierdo",
+        "geometry": {
+          "kind": "rectangular_board",
+          "lengthMm": 2000,
+          "widthMm": 550,
+          "thicknessMm": 18,
+          "lengthFormula": "H",
+          "widthFormula": "D"
+        },
+        "defaultEdges": [
+          { "side": "L1", "enabled": false },
+          { "side": "L2", "enabled": false },
+          { "side": "W1", "enabled": false },
+          { "side": "W2", "enabled": false }
+        ],
+        "optionRoles": ["INTERIOR"],
+        "active": true
+      },
+      {
+        "id": "comp-entrepano",
+        "code": "ENTREPANO",
+        "name": "Entrepaño",
+        "placement": "custom",
+        "geometry": {
+          "kind": "rectangular_board",
+          "lengthMm": 564,
+          "widthMm": 514,
+          "thicknessMm": 18,
+          "lengthFormula": "W-2*T",
+          "widthFormula": "D-2*T"
+        },
+        "defaultEdges": [
+          { "side": "L1", "enabled": false },
+          { "side": "L2", "enabled": false },
+          { "side": "W1", "enabled": false },
+          { "side": "W2", "enabled": false }
+        ],
+        "optionRoles": ["INTERIOR"],
+        "active": true
+      }
+    ],
+    "agregados": [],
+    "modules": [
+      {
+        "id": "mod-despensa",
+        "code": "DES-HCS",
+        "name": "Despensa con entrepaños configurables",
+        "structureId": "st-despensa",
+        "baseMode": "none",
+        "externalDims": { "width": 600, "height": 2000, "depth": 550 },
+        "presets": [],
+        "components": [{ "componentId": "comp-entrepano", "quantity": 4 }],
+        "agregados": [],
+        "hardwareLines": [
+          {
+            "id": "hl-soportes",
+            "quantity": 4,
+            "optionRole": "",
+            "hardwareId": "hw-soporte",
+            "componentId": "comp-entrepano"
+          },
+          {
+            "id": "hl-tirador",
+            "quantity": 2,
+            "optionRole": "",
+            "hardwareId": "hw-tirador"
+          }
+        ],
+        "active": true
+      }
+    ]
+  },
+  "parameters": [
+    {
+      "name": "entrepanos",
+      "label": "Entrepaños",
+      "type": "number",
+      "defaultValue": 4,
+      "required": true,
+      "category": "configuration",
+      "unit": "count",
+      "integer": true,
+      "min": 0,
+      "max": 8,
+      "binding": { "version": 1, "kind": "componentQuantity", "componentId": "comp-entrepano" }
+    }
+  ],
+  "cases": [
+    {
+      "name": "N=0: sin entrepaños no hay soportes; el tirador fijo queda",
+      "values": { "entrepanos": 0 },
+      "expectedBoardParts": 2,
+      "expectedHardware": [
+        { "hardwareId": "hw-tirador", "quantity": 2 }
+      ]
+    },
+    {
+      "name": "N=1: un entrepaño mantiene la cantidad por copia (4 soportes)",
+      "values": { "entrepanos": 1 },
+      "expectedBoardParts": 3,
+      "expectedHardware": [
+        { "hardwareId": "hw-soporte", "quantity": 4 },
+        { "hardwareId": "hw-tirador", "quantity": 2 }
+      ]
+    },
+    {
+      "name": "N=4: los soportes escalan ×4; el tirador fijo no cambia",
+      "values": { "entrepanos": 4 },
+      "expectedBoardParts": 6,
+      "expectedHardware": [
+        { "hardwareId": "hw-soporte", "quantity": 16 },
+        { "hardwareId": "hw-tirador", "quantity": 2 }
+      ]
+    },
+    {
+      "name": "N=8: los soportes escalan ×8; el tirador fijo no cambia",
+      "values": { "entrepanos": 8 },
+      "expectedBoardParts": 10,
+      "expectedHardware": [
+        { "hardwareId": "hw-soporte", "quantity": 32 },
+        { "hardwareId": "hw-tirador", "quantity": 2 }
+      ]
+    }
+  ]
+}

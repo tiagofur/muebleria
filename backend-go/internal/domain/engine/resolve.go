@@ -356,15 +356,37 @@ func resolveBomFromParts(
 		})
 	}
 
+	// #1394: the copy lookup runs once and only when a linked line exists —
+	// catalogs without the link keep the exact previous behavior.
+	componentCopies := map[string]int{}
+	for _, line := range hardwareLines {
+		if id := strings.TrimSpace(line.ComponentID); id != "" {
+			componentCopies = effectiveComponentCopies(module, catalog)
+			break
+		}
+	}
+
 	hardwareResolved := make([]domain.ResolvedHardwareLine, 0, len(hardwareLines))
 	for _, line := range hardwareLines {
+		quantity := line.Quantity
+		// #1394: a component-linked line is per-copy. Zero effective copies
+		// (component not placed, or its binding resolved to 0) mean the
+		// physical piece the hardware belongs to does not exist — the demand
+		// drops instead of shipping orphan hardware.
+		if id := strings.TrimSpace(line.ComponentID); id != "" {
+			copies := componentCopies[id]
+			if copies <= 0 {
+				continue
+			}
+			quantity *= float64(copies)
+		}
 		hw, err := ResolveHardware(line, optionChoices, catalog.Hardware)
 		if err != nil {
 			return domain.ResolvedBom{}, err
 		}
 		hardwareResolved = append(hardwareResolved, domain.ResolvedHardwareLine{
 			ID:                  line.ID,
-			Quantity:            line.Quantity,
+			Quantity:            quantity,
 			DescriptionOverride: line.DescriptionOverride,
 			OptionRole:          line.OptionRole,
 			HardwareID:          hw.ID,
@@ -420,6 +442,31 @@ func collectAllHardwareLines(module domain.Module, catalog domain.Catalog) []dom
 	}
 
 	return lines
+}
+
+// effectiveComponentCopies (#1394) totals the effective copies of every
+// component placed in the module: direct instances (their Quantity already
+// carries the applied componentQuantity/Condition bindings — the same N of
+// #1383/#1384) plus the live structure's instances, mirroring the #1210
+// placement-demand scope. Callers gate on at least one linked line, so a
+// catalog without links never pays the walk.
+func effectiveComponentCopies(module domain.Module, catalog domain.Catalog) map[string]int {
+	copies := make(map[string]int)
+	note := func(instances []domain.ComponentInstance) {
+		for _, inst := range instances {
+			if inst.Quantity <= 0 {
+				continue
+			}
+			copies[inst.ComponentID] += inst.Quantity
+		}
+	}
+	note(module.Components)
+	if strings.TrimSpace(module.StructureID) != "" {
+		if st, ok := findStructure(catalog, module.StructureID); ok {
+			note(st.Components)
+		}
+	}
+	return copies
 }
 
 // expandComposedModulePartsWithDims expands structure + module components and

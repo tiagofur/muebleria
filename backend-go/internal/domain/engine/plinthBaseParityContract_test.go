@@ -98,9 +98,13 @@ type pbInstance struct {
 }
 
 type pbHardwareLine struct {
-	ID         string  `json:"id"`
-	Quantity   float64 `json:"quantity"`
-	OptionRole string  `json:"optionRole"`
+	ID string `json:"id"`
+	// ComponentID (#1394): optional per-copy link (empty on the plinth
+	// fixture — the field is additive for the hardware-scaling contract).
+	ComponentID string  `json:"componentId"`
+	Quantity    float64 `json:"quantity"`
+	OptionRole  string  `json:"optionRole"`
+	HardwareID  string  `json:"hardwareId"`
 }
 
 type pbAgregadoInstance struct {
@@ -219,7 +223,7 @@ func pbToInstances(in []pbInstance) []domain.ComponentInstance {
 func pbToHardwareLines(in []pbHardwareLine) []domain.HardwareLine {
 	out := make([]domain.HardwareLine, 0, len(in))
 	for _, l := range in {
-		out = append(out, domain.HardwareLine{ID: l.ID, Quantity: l.Quantity, OptionRole: l.OptionRole})
+		out = append(out, domain.HardwareLine{ID: l.ID, Quantity: l.Quantity, OptionRole: l.OptionRole, HardwareID: l.HardwareID, ComponentID: l.ComponentID})
 	}
 	return out
 }
