@@ -282,6 +282,11 @@ function requireHardwareId(
 /**
  * Resolve board parts + hardware lines into material/hardware IDs.
  * Extracted for reuse by both legacy and composed module paths.
+ *
+ * `componentCopies` (#1394) carries the effective copies per placed component
+ * (the caller builds it from module + structure instances); a hardware line
+ * linked through `componentId` is per-copy: its quantity multiplies by the
+ * linked component's copies and drops when zero.
  */
 function resolveBoardPartsAndHardware(
   boardParts: readonly BoardPart[],
@@ -289,6 +294,7 @@ function resolveBoardPartsAndHardware(
   optionChoices: OptionChoices,
   catalog: Catalog,
   moduleCode: string,
+  componentCopies?: ReadonlyMap<string, number>,
 ): ResolvedBom {
   const resolvedBoardParts: ResolvedBoardPart[] = boardParts.map((part) => {
     const material = requireMaterialChoice(
@@ -329,25 +335,56 @@ function resolveBoardPartsAndHardware(
     };
   });
 
-  const resolvedHardwareLines: ResolvedHardwareLine[] = hardwareLines.map(
-    (line) => {
-      const hardwareId = requireHardwareId(
-        line,
-        optionChoices,
-        catalog,
-        moduleCode,
-      );
-      return {
-        id: line.id,
-        quantity: line.quantity,
-        descriptionOverride: line.descriptionOverride,
-        optionRole: line.optionRole,
-        hardwareId,
-      };
-    },
-  );
+  // #1394: component-linked lines are per-copy. Zero effective copies
+  // (component not placed, or its binding resolved to 0) mean the physical
+  // piece the hardware belongs to does not exist — the demand drops instead
+  // of shipping orphan hardware. Unlinked lines keep the exact previous
+  // behavior.
+  const resolvedHardwareLines: ResolvedHardwareLine[] = [];
+  for (const line of hardwareLines) {
+    let quantity = line.quantity;
+    const linkedComponentId = line.componentId?.trim();
+    if (linkedComponentId) {
+      const copies = componentCopies?.get(linkedComponentId) ?? 0;
+      if (copies <= 0) continue;
+      quantity = quantity * copies;
+    }
+    const hardwareId = requireHardwareId(
+      line,
+      optionChoices,
+      catalog,
+      moduleCode,
+    );
+    resolvedHardwareLines.push({
+      id: line.id,
+      quantity,
+      descriptionOverride: line.descriptionOverride,
+      optionRole: line.optionRole,
+      hardwareId,
+    });
+  }
 
   return { boardParts: resolvedBoardParts, hardwareLines: resolvedHardwareLines };
+}
+
+/**
+ * #1394 — effective copies per placed component: direct module instances
+ * (their quantity already carries the applied componentQuantity/Condition
+ * bindings — the same N of #1383/#1384) plus the structure's instances,
+ * mirroring the Go effectiveComponentCopies and the #1210 placement scope.
+ */
+function effectiveComponentCopies(
+  instances: readonly ModuleComponentInstance[],
+): Map<string, number> {
+  const copies = new Map<string, number>();
+  for (const instance of instances) {
+    if (!(instance.quantity > 0)) continue;
+    copies.set(
+      instance.componentId,
+      (copies.get(instance.componentId) ?? 0) + instance.quantity,
+    );
+  }
+  return copies;
 }
 
 /**
@@ -1029,6 +1066,13 @@ export function resolveBom(
     for (const part of allParts) validateBoardPart(part, module.code);
     for (const line of composedHardware) validateHardwareLine(line, module.code);
 
+    // #1394: copies of every component placed in the module (structure body +
+    // direct instances) govern the per-copy hardware lines resolved below.
+    const componentCopies = effectiveComponentCopies([
+      ...(structure.components ?? []),
+      ...(module.components ?? []),
+    ]);
+
     return withHingeBandDemand(
       withPlacementHardwareDemand(
         resolveBoardPartsAndHardware(
@@ -1037,6 +1081,7 @@ export function resolveBom(
           optionChoices,
           catalog,
           module.code,
+          componentCopies,
         ),
         placementCounts,
       ),
@@ -1133,6 +1178,10 @@ export function resolveBom(
   for (const part of allParts) validateBoardPart(part, module.code);
   for (const line of allHardware) validateHardwareLine(line, module.code);
 
+  // #1394: non-composed arm — only direct module instances exist (the
+  // synthetic agregado structure carries no components).
+  const componentCopies = effectiveComponentCopies(module.components ?? []);
+
   return withHingeBandDemand(
     withPlacementHardwareDemand(
       resolveBoardPartsAndHardware(
@@ -1141,6 +1190,7 @@ export function resolveBom(
         optionChoices,
         catalog,
         module.code,
+        componentCopies,
       ),
       placementCounts,
     ),

@@ -780,18 +780,22 @@ function hardwareLineToApi(l: HardwareLine): Record<string, unknown> {
     description_override: l.descriptionOverride ?? '',
     option_role: l.optionRole,
     hardware_id: l.hardwareId ?? '',
+    // #1394: optional per-copy component link (empty = fixed bulk line).
+    component_id: l.componentId ?? '',
   };
 }
 
 function hardwareLineFromApi(raw: Record<string, unknown>): HardwareLine {
   const hw = str(raw.hardware_id ?? raw.hardwareId);
   const desc = str(raw.description_override ?? raw.descriptionOverride);
+  const comp = str(raw.component_id ?? raw.componentId);
   return {
     id: str(raw.id),
     quantity: num(raw.quantity, 1),
     descriptionOverride: desc || undefined,
     optionRole: str(raw.option_role ?? raw.optionRole),
     hardwareId: hw || undefined,
+    componentId: comp || undefined,
   };
 }
 
