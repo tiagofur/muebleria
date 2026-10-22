@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -945,5 +945,107 @@ describe('ModulesScreen URL handoff / deep links (F152)', () => {
     await user.click(screen.getByTestId('module-editor-stale-discard'));
     expect(onDiscardStaleEditor).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('module-editor-page')).toBeNull();
+  });
+
+  it('#1404 vincula un herraje a un componente desde Herrajes y el guardado lleva componentId', async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = renderScreen({
+      structures: [
+        {
+          id: 'struct-1',
+          code: 'STR-1',
+          name: 'Cuerpo base',
+          components: [],
+        },
+      ],
+    });
+
+    await user.click(screen.getByTestId('module-card-mod-1'));
+    await user.click(screen.getByRole('button', { name: /^Editar$/ }));
+    await screen.findByTestId('module-editor-page');
+
+    // Herrajes queda bloqueado hasta elegir estructura base (mismo gating).
+    await user.click(screen.getByTestId('module-editor-tab-structure'));
+    await user.selectOptions(
+      screen.getByTestId('structure-picker'),
+      'struct-1',
+    );
+    await user.type(screen.getByLabelText('Ancho'), '600');
+    await user.type(screen.getByLabelText('Alto'), '720');
+    await user.type(screen.getByLabelText('Profundidad'), '590');
+    await user.click(screen.getByTestId('module-editor-tab-hardware'));
+
+    expect(
+      screen.getByTestId('module-hardware-component-hint').textContent,
+    ).toMatch(/escala ×N con las copias/);
+
+    // Vincular la línea BISAGRA existente a un componente del catálogo.
+    await user.click(screen.getByLabelText('Componente (opcional)'));
+    await user.click(
+      screen.getByRole('option', { name: /COM-LAT — Lateral izquierdo/ }),
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Guardar/i }));
+
+    await waitFor(() => {
+      expect(onUpdate).toHaveBeenCalledTimes(1);
+    });
+    const [savedId, savedDraft] = onUpdate.mock.calls[0]!;
+    expect(savedId).toBe('mod-1');
+    expect(savedDraft.hardwareLines[0]!.componentId).toBe('comp-lat');
+  });
+
+  it('#1404 un error de servidor no stale mantiene el editor abierto sin banner y conserva el vínculo', async () => {
+    const user = userEvent.setup();
+    const serverError = Object.assign(new Error('boom'), {
+      name: 'GraneteApiError',
+      code: 'INTERNAL_ERROR',
+    });
+    const rejectedUpdate = vi.fn().mockRejectedValue(serverError);
+    renderScreen({
+      structures: [
+        {
+          id: 'struct-1',
+          code: 'STR-1',
+          name: 'Cuerpo base',
+          components: [],
+        },
+      ],
+      onUpdate: rejectedUpdate,
+    });
+
+    await user.click(screen.getByTestId('module-card-mod-1'));
+    await user.click(screen.getByRole('button', { name: /^Editar$/ }));
+    await screen.findByTestId('module-editor-page');
+    await user.click(screen.getByTestId('module-editor-tab-structure'));
+    await user.selectOptions(
+      screen.getByTestId('structure-picker'),
+      'struct-1',
+    );
+    await user.type(screen.getByLabelText('Ancho'), '600');
+    await user.type(screen.getByLabelText('Alto'), '720');
+    await user.type(screen.getByLabelText('Profundidad'), '590');
+    await user.click(screen.getByTestId('module-editor-tab-hardware'));
+
+    await user.click(screen.getByLabelText('Componente (opcional)'));
+    await user.click(
+      screen.getByRole('option', { name: /COM-LAT — Lateral izquierdo/ }),
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Guardar/i }));
+
+    await waitFor(() => {
+      expect(rejectedUpdate).toHaveBeenCalledTimes(1);
+    });
+    // Flush the save rejection (catch branch) before asserting the states.
+    await act(async () => {});
+    // El rechazo se resuelve sin cerrar el editor ni mostrar el banner stale
+    // (ese estado es exclusivo del conflicto de versión; el resto de errores
+    // los cubre el toast compartido de la app).
+    expect(screen.getByTestId('module-editor-page')).toBeTruthy();
+    expect(screen.queryByTestId('module-editor-stale')).toBeNull();
+    expect(
+      screen.getByLabelText('Componente (opcional)').textContent,
+    ).toMatch(/COM-LAT/);
   });
 });

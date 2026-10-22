@@ -48,6 +48,12 @@ export type HardwareLineDraft = {
   mode: 'role' | 'fixed';
   optionRole: string;
   hardwareId: string;
+  /**
+   * #1404 — optional catalog component this line belongs to (empty = none).
+   * Set ⇒ the line is per-copy: its quantity scales ×N with that component's
+   * effective copies (e.g. shelf supports). Same value as HardwareLine.componentId.
+   */
+  componentId: string;
 };
 
 export interface ComponentInstanceDraft {
@@ -145,7 +151,7 @@ export const agregadoInstanceDraftRule: DraftRule = objectRule({
   gapMm: optionalRule(numberRule), mirrored: optionalRule(booleanRule), optionOverrides: optionalRule(recordValuesRule(stringRule)) });
 const presetRule = objectRule({ ...stringFields('id', 'name'), width: numberRule, height: numberRule, depth: numberRule });
 const hardwareLineDraftRule = objectRule({ ...stringFields('id', 'descriptionOverride', 'optionRole', 'hardwareId'),
-  quantity: numberRule, mode: enumRule('role', 'fixed') });
+  quantity: numberRule, mode: enumRule('role', 'fixed'), componentId: optionalRule(stringRule) });
 /**
  * Structural-only guard for verbatim parameter definitions (#497): each entry
  * must be an object, but content is NOT mirrored here — the server owns
@@ -223,6 +229,7 @@ export function emptyHardwareLineDraft(id: string): HardwareLineDraft {
     mode: 'role',
     optionRole: '',
     hardwareId: '',
+    componentId: '',
   };
 }
 
@@ -281,6 +288,7 @@ export function hardwareLineToDraft(line: HardwareLine): HardwareLineDraft {
     mode: hasFixed ? 'fixed' : 'role',
     optionRole: line.optionRole,
     hardwareId: line.hardwareId ?? '',
+    componentId: line.componentId ?? '',
   };
 }
 
@@ -373,6 +381,7 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
         l.mode === 'fixed' && l.hardwareId.trim()
           ? l.hardwareId.trim()
           : undefined,
+      componentId: l.componentId.trim() ? l.componentId.trim() : undefined,
     })),
     structureId: (draft.structureId ?? '').trim() || undefined,
     components: (draft.components ?? []).map((c) => ({
