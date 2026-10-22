@@ -103,6 +103,7 @@ describe('ModuleEditorHardwarePanel — vínculo con componente (#1404)', () => 
     setup();
     const hint = screen.getByTestId('module-hardware-component-hint');
     expect(hint.textContent).toMatch(/escala ×N con las copias/);
+    expect(hint.textContent).toMatch(/no usa ese componente, la línea no entra al BOM/);
     expect(hint.textContent).toMatch(/soportes de entrepaño/);
     expect(
       screen.getByLabelText('Componente (opcional)').textContent,

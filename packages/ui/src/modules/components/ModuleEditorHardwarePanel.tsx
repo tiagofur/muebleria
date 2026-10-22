@@ -53,7 +53,8 @@ export function ModuleEditorHardwarePanel({
       </div>
       <p className="module-editor__hint" data-testid="module-hardware-component-hint">
         Si la línea pertenece a un componente replicado, su cantidad escala ×N
-        con las copias (p. ej. soportes de entrepaño).
+        con las copias (p. ej. soportes de entrepaño). Si el módulo no usa ese
+        componente, la línea no entra al BOM.
       </p>
       {hardwareLines.length === 0 ? (
         <p className="catalog-empty">Sin líneas de herraje.</p>
