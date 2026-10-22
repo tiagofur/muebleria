@@ -2818,6 +2818,7 @@ type CatalogHardwareLine struct {
 	DescriptionOverride *string `json:"description_override,omitempty"`
 	OptionRole          string  `json:"option_role"`
 	HardwareID          *string `json:"hardware_id,omitempty"`
+	ComponentID         *string `json:"component_id,omitempty"`
 }
 
 type CatalogHardwareRelativePosition struct {
