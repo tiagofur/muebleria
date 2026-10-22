@@ -20,7 +20,7 @@ import {
 } from '@granete/excel';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 /**
  * #739 browser E2E against the real Go backend + PostgreSQL:
@@ -232,7 +232,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
         // this spec quotes its own module; later residents quote the seed.
         ...catalog.modules,
         {
-          ...template,
+          ...moduleCreatePayload(template),
           id: MODULE_ID,
           code: 'ENG-739-MOD',
           name: 'Módulo Ingeniería 739',

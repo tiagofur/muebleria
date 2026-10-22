@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 /**
  * #741 PR 1 — browser E2E of the conservative continuity policy:
@@ -186,7 +186,7 @@ test.describe.serial('Continuidad P1→P2: nueva revisión sin retarget implíci
         // CONT module, and later residents quote the seed with empty choices.
         ...catalog.modules,
         {
-          ...template,
+          ...moduleCreatePayload(template),
           id: CONT_MODULE,
           code: 'PROD-741C',
           name: 'Módulo Continuidad 741C',

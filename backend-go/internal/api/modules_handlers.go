@@ -59,6 +59,10 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 				respondWithParameterDefinitionIssues(w, definitionsErr.Issues)
 				return
 			}
+			if moduleChildRowConflict(err) {
+				respondWithError(w, http.StatusConflict, "Los ids de presets, herrajes o piezas ya pertenecen a otra fila. Al clonar una plantilla, quitá esos ids para que el servidor genere unos nuevos.")
+				return
+			}
 			if isDuplicateKey(err) {
 				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
@@ -127,6 +131,10 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 			}
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if moduleChildRowConflict(err) {
+				respondWithError(w, http.StatusConflict, "Los ids de presets, herrajes o piezas ya pertenecen a otra fila. Al clonar una plantilla, quitá esos ids para que el servidor genere unos nuevos.")
 				return
 			}
 			if isDuplicateKey(err) {

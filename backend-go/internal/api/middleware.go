@@ -199,18 +199,28 @@ func AuthMiddleware(tokens *auth.Authority, users MembershipLookup) func(http.Ha
 					if respondWithTeamInvariantError(w, err) {
 						return
 					}
+					// #1398: a statement the handler already answered with a 4xx
+					// (e.g. a duplicate id surfaced as 409) aborted the tenant
+					// transaction; the trailing COMMIT then fails with pgx's
+					// "commit unexpectedly resulted in rollback". The transaction
+					// rolls back either way and PostgreSQL rejects every statement
+					// after the abort, so the handler's rendered 4xx is the honest
+					// response — flush it instead of replacing it with a generic
+					// 500. Commit failures under a 2xx/5xx keep the old behavior.
+					if buffer.status >= http.StatusBadRequest && buffer.status < http.StatusInternalServerError && isCommitRolledBack(err) {
+						slog.Error("tenant transaction was already aborted by the handler's statement; flushing its rendered response",
+							"op", "tenant transaction",
+							"status", buffer.status,
+							"body", capturedBodyForLog(buffer.body.String()),
+							"path", r.URL.Path,
+							"request_id", RequestIDFromContext(r.Context()))
+						flushCapturedResponse(w, buffer)
+						return
+					}
 					respondWithInternalError(w, err, "tenant transaction")
 					return
 				}
-				for key, values := range buffer.header {
-					w.Header()[key] = append([]string(nil), values...)
-				}
-				status := buffer.status
-				if status == 0 {
-					status = http.StatusOK
-				}
-				w.WriteHeader(status)
-				_, _ = w.Write(buffer.body.Bytes())
+				flushCapturedResponse(w, buffer)
 				return
 			}
 
@@ -817,4 +827,27 @@ var extensionTokenMayPutPatterns = []*regexp.Regexp{
 func extensionTokenMayPost(path string) bool {
 	_, ok := extensionTokenMayPostPaths[path]
 	return ok
+}
+
+// flushCapturedResponse replays the buffered handler response onto the real
+// writer: the tenant-transaction middleware renders into a capture buffer so
+// a commit failure can still decide what the client finally sees.
+func flushCapturedResponse(w http.ResponseWriter, buffer *captureWriter) {
+	for key, values := range buffer.header {
+		w.Header()[key] = append([]string(nil), values...)
+	}
+	status := buffer.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	w.WriteHeader(status)
+	_, _ = w.Write(buffer.body.Bytes())
+}
+
+// isCommitRolledBack reports whether err is pgx's "commit unexpectedly
+// resulted in rollback": COMMIT ran on a transaction a failed statement had
+// already aborted. pgx does not export a sentinel for it, so the message is
+// the contract (same approach as the storage "not found" matching).
+func isCommitRolledBack(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "commit unexpectedly resulted in rollback")
 }

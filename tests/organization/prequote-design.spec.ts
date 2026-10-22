@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { Client } from 'pg';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, required, moduleCreatePayload } from './support/api';
 
 // Catalog-only prerequisite: the gate's generic module references a required
 // ZOCLO choice. Keep the quote/customer/lines/Design path exclusively in UI.
@@ -23,7 +23,7 @@ async function preparePricedCatalogFixture(): Promise<void> {
     ...catalog,
     structures: [...(catalog.structures ?? []), { id: structureId, code: 'PREQUOTE-STRUCT', name: 'Prequote structure', externalDims: dims, components: [], active: true }],
     hardware: [...catalog.hardware, { id: hardwareId, code: 'PREQUOTE-HW', name: 'Prequote hardware', unit: 'piece', costPerUnit: 10, active: true }],
-    modules: [{ ...template, id: GATE_MODULE_A_ID, structureId, baseMode: 'none', components: [], hardwareLines: [{ id: 'prequote-hardware-line', hardwareId, quantity: 1, optionRole: '' }], externalDims: dims }],
+    modules: [{ ...moduleCreatePayload(template), id: GATE_MODULE_A_ID, structureId, baseMode: 'none', components: [], hardwareLines: [{ id: 'prequote-hardware-line', hardwareId, quantity: 1, optionRole: '' }], externalDims: dims }],
   });
 }
 

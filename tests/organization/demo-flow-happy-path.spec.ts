@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 /**
  * #642 demo flow — browser E2E of the SIMPLIFIED happy path UX:
@@ -252,7 +252,7 @@ async function seedHappyPathFixtureReal(): Promise<SeededHappyPath> {
     hardware: [...catalog.hardware, { id: HAPPY_HW, code: 'HAPPY-B-HW', name: 'Herraje Happy B', unit: 'piece', costPerUnit: 10, active: true }],
     modules: [
       {
-        ...template,
+        ...moduleCreatePayload(template),
         id: GATE_MODULE_A_ID,
         structureId: HAPPY_STRUCT,
         components: [],

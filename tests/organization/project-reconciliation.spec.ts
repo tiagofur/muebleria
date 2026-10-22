@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 /**
  * #502 / WEB-DT-3 browser E2E against the real Go backend + PostgreSQL:
@@ -63,7 +63,7 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
     hardware: [...catalog.hardware, { id: REC_HW, code: 'REC-HW', name: 'Herraje', unit: 'piece', costPerUnit: 10, active: true }],
     modules: [
       {
-        ...template,
+        ...moduleCreatePayload(template),
         id: GATE_MODULE_A_ID,
         structureId: REC_STRUCT,
         components: [],

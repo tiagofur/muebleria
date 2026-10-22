@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -1233,6 +1234,59 @@ func TestAuthMiddleware_PlatformAdminLiveAuthority(t *testing.T) {
 		}
 		if claimsInContext == nil || !claimsInContext.PlatformAdmin {
 			t.Fatalf("context claims PlatformAdmin = false, want true (DB authority)")
+		}
+	})
+}
+
+// #1398: a statement failure the handler already answered with a 4xx aborts
+// the tenant transaction; the trailing COMMIT fails with pgx's rollback
+// notice and must NOT replace the rendered 4xx with a generic 500.
+func TestAuthMiddleware_FlushesRendered4xxWhenCommitRolledBack(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	users := &commitFailingUsers{
+		staticUsers: &staticUsers{
+			byID: map[string]*domain.User{
+				"user-1": {ID: "user-1", Email: "user@test.com", AccountStatus: domain.AccountStatusActive},
+			},
+			memberships: map[string]*domain.MembershipWithOrg{
+				"user-1:org-1": {
+					Membership:   domain.Membership{ID: "user-1:org-1", OrganizationID: "org-1", UserID: "user-1", CredentialVersion: 1, Roles: []domain.UserRole{domain.RoleAdmin}, Status: domain.MembershipStatusActive},
+					Organization: domain.Organization{ID: "org-1", Status: domain.OrganizationStatusActive, CredentialVersion: 1},
+				},
+			},
+		},
+		commitErr: errors.New("commit unexpectedly resulted in rollback"),
+	}
+	token, err := auth.GenerateLegacyWebToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "user-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newReq := func() *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/api/catalog/modules", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		return req
+	}
+
+	t.Run("409 rendered by the handler survives the rollback commit", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		AuthMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
+		})).ServeHTTP(rr, newReq())
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("status = %d, want 409 (the handler's conflict, not the commit's 500)", rr.Code)
+		}
+		if !strings.Contains(rr.Body.String(), "El código ingresado ya está registrado") {
+			t.Fatalf("the handler's 409 body must reach the client verbatim, got %s", rr.Body.String())
+		}
+	})
+
+	t.Run("200 with a failing commit stays a 500", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		AuthMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})).ServeHTTP(rr, newReq())
+		if rr.Code != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want 500: a commit failure under a success response is still a transaction failure", rr.Code)
 		}
 	})
 }

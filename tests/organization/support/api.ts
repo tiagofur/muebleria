@@ -198,3 +198,25 @@ export async function prepareLifecycleSubject(): Promise<LifecycleSubject> {
     bOwnerToken: bOwner.token,
   };
 }
+
+/**
+ * Clones a catalog module as a CREATE payload base WITHOUT dragging child row
+ * ids (#1398): presets / board parts / hardware line ids are server identity —
+ * the server generates them on create, and a template clone that kept the
+ * source module's ids used to collide on module_presets and surface as a
+ * generic 500 instead of a typed conflict.
+ */
+export function moduleCreatePayload<
+  M extends {
+    presets?: readonly { id: string }[];
+    hardwareLines?: readonly { id: string }[];
+    boardParts?: readonly { id: string }[];
+  },
+>(template: M): M {
+  return {
+    ...template,
+    presets: template.presets?.map((preset) => ({ ...preset, id: '' })),
+    hardwareLines: template.hardwareLines?.map((line) => ({ ...line, id: '' })),
+    boardParts: template.boardParts?.map((part) => ({ ...part, id: '' })),
+  };
+}

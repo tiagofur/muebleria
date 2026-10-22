@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 /**
  * #740 PR 2 — browser E2E of the OPERATIONAL physical work gate:
@@ -216,7 +216,7 @@ test.describe.serial('Operational physical gate: Ingeniería → materiales → 
         // module instead of rewiring the seed for every later resident.
         ...catalog.modules,
         {
-          ...template,
+          ...moduleCreatePayload(template),
           id: GATE_MODULE,
           code: 'ENG-740G',
           name: 'Módulo Ingeniería 740G',

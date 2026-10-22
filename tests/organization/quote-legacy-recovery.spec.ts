@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { Pool } from 'pg';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 /**
  * #642 Legacy Quote Recovery — real browser E2E (Chromium + Go + PostgreSQL).
@@ -62,7 +62,7 @@ test.describe.serial('#642 legacy quote recovery', () => {
       customers: [...(catalog.customers ?? []).filter((c) => c.id !== CUSTOMER_ID), { id: CUSTOMER_ID, name: CUSTOMER_NAME, active: true }],
       modules: [
         ...catalog.modules.filter((m) => m.id !== GATE_MODULE_A_ID),
-        { ...template, id: GATE_MODULE_A_ID, externalDims: { width: 600, height: 720, depth: depthMm } },
+        { ...moduleCreatePayload(template), id: GATE_MODULE_A_ID, externalDims: { width: 600, height: 720, depth: depthMm } },
       ],
     });
 

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload } from './support/api';
 
 /**
  * #738 — browser E2E of the canonical Engineering entry:
@@ -92,7 +92,7 @@ test.describe.serial('Engineering entry: canonical release → queue + workspace
       hardware: [...catalog.hardware, { id: ENTRY_HW, code: 'ENG-ENTRY-HW', name: 'Herraje Entrada', unit: 'piece', costPerUnit: 10, active: true }],
       modules: [
         {
-          ...template,
+          ...moduleCreatePayload(template),
           id: GATE_MODULE_A_ID,
           structureId: ENTRY_STRUCT,
           components: [],

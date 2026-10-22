@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { required } from './support/api';
+import { required, moduleCreatePayload } from './support/api';
 
 /**
  * #1215: a hardware pinned by live references cannot be deactivated from the
@@ -81,7 +81,7 @@ test.describe.serial('Hardware in-use deactivation guard (#1215) browser E2E', (
       modules: [
         ...catalog.modules.filter((m) => m.id !== MODULE_ID),
         {
-          ...template,
+          ...moduleCreatePayload(template),
           id: MODULE_ID,
           code: 'MOD-HW-INUSE-GUARD',
           name: 'Módulo guard in-use',
