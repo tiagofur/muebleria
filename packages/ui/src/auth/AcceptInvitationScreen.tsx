@@ -43,6 +43,9 @@ const INVITATION_FALLBACK_MESSAGE = 'Esta invitación no está disponible. Pedil
 
 function invitationStateMessage(error: unknown): string {
   if (error instanceof GraneteApiError) {
+    if (error.status === 429) {
+      return 'Demasiados intentos. Esperá un momento y probá de nuevo.';
+    }
     return INVITATION_STATE_MESSAGES[error.code] ?? INVITATION_FALLBACK_MESSAGE;
   }
   return 'No se pudo verificar la invitación. Revisá tu conexión y probá de nuevo.';
@@ -72,6 +75,13 @@ export function AcceptInvitationScreen({
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<InvitationPreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  /**
+   * #1108 re-critique: Reintentar sólo donde puede funcionar — red, 429 (el
+   * limiter viaja con retryable: false, por eso el status explícito) y 5xx
+   * que el backend marca retryable. En estados terminales (vencida/revocada/
+   * usada/rotada) la primaria es volver al login — reintentar es acción muerta.
+   */
+  const [previewRetryable, setPreviewRetryable] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
   const errorRef = useRef<HTMLDivElement>(null);
   const previewErrorRef = useRef<HTMLDivElement>(null);
@@ -85,6 +95,9 @@ export function AcceptInvitationScreen({
     } catch (err) {
       setPreview(null);
       setPreviewError(invitationStateMessage(err));
+      setPreviewRetryable(
+        !(err instanceof GraneteApiError) || err.status === 429 || err.retryable,
+      );
     } finally {
       setPreviewLoading(false);
     }
@@ -169,11 +182,21 @@ export function AcceptInvitationScreen({
               {previewError}
             </div>
             <div className="accept-invitation-card__footer accept-invitation-card__footer--actions">
-              <button type="button" className="btn btn--secondary btn--small" onClick={() => void loadPreview()}>
-                Reintentar
-              </button>
+              {previewRetryable ? (
+                <button type="button" className="btn btn--secondary btn--small" onClick={() => void loadPreview()}>
+                  Reintentar
+                </button>
+              ) : null}
               {onBackToLogin && (
-                <button type="button" className="btn btn--ghost btn--small accept-invitation-card__back" onClick={onBackToLogin}>
+                <button
+                  type="button"
+                  className={
+                    previewRetryable
+                      ? 'btn btn--ghost btn--small accept-invitation-card__back'
+                      : 'btn btn--secondary btn--small accept-invitation-card__back'
+                  }
+                  onClick={onBackToLogin}
+                >
                   <ArrowLeft size={14} strokeWidth={1.5} aria-hidden="true" /> Volver al inicio de sesión
                 </button>
               )}
@@ -274,7 +297,7 @@ export function AcceptInvitationScreen({
               aria-busy={loading}
             >
               {loading ? (
-                'Enviando...'
+                'Enviando…'
               ) : (
                 <>
                   <UserCheck size={16} strokeWidth={1.5} aria-hidden="true" />

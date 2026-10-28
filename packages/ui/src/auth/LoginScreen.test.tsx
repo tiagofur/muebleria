@@ -84,7 +84,7 @@ describe('LoginScreen', () => {
     );
 
     const submit = screen.getByRole('button', {
-      name: 'Iniciando sesión...',
+      name: 'Iniciando sesión…',
     }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     expect((screen.getByLabelText('Email') as HTMLInputElement).disabled).toBe(
