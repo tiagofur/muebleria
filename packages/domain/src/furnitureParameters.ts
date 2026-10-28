@@ -17,7 +17,7 @@ const PARAMETER_FIELDS = new Set([
   'name', 'label', 'sortOrder', 'type', 'defaultValue', 'required', 'unit', 'category',
   'min', 'max', 'step', 'maxLength', 'options', 'optionLabels', 'integer', 'binding',
 ]);
-const BINDING_FIELDS = new Set(['version', 'kind', 'componentId', 'dimension', 'relationship']);
+const BINDING_FIELDS = new Set(['version', 'kind', 'componentId', 'agregadoId', 'dimension', 'relationship']);
 const RELATIONSHIP_FIELDS = new Set(['kind', 'sourceRole', 'sourceFace', 'targets', 'station', 'families']);
 const RELATIONSHIP_TARGET_FIELDS = new Set(['componentId', 'role', 'face']);
 const RELATIONSHIP_STATION_FIELDS = new Set(['startMarginMm', 'endMarginMm']);
@@ -407,6 +407,9 @@ function validateBinding(
     if (binding.dimension !== undefined) {
       add('binding.dimension', 'is not allowed for componentQuantity');
     }
+    if (binding.agregadoId !== undefined) {
+      add('binding.agregadoId', 'is only allowed for agregadoQuantity and agregadoCondition');
+    }
     if (binding.relationship !== undefined) {
       if (binding.relationship === null || typeof binding.relationship !== 'object' ||
           Array.isArray(binding.relationship)) {
@@ -448,6 +451,35 @@ function validateBinding(
     if (binding.dimension !== undefined || binding.relationship !== undefined) {
       add('binding', 'componentCondition cannot declare dimension or relationship');
     }
+    if (binding.agregadoId !== undefined) {
+      add('binding.agregadoId', 'is only allowed for agregadoQuantity and agregadoCondition');
+    }
+  } else if (binding.kind === 'agregadoQuantity') {
+    if (definition.type !== 'number' || !definition.integer) {
+      add('binding.kind', 'agregadoQuantity requires an integer number parameter');
+    }
+    if (typeof binding.agregadoId !== 'string' || !binding.agregadoId.trim()) {
+      add('binding.agregadoId', 'is required for agregadoQuantity');
+    }
+    if (binding.dimension !== undefined || binding.relationship !== undefined) {
+      add('binding', 'agregadoQuantity cannot declare dimension or relationship');
+    }
+    if (binding.componentId !== undefined && binding.componentId !== '') {
+      add('binding.componentId', 'is only allowed for component kinds');
+    }
+  } else if (binding.kind === 'agregadoCondition') {
+    if (definition.type !== 'boolean') {
+      add('binding.kind', 'agregadoCondition requires a boolean parameter');
+    }
+    if (typeof binding.agregadoId !== 'string' || !binding.agregadoId.trim()) {
+      add('binding.agregadoId', 'is required for agregadoCondition');
+    }
+    if (binding.dimension !== undefined || binding.relationship !== undefined) {
+      add('binding', 'agregadoCondition cannot declare dimension or relationship');
+    }
+    if (binding.componentId !== undefined && binding.componentId !== '') {
+      add('binding.componentId', 'is only allowed for component kinds');
+    }
   } else if (binding.kind === 'dimensionColumn') {
     if (definition.type !== 'number' || !definition.integer || definition.unit !== 'mm') {
       add('binding.kind', 'dimensionColumn requires an integer number parameter measured in mm');
@@ -459,6 +491,9 @@ function validateBinding(
     if ((binding.componentId !== undefined && binding.componentId !== '') || binding.relationship !== undefined) {
       add('binding', 'dimensionColumn cannot target composition');
     }
+    if (binding.agregadoId !== undefined) {
+      add('binding.agregadoId', 'is only allowed for agregadoQuantity and agregadoCondition');
+    }
   } else if (binding.kind === 'structureRelationship') {
     if (definition.type !== 'number' || !definition.integer) {
       add('binding.kind', 'structureRelationship requires an integer number parameter (the station count)');
@@ -468,6 +503,9 @@ function validateBinding(
     }
     if (binding.dimension !== undefined) {
       add('binding.dimension', 'is not allowed for structureRelationship');
+    }
+    if (binding.agregadoId !== undefined) {
+      add('binding.agregadoId', 'is only allowed for agregadoQuantity and agregadoCondition');
     }
     if (binding.relationship === null || typeof binding.relationship !== 'object' ||
         Array.isArray(binding.relationship)) {
@@ -567,7 +605,7 @@ function validateBinding(
       }
     }
   } else {
-    add('binding.kind', 'must be componentQuantity, componentCondition, dimensionColumn, or structureRelationship');
+    add('binding.kind', 'must be componentQuantity, componentCondition, agregadoQuantity, agregadoCondition, dimensionColumn, or structureRelationship');
   }
 }
 
