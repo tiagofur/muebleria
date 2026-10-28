@@ -133,6 +133,63 @@ class PresentationMotionAdapterTest < Minitest::Test
     assert_equal @handle_closed.to_a, @handle.transformation.to_a
   end
 
+  def test_fixed_body_members_never_move_and_zero_drift_after_50_cycles
+    # #1376: rigid member with actorMembership 'body' stays fixed to cabinet
+    plate_closed = Geom::Transformation.translation(Geom::Vector3d.new(24.0, 0.5, 2.0))
+    plate_fixed = FakeComponentInstance.new('plate-fixed', plate_closed)
+
+    # Hardware mounted on door-1 only includes the moving member (@handle),
+    # while plate_fixed belongs to body and is omitted from hardware_by_host
+    a = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+      motions, { 'door-1' => @door }, { 'door-1' => [@handle] }
+    )
+
+    50.times do
+      a.apply_motion('slot-0', 1.0, nil, side: 'left')
+      # During open: plate_fixed never moved
+      assert_equal plate_closed.to_a, plate_fixed.transformation.to_a
+      # While handle moved
+      refute_equal @handle_closed.to_a, @handle.transformation.to_a
+
+      a.apply_motion('slot-0', 0.0)
+    end
+
+    assert_equal @door_closed.to_a, @door.transformation.to_a
+    assert_equal @handle_closed.to_a, @handle.transformation.to_a
+    assert_equal plate_closed.to_a, plate_fixed.transformation.to_a
+  end
+
+  def test_two_instances_of_same_recipe_membership_does_not_interfere
+    door_b_closed = Geom::Transformation.translation(Geom::Vector3d.new(10.0, 1.0, 300.0))
+    door_b = FakeComponentInstance.new('door-2', door_b_closed, 15.0)
+    handle_b_closed = Geom::Transformation.translation(Geom::Vector3d.new(12.0, 1.5, 305.0))
+    handle_b = FakeComponentInstance.new('handle-2', handle_b_closed)
+
+    two_motions = motions + [{
+      'id' => 'slot-1',
+      'doorSlotIndex' => 1,
+      'componentInstanceIds' => ['door-2'],
+      'motion' => { 'kind' => 'rotate', 'openAngleDeg' => 90.0 }
+    }]
+
+    a = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+      two_motions,
+      { 'door-1' => @door, 'door-2' => door_b },
+      { 'door-1' => [@handle], 'door-2' => [handle_b] }
+    )
+
+    # Move only slot-0 (door A)
+    a.apply_motion('slot-0', 1.0, nil, side: 'left')
+
+    # Door A moved
+    refute_equal @door_closed.to_a, @door.transformation.to_a
+    refute_equal @handle_closed.to_a, @handle.transformation.to_a
+
+    # Door B completely unmoved
+    assert_equal door_b_closed.to_a, door_b.transformation.to_a
+    assert_equal handle_b_closed.to_a, handle_b.transformation.to_a
+  end
+
   def test_close_all_restores_all_actors
     a = adapter
     a.apply_motion('slot-0', 1.0, nil, side: 'left')

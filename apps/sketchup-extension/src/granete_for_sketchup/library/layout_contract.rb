@@ -275,7 +275,7 @@ module Granete
       # a single unified hardware placement contract authority (R1).
       class LayoutAssemblyRigidMember < LayoutHardwarePlacement
         attr_reader :member_id, :assembly_instance_id, :agregado_id, :role, :render_status,
-                    :recipe_revision, :snapshot_id
+                    :recipe_revision, :snapshot_id, :actor_membership
 
         # rubocop:disable-next Metrics/ParameterLists
         def initialize(member_id:, assembly_instance_id:, agregado_id:, local_transform:,
@@ -284,7 +284,7 @@ module Granete
                        preparation_state: nil, mount_frame: nil, render_status: nil,
                        is_historical: false, recipe_revision: nil, snapshot_id: nil,
                        dimensions: nil, color_hex: nil, anchor_face: nil, offset_mm: nil,
-                       host_component_instance_id: nil, placement_kind: 'derived')
+                       host_component_instance_id: nil, placement_kind: 'derived', actor_membership: nil)
           @member_id = member_id
           @assembly_instance_id = assembly_instance_id
           @agregado_id = agregado_id
@@ -292,6 +292,7 @@ module Granete
           @render_status = render_status
           @recipe_revision = recipe_revision
           @snapshot_id = snapshot_id
+          @actor_membership = actor_membership
           placement_id = "#{assembly_instance_id}:#{member_id}"
           resolved_name = name || role || member_id
           super(
@@ -960,7 +961,10 @@ module Granete
             dimensions: ContractCoercions.optional_triple(raw['dimensionsMm'], "dimensionsMm de #{placement_id}"),
             color_hex: ContractCoercions.optional_opaque_string(raw['colorHex'], "colorHex de #{placement_id}"),
             anchor_face: ContractCoercions.optional_opaque_string(raw['anchorFace'], "anchorFace de #{placement_id}"),
-            offset_mm: raw['offsetMm']&.to_f
+            offset_mm: raw['offsetMm']&.to_f,
+            actor_membership: ContractCoercions.optional_opaque_string(
+              raw['actorMembership'], "actorMembership de #{placement_id}"
+            )
           )
         end
 
