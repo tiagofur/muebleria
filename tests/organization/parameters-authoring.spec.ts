@@ -202,6 +202,83 @@ test.describe.serial('Furniture parameter authoring (#497) Browser E2E', () => {
     await expect(page.getByTestId('parameter-row')).toContainText('cantidad de componente');
   });
 
+  test('React authors an agregadoQuantity binding and the preview resolves its copies (#1386)', async ({ page }) => {
+    test.setTimeout(120_000);
+    const AGR_ID = 'd1111111-3333-4d44-8555-666666666611';
+    const STRUCTURE_ID = 'd1111111-3333-4d44-8555-666666666612';
+    const MODULE_ID_AGR = 'd1111111-3333-4d44-8555-666666666613';
+    const token = await apiLogin(required('ORGANIZATION_GATE_EMAIL'), required('ORGANIZATION_GATE_ORG_A_SLUG'));
+
+    // Seed: structure (agregado copies need the structured layout path),
+    // the agregado reusing the seeded board, and a module placing one unit.
+    await upsert(token, `/catalog/structures/${STRUCTURE_ID}`, '/catalog/structures', {
+      id: STRUCTURE_ID, code: 'AGR-BR-CUERPO', name: 'Cuerpo agregado browser',
+      components: [],
+    });
+    await upsert(token, `/catalog/agregados/${AGR_ID}`, '/catalog/agregados', {
+      id: AGR_ID, code: 'AGR-BR-CAJ', name: 'Cajón browser', active: true,
+      components: [{ componentId: COMPONENT_ID, quantity: 1 }],
+    });
+    await upsert(token, `/catalog/modules/${MODULE_ID_AGR}`, '/catalog/modules', {
+      id: MODULE_ID_AGR, code: 'MOD-AGR-BR', name: 'Mueble agregado browser',
+      base_labor_cost: 0, width_mm: 600, height_mm: 720, depth_mm: 590,
+      categoryId: '', structure_id: STRUCTURE_ID, furniture_type: 'inferior',
+      base_mode: '', base_clearance_mm: null, components: [], presets: [],
+      agregados: [{ agregado_id: AGR_ID, quantity: 1 }],
+      image_url: '', notes: '', hardware_lines: [], parameter_definitions: [],
+    });
+
+    await loginToA(page);
+    await page.goto(`/modules/${MODULE_ID_AGR}/edit`);
+    await page.getByTestId('module-editor-tab-parameters').click();
+    await page.getByTestId('parameter-add').click();
+
+    await page.getByTestId('parameter-name').fill('cajones');
+    await page.getByTestId('parameter-label').fill('Cantidad de cajones');
+    await page.getByTestId('parameter-type').selectOption('number');
+    await page.getByTestId('parameter-category').selectOption('configuration');
+    await page.getByTestId('parameter-min').fill('0');
+    await page.getByTestId('parameter-max').fill('8');
+    await page.getByTestId('parameter-integer').check();
+    await page.getByTestId('parameter-unit').selectOption('count');
+    await page.getByTestId('parameter-binding-kind').selectOption('agregadoQuantity');
+    await page.getByTestId('parameter-binding-agregado').selectOption(AGR_ID);
+    await page.getByTestId('parameter-save').click();
+
+    await expect(page.getByTestId('parameter-row')).toContainText('cajones');
+    await expect(page.getByTestId('parameter-row')).toContainText('cantidad de agregado');
+
+    await page.getByRole('button', { name: /^Guardar/i }).click();
+    await expect(page.getByTestId('module-editor-page')).toHaveCount(0, { timeout: 20_000 });
+
+    // API readback: the binding persisted with agregadoId (no componentId).
+    const modulesResponse = await apiGet(token, '/catalog/modules');
+    expect(modulesResponse.ok).toBeTruthy();
+    const modules = (await modulesResponse.json()) as ReadonlyArray<{
+      id: string;
+      parameter_definitions?: ReadonlyArray<{ name: string; binding?: { kind: string; componentId?: string; agregadoId?: string } }>;
+    }>;
+    const authored = modules.find((m) => m.id === MODULE_ID_AGR);
+    expect(authored?.parameter_definitions?.[0]?.binding?.kind).toBe('agregadoQuantity');
+    expect(authored?.parameter_definitions?.[0]?.binding?.agregadoId).toBe(AGR_ID);
+    expect(authored?.parameter_definitions?.[0]?.binding?.componentId).toBeUndefined();
+
+    // Server-authoritative preview: the copies follow the parameter (2 units
+    // × 1 board, then 0 removes every agregado piece). Same page session —
+    // already logged in from the authoring leg.
+    await page.goto(`/modules/${MODULE_ID_AGR}/edit`);
+    await page.getByTestId('module-editor-tab-parameters').click();
+    await page.getByTestId('parameter-sample-cajones').fill('2');
+    await page.getByTestId('parameter-preview-run').click();
+    await expect(page.getByTestId('parameter-preview-accepted')).toBeVisible();
+    await expect(page.getByTestId('parameter-preview-accepted')).toContainText('2 piezas');
+
+    await page.getByTestId('parameter-sample-cajones').fill('0');
+    await page.getByTestId('parameter-preview-run').click();
+    await expect(page.getByTestId('parameter-preview-accepted')).toBeVisible();
+    await expect(page.getByTestId('parameter-preview-accepted')).toContainText('0 piezas');
+  });
+
   test('tenant isolation: organization B never sees the authored parameters', async () => {
     const tokenB = await apiLogin(
       required('ORGANIZATION_GATE_B_OWNER_EMAIL'),
