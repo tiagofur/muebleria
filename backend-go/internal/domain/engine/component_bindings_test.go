@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -245,4 +246,92 @@ func TestAgregadoBindingsSharedContract(t *testing.T) {
 			}
 		})
 	}
+}
+
+// #1386: the BOM mirror of the formula-pose rule (resolve.go) must produce
+// the same unit sizes as the layout — full-size units when the pose formulas
+// use i/N, the historic layout_direction split otherwise. The drawer front
+// derives its length from the unit height so the branch is observable in
+// the piece dims, not just in the piece count.
+func TestResolveBomAgregadoCopyPoseFormula(t *testing.T) {
+	mat := domain.MaterialBoard{
+		ID: "mat-1", Code: "MAT", Name: "Melamina", Active: true,
+		WidthMm: 1830, LengthMm: 2440, ThicknessMm: 18, CostPerM2: 20,
+		DefaultEdgeBandID: "edge-1",
+	}
+	edge := domain.EdgeBand{ID: "edge-1", Code: "CAN", Name: "Canto", CostPerMl: 1, Active: true}
+	compFrente := domain.Component{
+		ID: "comp-frente", Code: "FCAJ", Name: "Frente Cajon", Placement: domain.PlacementFrenteCajon,
+		GeometryKind: "rectangular_board", LengthFormula: "H", WidthMm: 500, ThicknessMm: 18,
+		OptionRoles: []string{"FRENTE"}, Active: true,
+	}
+	agrCajon := domain.Agregado{
+		ID: "cajon-std", Code: "CAJ", Name: "Cajón", Active: true,
+		Components: []domain.ComponentInstance{{ComponentID: "comp-frente", Quantity: 1}},
+	}
+	st := domain.Structure{ID: "st-1", Code: "EST", Name: "Cuerpo", WidthMm: 600, HeightMm: 720, DepthMm: 560, Active: true}
+	module := domain.Module{
+		ID: "mod-1", Code: "MOD", Name: "Cajonera", StructureID: "st-1",
+		WidthMm: 600, HeightMm: 720, DepthMm: 560,
+		Agregados: []domain.ModuleAgregadoInstance{{AgregadoID: "cajon-std", Quantity: 1}},
+		ParameterDefinitions: []domain.FurnitureParameterDefinition{{
+			Name: "cajones", Label: "Cajones", Type: domain.FurnitureParameterTypeNumber,
+			Category:     domain.FurnitureParameterCategoryConfiguration,
+			DefaultValue: float64(1), Integer: true,
+			Binding: &domain.FurnitureParameterBinding{
+				Version: 1, Kind: domain.FurnitureParameterBindingAgregadoQuantity, AgregadoID: "cajon-std",
+			},
+		}},
+	}
+	catalog := domain.Catalog{
+		Materials:  []domain.MaterialBoard{mat},
+		Edges:      []domain.EdgeBand{edge},
+		Structures: []domain.Structure{st},
+		Components: []domain.Component{compFrente},
+		Agregados:  []domain.Agregado{agrCajon},
+	}
+	choices := map[string]string{"INTERIOR": "mat-1", "FRENTE": "mat-1"}
+	run := func(t *testing.T, instance domain.ModuleAgregadoInstance, value float64) []domain.ResolvedBoardPart {
+		t.Helper()
+		module.Agregados = []domain.ModuleAgregadoInstance{instance}
+		bound := ApplyEvaluatedAgregadoBindings(module, map[string]any{"cajones": value})
+		bom, err := ResolveBomWithContext(bound, choices, catalog, nil, "", nil,
+			&domain.ItemCustomDims{WidthMm: 600, HeightMm: 720, DepthMm: 560})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bom.BoardParts
+	}
+
+	t.Run("pose formula makes BOM units full-size", func(t *testing.T) {
+		parts := run(t, domain.ModuleAgregadoInstance{
+			AgregadoID: "cajon-std", Quantity: 1,
+			Position: &domain.AgregadoPosition{ZFormula: "i*250"},
+		}, 3)
+		if len(parts) != 3 {
+			t.Fatalf("expected 3 pieces, got %d", len(parts))
+		}
+		for i, part := range parts {
+			if want := fmt.Sprintf("agr-cajon-std-u%d-comp-frente-copy-0", i); part.ID != want {
+				t.Fatalf("piece id = %s, want %s", part.ID, want)
+			}
+			if part.LengthMm != 720 {
+				t.Fatalf("piece %s length = %v, want full unit 720", part.ID, part.LengthMm)
+			}
+		}
+	})
+
+	t.Run("no pose formula keeps the split unit sizes", func(t *testing.T) {
+		parts := run(t, domain.ModuleAgregadoInstance{
+			AgregadoID: "cajon-std", Quantity: 1, LayoutDirection: "vertical",
+		}, 2)
+		if len(parts) != 2 {
+			t.Fatalf("expected 2 pieces, got %d", len(parts))
+		}
+		for _, part := range parts {
+			if part.LengthMm != 360 {
+				t.Fatalf("piece %s length = %v, want split unit 360", part.ID, part.LengthMm)
+			}
+		}
+	})
 }

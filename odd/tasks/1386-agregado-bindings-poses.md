@@ -50,7 +50,10 @@ formulada, se ejecuta la opción recomendada **(a)**, simétrica a #1383 slice 1
 - TS: `smartFurnitureDomain.ts` (union de kinds + `agregadoId`),
   `furnitureParameters.ts` (`BINDING_FIELDS` + validación espejo),
   `engine/componentBindings.ts` (apply espejo), `engine/bom.ts` (unidades por
-  fórmula espejo).
+  fórmula espejo), `agregadoAssembly.ts` (espejo de la regla en la proyección
+  3D de ensamblados — incorporado en la corrección del review ronda 1 para que
+  Project3D/SpatialStudio/producción no apilen copias que BOM y layout
+  distribuyen).
 - Contratos: `contracts/agregadoBindings.contract.json` (fixture nueva) y
   `contracts/openapi/granete-api.v1.yaml` (enum + `agregadoId`) con
   regeneración de clientes.

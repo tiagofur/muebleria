@@ -82,7 +82,7 @@ describe('agregado copy pose formula (#1386)', () => {
     }],
     components: [{
       id: 'comp-frente', code: 'FCAJ', name: 'Frente Cajon', placement: 'frente_cajon',
-      geometry: { kind: 'rectangular_board', lengthMm: 200, widthMm: 500, thicknessMm: 18 },
+      geometry: { kind: 'rectangular_board', lengthFormula: 'H', widthMm: 500, thicknessMm: 18 },
       optionRoles: ['FRENTE'], active: true,
       defaultEdges: [
         { side: 'L1', enabled: false }, { side: 'L2', enabled: false },
@@ -113,6 +113,8 @@ describe('agregado copy pose formula (#1386)', () => {
     const bom = resolveBom(bound, { FRENTE: 'mat-1' }, source,
       undefined, undefined, undefined, { widthMm: 600, heightMm: 720, depthMm: 500 });
     expect(bom.boardParts.map((part) => part.z)).toEqual([2, 252, 502]);
+    // Full sub-space per unit (Go: TestResolveBomAgregadoCopyPoseFormula).
+    expect(bom.boardParts.map((part) => part.lengthMm)).toEqual([720, 720, 720]);
   });
 
   it('no i/N keeps the layout_direction split', () => {
@@ -124,12 +126,13 @@ describe('agregado copy pose formula (#1386)', () => {
     const module = {
       id: 'mod-1', code: 'MOD', name: 'Cajonera', structureId: 'st-1', hardwareLines: [],
       agregados: [{
-        agregadoId: 'cajon-std', quantity: 1, layoutDirection: 'vertical',
+        agregadoId: 'cajon-std', quantity: 1, layoutDirection: 'vertical' as const,
       }],
     };
     const bound = applyEvaluatedAgregadoBindings(module, definitions, { cajones: 2 });
     const bom = resolveBom(bound, { FRENTE: 'mat-1' }, source,
       undefined, undefined, undefined, { widthMm: 600, heightMm: 720, depthMm: 500 });
     expect(bom.boardParts.map((part) => part.z)).toEqual([2, 362]);
+    expect(bom.boardParts.map((part) => part.lengthMm)).toEqual([360, 360]);
   });
 });

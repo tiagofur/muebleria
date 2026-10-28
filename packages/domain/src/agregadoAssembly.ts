@@ -26,7 +26,7 @@ import type {
   OptionChoices,
   Structure,
 } from './types';
-import { calculateAgregadoSubspaceUnits } from './agregados';
+import { calculateAgregadoSubspaceUnits, type SubspaceUnit } from './agregados';
 import { evaluatePartFormula } from './engine/shared';
 import { materialBindingRole } from './materialRole';
 import { resolveBoardOptionChoiceId } from './plinth';
@@ -1511,13 +1511,41 @@ export function resolveModuleAgregadoAssemblies(
       );
     }
 
-    const units = calculateAgregadoSubspaceUnits(
-      agrInst.quantity,
-      { width: spaceW, height: spaceH, depth: spaceD },
-      { x: spaceX, y: spaceY, z: spaceZ },
-      agrInst.layoutDirection ?? 'none',
-      agrInst.gapMm ?? 0,
-    );
+    // #1386: pose formulas using the copy variables (i, N) position every
+    // unit BY FORMULA at full sub-space size — the layout_direction split
+    // stays off, mirroring bom.ts and the Go engine so the 3D assembly
+    // projection of bound agregado copies matches BOM and layout.
+    const quantity = Math.max(1, agrInst.quantity);
+    const poseUsesCopyIndex = [agrInst.position?.xFormula, agrInst.position?.yFormula, agrInst.position?.zFormula]
+      .some((formula) => /[iN]/.test(formula ?? ''));
+    const units: readonly SubspaceUnit[] = poseUsesCopyIndex
+      ? Array.from({ length: quantity }, (_, unitIndex) => {
+          const poseDims = { ...parentDims, i: unitIndex, N: quantity };
+          const evalPose = (formula: string | undefined, field: 'x' | 'y' | 'z') =>
+            formula
+              ? evaluatePartFormula(formula, poseDims, {
+                  structureCode: agregado.code,
+                  partDescription: agregado.name,
+                  field,
+                })
+              : 0;
+          return {
+            unitIndex,
+            x: evalPose(agrInst.position?.xFormula, 'x'),
+            y: evalPose(agrInst.position?.yFormula, 'y'),
+            z: evalPose(agrInst.position?.zFormula, 'z'),
+            width: spaceW,
+            height: spaceH,
+            depth: spaceD,
+          };
+        })
+      : calculateAgregadoSubspaceUnits(
+          agrInst.quantity,
+          { width: spaceW, height: spaceH, depth: spaceD },
+          { x: spaceX, y: spaceY, z: spaceZ },
+          agrInst.layoutDirection ?? 'none',
+          agrInst.gapMm ?? 0,
+        );
 
     for (const unit of units) {
       const assemblyInstanceId =
