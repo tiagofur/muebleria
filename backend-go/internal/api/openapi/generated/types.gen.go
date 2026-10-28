@@ -2663,6 +2663,8 @@ type FurnitureParameterBindingKind string
 const (
 	FurnitureParameterBindingKindComponentquantity     FurnitureParameterBindingKind = "componentQuantity"
 	FurnitureParameterBindingKindComponentcondition    FurnitureParameterBindingKind = "componentCondition"
+	FurnitureParameterBindingKindAgregadoquantity      FurnitureParameterBindingKind = "agregadoQuantity"
+	FurnitureParameterBindingKindAgregadocondition     FurnitureParameterBindingKind = "agregadoCondition"
 	FurnitureParameterBindingKindDimensioncolumn       FurnitureParameterBindingKind = "dimensionColumn"
 	FurnitureParameterBindingKindStructurerelationship FurnitureParameterBindingKind = "structureRelationship"
 )
@@ -2732,6 +2734,7 @@ type FurnitureParameterBinding struct {
 	Version      int64                                  `json:"version"`
 	Kind         FurnitureParameterBindingKind          `json:"kind"`
 	ComponentId  *string                                `json:"componentId,omitempty"`
+	AgregadoId   *string                                `json:"agregadoId,omitempty"`
 	Dimension    *string                                `json:"dimension,omitempty"`
 	Relationship *FurnitureParameterRelationshipBinding `json:"relationship,omitempty"`
 }

@@ -274,6 +274,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	// Apply declarative consumers before any authoritative expansion. Parameter
 	// names never select behavior here; only the versioned binding does.
 	input.Module = ApplyEvaluatedComponentBindings(input.Module, input.EvaluatedParameters)
+	input.Module = ApplyEvaluatedAgregadoBindings(input.Module, input.EvaluatedParameters)
 
 	// 1. Dry-run the default expansion to collect the template index the
 	// snapshot must map onto (structure/module/agregado walk, same code path

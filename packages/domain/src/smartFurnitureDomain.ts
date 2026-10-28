@@ -176,8 +176,9 @@ export type ParameterType = "number" | "string" | "boolean" | "enum";
 
 export interface FurnitureParameterBinding {
   readonly version: number;
-  readonly kind: "componentQuantity" | "componentCondition" | "dimensionColumn" | "structureRelationship";
+  readonly kind: "componentQuantity" | "componentCondition" | "agregadoQuantity" | "agregadoCondition" | "dimensionColumn" | "structureRelationship";
   readonly componentId?: string;
+  readonly agregadoId?: string;
   readonly dimension?: "widthMm" | "heightMm" | "depthMm";
   readonly relationship?: {
     readonly kind: string;

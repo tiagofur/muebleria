@@ -13,6 +13,7 @@ import {
 import {
   calculateAgregadoSubspaceUnits,
   resolveAgregadoInstance,
+  type SubspaceUnit,
 } from '../agregados';
 import {
   applyBaseTreatment,
@@ -842,13 +843,41 @@ export function resolveComposedModule(
         })
       : 0;
 
-    const units = calculateAgregadoSubspaceUnits(
-      agrInst.quantity,
-      { width: spaceW, height: spaceH, depth: spaceD },
-      { x: spaceX, y: spaceY, z: spaceZ },
-      agrInst.layoutDirection ?? 'none',
-      agrInst.gapMm ?? 0,
-    );
+    // #1386: pose formulas referencing the copy variables (i, N) position
+    // every unit BY FORMULA at full sub-space size — the layout_direction
+    // split stays off so the two distribution mechanisms never stack. This
+    // mirrors Go expandLayoutAgregado/resolve so dims and unit ids match.
+    const quantity = Math.max(1, agrInst.quantity);
+    const poseUsesCopyIndex = [agrInst.position?.xFormula, agrInst.position?.yFormula, agrInst.position?.zFormula]
+      .some((formula) => /[iN]/.test(formula ?? ''));
+    const units: readonly SubspaceUnit[] = poseUsesCopyIndex
+      ? Array.from({ length: quantity }, (_, unitIndex) => {
+          const poseDims = { ...parentDims, i: unitIndex, N: quantity };
+          const evalPose = (formula: string | undefined, field: 'x' | 'y' | 'z') =>
+            formula
+              ? evaluatePartFormula(formula, poseDims, {
+                  structureCode: agregado.code,
+                  partDescription: agregado.name,
+                  field,
+                })
+              : 0;
+          return {
+            unitIndex,
+            x: evalPose(agrInst.position?.xFormula, 'x'),
+            y: evalPose(agrInst.position?.yFormula, 'y'),
+            z: evalPose(agrInst.position?.zFormula, 'z'),
+            width: spaceW,
+            height: spaceH,
+            depth: spaceD,
+          };
+        })
+      : calculateAgregadoSubspaceUnits(
+          agrInst.quantity,
+          { width: spaceW, height: spaceH, depth: spaceD },
+          { x: spaceX, y: spaceY, z: spaceZ },
+          agrInst.layoutDirection ?? 'none',
+          agrInst.gapMm ?? 0,
+        );
 
     for (const unit of units) {
       const unitInst = { ...agrInst, quantity: 1 };

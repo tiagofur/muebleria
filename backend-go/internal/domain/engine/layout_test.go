@@ -691,3 +691,83 @@ func TestDefaultPoseForPlacementParity(t *testing.T) {
 		t.Fatalf("second lateral x = %v, want 582", lateral.x)
 	}
 }
+
+// #1386: an agregado instance whose pose formulas reference i/N positions
+// every copy BY FORMULA at full sub-space size; without them the historic
+// layout_direction split is untouched. The quantity comes from the
+// agregadoQuantity binding, mirroring the boundShelfModule pattern.
+func TestAgregadoCopyPoseFormula(t *testing.T) {
+	drawerFront := domain.Component{
+		ID: "comp-frente", Code: "FCAJ", Name: "Frente Cajón", Placement: domain.PlacementFrenteCajon,
+		GeometryKind: "rectangular_board", LengthMm: 200, WidthMm: 500, ThicknessMm: 18,
+		OptionRoles: []string{"FRENTE"}, Active: true,
+	}
+	agrCajon := domain.Agregado{
+		ID: "cajon-std", Code: "CAJ", Name: "Cajón", Active: true,
+		Components: []domain.ComponentInstance{{ComponentID: "comp-frente", Quantity: 1}},
+	}
+	newModule := func(instance domain.ModuleAgregadoInstance) (domain.Module, domain.Catalog) {
+		structure := domain.Structure{ID: "st-1", Code: "EST", Name: "Cuerpo", WidthMm: 600, HeightMm: 720, DepthMm: 560, Active: true}
+		module := domain.Module{
+			ID: "mod-1", Code: "MOD", Name: "Cajonera", StructureID: "st-1",
+			WidthMm: 600, HeightMm: 720, DepthMm: 560,
+			Agregados: []domain.ModuleAgregadoInstance{instance},
+			ParameterDefinitions: []domain.FurnitureParameterDefinition{{
+				Name: "cajones", Label: "Cajones", Type: domain.FurnitureParameterTypeNumber,
+				Category:     domain.FurnitureParameterCategoryConfiguration,
+				DefaultValue: float64(1), Integer: true,
+				Binding: &domain.FurnitureParameterBinding{
+					Version: 1, Kind: domain.FurnitureParameterBindingAgregadoQuantity, AgregadoID: "cajon-std",
+				},
+			}},
+		}
+		catalog := domain.Catalog{
+			Structures: []domain.Structure{structure},
+			Components: []domain.Component{drawerFront},
+			Agregados:  []domain.Agregado{agrCajon},
+		}
+		return module, catalog
+	}
+	drawerZs := func(t *testing.T, module domain.Module, catalog domain.Catalog) []float64 {
+		t.Helper()
+		layout, err := ResolveFurnitureLayout(module, catalog, nil, nil)
+		if err != nil {
+			t.Fatalf("resolve layout: %v", err)
+		}
+		var zs []float64
+		for _, c := range layout.Components {
+			if c.Name == "Frente Cajón" {
+				zs = append(zs, c.Transform.TranslationMm[2])
+			}
+		}
+		sort.Float64s(zs)
+		return zs
+	}
+
+	t.Run("i formula stacks copies 250mm apart at full size", func(t *testing.T) {
+		module, catalog := newModule(domain.ModuleAgregadoInstance{
+			AgregadoID: "cajon-std", Quantity: 1,
+			Position: &domain.AgregadoPosition{ZFormula: "i*250"},
+		})
+		bound := ApplyEvaluatedAgregadoBindings(module, map[string]any{"cajones": float64(3)})
+		zs := drawerZs(t, bound, catalog)
+		// The +2 is the frente placement's own z offset (pre-existing), on
+		// top of each formula pose (i*250).
+		if !reflect.DeepEqual(zs, []float64{2, 252, 502}) {
+			t.Fatalf("drawer z = %v, want [2 252 502]", zs)
+		}
+	})
+
+	t.Run("no i/N keeps the layout_direction split", func(t *testing.T) {
+		module, catalog := newModule(domain.ModuleAgregadoInstance{
+			AgregadoID: "cajon-std", Quantity: 1, LayoutDirection: "vertical",
+		})
+		bound := ApplyEvaluatedAgregadoBindings(module, map[string]any{"cajones": float64(2)})
+		zs := drawerZs(t, bound, catalog)
+		// Sub-space = module height 720 split in 2 → units at z 0 and 360,
+		// plus the frente placement's own +2.
+		if !reflect.DeepEqual(zs, []float64{2, 362}) {
+			t.Fatalf("drawer z = %v, want split [2 362]", zs)
+		}
+	})
+}

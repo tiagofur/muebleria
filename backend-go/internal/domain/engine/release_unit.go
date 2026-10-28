@@ -174,7 +174,7 @@ func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalo
 		}
 	}
 	for _, definition := range module.ParameterDefinitions {
-		if definition.Binding != nil && definition.Binding.Kind == domain.FurnitureParameterBindingComponentQuantity {
+		if definition.Binding != nil && (definition.Binding.Kind == domain.FurnitureParameterBindingComponentQuantity || definition.Binding.Kind == domain.FurnitureParameterBindingAgregadoQuantity) {
 			value, ok := values[definition.Name].(float64)
 			if !ok || !releaseUnitSafeInteger(value) || value < 0 {
 				return nil, fmt.Errorf("release unit requires a safe component quantity for %s", definition.Name)
@@ -182,6 +182,7 @@ func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalo
 		}
 	}
 	prepared := ApplyEvaluatedComponentBindings(module, values)
+	prepared = ApplyEvaluatedAgregadoBindings(prepared, values)
 	if err := validateReleaseUnitExpansion(prepared, catalog, collection); err != nil {
 		return nil, fmt.Errorf("release unit expansion: %w", err)
 	}
