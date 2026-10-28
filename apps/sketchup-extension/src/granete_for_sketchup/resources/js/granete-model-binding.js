@@ -68,6 +68,8 @@
   var bindingProjectName = document.getElementById("binding-project-name");
   var bindingDesignName = document.getElementById("binding-design-name");
   var bindingBaseRevision = document.getElementById("binding-base-revision");
+  var bindingSurfaceRow = document.getElementById("binding-surface-row");
+  var bindingAuthoringSurface = document.getElementById("binding-authoring-surface");
   var bindingConnectBtn = document.getElementById("btn-binding-connect");
   var bindingRefreshBtn = document.getElementById("btn-binding-refresh");
   // #1256: nota de descubribilidad del Inspector — visible sólo sin
@@ -136,10 +138,22 @@
     deps.invalidateProjectFurniture();
 
     var copy = MODEL_BINDING_COPY[status.state] || MODEL_BINDING_COPY.invalid;
-    bindingBadge.textContent = copy.badge;
-    bindingBadge.className = "status-badge " + copy.cls;
-
+    var badgeText = copy.badge;
+    var badgeCls = copy.cls;
     var detail = copy.detail;
+
+    // #1375: if the project's authoring surface is Proyectar, SketchUp operates in viewer-only mode.
+    var isViewerOnly = status.state === "connected" &&
+                       status.capabilities &&
+                       status.capabilities.can_edit_working_copy === false;
+    if (isViewerOnly) {
+      badgeText = "Modo visor";
+      badgeCls = "neutral";
+      detail = "Autoría en Proyectar (este archivo SketchUp es de sólo lectura)";
+    }
+
+    bindingBadge.textContent = badgeText;
+    bindingBadge.className = "status-badge " + badgeCls;
     if (status.reason) detail = (detail ? detail + " " : "") + "(" + status.reason + ")";
     bindingDetail.textContent = detail;
 
@@ -153,6 +167,16 @@
       bindingProjectName.textContent = binding.projectName || binding.projectId || "--";
       bindingDesignName.textContent = binding.designName || binding.designId || "--";
       bindingBaseRevision.textContent = bindingBaseLabel(status);
+      if (bindingSurfaceRow && bindingAuthoringSurface) {
+        if (binding.authoringSurface) {
+          bindingSurfaceRow.style.display = "flex";
+          bindingAuthoringSurface.textContent = binding.authoringSurface === "proyectar"
+            ? "Proyectar (Visor en SketchUp)"
+            : "SketchUp";
+        } else {
+          bindingSurfaceRow.style.display = "none";
+        }
+      }
     }
 
     bindingConnectBtn.style.display = status.state === "connected" ? "none" : "block";
@@ -874,6 +898,12 @@
     // only external read of the binding state.
     isConnected: function () {
       return !!(modelBindingState.status && modelBindingState.status.state === "connected");
+    },
+    // #1375: authoring surface gate — true if connected and capabilities permit editing.
+    canEditWorkingCopy: function () {
+      if (!modelBindingState.status || modelBindingState.status.state !== "connected") return true;
+      var caps = modelBindingState.status.capabilities || {};
+      return caps.can_edit_working_copy !== false;
     }
   };
 })();

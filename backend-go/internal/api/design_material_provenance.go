@@ -142,6 +142,9 @@ func (s *Server) HandleDesignWorkingCopyMaterialsReconcile(w http.ResponseWriter
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "designId inválido", nil)
 		return
 	}
+	if !s.checkDesignAuthoringSurfaceGate(w, r, designID) {
+		return
+	}
 
 	var body openapi.ReconcileDesignWorkingMaterialsRequest
 	if !decodeJSONBody(w, r, &body) {

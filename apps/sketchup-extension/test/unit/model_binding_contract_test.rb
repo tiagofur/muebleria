@@ -76,4 +76,12 @@ class ModelBindingContractTest < Minitest::Test
     payload = error['response']
     assert_equal 'NOT_FOUND', payload['code']
   end
+
+  def test_project_summary_parses_authoring_surface
+    # #1375: authoring_surface on project summary
+    payload = JSON.parse(JSON.generate(scenario('01-first-bind-valid')['response']))
+    payload['project']['authoring_surface'] = 'proyectar'
+    validation = mb::Contract.parse!(payload)
+    assert_equal 'proyectar', validation.project['authoring_surface']
+  end
 end

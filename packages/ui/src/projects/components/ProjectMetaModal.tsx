@@ -16,7 +16,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Customer } from '@granete/domain';
+import type { Customer, ProjectAuthoringSurface } from '@granete/domain';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import { Modal } from '../../common';
 import {
@@ -207,6 +207,28 @@ export function ProjectMetaModal({
               onChange={(e) => setDraft({ ...draft, currency: e.target.value })}
               required
             />
+          </div>
+          <div className="catalog-form__field">
+            <label htmlFor="prj-authoring-surface">Superficie de autoría</label>
+            <select
+              id="prj-authoring-surface"
+              data-testid="project-authoring-surface"
+              value={draft.authoringSurface ?? 'sketchup'}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  authoringSurface: e.target.value as ProjectAuthoringSurface,
+                })
+              }
+            >
+              <option value="sketchup">SketchUp (taller / plugin)</option>
+              <option value="proyectar">Proyectar (diseño 3D web)</option>
+            </select>
+            <span className="catalog-form__hint">
+              {draft.authoringSurface === 'proyectar'
+                ? 'La autoría se realiza en Proyectar (web). SketchUp abrirá en modo visor de sólo lectura.'
+                : 'La autoría se realiza en SketchUp. Proyectar abrirá en modo visor.'}
+            </span>
           </div>
           {showCosts ? (
             <>

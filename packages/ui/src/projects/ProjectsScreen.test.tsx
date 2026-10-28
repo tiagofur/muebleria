@@ -406,6 +406,34 @@ describe('ProjectsScreen F022', () => {
         name: 'Oficina',
         customerId: 'cust-bruno',
         customerName: '',
+        authoringSurface: 'sketchup',
+      }),
+    );
+  });
+
+  it('allows selecting authoring surface on new project metadata (#1375)', async () => {
+    const user = userEvent.setup();
+    const { onCreate } = renderScreen();
+
+    await user.click(screen.getByRole('button', { name: /Nueva cotización/i }));
+    const surfaceSelect = screen.getByTestId('project-authoring-surface');
+    expect((surfaceSelect as HTMLSelectElement).value).toBe('sketchup');
+
+    await user.selectOptions(surfaceSelect, 'proyectar');
+    expect((surfaceSelect as HTMLSelectElement).value).toBe('proyectar');
+
+    const clientTrigger = screen.getByLabelText('Cliente');
+    await user.click(clientTrigger);
+    await user.click(within(screen.getByRole('listbox')).getByRole('option', { name: /^Bruno$/i }));
+
+    await user.type(screen.getByLabelText('Nombre'), 'Estudio Web');
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Estudio Web',
+        customerId: 'cust-bruno',
+        authoringSurface: 'proyectar',
       }),
     );
   });

@@ -407,6 +407,15 @@
       return;
     }
     var isConnected = deps.isModelConnected();
+    var canEdit = !window.GraneteUI || !window.GraneteUI.modelBinding ||
+      typeof window.GraneteUI.modelBinding.canEditWorkingCopy !== "function" ||
+      window.GraneteUI.modelBinding.canEditWorkingCopy();
+    if (isConnected && !canEdit) {
+      btnInsert.disabled = true;
+      btnInsert.innerHTML = deps.icon("eye") + "<span>Modo visor</span>";
+      btnInsert.title = "La autoría de este proyecto se realiza en Proyectar (sólo lectura en SketchUp)";
+      return;
+    }
     if (isConnected) {
       btnInsert.innerHTML = deps.icon("plus") + "<span>Agregar al diseño</span>";
       btnInsert.title = "Crea un nuevo mueble en el proyecto y lo agrega a este diseño";

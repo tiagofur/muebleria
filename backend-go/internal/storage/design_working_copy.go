@@ -729,6 +729,7 @@ type ModelBindingContext struct {
 	ProjectName               string
 	CustomerID                string
 	CustomerName              string
+	AuthoringSurface          string
 	Design                    domain.Design
 	WorkingCopyBaseRevisionID *string
 	WorkingCopyUpdatedAt      time.Time

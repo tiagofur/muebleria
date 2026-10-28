@@ -43,12 +43,17 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		// #712: optional inline-customer create command. Embedded decode keeps
 		// the flat legacy payload 100% backward compatible — existing clients
 		// simply omit inline_customer_name.
-		var req createProjectRequest
-		if !decodeJSONBody(w, r, &req) {
-			return
-		}
-		p := req.Project
-		inlineName := strings.TrimSpace(req.InlineCustomerName)
+			var req createProjectRequest
+			if !decodeJSONBody(w, r, &req) {
+				return
+			}
+			p := req.Project
+			if p.AuthoringSurface != "" && !domain.IsValidAuthoringSurface(string(p.AuthoringSurface)) {
+				respondWithError(w, http.StatusBadRequest, "authoring_surface debe ser 'sketchup' o 'proyectar'")
+				return
+			}
+			p.AuthoringSurface = domain.NormalizeAuthoringSurface(string(p.AuthoringSurface))
+			inlineName := strings.TrimSpace(req.InlineCustomerName)
 		switch {
 		case inlineName != "" && p.CustomerID != "":
 			respondWithError(w, http.StatusBadRequest, "enviá un cliente existente o un cliente nuevo, no ambos")
@@ -257,12 +262,19 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
-		var req updateProjectRequest
-		if !decodeJSONBody(w, r, &req) {
-			return
-		}
-		p := req.Project
-		inlineName := strings.TrimSpace(req.InlineCustomerName)
+			var req updateProjectRequest
+			if !decodeJSONBody(w, r, &req) {
+				return
+			}
+			p := req.Project
+			if p.AuthoringSurface != "" && !domain.IsValidAuthoringSurface(string(p.AuthoringSurface)) {
+				respondWithError(w, http.StatusBadRequest, "authoring_surface debe ser 'sketchup' o 'proyectar'")
+				return
+			}
+			if p.AuthoringSurface == "" {
+				p.AuthoringSurface = existing.AuthoringSurface
+			}
+			inlineName := strings.TrimSpace(req.InlineCustomerName)
 		if inlineName != "" {
 			if p.CustomerID != "" {
 				respondWithError(w, http.StatusBadRequest, "enviá un cliente existente o un cliente nuevo, no ambos")

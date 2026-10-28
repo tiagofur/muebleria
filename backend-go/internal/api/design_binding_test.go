@@ -74,7 +74,7 @@ func TestHandleProjectDesignBindingValidate_Valid(t *testing.T) {
 		`"state":"valid"`,
 		`"schema_version":` + strconv.Itoa(ModelBindingSchemaVersion),
 		`"organization":{"id":"60000000-0000-0000-0000-000000000001","name":"Carpintería García"}`,
-		`"project":{"id":"` + designTestProjectID + `","name":"Cocina García","customer":{"id":"61000000-0000-0000-0000-000000000001","name":"Cliente García"}}`,
+			`"project":{"id":"` + designTestProjectID + `","name":"Cocina García","customer":{"id":"61000000-0000-0000-0000-000000000001","name":"Cliente García"},"authoring_surface":"sketchup"}`,
 		`"design":{"id":"` + designTestDesignID + `","name":"Cocina Principal","status":"active"}`,
 		`"base_revision_id":"` + base + `"`,
 		`"base_revision_number":2`,
@@ -232,4 +232,61 @@ func TestHandleProjectDesignBindingValidate_MethodNotAllowed(t *testing.T) {
 	if rr.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", rr.Code)
 	}
+}
+
+// #1375: Authoring surface gates capabilities in model binding validation.
+func TestHandleProjectDesignBindingValidate_AuthoringSurface(t *testing.T) {
+	base := designTestRevisionID
+
+	t.Run("proyectar surface sets can_edit and can_publish to false", func(t *testing.T) {
+		bctx := validBindingContext()
+		bctx.AuthoringSurface = "proyectar"
+		store := &stubStore{modelBindingContext: bctx}
+		srv := &Server{Store: store}
+		req := bindingValidationRequest(http.MethodPost,
+			"/api/projects/"+designTestProjectID+"/designs/"+designTestDesignID+"/binding:validate",
+			`{"client_schema_version":1,"base_revision_id":"`+base+`"}`,
+			string(domain.RoleAdmin))
+		rr := httptest.NewRecorder()
+
+		srv.HandleProjectDesignBindingValidate(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+		}
+		body := rr.Body.String()
+		if !strings.Contains(body, `"can_edit_working_copy":false`) ||
+			!strings.Contains(body, `"can_publish_revision":false`) {
+			t.Fatalf("expected can_edit_working_copy and can_publish_revision to be false on proyectar surface, got: %s", body)
+		}
+		if !strings.Contains(body, `"authoring_surface":"proyectar"`) {
+			t.Fatalf("expected authoring_surface to be proyectar, got: %s", body)
+		}
+	})
+
+	t.Run("sketchup surface sets can_edit and can_publish to true", func(t *testing.T) {
+		bctx := validBindingContext()
+		bctx.AuthoringSurface = "sketchup"
+		store := &stubStore{modelBindingContext: bctx}
+		srv := &Server{Store: store}
+		req := bindingValidationRequest(http.MethodPost,
+			"/api/projects/"+designTestProjectID+"/designs/"+designTestDesignID+"/binding:validate",
+			`{"client_schema_version":1,"base_revision_id":"`+base+`"}`,
+			string(domain.RoleAdmin))
+		rr := httptest.NewRecorder()
+
+		srv.HandleProjectDesignBindingValidate(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+		}
+		body := rr.Body.String()
+		if !strings.Contains(body, `"can_edit_working_copy":true`) ||
+			!strings.Contains(body, `"can_publish_revision":true`) {
+			t.Fatalf("expected can_edit_working_copy and can_publish_revision to be true on sketchup surface, got: %s", body)
+		}
+		if !strings.Contains(body, `"authoring_surface":"sketchup"`) {
+			t.Fatalf("expected authoring_surface to be sketchup, got: %s", body)
+		}
+	})
 }

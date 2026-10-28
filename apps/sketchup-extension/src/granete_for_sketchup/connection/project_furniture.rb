@@ -275,7 +275,7 @@ module Granete
         end
 
         # Reusable placement revalidation and lifecycle guards (#389 §15).
-        module PlacementGuards
+        module PlacementGuards # rubocop:disable Metrics/ModuleLength
           module_function
 
           def placement_context(binding_store, model_binding_service)
@@ -293,7 +293,13 @@ module Granete
                                                         design_id: binding.design_id,
                                                         base_revision_id: binding.base_revision_id)
             state = ModelBinding::State.derive(stored: binding, validation: validation)
-            return nil if state == 'connected'
+            if state == 'connected'
+              return nil if validation.capabilities['can_edit_working_copy'] != false
+
+              return { 'ok' => false, 'code' => 'viewer_only',
+                       'reason' => 'este proyecto tiene como superficie de autoría Proyectar ' \
+                                   '(SketchUp está en modo visor)' }
+            end
 
             remediation = state == 'stale_base' ? 'actualizá la base de trabajo en la tarjeta Modelo / Diseño' : nil
             { 'ok' => false, 'code' => state,
@@ -310,7 +316,7 @@ module Granete
             end
             if instance.lifecycle_status != 'active'
               return { 'ok' => false, 'code' => 'terminal',
-                       'reason' => 'el mueble fue eliminado del proyecto' }
+                       'reason' => 'este mueble ya fue fabricado o cancelado y no puede colocarse' }
             end
 
             { 'ok' => true, 'unit' => instance }

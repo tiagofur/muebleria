@@ -170,6 +170,22 @@ function runTests() {
     assert.ok(!visible(el(sandbox, 'btn-binding-adopt')));
   });
 
+  test('proyectar authoring surface renders viewer-only badge and details (#1375)', (sandbox) => {
+    const status = connectedStatus();
+    status.capabilities.can_edit_working_copy = false;
+    status.capabilities.can_publish_revision = false;
+    status.binding.authoringSurface = 'proyectar';
+
+    sandbox.window.GraneteDialog.onModelBindingStatus(status);
+
+    assert.equal(el(sandbox, 'model-binding-badge').textContent, 'Modo visor');
+    assert.equal(el(sandbox, 'model-binding-badge').className, 'status-badge neutral');
+    assert.ok(el(sandbox, 'model-binding-detail').textContent.includes('Proyectar'));
+    assert.equal(el(sandbox, 'binding-authoring-surface').textContent, 'Proyectar (Visor en SketchUp)');
+    assert.equal(el(sandbox, 'binding-surface-row').style.display, 'flex');
+    assert.equal(sandbox.window.GraneteUI.modelBinding.canEditWorkingCopy(), false);
+  });
+
   test('stale base is distinct and offers explicit remediation only', (sandbox) => {
     const status = connectedStatus();
     status.state = 'stale_base';

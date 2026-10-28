@@ -892,6 +892,19 @@ class ProjectFurnitureTest < Minitest::Test
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
 
+  def test_viewer_only_fails_loud_without_any_write
+    # #1375: authoring_surface == 'proyectar' -> can_edit_working_copy is false -> viewer_only
+    stub_binding_validation(can_edit_working_copy: false)
+
+    result = @placer.place(FI_1)
+
+    refute result['ok']
+    assert_equal 'viewer_only', result['code']
+    assert_includes result['reason'], 'Proyectar'
+    assert_empty top_level_furniture(@model)
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
   def test_unbound_model_cannot_place
     placer = build_placer(model: PlacerModel.new) # fresh model without binding
 
@@ -2460,7 +2473,7 @@ class ProjectFurnitureTest < Minitest::Test
     )
   end
 
-  def stub_binding_validation(base:)
+  def stub_binding_validation(base: REVISION_R1, can_edit_working_copy: true)
     @transport.respond(:post, "/projects/#{PROJECT_ID}/designs/#{DESIGN_ID}/binding:validate", 200,
                        {
                          'state' => 'valid',
@@ -2470,7 +2483,8 @@ class ProjectFurnitureTest < Minitest::Test
                          'project' => { 'id' => PROJECT_ID, 'name' => 'Cocina García' },
                          'design' => { 'id' => DESIGN_ID, 'name' => 'Cocina principal', 'status' => 'active' },
                          'working_copy' => { 'base_revision_id' => base, 'base_revision_number' => 1 },
-                         'capabilities' => { 'can_edit_working_copy' => true, 'can_publish_revision' => true,
+                         'capabilities' => { 'can_edit_working_copy' => can_edit_working_copy,
+                                             'can_publish_revision' => can_edit_working_copy,
                                              'can_create_initial_quote' => true }
                        })
     @transport.respond(:post, "/designs/#{DESIGN_ID}/effective-materials", 200, lambda { |req|

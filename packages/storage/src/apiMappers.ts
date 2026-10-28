@@ -1983,6 +1983,7 @@ export function projectToApi(p: Project): Record<string, unknown> {
     currency: p.currency,
     margin_factor: p.marginFactor,
     labor_fixed_cost: p.laborFixedCost,
+    authoring_surface: p.authoringSurface ?? 'sketchup',
     status: p.status,
     // OC-011 — commercial status outcome
     commercial_status: p.commercialStatus ?? null,
@@ -2143,6 +2144,7 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     currency: str(raw.currency, 'MXN'),
     marginFactor: num(raw.margin_factor ?? raw.marginFactor, 1.35),
     laborFixedCost: num(raw.labor_fixed_cost ?? raw.laborFixedCost),
+    authoringSurface: (str(raw.authoring_surface ?? raw.authoringSurface) || 'sketchup') as Project['authoringSurface'],
     status: (['draft', 'quoted', 'accepted', 'produced'].includes(status)
       ? status
       : 'draft') as ProjectStatus,

@@ -100,6 +100,15 @@ func modelBindingValidationDTO(ctx *storage.ModelBindingContext, roles []domain.
 	canCreateInitialQuote := state == openapi.ModelBindingStateValid &&
 		domain.AnyRole(roles, domain.RoleCanMutateProjects)
 
+	// #1375: if the project's authoring surface is Proyectar, SketchUp operates
+	// in viewer-only mode: cannot edit the working copy or publish revisions.
+	surface := domain.NormalizeAuthoringSurface(ctx.AuthoringSurface)
+	if surface == domain.AuthoringSurfaceProyectar {
+		canEdit = false
+		canPublish = false
+	}
+	surfaceDTO := openapi.ProjectAuthoringSurface(surface)
+
 	var baseRevID *string
 	var baseRevNum *int64
 	if ctx.WorkingCopyBaseRevisionID != nil && *ctx.WorkingCopyBaseRevisionID != "" {
@@ -119,9 +128,10 @@ func modelBindingValidationDTO(ctx *storage.ModelBindingContext, roles []domain.
 			Name: ctx.OrganizationName,
 		},
 		Project: openapi.ModelBindingProjectSummary{
-			ID:       ctx.ProjectID,
-			Name:     ctx.ProjectName,
-			Customer: openapi.CustomerSummary{ID: ctx.CustomerID, Name: ctx.CustomerName},
+			ID:               ctx.ProjectID,
+			Name:             ctx.ProjectName,
+			Customer:         openapi.CustomerSummary{ID: ctx.CustomerID, Name: ctx.CustomerName},
+			AuthoringSurface: &surfaceDTO,
 		},
 		Design: openapi.ModelBindingDesignSummary{
 			ID:     ctx.Design.ID,

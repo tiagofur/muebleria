@@ -12567,6 +12567,13 @@
           }
         }
       },
+      "ProjectAuthoringSurface": {
+        "type": "string",
+        "enum": [
+          "sketchup",
+          "proyectar"
+        ]
+      },
       "ModelBindingState": {
         "type": "string",
         "enum": [
@@ -12609,6 +12616,9 @@
           },
           "customer": {
             "$ref": "#/components/schemas/CustomerSummary"
+          },
+          "authoring_surface": {
+            "$ref": "#/components/schemas/ProjectAuthoringSurface"
           }
         }
       },

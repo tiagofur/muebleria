@@ -1459,11 +1459,16 @@
     // Each control obeys its OWN capability, and a multi-selection
     // fail-closes every mutation until batch editing exists.
     var multi = context.selectionCount && context.selectionCount > 1;
-    var canEditParams = deps.capabilityEnabled(context, "canEditParameters");
-    var canEditMaterials = deps.capabilityEnabled(context, "canEditMaterialRoles");
-    var blockerReason = !canEditParams && context.capabilities && context.capabilities.canEditParameters
-      ? context.capabilities.canEditParameters.reason
-      : null;
+    var canEditWorkingCopy = !window.GraneteUI || !window.GraneteUI.modelBinding ||
+      typeof window.GraneteUI.modelBinding.canEditWorkingCopy !== "function" ||
+      window.GraneteUI.modelBinding.canEditWorkingCopy();
+    var canEditParams = deps.capabilityEnabled(context, "canEditParameters") && canEditWorkingCopy;
+    var canEditMaterials = deps.capabilityEnabled(context, "canEditMaterialRoles") && canEditWorkingCopy;
+    var blockerReason = !canEditWorkingCopy
+      ? "La autoría de este proyecto se realiza en Proyectar (este archivo SketchUp es de sólo lectura)."
+      : (!canEditParams && context.capabilities && context.capabilities.canEditParameters
+        ? context.capabilities.canEditParameters.reason
+        : null);
     inspectorEditBlocker.style.display = canEditParams ? "none" : "block";
     inspectorEditBlockerReason.textContent = blockerReason || "La edición no está disponible para este mueble.";
     inspectorParamsCard.style.display = canEditParams ? "block" : "none";
@@ -1471,7 +1476,7 @@
     // One native switch for params + materials + the draft footer.
     inspectorEditFieldset.disabled = Boolean(multi || !canEditParams);
     btnApply.disabled = Boolean(multi || !canEditParams);
-    btnDelete.disabled = Boolean(!deps.capabilityEnabled(context, "canDelete") || multi);
+    btnDelete.disabled = Boolean(!deps.capabilityEnabled(context, "canDelete") || multi || !canEditWorkingCopy);
 
     // A denied canDelete explains itself with the Ruby-provided reason;
     // enabled or multi-selection hides the note (multi has its own).

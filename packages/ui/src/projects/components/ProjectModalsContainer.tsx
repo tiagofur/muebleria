@@ -293,59 +293,63 @@ export function ProjectModalsContainer({
         />
       ) : null}
 
-      {selectedProject && onUpdateKitchenLayout ? (
-        <ProjectSpatialStudio
-          open={showSpatialStudio}
-          project={selectedProject}
-          modules={modules}
-          categories={categories}
-          catalog={studio3dCatalog}
-          canEdit={Boolean(canMutate && selectedProject.status === 'draft')}
-          resolveMediaUrl={resolveImageUrl}
-          quoteSalePrice={
-            breakdown?.salePrice ??
-            (typeof projectEstimates[selectedProject.id] === 'number'
-              ? (projectEstimates[selectedProject.id] as number)
-              : null)
-          }
-          bootstrap={spatialBootstrap}
-          onInsertFromCatalog={
-            canMutate && selectedProject.status === 'draft'
-              ? onInsertCatalogItem
-              : undefined
-          }
-          onUpdateProjectLevelChoice={
-            canMutate && selectedProject.status === 'draft'
-              ? onUpdateProjectLevelChoice
-              : undefined
-          }
-          materialCategories={materialCategories}
-          planActor={planActor}
-          onAcquirePlanEdit={onAcquirePlanEdit}
-          onRenewPlanEdit={onRenewPlanEdit}
-          onReleasePlanEdit={onReleasePlanEdit}
-          onClose={onCloseSpatialStudio}
-          onChangeLayout={(layout) =>
-            onUpdateKitchenLayout(selectedProject.id, layout)
-          }
-          onUpdateItem={
-            canMutate && selectedProject.status === 'draft' && onUpdateItem
-              ? (item) => onUpdateItem(selectedProject.id, item)
-              : undefined
-          }
-          onRemoveItem={
-            canMutate && selectedProject.status === 'draft' && onRemoveItem
-              ? (itemId) => onRemoveItem(selectedProject.id, itemId)
-              : undefined
-          }
-          onRestoreItems={
-            canMutate && selectedProject.status === 'draft' && onRestoreItems
-              ? (items, order) =>
-                  onRestoreItems(selectedProject.id, items, order)
-              : undefined
-          }
-        />
-      ) : null}
+      {selectedProject && onUpdateKitchenLayout ? (() => {
+        // #1375: if the project's authoring surface is SketchUp, Proyectar opens in viewer mode.
+        // For guest/demo projects without an organization, Proyectar remains authoring by default.
+        const isProyectar =
+          selectedProject.authoringSurface === 'proyectar' ||
+          (selectedProject.authoringSurface === undefined && !selectedProject.organizationId);
+        const canEditProyectar = Boolean(canMutate && selectedProject.status === 'draft' && isProyectar);
+        return (
+          <ProjectSpatialStudio
+            open={showSpatialStudio}
+            project={selectedProject}
+            modules={modules}
+            categories={categories}
+            catalog={studio3dCatalog}
+            canEdit={canEditProyectar}
+            resolveMediaUrl={resolveImageUrl}
+            quoteSalePrice={
+              breakdown?.salePrice ??
+              (typeof projectEstimates[selectedProject.id] === 'number'
+                ? (projectEstimates[selectedProject.id] as number)
+                : null)
+            }
+            bootstrap={spatialBootstrap}
+            onInsertFromCatalog={
+              canEditProyectar ? onInsertCatalogItem : undefined
+            }
+            onUpdateProjectLevelChoice={
+              canEditProyectar ? onUpdateProjectLevelChoice : undefined
+            }
+            materialCategories={materialCategories}
+            planActor={planActor}
+            onAcquirePlanEdit={onAcquirePlanEdit}
+            onRenewPlanEdit={onRenewPlanEdit}
+            onReleasePlanEdit={onReleasePlanEdit}
+            onClose={onCloseSpatialStudio}
+            onChangeLayout={(layout) =>
+              onUpdateKitchenLayout(selectedProject.id, layout)
+            }
+            onUpdateItem={
+              canEditProyectar && onUpdateItem
+                ? (item) => onUpdateItem(selectedProject.id, item)
+                : undefined
+            }
+            onRemoveItem={
+              canEditProyectar && onRemoveItem
+                ? (itemId) => onRemoveItem(selectedProject.id, itemId)
+                : undefined
+            }
+            onRestoreItems={
+              canEditProyectar && onRestoreItems
+                ? (items, order) =>
+                    onRestoreItems(selectedProject.id, items, order)
+                : undefined
+            }
+          />
+        );
+      })() : null}
 
       <Project3DModal
         open={show3DModal}
