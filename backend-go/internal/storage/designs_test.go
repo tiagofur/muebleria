@@ -1603,9 +1603,12 @@ func TestDesigns_ModelBindingContext(t *testing.T) {
 	if bctx.WorkingCopyBaseRevisionID == nil || *bctx.WorkingCopyBaseRevisionID != rev.ID {
 		t.Fatalf("working copy base = %v, want published revision %s", bctx.WorkingCopyBaseRevisionID, rev.ID)
 	}
-	if bctx.BaseRevisionNumber == nil || *bctx.BaseRevisionNumber != 1 {
-		t.Fatalf("base revision number = %v, want 1", bctx.BaseRevisionNumber)
-	}
+		if bctx.BaseRevisionNumber == nil || *bctx.BaseRevisionNumber != 1 {
+			t.Fatalf("base revision number = %v, want 1", bctx.BaseRevisionNumber)
+		}
+		if bctx.AuthoringSurface != string(domain.AuthoringSurfaceSketchup) {
+			t.Fatalf("authoring surface = %q, want %q", bctx.AuthoringSurface, domain.AuthoringSurfaceSketchup)
+		}
 
 	// 2. Client binding base matching the authoritative base validates.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
@@ -1663,7 +1666,24 @@ func TestDesigns_ModelBindingContext(t *testing.T) {
 	if bctx.Design.Status != domain.DesignStatusArchived {
 		t.Fatalf("archived design status = %s, want archived", bctx.Design.Status)
 	}
-	if bctx.WorkingCopyBaseRevisionID == nil || *bctx.WorkingCopyBaseRevisionID != rev.ID {
-		t.Fatalf("archived design must still expose the exact working base: %+v", bctx)
+		if bctx.WorkingCopyBaseRevisionID == nil || *bctx.WorkingCopyBaseRevisionID != rev.ID {
+			t.Fatalf("archived design must still expose the exact working base: %+v", bctx)
+		}
+
+		// 7. #1375: Authoring surface 'proyectar' is read back faithfully.
+		if _, err := fx.admin.Exec(context.Background(),
+			`UPDATE projects SET authoring_surface='proyectar' WHERE id=$1`, fiSharedProject); err != nil {
+			t.Fatal(err)
+		}
+		err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+			var err error
+			bctx, err = fx.store.GetModelBindingContext(ctx, fiSharedProject, sharedDesign.ID, nil)
+			return err
+		})
+		if err != nil {
+			t.Fatalf("proyectar surface context: %v", err)
+		}
+		if bctx.AuthoringSurface != string(domain.AuthoringSurfaceProyectar) {
+			t.Fatalf("authoring surface = %q, want %q", bctx.AuthoringSurface, domain.AuthoringSurfaceProyectar)
+		}
 	}
-}

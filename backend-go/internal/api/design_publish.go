@@ -160,6 +160,9 @@ func (s *Server) HandleDesignPublishPrepare(w http.ResponseWriter, r *http.Reque
 	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateProjects), "no tenés permiso para publicar diseños") {
 		return
 	}
+	if !s.checkDesignAuthoringSurfaceGate(w, r, designID) {
+		return
+	}
 
 	var body openapi.PrepareDesignPublishRequest
 	if !decodeGeneratedJSONBody(w, r, &body) {

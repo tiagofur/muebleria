@@ -234,6 +234,9 @@ func (s *Server) HandleDesignOpening(w http.ResponseWriter, r *http.Request) {
 		if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanAccessProjects), "no tenés permiso para editar el diseño") {
 			return
 		}
+		if !s.checkDesignAuthoringSurfaceGate(w, r, designID) {
+			return
+		}
 		s.handleDesignOpeningPut(w, r, claims.UserID, designID)
 
 	default:

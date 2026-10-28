@@ -7,6 +7,7 @@ import (
 	"time"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -508,6 +509,32 @@ func (s *Server) HandleProjectDesigns(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// #1375: checkDesignAuthoringSurfaceGate verifies that the calling client is
+// permitted to mutate the design. If the project's authoring surface is
+// Proyectar, SketchUp (ExtensionClient) operates strictly in viewer mode and cannot
+// mutate working copy, opening, or publish revisions. Fail-closed.
+func (s *Server) checkDesignAuthoringSurfaceGate(w http.ResponseWriter, r *http.Request, designID string) bool {
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.Client != auth.ExtensionClient {
+		return true
+	}
+	design, err := s.Store.GetDesignByID(r.Context(), designID)
+	if err != nil {
+		respondWithDesignError(w, err)
+		return false
+	}
+	project, err := s.Store.GetProjectByID(r.Context(), design.ProjectID)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "project not found")
+		return false
+	}
+	if project.AuthoringSurface == domain.AuthoringSurfaceProyectar {
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, "la superficie de autoría de este proyecto es Proyectar; SketchUp está en modo visor de sólo lectura", nil)
+		return false
+	}
+	return true
+}
+
 // HandleDesign serves GET for /api/designs/{designId}.
 func (s *Server) HandleDesign(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
@@ -564,11 +591,14 @@ func (s *Server) HandleDesignRevisions(w http.ResponseWriter, r *http.Request) {
 		}
 		respondWithJSON(w, http.StatusOK, dtos)
 
-	case http.MethodPost:
-		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateProjects), "no tenés permiso para publicar revisiones de diseño") {
-			return
-		}
-		var body openapi.PublishDesignRevisionRequest
+		case http.MethodPost:
+			if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateProjects), "no tenés permiso para publicar revisiones de diseño") {
+				return
+			}
+			if !s.checkDesignAuthoringSurfaceGate(w, r, designID) {
+				return
+			}
+			var body openapi.PublishDesignRevisionRequest
 		if !decodeGeneratedJSONBody(w, r, &body) {
 			return
 		}
@@ -656,11 +686,14 @@ func (s *Server) HandleDesignWorkingCopy(w http.ResponseWriter, r *http.Request)
 		}
 		respondWithJSON(w, http.StatusOK, toDesignWorkingCopyDTO(*wc))
 
-	case http.MethodPut:
-		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para editar el diseño") {
-			return
-		}
-		var body openapi.UpdateDesignWorkingCopyRequest
+		case http.MethodPut:
+			if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para editar el diseño") {
+				return
+			}
+			if !s.checkDesignAuthoringSurfaceGate(w, r, designID) {
+				return
+			}
+			var body openapi.UpdateDesignWorkingCopyRequest
 		if !decodeJSONBody(w, r, &body) {
 			return
 		}
@@ -849,11 +882,14 @@ func (s *Server) HandleDesignWorkingCopyReset(w http.ResponseWriter, r *http.Req
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para resetear el diseño") {
-		return
-	}
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para resetear el diseño") {
+			return
+		}
+		if !s.checkDesignAuthoringSurfaceGate(w, r, designID) {
+			return
+		}
 
-	var body openapi.ResetDesignWorkingCopyRequest
+		var body openapi.ResetDesignWorkingCopyRequest
 	if !decodeJSONBody(w, r, &body) {
 		return
 	}

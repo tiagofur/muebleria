@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -455,4 +456,99 @@ func TestHandleDesignWorkingCopy_PutRejectsUnknownFinish(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), "rose-gold") {
 		t.Fatalf("body = %s, want it to name the unknown finish", rr.Body.String())
 	}
+}
+
+// #1375: Authoring surface gate on working copy mutations.
+func TestHandleDesignWorkingCopy_AuthoringSurfaceGate(t *testing.T) {
+	design := domain.Design{ID: designTestDesignID, ProjectID: designTestProjectID, Status: domain.DesignStatusActive}
+	reqBody := `{
+		"source_type": "sketchup",
+		"expected_working_version": "2026-09-21T00:00:00.000000Z",
+		"items": []
+	}`
+
+	t.Run("sketchup client rejected on proyectar project", func(t *testing.T) {
+		project := domain.Project{ID: designTestProjectID, AuthoringSurface: domain.AuthoringSurfaceProyectar}
+		store := &stubStore{
+			designsByID:         map[string]domain.Design{designTestDesignID: design},
+			projectReturnedByID: &project,
+		}
+		srv := &Server{Store: store}
+		req := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy", reqBody, string(domain.RoleAdmin))
+		claims := claimsFromRequest(req)
+		claims.Client = auth.ExtensionClient
+		rr := httptest.NewRecorder()
+
+		srv.HandleDesignWorkingCopy(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403 (body=%s)", rr.Code, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), "Proyectar") {
+			t.Errorf("expected error message to mention Proyectar, got: %s", rr.Body.String())
+		}
+	})
+
+	t.Run("sketchup client allowed on sketchup project", func(t *testing.T) {
+		project := domain.Project{ID: designTestProjectID, AuthoringSurface: domain.AuthoringSurfaceSketchup}
+		store := &stubStore{
+			designsByID:         map[string]domain.Design{designTestDesignID: design},
+			projectReturnedByID: &project,
+		}
+		srv := &Server{Store: store}
+		req := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy", reqBody, string(domain.RoleAdmin))
+		claims := claimsFromRequest(req)
+		claims.Client = auth.ExtensionClient
+		rr := httptest.NewRecorder()
+
+		srv.HandleDesignWorkingCopy(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("web client allowed on proyectar project", func(t *testing.T) {
+		project := domain.Project{ID: designTestProjectID, AuthoringSurface: domain.AuthoringSurfaceProyectar}
+		store := &stubStore{
+			designsByID:         map[string]domain.Design{designTestDesignID: design},
+			projectReturnedByID: &project,
+		}
+		srv := &Server{Store: store}
+		req := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy", reqBody, string(domain.RoleAdmin))
+		rr := httptest.NewRecorder()
+
+		srv.HandleDesignWorkingCopy(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+		}
+	})
+}
+
+func TestHandleDesignRevisions_AuthoringSurfaceGate(t *testing.T) {
+	design := domain.Design{ID: designTestDesignID, ProjectID: designTestProjectID, Status: domain.DesignStatusActive}
+	reqBody := `{"description":"test publish"}`
+
+	t.Run("sketchup client rejected on publish for proyectar project", func(t *testing.T) {
+		project := domain.Project{ID: designTestProjectID, AuthoringSurface: domain.AuthoringSurfaceProyectar}
+		store := &stubStore{
+			designsByID:         map[string]domain.Design{designTestDesignID: design},
+			projectReturnedByID: &project,
+		}
+		srv := &Server{Store: store}
+		req := designRequest(http.MethodPost, "/api/designs/"+designTestDesignID+"/revisions", reqBody, string(domain.RoleAdmin))
+		claims := claimsFromRequest(req)
+		claims.Client = auth.ExtensionClient
+		rr := httptest.NewRecorder()
+
+		srv.HandleDesignRevisions(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403 (body=%s)", rr.Code, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), "Proyectar") {
+			t.Errorf("expected error message to mention Proyectar, got: %s", rr.Body.String())
+		}
+	})
 }
