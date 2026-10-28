@@ -81,4 +81,19 @@ describe('agregadoDraft recipe round-trip (#1412)', () => {
     expect(isAgregadoDraft(agregadoToDraft(agregadoConReceta))).toBe(true);
     expect(isAgregadoDraft({ ...createEmptyAgregadoDraft(), rigidMembers: 'no' })).toBe(false);
   });
+
+  it('draftToAgregado normaliza claves de receta ausentes en vez de fallar (draft viejo restaurado)', () => {
+    const legacy = JSON.parse(JSON.stringify(createEmptyAgregadoDraft()));
+    legacy.code = 'VIEJO';
+    delete legacy.rigidMembers;
+    delete legacy.variantSets;
+    delete legacy.compatibilityRules;
+
+    expect(() => draftToAgregado('agr-legado', legacy as never)).not.toThrow();
+    const back = draftToAgregado('agr-legado', legacy as never);
+    expect(back.rigidMembers).toBeUndefined();
+    expect(back.variantSets).toBeUndefined();
+    expect(back.compatibilityRules).toBeUndefined();
+    expect(back.code).toBe('VIEJO');
+  });
 });

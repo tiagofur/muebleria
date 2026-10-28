@@ -53,9 +53,10 @@ de /catalog/agregados (superficie entera sin documentar hoy — follow-up propio
        miembros) — agregado3dPreview.ts + 3 tests nuevos (18/18).
 5. [x] E2E browser: autoría → save → readback exacto → F5 persiste; bloqueo cliente
        sin PUT; 422 server sin revisión. — tests/organization/agregado-recipe-authoring.spec.ts
-       **3 passed, GATE_EXIT=0** (run2 /tmp/gate-1412-run2.log). Corrección de la ronda:
-       cancelar con borrador sucio abre «Descartar cambios» — el spec lo confirma.
-       Regresión del spec #1369 (aplica recetas por el mismo PUT): EN CURSO.
+       **3 passed, GATE_EXIT=0** (run2 /tmp/gate-1412-run2.log; en CI pasó 3/3 en el
+       shard 3/3). Corrección de la ronda: cancelar con borrador sucio abre
+       «Descartar cambios» — el spec lo confirma. Regresión del spec #1369 (aplica
+       recetas por el mismo PUT): **8 passed**.
 
 ## Verificación (V0/V1/V2) — evidencia congelada
 

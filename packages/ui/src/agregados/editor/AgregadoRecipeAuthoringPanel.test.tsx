@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import type { Hardware } from '@granete/domain';
 import {
   AgregadoRecipeAuthoringPanel,
@@ -29,7 +29,12 @@ function Harness({ onChange, initial }: { onChange?: (d: AgregadoDraft) => void;
     ...createEmptyAgregadoDraft(),
     ...initial,
   });
+  // Ref con el ÚLTIMO estado aplicado: los updaters funcionales del panel
+  // deben encadenar contra el estado vigente, no contra el closure del render
+  // (bajo batching de React un closure viejo reproduce el bug que S2 arregla).
+  const latestRef = useRef<AgregadoDraft>({ ...createEmptyAgregadoDraft(), ...initial });
   const notify = (next: AgregadoDraft) => {
+    latestRef.current = next;
     setDraft(next);
     onChange?.(next);
   };
@@ -37,8 +42,11 @@ function Harness({ onChange, initial }: { onChange?: (d: AgregadoDraft) => void;
     <AgregadoRecipeAuthoringPanel
       draft={draft}
       setDraft={(action) => {
-        const next = typeof action === 'function' ? (action as (p: AgregadoDraft) => AgregadoDraft)(draft) : action;
-        notify(next);
+        notify(
+          typeof action === 'function'
+            ? (action as (p: AgregadoDraft) => AgregadoDraft)(latestRef.current)
+            : action,
+        );
       }}
       catalogHardware={catalogHardware}
       saved={null}
@@ -162,6 +170,55 @@ describe('AgregadoRecipeAuthoringPanel (#1412 autoría de receta)', () => {
     expect(latest?.rigidMembers[0]?.source).toEqual({
       kind: 'variant',
       variant: { variantSetId: 'set-fondo-1' },
+    });
+  });
+
+  it('renombrar el id de un set arrastra su regla y a los miembros variante (S2, sin huérfanos)', async () => {
+    const user = userEvent.setup();
+    let latest: AgregadoDraft | undefined;
+    render(
+      <Harness
+        onChange={(d) => (latest = d)}
+        initial={{
+          rigidMembers: [
+            {
+              memberId: 'guia-izq',
+              role: 'side_left',
+              source: { kind: 'variant', variant: { variantSetId: 'viejo' } },
+              placement: {
+                x: { ref: 'min', offsetMm: 0 },
+                y: { ref: 'min', offsetMm: 0 },
+                z: { ref: 'min', offsetMm: 0 },
+              },
+              bomRole: 'included_in_kit',
+            },
+          ],
+          variantSets: [
+            {
+              id: 'viejo',
+              dimension: 'depth',
+              variants: [{ nominalDimensionMm: 500, hardwareId: 'hw-corr' }],
+            },
+          ],
+          compatibilityRules: [
+            { variantSetId: 'viejo', clearanceMm: 20, selectionStrategy: 'max_fitting' },
+          ],
+        }}
+      />,
+    );
+
+    const idInput = screen.getByTestId('agregado-tab-recipe-authoring-set-0-id');
+    await user.click(idInput);
+    await user.clear(idInput);
+    await user.type(idInput, 'nuevo');
+
+    expect(latest?.variantSets?.[0]?.id).toBe('nuevo');
+    expect(latest?.compatibilityRules).toEqual([
+      { variantSetId: 'nuevo', clearanceMm: 20, selectionStrategy: 'max_fitting' },
+    ]);
+    expect(latest?.rigidMembers?.[0]?.source).toEqual({
+      kind: 'variant',
+      variant: { variantSetId: 'nuevo' },
     });
   });
 });

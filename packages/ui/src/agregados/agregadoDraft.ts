@@ -188,10 +188,13 @@ export function draftToAgregado(id: string, draft: AgregadoDraft): Agregado {
     components: draft.components.length > 0 ? draft.components : undefined,
     hardwareLines: draft.hardwareLines.length > 0 ? draft.hardwareLines : undefined,
     presentationMotion,
-    rigidMembers: draft.rigidMembers.length > 0 ? draft.rigidMembers : undefined,
-    variantSets: draft.variantSets.length > 0 ? draft.variantSets : undefined,
+    // `?? []`: un draft persistido anterior a la receta sobrevive en
+    // sessionStorage y llega con las claves ausentes — sin normalizar, el
+    // guard del submit fallaría con "Cannot read properties of undefined".
+    rigidMembers: (draft.rigidMembers ?? []).length > 0 ? draft.rigidMembers : undefined,
+    variantSets: (draft.variantSets ?? []).length > 0 ? draft.variantSets : undefined,
     compatibilityRules:
-      draft.compatibilityRules.length > 0 ? draft.compatibilityRules : undefined,
+      (draft.compatibilityRules ?? []).length > 0 ? draft.compatibilityRules : undefined,
     commercialKitHardwareId: draft.commercialKitHardwareId || undefined,
   };
 }

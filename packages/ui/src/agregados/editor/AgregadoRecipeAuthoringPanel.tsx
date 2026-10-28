@@ -8,7 +8,7 @@
  * la revisión guardada, nunca contra este borrador.
  */
 
-import { type ChangeEvent, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { type ChangeEvent, type Dispatch, type ReactNode, type SetStateAction, useRef } from 'react';
 import type {
   Agregado,
   AgregadoRigidMember,
@@ -122,9 +122,51 @@ export function AgregadoRecipeAuthoringPanel({
     patchDraft({ variantSets: nextSets, compatibilityRules: nextRules });
   };
 
+  // Renombrar el id de un set es una operación en cascada (regla + miembros
+  // variante lo siguen). El id ORIGEN se captura al enfocar el campo.
+  const renameOriginRef = useRef<Map<number, string>>(new Map());
+
   const updateVariantSet = (idx: number, patch: Partial<AgregadoVariantSet>) => {
-    patchDraft({
-      variantSets: sets.map((s, i) => (i === idx ? { ...s, ...patch } : s)),
+    setDraft((prev) => {
+      const prevSets = prev.variantSets ?? [];
+      const previous = prevSets[idx];
+      const nextSets = prevSets.map((s, i) => (i === idx ? { ...s, ...patch } : s));
+      const nextId = patch.id;
+      // Cascada por cualquiera de los ids de referencia: el inmediato previo
+      // (tecleo normal) o el origen capturado al enfocar (borrar y reescribir).
+      // Si el nuevo valor es vacío no se cascada — el validador bloquea el
+      // guardado con el set sin id.
+      const fromIds = new Set(
+        [previous?.id, renameOriginRef.current.get(idx)].filter(
+          (v): v is string => typeof v === 'string' && v.trim() !== '',
+        ),
+      );
+      if (
+        !previous ||
+        nextId === undefined ||
+        nextId === previous.id ||
+        nextId.trim() === '' ||
+        fromIds.size === 0
+      ) {
+        return { ...prev, variantSets: nextSets };
+      }
+      return {
+        ...prev,
+        variantSets: nextSets,
+        compatibilityRules: (prev.compatibilityRules ?? []).map((r) =>
+          fromIds.has(r.variantSetId) ? { ...r, variantSetId: nextId } : r,
+        ),
+        rigidMembers: (prev.rigidMembers ?? []).map((m) =>
+          m.source.kind === 'variant' &&
+          m.source.variant !== undefined &&
+          fromIds.has(m.source.variant.variantSetId)
+            ? {
+                ...m,
+                source: { kind: 'variant', variant: { variantSetId: nextId } },
+              }
+            : m,
+        ),
+      };
     });
   };
 
@@ -546,6 +588,8 @@ export function AgregadoRecipeAuthoringPanel({
                         type="text"
                         className="catalog-form__input"
                         value={s.id}
+                        onFocus={() => renameOriginRef.current.set(idx, s.id)}
+                        onBlur={() => renameOriginRef.current.delete(idx)}
                         onChange={(e) => updateVariantSet(idx, { id: e.target.value })}
                         data-testid={`${testId}-set-${idx}-id`}
                       />
