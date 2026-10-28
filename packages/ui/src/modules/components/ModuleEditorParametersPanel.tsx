@@ -26,6 +26,7 @@ import { InlineLoading } from '../../common/InlineLoading';
 import type { ModuleDraft } from '../moduleHelpers';
 import {
   authorableBindingKinds,
+  agregadoBindingEntries,
   compositionBindingEntries,
   moveParameterDefinition,
   reservedDimensionProjections,
@@ -73,11 +74,18 @@ const UNITS = [
 const RESERVED_NAMES = new Set(['widthMm', 'heightMm', 'depthMm']);
 const NAME_PATTERN = /^[A-Za-z0-9_]+$/;
 
-const BINDING_EFFECT: Record<'componentQuantity' | 'componentCondition', string> = {
+const BINDING_EFFECT: Record<
+  'componentQuantity' | 'componentCondition' | 'agregadoQuantity' | 'agregadoCondition',
+  string
+> = {
   componentQuantity:
     'Multiplica la cantidad del componente por el valor del parámetro.',
   componentCondition:
     'Incluye el componente sólo cuando el valor del parámetro es verdadero.',
+  agregadoQuantity:
+    'Fija cuántas copias del agregado resuelve el parámetro (0 las elimina).',
+  agregadoCondition:
+    'Incluye el agregado sólo cuando el valor del parámetro es verdadero.',
 };
 
 type ParameterFormState = {
@@ -94,8 +102,14 @@ type ParameterFormState = {
   maxLength: string;
   options: string[];
   defaultValue: string;
-  bindingKind: '' | 'componentQuantity' | 'componentCondition';
+  bindingKind:
+    | ''
+    | 'componentQuantity'
+    | 'componentCondition'
+    | 'agregadoQuantity'
+    | 'agregadoCondition';
   bindingComponentId: string;
+  bindingAgregadoId: string;
 };
 
 function emptyForm(): ParameterFormState {
@@ -115,6 +129,7 @@ function emptyForm(): ParameterFormState {
     defaultValue: '',
     bindingKind: '',
     bindingComponentId: '',
+    bindingAgregadoId: '',
   };
 }
 
@@ -144,10 +159,13 @@ function formFromParameter(parameter: FurnitureParameter): ParameterFormState {
     defaultValue,
     bindingKind:
       parameter.binding?.kind === 'componentQuantity' ||
-      parameter.binding?.kind === 'componentCondition'
+      parameter.binding?.kind === 'componentCondition' ||
+      parameter.binding?.kind === 'agregadoQuantity' ||
+      parameter.binding?.kind === 'agregadoCondition'
         ? parameter.binding.kind
         : '',
     bindingComponentId: parameter.binding?.componentId ?? '',
+    bindingAgregadoId: parameter.binding?.agregadoId ?? '',
   };
 }
 
@@ -167,14 +185,24 @@ function buildParameter(form: ParameterFormState): FurnitureParameter {
     defaultValue = form.defaultValue;
   }
 
+  const isAgregadoKind =
+    form.bindingKind === 'agregadoQuantity' || form.bindingKind === 'agregadoCondition';
   const withBinding =
-    form.category !== 'metadata' && form.bindingKind !== '' && form.bindingComponentId.trim() !== ''
+    form.category !== 'metadata' &&
+    form.bindingKind !== '' &&
+    (isAgregadoKind ? form.bindingAgregadoId.trim() !== '' : form.bindingComponentId.trim() !== '')
       ? {
-          binding: {
-            version: 1,
-            kind: form.bindingKind,
-            componentId: form.bindingComponentId.trim(),
-          },
+          binding: isAgregadoKind
+            ? {
+                version: 1,
+                kind: form.bindingKind,
+                agregadoId: form.bindingAgregadoId.trim(),
+              }
+            : {
+                version: 1,
+                kind: form.bindingKind,
+                componentId: form.bindingComponentId.trim(),
+              },
         }
       : {};
   const parameter: FurnitureParameter = {
@@ -265,7 +293,12 @@ function formSaveError(
     if (form.bindingKind === '') {
       return 'Los parámetros que no son metadatos necesitan una vinculación semántica.';
     }
-    if (form.bindingComponentId.trim() === '') {
+    const isAgregadoKind =
+      form.bindingKind === 'agregadoQuantity' || form.bindingKind === 'agregadoCondition';
+    if (isAgregadoKind && form.bindingAgregadoId.trim() === '') {
+      return 'Elegí el agregado al que se vincula el parámetro.';
+    }
+    if (!isAgregadoKind && form.bindingComponentId.trim() === '') {
       return 'Elegí el componente al que se vincula el parámetro.';
     }
   }
@@ -285,6 +318,8 @@ function bindingSummary(parameter: FurnitureParameter): string {
   }
   if (binding.kind === 'componentQuantity') return 'cantidad de componente';
   if (binding.kind === 'componentCondition') return 'condición de componente';
+  if (binding.kind === 'agregadoQuantity') return 'cantidad de agregado';
+  if (binding.kind === 'agregadoCondition') return 'condición de agregado';
   if (binding.kind === 'dimensionColumn') return 'proyección de dimensión';
   return 'relación de estructura (resolvedor)';
 }
@@ -328,13 +363,14 @@ export function ModuleEditorParametersPanel({
     return names;
   }, [catalogComponents]);
 
+  const activeStructure = selectedStructure ?? structures.find((s) => s.id === draft.structureId);
   const entries = useMemo(
-    () =>
-      compositionBindingEntries(
-        draft.components.map((c) => c.componentId),
-        selectedStructure ?? structures.find((s) => s.id === draft.structureId),
-      ),
-    [draft.components, draft.structureId, selectedStructure, structures],
+    () => compositionBindingEntries(draft.components.map((c) => c.componentId), activeStructure),
+    [draft.components, activeStructure],
+  );
+  const agregadoEntries = useMemo(
+    () => agregadoBindingEntries(draft.agregados.map((a) => a.agregadoId), activeStructure),
+    [draft.agregados, activeStructure],
   );
 
   const issues = useMemo(
@@ -439,6 +475,10 @@ export function ModuleEditorParametersPanel({
   const editingEntries =
     editing && editing.form.category !== 'metadata'
       ? entries
+      : [];
+  const editingAgregadoEntries =
+    editing && editing.form.category !== 'metadata'
+      ? agregadoEntries
       : [];
 
   return (
@@ -987,7 +1027,11 @@ export function ModuleEditorParametersPanel({
                     <option key={kind} value={kind} disabled={compatibility !== 'compatible'}>
                       {kind === 'componentQuantity'
                         ? 'Cantidad de un componente'
-                        : 'Presencia de un componente (sí/no)'}
+                        : kind === 'componentCondition'
+                          ? 'Presencia de un componente (sí/no)'
+                          : kind === 'agregadoQuantity'
+                            ? 'Cantidad de copias de un agregado'
+                            : 'Presencia de un agregado (sí/no)'}
                       {compatibility === 'requires-integer-number'
                         ? ' — requiere número entero'
                         : compatibility === 'requires-boolean'
@@ -1009,6 +1053,61 @@ export function ModuleEditorParametersPanel({
               </div>
 
               {editing.form.bindingKind !== '' ? (
+                editing.form.bindingKind === 'agregadoQuantity' ||
+                editing.form.bindingKind === 'agregadoCondition' ? (
+                <div className="catalog-form__field">
+                  <label htmlFor="parameter-binding-agregado">Agregado</label>
+                  <select
+                    id="parameter-binding-agregado"
+                    value={editing.form.bindingAgregadoId}
+                    onChange={(e) =>
+                      setEditing((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              form: { ...prev.form, bindingAgregadoId: e.target.value },
+                            }
+                          : prev,
+                      )
+                    }
+                    disabled={!canMutate}
+                    data-testid="parameter-binding-agregado"
+                  >
+                    <option value="">Elegí un agregado…</option>
+                    {editingAgregadoEntries.map((entry) => {
+                      const ambiguous = entry.state === 'ambiguous';
+                      return (
+                        <option key={entry.agregadoId} value={entry.agregadoId} disabled={ambiguous}>
+                          {entry.agregadoId} · {entry.source === 'direct' ? 'directo' : 'estructura'}
+                          {ambiguous ? ` — ambiguo (${entry.entryCount} entradas)` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {editing.form.bindingAgregadoId !== '' ? (
+                    <span className="catalog-form__hint" data-testid="parameter-binding-agregado-state">
+                      {(() => {
+                        const selected = editingAgregadoEntries.find(
+                          (entry) => entry.agregadoId === editing.form.bindingAgregadoId,
+                        );
+                        if (selected === undefined) {
+                          return 'El agregado no está en la composición del mueble: agregalo en la pestaña Agregados o elegí otro.';
+                        }
+                        if (selected.state === 'ambiguous') {
+                          return `Ambiguo: hay ${selected.entryCount} entradas de este agregado en la composición. Desambiguá con ids de instancia antes de vincular.`;
+                        }
+                        return 'Objetivo único y directo: el servidor lo acepta.';
+                      })()}
+                    </span>
+                  ) : null}
+                  {editingAgregadoEntries.length === 0 ? (
+                    <span className="catalog-form__hint" data-testid="parameter-binding-agregado-empty">
+                      El mueble no tiene agregados en su composición: agregá alguno en la
+                      pestaña Agregados para poder vincular.
+                    </span>
+                  ) : null}
+                </div>
+                ) : (
                 <div className="catalog-form__field">
                   <label htmlFor="parameter-binding-component">Componente</label>
                   <select
@@ -1063,6 +1162,7 @@ export function ModuleEditorParametersPanel({
                     </span>
                   ) : null}
                 </div>
+                )
               ) : null}
             </fieldset>
           ) : null}

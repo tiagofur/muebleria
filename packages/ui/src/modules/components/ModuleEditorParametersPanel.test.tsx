@@ -583,4 +583,110 @@ describe('ModuleEditorParametersPanel (#497 T5/T6)', () => {
       /hash de la definición y la revisión del catálogo avanzan/,
     );
   });
+
+  it('creates an integer parameter with an agregadoQuantity binding (#1386)', async () => {
+    const user = userEvent.setup();
+    const setDraft = vi.fn();
+    renderPanel(
+      draftWith({
+        agregados: [{ agregadoId: 'agr-cajon', quantity: 1 }] as ModuleDraft['agregados'],
+      }),
+      setDraft,
+    );
+
+    await user.click(screen.getByTestId('parameter-add'));
+    await user.type(screen.getByTestId('parameter-name'), 'cajones');
+    await user.type(screen.getByTestId('parameter-label'), 'Cantidad de cajones');
+    await user.type(screen.getByTestId('parameter-min'), '0');
+    await user.type(screen.getByTestId('parameter-max'), '8');
+    await user.click(screen.getByTestId('parameter-integer'));
+    await user.selectOptions(screen.getByTestId('parameter-binding-kind'), 'agregadoQuantity');
+    // The component selector is replaced by the agregado one.
+    expect(screen.queryByTestId('parameter-binding-component')).toBeNull();
+    await user.selectOptions(screen.getByTestId('parameter-binding-agregado'), 'agr-cajon');
+    expect(screen.getByTestId('parameter-binding-agregado-state').textContent).toMatch(
+      /Objetivo único y directo/,
+    );
+    await user.click(screen.getByTestId('parameter-save'));
+
+    expect(setDraft).toHaveBeenCalledTimes(1);
+    const updater = setDraft.mock.calls[0]![0] as (prev: ModuleDraft) => ModuleDraft;
+    const next = updater(
+      draftWith({
+        agregados: [{ agregadoId: 'agr-cajon', quantity: 1 }] as ModuleDraft['agregados'],
+      }),
+    );
+    const created = next.parameterDefinitions![0]!;
+    expect(created.binding).toEqual({
+      version: 1,
+      kind: 'agregadoQuantity',
+      agregadoId: 'agr-cajon',
+    });
+  });
+
+  it('roundtrips an existing agregadoCondition binding into the form', async () => {
+    const user = userEvent.setup();
+    renderPanel(
+      draftWith({
+        agregados: [{ agregadoId: 'agr-cajon', quantity: 1 }] as ModuleDraft['agregados'],
+        parameterDefinitions: [
+          {
+            name: 'cajonesOn',
+            label: 'Cajones activos',
+            type: 'boolean',
+            category: 'configuration',
+            defaultValue: true,
+            required: true,
+            binding: { version: 1, kind: 'agregadoCondition', agregadoId: 'agr-cajon' },
+          },
+        ],
+      }),
+    );
+
+    await user.click(screen.getByTestId('parameter-edit'));
+    const kind = screen.getByTestId('parameter-binding-kind') as HTMLSelectElement;
+    expect(kind.value).toBe('agregadoCondition');
+    const target = screen.getByTestId('parameter-binding-agregado') as HTMLSelectElement;
+    expect(target.value).toBe('agr-cajon');
+    expect(screen.queryByTestId('parameter-binding-component')).toBeNull();
+  });
+
+  it('hints that an agregado binding needs a agregado in the composition', async () => {
+    const user = userEvent.setup();
+    renderPanel(draftWith(), vi.fn());
+
+    await user.click(screen.getByTestId('parameter-add'));
+    await user.type(screen.getByTestId('parameter-name'), 'cajones');
+    await user.type(screen.getByTestId('parameter-label'), 'Cantidad de cajones');
+    await user.click(screen.getByTestId('parameter-integer'));
+    await user.selectOptions(screen.getByTestId('parameter-binding-kind'), 'agregadoQuantity');
+    expect(screen.getByTestId('parameter-binding-agregado-empty')).toBeTruthy();
+    expect(screen.getByTestId('parameter-binding-agregado-empty').textContent).toMatch(
+      /pestaña Agregados/,
+    );
+  });
+
+  it('marks duplicated agregado placements ambiguous instead of selecting them', async () => {
+    const user = userEvent.setup();
+    renderPanel(
+      draftWith({
+        agregados: [
+          { agregadoId: 'agr-cajon', quantity: 1 },
+          { agregadoId: 'agr-cajon', quantity: 1 },
+        ] as ModuleDraft['agregados'],
+      }),
+      vi.fn(),
+    );
+
+    await user.click(screen.getByTestId('parameter-add'));
+    await user.type(screen.getByTestId('parameter-name'), 'cajones');
+    await user.type(screen.getByTestId('parameter-label'), 'Cantidad de cajones');
+    await user.click(screen.getByTestId('parameter-integer'));
+    await user.selectOptions(screen.getByTestId('parameter-binding-kind'), 'agregadoQuantity');
+    const option = screen
+      .getByTestId('parameter-binding-agregado')
+      .querySelector('option[value="agr-cajon"]') as HTMLOptionElement;
+    expect(option.disabled).toBe(true);
+    expect(option.textContent).toContain('ambiguo (2 entradas)');
+  });
 });

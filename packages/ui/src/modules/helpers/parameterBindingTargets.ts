@@ -14,7 +14,7 @@ import type { FurnitureParameter, Structure } from '@granete/domain';
 
 type AuthorableBindingKind = Extract<
   NonNullable<FurnitureParameter['binding']>['kind'],
-  'componentQuantity' | 'componentCondition'
+  'componentQuantity' | 'componentCondition' | 'agregadoQuantity' | 'agregadoCondition'
 >;
 
 export type CompositionEntrySource = 'direct' | 'structure';
@@ -24,19 +24,61 @@ export type CompositionBindingEntry = {
   readonly source: CompositionEntrySource;
 };
 
-export type CompositionBindingEntryView = CompositionBindingEntry & {
-  /** How many composition instances reference this componentId. */
+/** #1386: agregado instances as binding targets, keyed by agregadoId. */
+export type AgregadoBindingEntry = {
+  readonly agregadoId: string;
+  readonly source: CompositionEntrySource;
+};
+
+type CountedEntryView<T extends { source: CompositionEntrySource }> = T & {
+  /** How many composition instances reference this target id. */
   readonly entryCount: number;
-  /** How many DIRECT module instances reference this componentId. */
+  /** How many DIRECT module instances reference this target id. */
   readonly directCount: number;
   /**
    * 'ok' = exactly one direct entry and one overall entry (the only state the
-   * server accepts for componentQuantity/componentCondition). 'ambiguous' =
-   * more than one entry (never auto-select; the composition must be
-   * disambiguated). 'unknown' = not in the composition at all.
+   * server accepts for the behavioral bindings). 'ambiguous' = more than one
+   * entry (never auto-select; the composition must be disambiguated).
+   * 'unknown' = not in the composition at all.
    */
   readonly state: 'ok' | 'ambiguous' | 'unknown';
 };
+
+export type CompositionBindingEntryView = CountedEntryView<CompositionBindingEntry>;
+
+export type AgregadoBindingEntryView = CountedEntryView<AgregadoBindingEntry>;
+
+function countEntryStates<K extends 'componentId' | 'agregadoId', T extends { source: CompositionEntrySource } & Record<K, string>>(
+  entries: readonly T[],
+  key: K,
+): CountedEntryView<T>[] {
+  const directCounts = new Map<string, number>();
+  const allCounts = new Map<string, number>();
+  for (const entry of entries) {
+    const id = entry[key];
+    allCounts.set(id, (allCounts.get(id) ?? 0) + 1);
+    if (entry.source === 'direct') {
+      directCounts.set(id, (directCounts.get(id) ?? 0) + 1);
+    }
+  }
+
+  const seen = new Set<string>();
+  const views: CountedEntryView<T>[] = [];
+  for (const entry of entries) {
+    const id = entry[key];
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const entryCount = allCounts.get(id) ?? 0;
+    const directCount = directCounts.get(id) ?? 0;
+    views.push({
+      ...entry,
+      entryCount,
+      directCount,
+      state: entryCount === 1 && directCount === 1 ? 'ok' : entryCount > 1 ? 'ambiguous' : 'unknown',
+    });
+  }
+  return views;
+}
 
 /**
  * Composition entries available as binding targets: instances placed directly
@@ -55,31 +97,27 @@ export function compositionBindingEntries(
       entries.push({ componentId: instance.componentId, source: 'structure' });
     }
   }
+  return countEntryStates(entries, 'componentId');
+}
 
-  const directCounts = new Map<string, number>();
-  const allCounts = new Map<string, number>();
-  for (const entry of entries) {
-    allCounts.set(entry.componentId, (allCounts.get(entry.componentId) ?? 0) + 1);
-    if (entry.source === 'direct') {
-      directCounts.set(entry.componentId, (directCounts.get(entry.componentId) ?? 0) + 1);
+/**
+ * #1386: agregado instances available as binding targets — direct module
+ * placements plus the ones inherited from its structure (the same walk the
+ * Go consumer validator performs for agregadoQuantity/agregadoCondition).
+ */
+export function agregadoBindingEntries(
+  directAgregadoIds: readonly string[],
+  structure: Structure | undefined,
+): AgregadoBindingEntryView[] {
+  const entries: AgregadoBindingEntry[] = directAgregadoIds
+    .filter((id) => id.trim() !== '')
+    .map((agregadoId) => ({ agregadoId: agregadoId.trim(), source: 'direct' as const }));
+  if (structure) {
+    for (const instance of structure.agregados ?? []) {
+      entries.push({ agregadoId: instance.agregadoId, source: 'structure' });
     }
   }
-
-  const seen = new Set<string>();
-  const views: CompositionBindingEntryView[] = [];
-  for (const entry of entries) {
-    if (seen.has(entry.componentId)) continue;
-    seen.add(entry.componentId);
-    const entryCount = allCounts.get(entry.componentId) ?? 0;
-    const directCount = directCounts.get(entry.componentId) ?? 0;
-    views.push({
-      ...entry,
-      entryCount,
-      directCount,
-      state: entryCount === 1 && directCount === 1 ? 'ok' : entryCount > 1 ? 'ambiguous' : 'unknown',
-    });
-  }
-  return views;
+  return countEntryStates(entries, 'agregadoId');
 }
 
 export type BindingKindCompatibility =
@@ -89,8 +127,8 @@ export type BindingKindCompatibility =
 
 /**
  * Which behavioral binding kinds the persisted contract allows for a
- * parameter type: componentQuantity owns an integer number, componentCondition
- * owns a boolean. dimensionColumn is projection-only and
+ * parameter type: the quantity kinds own an integer number, the condition
+ * kinds own a boolean. dimensionColumn is projection-only and
  * structureRelationship is resolver-only — neither is authorable here.
  */
 export function bindingKindCompatibility(
@@ -98,7 +136,7 @@ export function bindingKindCompatibility(
   kind: AuthorableBindingKind,
   integer = false,
 ): BindingKindCompatibility {
-  if (kind === 'componentQuantity') {
+  if (kind === 'componentQuantity' || kind === 'agregadoQuantity') {
     // The persisted contract requires an integer number for quantities.
     return parameterType === 'number' && integer ? 'compatible' : 'requires-integer-number';
   }
@@ -110,12 +148,14 @@ export function authorableBindingKinds(
   parameterType: FurnitureParameter['type'],
   integer = false,
 ): readonly {
-  kind: 'componentQuantity' | 'componentCondition';
+  kind: AuthorableBindingKind;
   compatibility: BindingKindCompatibility;
 }[] {
   return [
     { kind: 'componentQuantity', compatibility: bindingKindCompatibility(parameterType, 'componentQuantity', integer) },
     { kind: 'componentCondition', compatibility: bindingKindCompatibility(parameterType, 'componentCondition') },
+    { kind: 'agregadoQuantity', compatibility: bindingKindCompatibility(parameterType, 'agregadoQuantity', integer) },
+    { kind: 'agregadoCondition', compatibility: bindingKindCompatibility(parameterType, 'agregadoCondition') },
   ];
 }
 

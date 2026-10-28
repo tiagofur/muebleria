@@ -60,6 +60,22 @@ formulada, se ejecuta la opción recomendada **(a)**, simétrica a #1383 slice 1
 - Tests: Go contract + unit (poses por fórmula no apiladas, consumers
   ambiguos, apply), TS contract + unit.
 
+## Slice 2 (editor + E2E) — ejecutado en esta rama
+
+- `parameterBindingTargets.ts`: los 4 kinds autorizables (cantidad/presencia de
+  componente y de agregado) + `agregadoBindingEntries` (directo/estructura,
+  ok/ambiguo/desconocido con la misma regla del validador Go).
+- `ModuleEditorParametersPanel.tsx`: selector de destino componente|agregado
+  según el kind, efectos y resúmenes de fila, guard de guardado por familia,
+  roundtrip del draft (bindingAgregadoId).
+- «Probar resolución» refleja ambos sin cambios: el conteo de piezas del
+  preview ya sigue al resolve server-authoritative (las copias de agregado
+  entran por el slice 1).
+- E2E browser en `tests/organization/parameters-authoring.spec.ts`: autoría del
+  binding por UI, readback API (agregadoId persistido, sin componentId) y
+  preview 2 piezas → 0 piezas. Trampa del contrato: el payload de módulo lleva
+  las instancias de agregado en snake_case (`agregado_id`).
+
 ## Fuera de alcance (queda declarado en la issue)
 
 - Editor web: selector de destino componente|agregado + «Probar resolución» +
