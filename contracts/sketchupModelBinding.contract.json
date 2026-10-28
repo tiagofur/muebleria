@@ -28,6 +28,7 @@
           "name": "Carpintería García"
         },
         "project": {
+          "authoring_surface": "sketchup",
           "customer": {
             "id": "61000000-0000-0000-0000-000000000001",
             "name": "Cliente García"
@@ -67,6 +68,7 @@
           "name": "Carpintería García"
         },
         "project": {
+          "authoring_surface": "sketchup",
           "customer": {
             "id": "61000000-0000-0000-0000-000000000001",
             "name": "Cliente García"
@@ -105,6 +107,7 @@
           "name": "Carpintería García"
         },
         "project": {
+          "authoring_surface": "sketchup",
           "customer": {
             "id": "61000000-0000-0000-0000-000000000001",
             "name": "Cliente García"
@@ -158,6 +161,7 @@
           "name": "Carpintería García"
         },
         "project": {
+          "authoring_surface": "sketchup",
           "customer": {
             "id": "61000000-0000-0000-0000-000000000001",
             "name": "Cliente García"
