@@ -66,9 +66,11 @@ de /catalog/agregados (superficie entera sin documentar hoy — follow-up propio
   TestH2 actorMembership + TestAgregado_PutValidatesRecipeFailClosed incluidos.
 - V2: gate organization browser — agregado-recipe-authoring.spec.ts 3 passed
   (GATE_EXIT=0, PostgreSQL real desechable + Chromium). Regresión
-  agregado-recipe-change.spec.ts (#1369) en curso al cierre. Host SketchUp:
-  NOT_RUN (cero cambios de extensión; render de assemblies y membresía ya en
-  main de #670/#1376) — verificación owner en vivo queda para la demo.
+  agregado-recipe-change.spec.ts: 8 passed (la validación del PUT no rompe el
+  apply de recetas). Gate visual proyectar-webgl: 12 passed (la ruta del modal
+  Agregado preserva la receta guardada). Host SketchUp: NOT_RUN (cero cambios
+  de extensión; render de assemblies y membresía ya en main) — verificación
+  owner en vivo queda para la demo.
 - N/A: foundation-gate-a (sin migraciones), sketchup rake verify (sin RBZ),
   visual proyectar-webgl (ruta del modal Agregado usa la receta GUARDADA,
   comportamiento preservado; si da presupuesto se corre local).
