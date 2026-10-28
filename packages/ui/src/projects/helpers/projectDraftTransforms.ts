@@ -10,6 +10,7 @@ import type {
   OptionChoices,
   OptionGroup,
   Project,
+  ProjectAuthoringSurface,
   ProjectStatus,
   ProjectTechnicalStatus,
   Structure,
@@ -45,6 +46,8 @@ export type ProjectDraft = {
   surveyCompletedAt?: string;
   /** Planned installation date in Obra (YYYY-MM-DD). */
   installationScheduledDate?: string;
+  /** #1375: Authoring surface per project ('sketchup' | 'proyectar'). */
+  authoringSurface?: ProjectAuthoringSurface;
 };
 
 export type AddItemDraft = {
@@ -152,6 +155,7 @@ export function emptyProjectDraft(
     technicalStatus: 'pending_assignment',
     surveyCompletedAt: '',
     installationScheduledDate: '',
+    authoringSurface: 'sketchup',
   };
 }
 
@@ -174,6 +178,7 @@ export function projectToDraft(
     technicalStatus: project.technicalStatus ?? 'pending_assignment',
     surveyCompletedAt: project.surveyCompletedAt ?? '',
     installationScheduledDate: project.installationScheduledDate ?? '',
+    authoringSurface: project.authoringSurface ?? 'sketchup',
   };
 }
 

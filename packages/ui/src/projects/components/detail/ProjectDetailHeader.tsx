@@ -143,6 +143,17 @@ export function ProjectDetailHeader({
             >
               {PROJECT_STAGE_LABELS_ES[deriveProjectStage(project)]}
             </span>
+            <span
+              className="badge badge--neutral-subtle"
+              data-testid="project-authoring-surface-badge"
+              title={
+                project.authoringSurface === 'proyectar'
+                  ? 'La autoría 3D de este proyecto se realiza en Proyectar (web)'
+                  : 'La autoría 3D de este proyecto se realiza en SketchUp'
+              }
+            >
+              Autoría: {project.authoringSurface === 'proyectar' ? 'Proyectar' : 'SketchUp'}
+            </span>
             {project.commercialStatus && (
               <span
                 className={`badge badge--${

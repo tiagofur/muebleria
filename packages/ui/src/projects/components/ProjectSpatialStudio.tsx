@@ -3362,8 +3362,10 @@ export function ProjectSpatialStudio({
         <div className="spatial-studio__chrome-actions">
           {!statusCanEdit ? (
             <span className="spatial-studio__frozen" data-testid="spatial-studio-frozen">
-              <Lock size={14} strokeWidth={1.5} aria-hidden /> Plano congelado
-              (solo lectura)
+              <Lock size={14} strokeWidth={1.5} aria-hidden />{' '}
+              {project.authoringSurface === 'sketchup'
+                ? 'Modo visor (autoría en SketchUp)'
+                : 'Plano congelado (solo lectura)'}
             </span>
           ) : editBlocked ? (
             <span

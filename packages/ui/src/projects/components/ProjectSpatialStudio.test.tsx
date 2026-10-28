@@ -626,6 +626,26 @@ describe('ProjectSpatialStudio', () => {
     expect(screen.queryByTestId('project-spatial-studio')).toBeNull();
   });
 
+  it('renders viewer-only banner when canEdit is false and authoring surface is sketchup (#1375)', () => {
+    const sketchupProject: Project = {
+      ...project,
+      authoringSurface: 'sketchup',
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={sketchupProject}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit={false}
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    const frozen = screen.getByTestId('spatial-studio-frozen');
+    expect(frozen.textContent).toContain('Modo visor (autoría en SketchUp)');
+  });
+
   it('soft-locks plan when another user holds the session', () => {
     const onAcquire = vi.fn(() => false);
     const onChangeLayout = vi.fn();

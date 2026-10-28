@@ -71,6 +71,7 @@ export type {
   FloorStatusEvent,
   ProjectProductionState,
   Project,
+  ProjectAuthoringSurface,
   ProjectVersion,
   ProjectTemplate,
   PlacementElevation,

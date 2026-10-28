@@ -433,6 +433,13 @@ describe('apiMappers', () => {
     const items = api.items as Record<string, unknown>[];
     expect(items[0]?.module_id).toBe('m1');
     expect(projectFromApi(api as Record<string, unknown>).customerId).toBe('c1');
+    expect(api.authoring_surface).toBe('sketchup');
+    expect(projectFromApi(api as Record<string, unknown>).authoringSurface).toBe('sketchup');
+
+    const pProyectar = { ...p, authoringSurface: 'proyectar' as const };
+    const apiProyectar = projectToApi(pProyectar);
+    expect(apiProyectar.authoring_surface).toBe('proyectar');
+    expect(projectFromApi(apiProyectar as Record<string, unknown>).authoringSurface).toBe('proyectar');
   });
 
   it('narrows the server-owned Digital Thread context projection to booleans', () => {

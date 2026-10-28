@@ -41,10 +41,19 @@ Default para todo proyecto nuevo: `'sketchup'`.
 
 ## Slices de ejecución
 
-- **Slice 1**: Contrato, DB y Modelos (Migración 000169, Go domain/storage/api, TS domain, OpenAPI).
-- **Slice 2**: Server authority & Gating fail-closed (Capabilities binding + rechazo 403 en handlers + tests Go PG real).
-- **Slice 3**: Cliente SketchUp (Modo visor en HTML/JS/Ruby cuando `can_edit_working_copy == false` + tests).
-- **Slice 4**: Web UI & Proyectar (Selector al crear proyecto, badge de superficie, modo visor en Proyectar + browser tests).
+- **Slice 1**: Contrato, DB y Modelos (Migración 000169, Go domain/storage/api, TS domain, OpenAPI) — commit c3464aad.
+- **Slice 2**: Server authority & Gating fail-closed (Capabilities binding + rechazo 403 en handlers + tests Go PG real) — commit 9535f8aa.
+- **Slice 3**: Cliente SketchUp (Modo visor en HTML/JS/Ruby cuando `can_edit_working_copy == false` + tests) — commit dc93f882.
+- **Slice 4**: Web UI & Proyectar (Selector al crear proyecto, badge de superficie, modo visor en Proyectar + browser tests) — commit pendiente.
+
+## Evidencia observada
+
+- V0: Drift check OpenAPI limpio (`scripts/check_openapi_drift.py`).
+- V1: Tests Go unitarios de API y Storage con PostgreSQL real descartable (`scripts/backend-test.sh`).
+- V1: Tests Ruby y JS de la extensión SketchUp (`bundle exec ruby -Ilib -Itest test/unit/model_binding_contract_test.rb`, `node test/js/dialog_model_binding_test.js`).
+- V1: Tests unitarios UI (`ProjectsScreen.test.tsx`, `ProjectSpatialStudio.test.tsx`, `apiMappers.test.ts`).
+- V2: Browser gate real (`tests/organization/project-authoring-surface.spec.ts`) — 3 passed en 9.4s contra PostgreSQL real y Chromium.
+
 
 ## No-Goals
 

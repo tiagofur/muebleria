@@ -142,6 +142,7 @@ function draftToProjectMeta(
   | 'technicalStatus'
   | 'surveyCompletedAt'
   | 'installationScheduledDate'
+  | 'authoringSurface'
 > {
   return {
     name: draft.name.trim(),
@@ -155,6 +156,7 @@ function draftToProjectMeta(
     technicalStatus: draft.technicalStatus,
     surveyCompletedAt: draft.surveyCompletedAt || undefined,
     installationScheduledDate: draft.installationScheduledDate || undefined,
+    authoringSurface: draft.authoringSurface ?? 'sketchup',
   };
 }
 
