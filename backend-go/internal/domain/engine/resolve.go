@@ -619,6 +619,15 @@ func expandComposedModulePartsWithDims(
 			quantity = 1
 		}
 		units := agregadoSubspaceUnits(quantity, spaceW, spaceH, spaceD, 0, 0, 0, agrInst.LayoutDirection, agrInst.GapMm)
+		// #1386: mirror expandLayoutAgregado — pose formulas using i/N make
+		// every unit full-size so BOM piece identities and dims match the
+		// layout exactly (the split stays off when formulas distribute).
+		if formulaUsesCopyIndex(agrInst.Position) {
+			units = make([]agregadoUnit, 0, quantity)
+			for idx := 0; idx < quantity; idx++ {
+				units = append(units, agregadoUnit{index: idx, w: spaceW, h: spaceH, d: spaceD})
+			}
+		}
 		for _, unit := range units {
 			unitDims := formulaDims{
 				W:  int(math.Round(unit.w)),

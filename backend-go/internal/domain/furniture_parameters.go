@@ -79,6 +79,8 @@ const (
 	FurnitureParameterBindingVersion               = 1
 	FurnitureParameterBindingComponentQuantity     = "componentQuantity"
 	FurnitureParameterBindingComponentCondition    = "componentCondition"
+	FurnitureParameterBindingAgregadoQuantity      = "agregadoQuantity"
+	FurnitureParameterBindingAgregadoCondition     = "agregadoCondition"
 	FurnitureParameterBindingDimensionColumn       = "dimensionColumn"
 	FurnitureParameterBindingStructureRelationship = "structureRelationship"
 )
@@ -91,6 +93,7 @@ type FurnitureParameterBinding struct {
 	Version      int                                    `json:"version"`
 	Kind         string                                 `json:"kind"`
 	ComponentID  string                                 `json:"componentId,omitempty"`
+	AgregadoID   string                                 `json:"agregadoId,omitempty"`
 	Dimension    string                                 `json:"dimension,omitempty"`
 	Relationship *FurnitureParameterRelationshipBinding `json:"relationship,omitempty"`
 }
@@ -544,6 +547,9 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 		if b.Dimension != "" {
 			add("binding.dimension", "is not allowed for componentQuantity")
 		}
+		if b.AgregadoID != "" {
+			add("binding.agregadoId", "is only allowed for agregadoQuantity and agregadoCondition")
+		}
 		if b.Relationship != nil {
 			if strings.TrimSpace(b.Relationship.Kind) == "" {
 				add("binding.relationship.kind", "is required")
@@ -570,6 +576,35 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 		if b.Dimension != "" || b.Relationship != nil {
 			add("binding", "componentCondition cannot declare dimension or relationship")
 		}
+		if b.AgregadoID != "" {
+			add("binding.agregadoId", "is only allowed for agregadoQuantity and agregadoCondition")
+		}
+	case FurnitureParameterBindingAgregadoQuantity:
+		if definition.Type != FurnitureParameterTypeNumber || !definition.Integer {
+			add("binding.kind", "agregadoQuantity requires an integer number parameter")
+		}
+		if strings.TrimSpace(b.AgregadoID) == "" {
+			add("binding.agregadoId", "is required for agregadoQuantity")
+		}
+		if b.Dimension != "" || b.Relationship != nil {
+			add("binding", "agregadoQuantity cannot declare dimension or relationship")
+		}
+		if b.ComponentID != "" {
+			add("binding.componentId", "is only allowed for component kinds")
+		}
+	case FurnitureParameterBindingAgregadoCondition:
+		if definition.Type != FurnitureParameterTypeBoolean {
+			add("binding.kind", "agregadoCondition requires a boolean parameter")
+		}
+		if strings.TrimSpace(b.AgregadoID) == "" {
+			add("binding.agregadoId", "is required for agregadoCondition")
+		}
+		if b.Dimension != "" || b.Relationship != nil {
+			add("binding", "agregadoCondition cannot declare dimension or relationship")
+		}
+		if b.ComponentID != "" {
+			add("binding.componentId", "is only allowed for component kinds")
+		}
 	case FurnitureParameterBindingDimensionColumn:
 		if definition.Type != FurnitureParameterTypeNumber || !definition.Integer || definition.Unit != FurnitureParameterUnitMM {
 			add("binding.kind", "dimensionColumn requires an integer millimeter number parameter")
@@ -580,6 +615,9 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 		if b.ComponentID != "" || b.Relationship != nil {
 			add("binding", "dimensionColumn cannot target composition")
 		}
+		if b.AgregadoID != "" {
+			add("binding.agregadoId", "is only allowed for agregadoQuantity and agregadoCondition")
+		}
 	case FurnitureParameterBindingStructureRelationship:
 		if definition.Type != FurnitureParameterTypeNumber || !definition.Integer {
 			add("binding.kind", "structureRelationship requires an integer number parameter (the station count)")
@@ -589,6 +627,9 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 		}
 		if b.Dimension != "" {
 			add("binding.dimension", "is not allowed for structureRelationship")
+		}
+		if b.AgregadoID != "" {
+			add("binding.agregadoId", "is only allowed for agregadoQuantity and agregadoCondition")
 		}
 		if b.Relationship == nil {
 			add("binding.relationship", "is required for structureRelationship")
@@ -696,7 +737,7 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 			}
 		}
 	default:
-		add("binding.kind", "must be componentQuantity, componentCondition, dimensionColumn, or structureRelationship")
+		add("binding.kind", "must be componentQuantity, componentCondition, agregadoQuantity, agregadoCondition, dimensionColumn, or structureRelationship")
 	}
 }
 
@@ -801,8 +842,19 @@ func ValidateModuleFurnitureParameterConsumers(module Module, catalog Catalog) [
 			directEntries[instance.ComponentID]++
 		}
 	}
+	directAgregados := map[string]int{}
+	allAgregados := map[string]int{}
+	noteAgregado := func(instance ModuleAgregadoInstance, direct bool) {
+		allAgregados[instance.AgregadoID]++
+		if direct {
+			directAgregados[instance.AgregadoID]++
+		}
+	}
 	for _, instance := range module.Components {
 		note(instance, true)
+	}
+	for _, instance := range module.Agregados {
+		noteAgregado(instance, true)
 	}
 	if module.StructureID != "" {
 		for _, structure := range catalog.Structures {
@@ -812,12 +864,24 @@ func ValidateModuleFurnitureParameterConsumers(module Module, catalog Catalog) [
 			for _, instance := range structure.Components {
 				note(instance, false)
 			}
+			for _, instance := range structure.Agregados {
+				noteAgregado(instance, false)
+			}
 			break
 		}
 	}
 	for _, definition := range module.ParameterDefinitions {
 		binding := definition.Binding
-		if binding == nil || (binding.Kind != FurnitureParameterBindingComponentQuantity && binding.Kind != FurnitureParameterBindingComponentCondition && binding.Kind != FurnitureParameterBindingStructureRelationship) {
+		if binding == nil || (binding.Kind != FurnitureParameterBindingComponentQuantity && binding.Kind != FurnitureParameterBindingComponentCondition && binding.Kind != FurnitureParameterBindingAgregadoQuantity && binding.Kind != FurnitureParameterBindingAgregadoCondition && binding.Kind != FurnitureParameterBindingStructureRelationship) {
+			continue
+		}
+		if binding.Kind == FurnitureParameterBindingAgregadoQuantity || binding.Kind == FurnitureParameterBindingAgregadoCondition {
+			// #1386: the agregado consumer mirrors the component rule — the
+			// bound agregadoId must be an unambiguous direct entry of the
+			// module (structure-level agregados do not qualify as direct).
+			if directAgregados[binding.AgregadoID] != 1 || allAgregados[binding.AgregadoID] != 1 {
+				issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.agregadoId", Message: "must reference exactly one unambiguous agregado entry placed directly on the module"})
+			}
 			continue
 		}
 		if binding.Kind == FurnitureParameterBindingStructureRelationship {

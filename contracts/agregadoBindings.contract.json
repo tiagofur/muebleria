@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "piecePrefix": "",
+  "comment": [
+    "#1386 — Contrato de paridad TS/Go de los bindings de AGREGADO (agregadoQuantity/agregadoCondition).",
+    "TS: packages/domain/src/agregadoBindings.contract.test.ts (applyEvaluatedAgregadoBindings + resolveBom).",
+    "Go: backend-go/internal/domain/engine/component_bindings_test.go TestAgregadoBindingsSharedContract.",
+    "Regla: expected congelados; si un motor diverge, se alinea el motor — nunca el expected.",
+    "Los ids de pieza de unidades de agregado llevan el prefijo agr-<agregadoId>-u<idx>- (sin mod-).",
+    "Módulo de referencia en cada test: 1 instancia de cajon-std (quantity 1 autoriada) con el componente comp-frente.",
+    "quantity 0 / condición false elimina la instancia (misma semántica que componentQuantity/componentCondition)."
+  ],
+  "parameters": [
+    {
+      "name": "cajonCount",
+      "label": "Cajones",
+      "type": "number",
+      "defaultValue": 2,
+      "required": true,
+      "category": "configuration",
+      "unit": "count",
+      "integer": true,
+      "min": 0,
+      "max": 8,
+      "binding": {
+        "version": 1,
+        "kind": "agregadoQuantity",
+        "agregadoId": "cajon-std"
+      }
+    },
+    {
+      "name": "cajonOn",
+      "label": "Cajones activos",
+      "type": "boolean",
+      "defaultValue": true,
+      "required": true,
+      "category": "configuration",
+      "binding": {
+        "version": 1,
+        "kind": "agregadoCondition",
+        "agregadoId": "cajon-std"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "quantity drives agregado copies",
+      "values": { "cajonCount": 3, "cajonOn": true },
+      "quantities": [3],
+      "pieceIds": [
+        "agr-cajon-std-u0-comp-frente-copy-0",
+        "agr-cajon-std-u1-comp-frente-copy-0",
+        "agr-cajon-std-u2-comp-frente-copy-0"
+      ]
+    },
+    {
+      "name": "zero quantity removes the agregado",
+      "values": { "cajonCount": 0, "cajonOn": true },
+      "quantities": [],
+      "pieceIds": []
+    },
+    {
+      "name": "condition false removes the agregado",
+      "values": { "cajonCount": 2, "cajonOn": false },
+      "quantities": [],
+      "pieceIds": []
+    },
+    {
+      "name": "count above max fails evaluation",
+      "values": { "cajonCount": 9, "cajonOn": true },
+      "issue": "PARAMETER_OUT_OF_RANGE"
+    }
+  ]
+}

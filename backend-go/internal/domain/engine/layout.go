@@ -1059,6 +1059,35 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 		quantity = 1
 	}
 	units := agregadoSubspaceUnits(quantity, spaceW, spaceH, spaceD, spaceX, spaceY, spaceZ, agrInst.LayoutDirection, agrInst.GapMm)
+	// #1386: pose formulas that reference the copy variables (i, N) position
+	// every unit BY FORMULA at full sub-space size — the layout_direction
+	// sub-space split stays off so the two distribution mechanisms never
+	// stack. Without i/N the historic split behavior is untouched.
+	if formulaUsesCopyIndex(agrInst.Position) {
+		units = make([]agregadoUnit, 0, quantity)
+		for idx := 0; idx < quantity; idx++ {
+			poseDims := parentDims
+			poseDims.I = idx
+			poseDims.N = quantity
+			unit := agregadoUnit{index: idx, w: spaceW, h: spaceH, d: spaceD}
+			if agrInst.Position != nil && agrInst.Position.XFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Position.XFormula, poseDims); err == nil {
+					unit.x = float64(v)
+				}
+			}
+			if agrInst.Position != nil && agrInst.Position.YFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Position.YFormula, poseDims); err == nil {
+					unit.y = float64(v)
+				}
+			}
+			if agrInst.Position != nil && agrInst.Position.ZFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Position.ZFormula, poseDims); err == nil {
+					unit.z = float64(v)
+				}
+			}
+			units = append(units, unit)
+		}
+	}
 
 	boards := []layoutBoard{}
 	for _, unit := range units {
@@ -1089,6 +1118,17 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 type agregadoUnit struct {
 	index            int
 	x, y, z, w, h, d float64
+}
+
+// formulaUsesCopyIndex reports whether any pose formula of the agregado
+// instance references the per-unit copy variables (i, N). The formula
+// vocabulary is single-letter variables plus operators and digits, so any
+// occurrence of those runes is a copy reference (#1386).
+func formulaUsesCopyIndex(position *domain.AgregadoPosition) bool {
+	if position == nil {
+		return false
+	}
+	return strings.ContainsAny(position.XFormula+position.YFormula+position.ZFormula, "iN")
 }
 
 // agregadoSubspaceUnits mirrors TS calculateAgregadoSubspaceUnits.
