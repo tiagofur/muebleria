@@ -125,6 +125,18 @@ describe('AcceptInvitationScreen lifecycle', () => {
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
   });
 
+  it('keeps retry available for a transient server error instead of blaming the invitation', async () => {
+    vi.stubGlobal('fetch', fetchRouter([['/auth/invitations:preview', () => jsonResponse({
+      code: 'INTERNAL_ERROR', message: 'boom', fieldErrors: {}, requestId: 'req-1', retryable: true, details: {},
+    }, 500)]]));
+    render(<AcceptInvitationScreen token="invite-token" baseUrl="http://api.test" onAccepted={vi.fn()} />);
+
+    await screen.findByRole('alert');
+    // review #1408: el backend marca 5xx como retryable — reintentar puede
+    // funcionar, y mandar al usuario a pedir re-invitación sería mentira.
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
+  });
+
   it('explains a rotated token instead of exposing a generic API message', async () => {
     vi.stubGlobal('fetch', fetchRouter([['/auth/invitations:preview', () => jsonResponse({
       code: 'INVITATION_TOKEN_ROTATED',

@@ -76,9 +76,10 @@ export function AcceptInvitationScreen({
   const [preview, setPreview] = useState<InvitationPreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   /**
-   * #1108 re-critique: Reintentar sólo donde puede funcionar (red, 429). En
-   * estados terminales (vencida/revocada/usada/rotada) la primaria es volver
-   * al login — reintentar es acción muerta.
+   * #1108 re-critique: Reintentar sólo donde puede funcionar — red, 429 (el
+   * limiter viaja con retryable: false, por eso el status explícito) y 5xx
+   * que el backend marca retryable. En estados terminales (vencida/revocada/
+   * usada/rotada) la primaria es volver al login — reintentar es acción muerta.
    */
   const [previewRetryable, setPreviewRetryable] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
@@ -95,7 +96,7 @@ export function AcceptInvitationScreen({
       setPreview(null);
       setPreviewError(invitationStateMessage(err));
       setPreviewRetryable(
-        !(err instanceof GraneteApiError) || err.status === 429,
+        !(err instanceof GraneteApiError) || err.status === 429 || err.retryable,
       );
     } finally {
       setPreviewLoading(false);
