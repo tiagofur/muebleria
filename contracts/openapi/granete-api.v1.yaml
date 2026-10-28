@@ -17113,6 +17113,8 @@
         "enum": [
           "componentQuantity",
           "componentCondition",
+          "agregadoQuantity",
+          "agregadoCondition",
           "dimensionColumn",
           "structureRelationship"
         ]
@@ -17231,6 +17233,9 @@
             "$ref": "#/components/schemas/FurnitureParameterBindingKind"
           },
           "componentId": {
+            "type": "string"
+          },
+          "agregadoId": {
             "type": "string"
           },
           "dimension": {
