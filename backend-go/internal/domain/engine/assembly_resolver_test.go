@@ -434,6 +434,42 @@ func TestH_BOMRoleCombinationsValidated(t *testing.T) {
 	}
 }
 
+// Test H2: actorMembership format validated against the #1376 raw-string contract.
+func TestH2_ActorMembershipFormatValidated(t *testing.T) {
+	base := domain.AgregadoRigidMember{
+		MemberID: "runner_l",
+		Role:     "runner_left",
+		Source:   domain.RigidMemberSource{Kind: domain.RigidMemberSourceFixed, Fixed: &domain.FixedHardwareSource{HardwareID: "hw-1"}},
+		Placement: domain.AssemblyAnchorRule{
+			X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+			Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+			Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+		},
+		BOMRole: domain.BOMRoleIncludedInKit,
+	}
+
+	for _, membership := range []string{"", "body", "actor:drawer"} {
+		m := base
+		m.ActorMembership = membership
+		if err := domain.ValidateAgregadoRigidMember(m, true); err != nil {
+			t.Errorf("actorMembership %q should be valid: %v", membership, err)
+		}
+	}
+
+	for _, membership := range []string{"drawer", "actor:", "actor:two words", "  "} {
+		m := base
+		m.ActorMembership = membership
+		err := domain.ValidateAgregadoRigidMember(m, true)
+		if err == nil {
+			t.Errorf("actorMembership %q should be invalid, got nil", membership)
+			continue
+		}
+		if !strings.Contains(err.Error(), "invalid actorMembership") {
+			t.Errorf("actorMembership %q: expected 'invalid actorMembership' error, got %v", membership, err)
+		}
+	}
+}
+
 // Test I (R2): Arbitrary finite rigid rotation contract (det=+1.0, no mirror, no shear)
 func TestI_ArbitraryFiniteRotationContract(t *testing.T) {
 	testCases := []struct {
@@ -1526,8 +1562,8 @@ func TestAgregadoActorMembershipSharedContract(t *testing.T) {
 	}
 
 	var fixture struct {
-		Agregado domain.Agregado               `json:"agregado"`
-		Params   engine.AssemblyResolutionParams `json:"params"`
+		Agregado        domain.Agregado                 `json:"agregado"`
+		Params          engine.AssemblyResolutionParams `json:"params"`
 		ExpectedMembers []struct {
 			MemberID        string `json:"memberId"`
 			ActorMembership string `json:"actorMembership"`

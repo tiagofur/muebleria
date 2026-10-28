@@ -347,6 +347,9 @@ type DesignRevisionAssemblySnapshot struct {
 
 var sha256Regex = regexp.MustCompile(`^sha256-[0-9a-f]{64}$`)
 
+// actorMembershipPattern matches the "actor:<id>" form of the #1376 membership contract.
+var actorMembershipPattern = regexp.MustCompile(`^actor:\S+$`)
+
 // ValidatePublishedAssemblySnapshot performs fail-closed validation on a published assembly snapshot
 // upon readback (R16). Any corrupted dimension, basis determinant != +1.0, missing visual pins,
 // or invalid revision identity returns a typed ErrCorruptAssemblySnapshot.
@@ -577,6 +580,11 @@ func ValidateAgregadoRigidMember(m AgregadoRigidMember, hasCommercialKit bool) e
 	}
 	if strings.TrimSpace(m.Role) == "" {
 		return fmt.Errorf("rigid member '%s' must have a non-empty role", m.MemberID)
+	}
+	// #1376 contract: consumers compare the raw string ("" | "body" | "actor:<id>"),
+	// so no trim normalization here — anything else would silently change membership.
+	if m.ActorMembership != "" && m.ActorMembership != "body" && !actorMembershipPattern.MatchString(m.ActorMembership) {
+		return fmt.Errorf("rigid member '%s': invalid actorMembership %q (expected \"\", \"body\", or \"actor:<id>\")", m.MemberID, m.ActorMembership)
 	}
 	if err := ValidateRigidMemberSource(m.Source); err != nil {
 		return fmt.Errorf("rigid member '%s': %w", m.MemberID, err)
