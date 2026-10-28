@@ -189,10 +189,10 @@ test('registration: namespace, exact public API and idempotent re-execution', ()
   assert.ok(mb, 'module registers window.GraneteUI.modelBinding');
   ['init', 'setStatus', 'onResult', 'onPublishProgress', 'onPublishResult',
     'onDesignValidationProgress', 'onDesignValidationResult',
-    'onBindingProjects', 'onBindingDesigns', 'isConnected'].forEach((entry) => {
+    'onBindingProjects', 'onBindingDesigns', 'isConnected', 'canEditWorkingCopy'].forEach((entry) => {
     assert.strictEqual(typeof mb[entry], 'function', 'public API entry: ' + entry);
   });
-  assert.strictEqual(Object.keys(mb).length, 10, 'exactly the 10 audited public entries');
+  assert.strictEqual(Object.keys(mb).length, 11, 'exactly the 11 audited public entries');
 
   const connectListenersBefore = el(sandbox, 'btn-binding-connect').listeners.click.length;
   const keydownBefore = sandbox.__documentListeners.keydown.length;

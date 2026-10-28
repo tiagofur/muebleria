@@ -295,7 +295,10 @@ export function ProjectModalsContainer({
 
       {selectedProject && onUpdateKitchenLayout ? (() => {
         // #1375: if the project's authoring surface is SketchUp, Proyectar opens in viewer mode.
-        const isProyectar = selectedProject.authoringSurface === 'proyectar';
+        // For guest/demo projects without an organization, Proyectar remains authoring by default.
+        const isProyectar =
+          selectedProject.authoringSurface === 'proyectar' ||
+          (selectedProject.authoringSurface === undefined && !selectedProject.organizationId);
         const canEditProyectar = Boolean(canMutate && selectedProject.status === 'draft' && isProyectar);
         return (
           <ProjectSpatialStudio
