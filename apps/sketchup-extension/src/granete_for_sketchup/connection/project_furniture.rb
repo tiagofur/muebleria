@@ -293,7 +293,12 @@ module Granete
                                                         design_id: binding.design_id,
                                                         base_revision_id: binding.base_revision_id)
             state = ModelBinding::State.derive(stored: binding, validation: validation)
-            return nil if state == 'connected'
+            return nil if state == 'connected' && validation.capabilities['can_edit_working_copy'] != false
+
+            if state == 'connected' && validation.capabilities['can_edit_working_copy'] == false
+              return { 'ok' => false, 'code' => 'viewer_only',
+                       'reason' => 'este proyecto tiene como superficie de autoría Proyectar (SketchUp está en modo visor)' }
+            end
 
             remediation = state == 'stale_base' ? 'actualizá la base de trabajo en la tarjeta Modelo / Diseño' : nil
             { 'ok' => false, 'code' => state,

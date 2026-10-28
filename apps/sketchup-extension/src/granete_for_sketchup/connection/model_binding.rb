@@ -193,6 +193,7 @@ module Granete
           def self.project_summary!(value)
             summary = summary!(value, 'project')
             summary['customer'] = summary!(value['customer'], 'project.customer') if value.key?('customer')
+            summary['authoring_surface'] = value['authoring_surface'] if value.key?('authoring_surface')
             summary
           end
 
@@ -702,6 +703,7 @@ module Granete
                 display['customerName'] = validation.project.dig('customer', 'name')
                 display['designName'] = validation.design['name']
                 display['designStatus'] = validation.design['status']
+                display['authoringSurface'] = validation.project['authoring_surface']
               end
             end
           end
