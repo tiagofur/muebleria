@@ -304,8 +304,11 @@ func TestResolveBomAgregadoCopyPoseFormula(t *testing.T) {
 	}
 
 	t.Run("pose formula makes BOM units full-size", func(t *testing.T) {
+		// The vertical direction makes the historic split observable: without
+		// the formula branch this input would yield split units (240), so the
+		// test discriminates deletion as well as inversion (review ronda 2).
 		parts := run(t, domain.ModuleAgregadoInstance{
-			AgregadoID: "cajon-std", Quantity: 1,
+			AgregadoID: "cajon-std", Quantity: 1, LayoutDirection: "vertical",
 			Position: &domain.AgregadoPosition{ZFormula: "i*250"},
 		}, 3)
 		if len(parts) != 3 {
