@@ -536,3 +536,105 @@ describe('resolveAgregado3DPreview hardware-only recipe (#669 review note)', () 
     expect(res.empty).toBe(false);
   });
 });
+
+describe('resolveAgregado3DPreview — receta del BORRADOR (#1412)', () => {
+  const draftMember = {
+    memberId: 'guia-der',
+    role: 'side_right',
+    source: { kind: 'fixed' as const, fixed: { hardwareId: 'hw-jal-1' } },
+    placement: {
+      x: { ref: 'max' as const, offsetMm: 0 },
+      y: { ref: 'min' as const, offsetMm: 0 },
+      z: { ref: 'min' as const, offsetMm: 0 },
+    },
+    bomRole: 'included_in_kit' as const,
+  };
+
+  it('proyecta la receta del borrador aunque no exista receta guardada (autoría en vivo)', () => {
+    const draft = doorDraft({
+      components: [],
+      rigidMembers: [draftMember],
+      commercialKitHardwareId: 'hw-kit-1',
+    });
+    // Sin id de catálogo: agregado NUEVO en autoría.
+    const res = resolveAgregado3DPreview(draft, catalogInputConHerrajes, null, null);
+
+    expect(res.error).toBeNull();
+    expect(res.assemblies).toHaveLength(1);
+    expect(res.assemblies[0]?.rigidMembers[0]?.memberId).toBe('guia-der');
+    expect(res.empty).toBe(false);
+  });
+
+  it('la receta del borrador GANA sobre la guardada (preview refleja la edición)', () => {
+    const catalogWithSavedRecipe: Module3DCatalogInput = {
+      ...catalogInputConHerrajes,
+      agregados: [
+        {
+          id: 'agr-cajon',
+          code: 'CAJ',
+          name: 'Cajón',
+          rigidMembers: [
+            {
+              memberId: 'viejo-guardado',
+              role: 'side_left',
+              source: { kind: 'fixed', fixed: { hardwareId: 'hw-jal-1' } },
+              placement: {
+                x: { ref: 'min', offsetMm: 0 },
+                y: { ref: 'min', offsetMm: 0 },
+                z: { ref: 'min', offsetMm: 0 },
+              },
+              bomRole: 'included_in_kit',
+            },
+          ],
+        },
+      ],
+    };
+    const draft = doorDraft({
+      components: [],
+      rigidMembers: [draftMember],
+      commercialKitHardwareId: 'hw-kit-1',
+    });
+    const res = resolveAgregado3DPreview(draft, catalogWithSavedRecipe, null, 'agr-cajon');
+
+    expect(res.error).toBeNull();
+    expect(res.assemblies).toHaveLength(1);
+    expect(res.assemblies[0]?.rigidMembers[0]?.memberId).toBe('guia-der');
+  });
+
+  it('sin miembros en el borrador cae a la receta guardada (#669 intacto)', () => {
+    const catalogWithSavedRecipe: Module3DCatalogInput = {
+      ...catalogInputConHerrajes,
+      agregados: [
+        {
+          id: 'agr-cajon',
+          code: 'CAJ',
+          name: 'Cajón',
+          commercialKitHardwareId: 'hw-kit-1',
+          rigidMembers: [
+            {
+              memberId: 'viejo-guardado',
+              role: 'side_left',
+              source: { kind: 'fixed', fixed: { hardwareId: 'hw-jal-1' } },
+              placement: {
+                x: { ref: 'min', offsetMm: 0 },
+                y: { ref: 'min', offsetMm: 0 },
+                z: { ref: 'min', offsetMm: 0 },
+              },
+              bomRole: 'included_in_kit',
+            },
+          ],
+        },
+      ],
+    };
+    const res = resolveAgregado3DPreview(
+      doorDraft({ components: [] }),
+      catalogWithSavedRecipe,
+      null,
+      'agr-cajon',
+    );
+
+    expect(res.error).toBeNull();
+    expect(res.assemblies).toHaveLength(1);
+    expect(res.assemblies[0]?.rigidMembers[0]?.memberId).toBe('viejo-guardado');
+  });
+});
