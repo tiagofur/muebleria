@@ -1383,10 +1383,14 @@ export interface DiscountTier {
   readonly discountPercent: number;
 }
 
+/** #1375: Authoring surface per project ('sketchup' | 'proyectar'). */
+export type ProjectAuthoringSurface = 'sketchup' | 'proyectar';
+
 export interface Project {
   readonly id: string;
   readonly name: string;
   readonly customerId: string;
+  readonly authoringSurface?: ProjectAuthoringSurface;
   readonly organizationId?: string;
   readonly salesOrganizationId?: string;
   readonly manufacturingOrganizationId?: string;

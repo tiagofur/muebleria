@@ -777,3 +777,59 @@ func TestF108_ClosingQuotePinsStructureRevision(t *testing.T) {
 }
 
 // --- Project templates (#110 / H15) ---
+
+// #1375: Authoring surface validation and defaulting on project creation.
+func TestHandleProjectsAuthoringSurface(t *testing.T) {
+	t.Run("invalid authoring surface returns 400", func(t *testing.T) {
+		srv := &Server{Store: &stubStore{}}
+		body := strings.NewReader(`{"name":"Test","customer_id":"10000000-0000-0000-0000-000000000001","currency":"USD","authoring_surface":"blender"}`)
+		req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+
+		srv.HandleProjects(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusBadRequest, rr.Body.String())
+		}
+		if msg := errorBody(t, rr); !strings.Contains(msg, "authoring_surface") {
+			t.Errorf("error = %q, want mention of authoring_surface", msg)
+		}
+	})
+
+	t.Run("omitted authoring surface defaults to sketchup", func(t *testing.T) {
+		store := &stubStore{}
+		srv := &Server{Store: store}
+		body := strings.NewReader(`{"name":"Test","customer_id":"10000000-0000-0000-0000-000000000001","currency":"USD"}`)
+		req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+
+		srv.HandleProjects(rr, req)
+
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusCreated, rr.Body.String())
+		}
+		if store.lastCreatedProject == nil || store.lastCreatedProject.AuthoringSurface != domain.AuthoringSurfaceSketchup {
+			t.Fatalf("surface = %q, want sketchup", store.lastCreatedProject.AuthoringSurface)
+		}
+	})
+
+	t.Run("explicit proyectar authoring surface preserved", func(t *testing.T) {
+		store := &stubStore{}
+		srv := &Server{Store: store}
+		body := strings.NewReader(`{"name":"Test","customer_id":"10000000-0000-0000-0000-000000000001","currency":"USD","authoring_surface":"proyectar"}`)
+		req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+
+		srv.HandleProjects(rr, req)
+
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusCreated, rr.Body.String())
+		}
+		if store.lastCreatedProject == nil || store.lastCreatedProject.AuthoringSurface != domain.AuthoringSurfaceProyectar {
+			t.Fatalf("surface = %q, want proyectar", store.lastCreatedProject.AuthoringSurface)
+		}
+	})
+}

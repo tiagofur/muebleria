@@ -1480,6 +1480,13 @@ type ValidateModelBindingRequest struct {
 	BaseRevisionID      *string `json:"base_revision_id,omitempty"`
 }
 
+type ProjectAuthoringSurface string
+
+const (
+	ProjectAuthoringSurfaceSketchup  ProjectAuthoringSurface = "sketchup"
+	ProjectAuthoringSurfaceProyectar ProjectAuthoringSurface = "proyectar"
+)
+
 type ModelBindingState string
 
 const (
@@ -1493,9 +1500,10 @@ type ModelBindingOrganizationSummary struct {
 }
 
 type ModelBindingProjectSummary struct {
-	ID       string          `json:"id"`
-	Name     string          `json:"name"`
-	Customer CustomerSummary `json:"customer"`
+	ID               string                   `json:"id"`
+	Name             string                   `json:"name"`
+	Customer         CustomerSummary          `json:"customer"`
+	AuthoringSurface *ProjectAuthoringSurface `json:"authoring_surface,omitempty"`
 }
 
 type ModelBindingDesignSummary struct {
