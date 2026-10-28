@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"os"
 	"strings"
 	"testing"
 
@@ -1513,6 +1514,56 @@ func TestThreeDrawers_SameRecipeSameMemberIDs(t *testing.T) {
 			if m.MemberID != want[i] {
 				t.Errorf("W=%g: member[%d] = %q, want %q", w, i, m.MemberID, want[i])
 			}
+		}
+	}
+}
+
+// #1376: Parity test for rigid member actor membership against shared contract fixture.
+func TestAgregadoActorMembershipSharedContract(t *testing.T) {
+	data, err := os.ReadFile("../../../../contracts/agregadoActorMembership.contract.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+
+	var fixture struct {
+		Agregado domain.Agregado               `json:"agregado"`
+		Params   engine.AssemblyResolutionParams `json:"params"`
+		ExpectedMembers []struct {
+			MemberID        string `json:"memberId"`
+			ActorMembership string `json:"actorMembership"`
+			IsMoving        bool   `json:"isMoving"`
+		} `json:"expectedMembers"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatalf("unmarshal fixture: %v", err)
+	}
+
+	resolved, err := engine.ResolveAgregadoAssembly(fixture.Agregado, fixture.Params)
+	if err != nil {
+		t.Fatalf("resolve assembly: %v", err)
+	}
+
+	if len(resolved.RigidMembers) != len(fixture.ExpectedMembers) {
+		t.Fatalf("expected %d rigid members, got %d", len(fixture.ExpectedMembers), len(resolved.RigidMembers))
+	}
+
+	byID := make(map[string]domain.ResolvedRigidMember)
+	for _, m := range resolved.RigidMembers {
+		byID[m.MemberID] = m
+	}
+
+	for _, exp := range fixture.ExpectedMembers {
+		m, ok := byID[exp.MemberID]
+		if !ok {
+			t.Errorf("member %s not found in resolved output", exp.MemberID)
+			continue
+		}
+		if m.ActorMembership != exp.ActorMembership {
+			t.Errorf("member %s actorMembership = %q, want %q", exp.MemberID, m.ActorMembership, exp.ActorMembership)
+		}
+		isMoving := m.ActorMembership != "" && m.ActorMembership != "body"
+		if isMoving != exp.IsMoving {
+			t.Errorf("member %s isMoving = %v, want %v", exp.MemberID, isMoving, exp.IsMoving)
 		}
 	}
 }

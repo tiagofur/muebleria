@@ -1,0 +1,255 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.agregadoActorMembership.v1",
+  "comment": [
+    "#1376 — Contrato de paridad TS/Go de membresía fijo/móvil por actor en miembros rígidos de agregado.",
+    "TS: packages/domain/src/agregadoActorMembership.contract.test.ts (resolveAgregadoAssembly).",
+    "Go: backend-go/internal/domain/engine/assembly_resolver_test.go TestAgregadoActorMembershipSharedContract.",
+    "Regla: expected congelados; si un motor diverge, se alinea el motor — nunca el expected.",
+    "actorMembership declara si el miembro pertenece al cuerpo inmóvil ('body' o vacío) o se mueve con un actor ('actor:<id>')."
+  ],
+  "agregado": {
+    "id": "agr-cajon-membership",
+    "code": "AGR-CAJ-MB",
+    "name": "Cajón con Membresía de Actores",
+    "commercialKitHardwareId": "hw-kit-drawer",
+    "rigidMembers": [
+      {
+        "memberId": "slide-fixed-l",
+        "role": "slide_fixed",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-slide-fixed"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit",
+        "actorMembership": "body"
+      },
+      {
+        "memberId": "slide-moving-l",
+        "role": "slide_moving",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-slide-moving"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 15
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit",
+        "actorMembership": "actor:drawer"
+      },
+      {
+        "memberId": "drawer-side-l",
+        "role": "drawer_side",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-side-l"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 20
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 50
+          }
+        },
+        "bomRole": "included_in_kit",
+        "actorMembership": "actor:drawer"
+      },
+      {
+        "memberId": "back-bracket-l",
+        "role": "back_bracket",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-back-bracket"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "max",
+            "offsetMm": -20
+          },
+          "y": {
+            "ref": "max",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 50
+          }
+        },
+        "bomRole": "included_in_kit"
+      }
+    ],
+    "commercial_kit_hardware_id": "hw-kit-drawer",
+    "rigid_members": [
+      {
+        "memberId": "slide-fixed-l",
+        "role": "slide_fixed",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-slide-fixed"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit",
+        "actorMembership": "body"
+      },
+      {
+        "memberId": "slide-moving-l",
+        "role": "slide_moving",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-slide-moving"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 15
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "included_in_kit",
+        "actorMembership": "actor:drawer"
+      },
+      {
+        "memberId": "drawer-side-l",
+        "role": "drawer_side",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-side-l"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 20
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 50
+          }
+        },
+        "bomRole": "included_in_kit",
+        "actorMembership": "actor:drawer"
+      },
+      {
+        "memberId": "back-bracket-l",
+        "role": "back_bracket",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-back-bracket"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "max",
+            "offsetMm": -20
+          },
+          "y": {
+            "ref": "max",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 50
+          }
+        },
+        "bomRole": "included_in_kit"
+      }
+    ]
+  },
+  "params": {
+    "widthMm": 600,
+    "depthMm": 500,
+    "heightMm": 200
+  },
+  "expectedMembers": [
+    {
+      "memberId": "slide-fixed-l",
+      "actorMembership": "body",
+      "isMoving": false
+    },
+    {
+      "memberId": "slide-moving-l",
+      "actorMembership": "actor:drawer",
+      "isMoving": true
+    },
+    {
+      "memberId": "drawer-side-l",
+      "actorMembership": "actor:drawer",
+      "isMoving": true
+    },
+    {
+      "memberId": "back-bracket-l",
+      "actorMembership": "",
+      "isMoving": false
+    }
+  ]
+}

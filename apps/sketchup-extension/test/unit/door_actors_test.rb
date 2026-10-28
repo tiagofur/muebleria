@@ -91,6 +91,33 @@ class DoorActorsTest < Minitest::Test
     assert_equal 1, scanned.doors.length
   end
 
+  def test_body_membership_excludes_hardware_from_moving_host
+    furniture = build_furniture do |definition|
+      door_child(definition, 'door-1', placement: 'puerta', role: 'FRENTE')
+      # Fixed hinge plate on cabinet body (#1376):
+      plate = new_child(definition, 'hinge-plate')
+      @store.write(plate, child_metadata('hinge-plate', {
+                                           'entityClass' => 'hardware',
+                                           'hostComponentInstanceId' => 'door-1',
+                                           'actorMembership' => 'body'
+                                         }))
+      # Moving hinge arm/cup:
+      cup = new_child(definition, 'hinge-cup')
+      @store.write(cup, child_metadata('hinge-cup', {
+                                         'entityClass' => 'hardware',
+                                         'hostComponentInstanceId' => 'door-1',
+                                         'actorMembership' => 'actor:door'
+                                       }))
+    end
+
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_equal 1, scanned.doors.length
+    mounted = scanned.hardware_by_host['door-comp-0']
+    assert_equal 1, mounted.length
+    assert_equal 'hinge-cup', mounted.first.name
+  end
+
   private
 
   # Yields the furniture definition so the test can add children; returns the

@@ -946,7 +946,8 @@ module Granete
             member_id: placement.respond_to?(:member_id) ? placement.member_id : nil,
             recipe_revision: placement.respond_to?(:recipe_revision) ? placement.recipe_revision : nil,
             snapshot_id: placement.respond_to?(:snapshot_id) ? placement.snapshot_id : nil,
-            is_historical: placement.respond_to?(:historical?) ? placement.historical? : false
+            is_historical: placement.respond_to?(:historical?) ? placement.historical? : false,
+            actor_membership: placement.respond_to?(:actor_membership) ? placement.actor_membership : nil
           )
           instance
         end
@@ -1356,7 +1357,8 @@ module Granete
                            asset_id: nil, asset_revision_id: nil, representation: nil,
                            preparation_state: nil, option_role: nil,
                            assembly_instance_id: nil, agregado_id: nil, member_id: nil,
-                           recipe_revision: nil, snapshot_id: nil, is_historical: false)
+                           recipe_revision: nil, snapshot_id: nil, is_historical: false,
+                           actor_membership: nil)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
@@ -1375,6 +1377,7 @@ module Granete
           intent['semanticRole'] = "hardware_#{placement_id}"
           intent['hardwareDefinitionId'] = hardware_definition_id if hardware_definition_id
           intent['hostComponentInstanceId'] = host_component_instance_id if host_component_instance_id
+          intent['actorMembership'] = actor_membership if actor_membership
           # Only the contract's #350 provenance is stored; a missing/legacy
           # value stays absent so the resolver reports 'unknown' fail-closed.
           intent['placementKind'] = placement_kind if placement_kind

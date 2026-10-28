@@ -55,16 +55,27 @@ module Granete
           entity_class = intent['entityClass'] || (intent['hostComponentInstanceId'] ? 'hardware' : 'component')
 
           if entity_class == 'hardware'
-            host_id = intent['hostComponentInstanceId']
-            hardware_by_host[host_id] << child if host_id
+            categorize_hardware(intent, identity, child, hardware_by_host)
           else
-            role = (intent['role'] || intent['semanticRole'] || '').to_s.downcase
-            placement = (intent['placement'] || '').to_s.downcase
-            return unless door_like?(placement, role)
-
-            doors << child
-            hardware_by_host["door-comp-#{doors.size - 1}"] = hardware_by_host[child_id] if child_id
+            categorize_component(intent, child_id, child, doors, hardware_by_host)
           end
+        end
+
+        def categorize_hardware(intent, identity, child, hardware_by_host)
+          membership = (intent['actorMembership'] || identity['actorMembership']).to_s.strip
+          return if membership == 'body'
+
+          host_id = intent['hostComponentInstanceId']
+          hardware_by_host[host_id] << child if host_id
+        end
+
+        def categorize_component(intent, child_id, child, doors, hardware_by_host)
+          role = (intent['role'] || intent['semanticRole'] || '').to_s.downcase
+          placement = (intent['placement'] || '').to_s.downcase
+          return unless door_like?(placement, role)
+
+          doors << child
+          hardware_by_host["door-comp-#{doors.size - 1}"] = hardware_by_host[child_id] if child_id
         end
 
         # A door actor is EXACTLY a door slot — placement 'puerta' (local
