@@ -199,7 +199,8 @@ func ResolveAgregadoAssembly(
 				TranslationMm: [3]float64{xCoord, yCoord, zCoord},
 				Basis:         basis,
 			},
-			BOMRole: member.BOMRole,
+			BOMRole:         member.BOMRole,
+			ActorMembership: member.ActorMembership,
 		})
 	}
 

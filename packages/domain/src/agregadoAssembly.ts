@@ -84,6 +84,8 @@ export interface AgregadoRigidMember {
   readonly source: RigidMemberSource;
   readonly placement: AssemblyAnchorRule;
   readonly bomRole: RigidMemberBOMRole;
+  /** #1376: Actor membership for presentation kinematics ('body' | 'actor:<id>' | undefined). */
+  readonly actorMembership?: string;
 }
 
 export type DimensionRuleSource =
@@ -156,6 +158,8 @@ export interface ResolvedRigidMember {
   readonly mountFrame?: HardwareMountFrame;
   /** Exact GLB co-representation for web consumers; absent = partial capability (#669) */
   readonly glb?: MemberGlbRepresentation;
+  /** #1376: Actor membership for presentation kinematics ('body' | 'actor:<id>' | undefined). */
+  readonly actorMembership?: string;
 }
 
 export interface AssemblyBOMItem {
@@ -848,6 +852,7 @@ export function resolveAgregadoAssembly(
           basis,
         },
         bomRole: member.bomRole,
+        actorMembership: member.actorMembership,
       });
     }
   }

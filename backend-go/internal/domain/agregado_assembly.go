@@ -77,11 +77,12 @@ type RigidMemberSource struct {
 
 // AgregadoRigidMember defines an autonomous bought rigid hardware component inside an Agregado recipe.
 type AgregadoRigidMember struct {
-	MemberID  string             `json:"memberId"`
-	Role      string             `json:"role"` // e.g. "side_left", "side_right", "runner_left", "runner_right"
-	Source    RigidMemberSource  `json:"source"`
-	Placement AssemblyAnchorRule `json:"placement"`
-	BOMRole   RigidMemberBOMRole `json:"bomRole"`
+	MemberID        string             `json:"memberId"`
+	Role            string             `json:"role"` // e.g. "side_left", "side_right", "runner_left", "runner_right"
+	Source          RigidMemberSource  `json:"source"`
+	Placement       AssemblyAnchorRule `json:"placement"`
+	BOMRole         RigidMemberBOMRole `json:"bomRole"`
+	ActorMembership string             `json:"actorMembership,omitempty"` // #1376: "body" | "actor:<id>" | ""
 }
 
 // DimensionRuleSource defines the authoritative source for recalculating fabricated board dimensions.
@@ -153,6 +154,7 @@ type ResolvedRigidMember struct {
 	AssetRevisionID *string                 `json:"assetRevisionId,omitempty"`
 	SHA256          *string                 `json:"sha256,omitempty"`
 	MountFrame      *HardwareMountFrame     `json:"mountFrame,omitempty"`
+	ActorMembership string                  `json:"actorMembership,omitempty"` // #1376: "body" | "actor:<id>" | ""
 }
 
 // AssemblyBOMItem is one purchasing row produced by the assembly.
