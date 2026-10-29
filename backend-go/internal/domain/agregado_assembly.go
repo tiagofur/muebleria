@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // RigidMemberSourceKind discriminates whether a rigid member points directly to a fixed
@@ -48,6 +49,11 @@ const (
 type AssemblyAxisPlacement struct {
 	Ref      AssemblyAxisRef `json:"ref"`      // "min" | "max" | "center"
 	OffsetMm float64         `json:"offsetMm"` // signed delta in mm from the reference
+	// OffsetFormula (#1418): bounded formula (PW/PH/PD with + - * / and
+	// numbers) evaluated against the assembly envelope (X→PW, Y→PD, Z→PH).
+	// When present it REPLACES OffsetMm; both engines round the result to
+	// whole mm so TS and Go resolve identically.
+	OffsetFormula *string `json:"offsetFormula,omitempty"`
 }
 
 // AssemblyAnchorRule defines the rigid pose of a member inside the Assembly Space.
@@ -155,7 +161,7 @@ type ResolvedRigidMember struct {
 	SHA256          *string                 `json:"sha256,omitempty"`
 	MountFrame      *HardwareMountFrame     `json:"mountFrame,omitempty"`
 	ActorMembership string                  `json:"actorMembership,omitempty"` // #1376: "body" | "actor:<id>" | ""
-	DesignParts     []HardwareDesignPart    `json:"designParts,omitempty"`    // #1417: parts of the member's hardware (by SKP component name).
+	DesignParts     []HardwareDesignPart    `json:"designParts,omitempty"`     // #1417: parts of the member's hardware (by SKP component name).
 }
 
 // AssemblyBOMItem is one purchasing row produced by the assembly.
@@ -543,7 +549,34 @@ func ValidateAxisPlacement(axisName string, p AssemblyAxisPlacement) error {
 	if math.IsNaN(p.OffsetMm) || math.IsInf(p.OffsetMm, 0) || math.Abs(p.OffsetMm) > 100000.0 {
 		return fmt.Errorf("axis %s has non-finite or out-of-bounds offsetMm: %g", axisName, p.OffsetMm)
 	}
+	if p.OffsetFormula != nil {
+		formula := strings.TrimSpace(*p.OffsetFormula)
+		if formula == "" {
+			return fmt.Errorf("axis %s has an empty offsetFormula (omit it or provide a formula)", axisName)
+		}
+		// Format-only check at validation time (the bounded evaluator lives
+		// in the engine package and runs at resolve time with real params).
+		// Same charset as the TS shared evaluator (TS parity); whitespace
+		// is stripped first (the evaluator ignores it too).
+		if !isValidOffsetFormulaCharset(strings.ReplaceAll(formula, " ", "")) {
+			return fmt.Errorf("axis %s has an invalid offsetFormula: %q (only numbers, PW/PH/PD and + - * / parentheses)", axisName, *p.OffsetFormula)
+		}
+	}
 	return nil
+}
+
+// isValidOffsetFormulaCharset mirrors the TS shared evaluator charset
+// (numbers, W/H/D/P/T/B/L/i/N variables and + - * / parentheses).
+func isValidOffsetFormulaCharset(formula string) bool {
+	for _, r := range formula {
+		if unicode.IsDigit(r) || r == '.' || r == 'W' || r == 'H' || r == 'D' ||
+			r == 'P' || r == 'T' || r == 'B' || r == 'L' || r == 'i' ||
+			r == 'N' || r == '+' || r == '-' || r == '*' || r == '/' || r == '(' || r == ')' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // ValidateAssemblyAnchorRule validates placement references and rigid rotation.

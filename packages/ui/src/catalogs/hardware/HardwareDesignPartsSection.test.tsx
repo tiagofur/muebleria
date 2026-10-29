@@ -6,7 +6,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import { useState } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -57,15 +57,15 @@ function Harness({ initial, onDraft }: { initial: HardwareDraft; onDraft: (d: Ha
 describe('HardwareDesignPartsSection (#1417)', () => {
   it('añade una fila con default body y edita sus campos', async () => {
     const user = userEvent.setup();
-    let latest: HardwareDraft | null = null;
-    render(<Harness initial={baseDraft()} onDraft={(d) => (latest = d)} />);
+    const latest: { current: HardwareDraft | null } = { current: null };
+    render(<Harness initial={baseDraft()} onDraft={(d) => { latest.current = d; }} />);
 
     await user.click(screen.getByTestId('hardware-design-parts-add'));
-    expect(latest?.designParts).toHaveLength(1);
-    expect(latest?.designParts?.[0]).toMatchObject({ componentName: '', actorMembership: 'body' });
+    expect(latest.current?.designParts ?? []).toHaveLength(1);
+    expect((latest.current?.designParts ?? [])[0]).toMatchObject({ componentName: '', actorMembership: 'body' });
 
     await user.type(screen.getByTestId('hardware-design-part-0-name'), 'riel_fijo');
-    expect(latest?.designParts?.[0]?.componentName).toBe('riel_fijo');
+    expect((latest.current?.designParts ?? [])[0]?.componentName).toBe('riel_fijo');
   });
 
   it('elimina filas por índice', async () => {
@@ -74,9 +74,9 @@ describe('HardwareDesignPartsSection (#1417)', () => {
       { componentName: 'riel_fijo', actorMembership: 'body', label: '', finishKey: '' },
       { componentName: 'riel_movil', actorMembership: 'actor:drawer', label: '', finishKey: 'body' },
     ]);
-    const setDraft = vi.fn((updater: (d: HardwareDraft) => HardwareDraft) => {
-      draft.designParts = updater(draft).designParts;
-    });
+    const setDraft: Dispatch<SetStateAction<HardwareDraft>> = (updater) => {
+      draft.designParts = (typeof updater === 'function' ? updater(draft) : updater).designParts;
+    };
     render(<HardwareDesignPartsSection draft={draft} setDraft={setDraft} />);
 
     await user.click(screen.getByTestId('hardware-design-part-0-remove'));
@@ -88,9 +88,9 @@ describe('HardwareDesignPartsSection (#1417)', () => {
     const draft = baseDraft([
       { componentName: 'riel_movil', actorMembership: 'body', label: '', finishKey: '' },
     ]);
-    const setDraft = vi.fn((updater: (d: HardwareDraft) => HardwareDraft) => {
-      draft.designParts = updater(draft).designParts;
-    });
+    const setDraft: Dispatch<SetStateAction<HardwareDraft>> = (updater) => {
+      draft.designParts = (typeof updater === 'function' ? updater(draft) : updater).designParts;
+    };
     render(<HardwareDesignPartsSection draft={draft} setDraft={setDraft} />);
 
     await user.selectOptions(screen.getByTestId('hardware-design-part-0-membership'), 'actor:drawer');

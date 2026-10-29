@@ -146,7 +146,18 @@ test.describe.serial('Agregado — autoría de receta en browser real (#1412)', 
     await authoring(page, 'member-1-id').fill('guia-der');
     await authoring(page, 'member-1-anchor-x-ref').selectOption({ label: 'Máximo' });
 
+    // Esperar el PUT explícitamente: el readback de version exige que el
+    // guardado haya COMMITTEADO (una carrera del optimista vs el servidor
+    // daría version sin incrementar aunque la receta esté guardada).
+    const putDone = page
+      .waitForResponse(
+        (res) => res.request().method() === 'PUT' && res.url().includes(`/catalog/agregados/${AGREGADO_ID}`),
+        { timeout: 20_000 },
+      )
+      .then((res) => res.status())
+      .catch(() => null);
     await page.getByTestId('agregado-save-btn').click();
+    expect(await putDone, 'PUT del guardado').toBe(200);
     await expect(page.getByTestId('agregado-editor-page')).toBeHidden();
 
     // La tarjeta de detalle refleja la receta guardada.
