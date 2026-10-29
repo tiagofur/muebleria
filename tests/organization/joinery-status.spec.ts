@@ -242,6 +242,25 @@ test.describe.serial('Joinery live panel (#875) Browser E2E', () => {
     // tarda órdenes de más que en local. La ASERCIÓN es la misma (diagnóstico
     // real del servidor); sólo se tolera la latencia del entorno.
     test.setTimeout(180_000);
+    // #1415 diagnóstico: respuestas no-ok y errores de página quedan en el log
+    // del gate — sin esto, un panel en estado de error no dice QUÉ falló.
+    page.on('response', async (res) => {
+      if (!res.ok()) {
+        let body = '';
+        if (res.url().includes('/auth/refresh') || res.url().includes('/furniture/definitions')) {
+          body = (await res.text().catch(() => '')).slice(0, 300);
+        }
+        console.log(`[HTTP ${res.status()}] ${res.request().method()} ${res.url()} ${body}`);
+      }
+    });
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        console.log(`[BROWSER ERROR] ${msg.text()}`);
+      }
+    });
+    page.on('pageerror', (err) => {
+      console.log(`[PAGE UNCAUGHT ERROR] ${err.message}`);
+    });
     await loginToA(page);
     await page.goto(`/quotes/${seeded.projectId}/disenos?design=${seeded.designAId}`);
 
