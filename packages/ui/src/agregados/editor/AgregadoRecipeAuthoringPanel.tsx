@@ -132,9 +132,11 @@ export function AgregadoRecipeAuthoringPanel({
     }
     const centered: AgregadoRigidMember = {
       ...base('rail_center', 'center_rail'),
+      // ancla min + PW/2 → el riel cae en el CENTRO real (w/2) y acompaña
+      // el ancho; ref 'center' + PW/2 caería en el borde derecho (w).
       placement: {
         ...base('rail_center', 'center_rail').placement,
-        x: { ref: 'center', offsetMm: 0, offsetFormula: 'PW/2' },
+        x: { ref: 'min', offsetMm: 0, offsetFormula: 'PW/2' },
       },
     };
     patchDraft({ rigidMembers: [centered] });

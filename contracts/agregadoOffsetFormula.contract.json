@@ -86,6 +86,10 @@
     {
       "widthMm": 451,
       "expectedX": 351.5
+    },
+    {
+      "widthMm": 151,
+      "expectedX": 50.5
     }
   ]
 }

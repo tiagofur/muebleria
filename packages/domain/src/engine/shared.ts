@@ -137,7 +137,10 @@ export function evaluatePartFormula(
     if (typeof result !== 'number' || isNaN(result) || !isFinite(result)) {
       throw new Error('No es un número válido');
     }
-    return Math.round(result);
+    // #1418 paridad con el evaluador Go (int(math.Round), half AWAY FROM
+    // ZERO): Math.round hace half hacia +∞ y divergía 1mm en seminegativos
+    // (−24.5 → −24 en TS vs −25 en Go). Mismo convenio explícito en ambos.
+    return result < 0 ? -Math.round(-result) : Math.round(result);
   } catch (err) {
     throw new ValidationError(`La fórmula "${formula}" no se pudo evaluar correctamente.`, {
       ...contextInfo,

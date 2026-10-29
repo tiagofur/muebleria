@@ -1784,3 +1784,54 @@ describe('offsetFormula en anclajes (#1418)', () => {
     expect(resolved.rigidMembers[0]?.localTransform.translationMm[0]).toBe(390);
   });
 });
+
+describe('preset equivalente: riel centrado real (#1418 review B2)', () => {
+  it('ancla min + PW/2 cae en el centro verdadero y acompaña el ancho', () => {
+    const centered = (w: number) =>
+      resolveAgregadoAssembly(
+        {
+          id: 'agr-centered',
+          rigidMembers: [
+            {
+              memberId: 'rail_center',
+              role: 'center_rail',
+              source: { kind: 'fixed', fixed: { hardwareId: 'hw-x' } },
+              placement: {
+                x: { ref: 'min', offsetMm: 0, offsetFormula: 'PW/2' },
+                y: { ref: 'min', offsetMm: 0 },
+                z: { ref: 'min', offsetMm: 0 },
+              },
+              bomRole: 'non_purchasing',
+            },
+          ],
+        },
+        { widthMm: w, depthMm: 500, heightMm: 150 },
+      ).rigidMembers[0]?.localTransform.translationMm[0];
+    expect(centered(400)).toBe(200);
+    expect(centered(800)).toBe(400);
+  });
+
+  it('seminegativos: misma convención half-away-from-zero que Go (review B1)', () => {
+    // PW=151 → PW/2 − 100 = −24.5 → −25 (half away from zero, como Go)
+    const x = resolveAgregadoAssembly(
+      {
+        id: 'agr-neg',
+        rigidMembers: [
+          {
+            memberId: 'm',
+            role: 'r',
+            source: { kind: 'fixed', fixed: { hardwareId: 'hw-x' } },
+            placement: {
+              x: { ref: 'min', offsetMm: 0, offsetFormula: 'PW/2 - 100' },
+              y: { ref: 'min', offsetMm: 0 },
+              z: { ref: 'min', offsetMm: 0 },
+            },
+            bomRole: 'non_purchasing',
+          },
+        ],
+      },
+      { widthMm: 151, depthMm: 500, heightMm: 150 },
+    ).rigidMembers[0]?.localTransform.translationMm[0];
+    expect(x).toBe(-25);
+  });
+});
