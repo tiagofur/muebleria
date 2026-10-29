@@ -1840,6 +1840,7 @@ export function AppContent({
     createEdge,
     createFromTemplate,
     createHardware,
+    createHardwareKit: catalogActions.createHardwareKit,
     createMaterial,
     createMaterialCategory,
     createModule,

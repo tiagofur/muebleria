@@ -20,6 +20,8 @@ import type {
   Customer,
   EdgeBand,
   Hardware,
+  HardwareKitCreateRequest,
+  HardwareKitResult,
   MaterialBoard,
   Module,
   ModuleCategory,
@@ -179,6 +181,14 @@ export interface CatalogState {
 
   // --- Agregados ---
   readonly createAgregado: (item: Agregado) => void;
+  /**
+   * #1416: kit wizard — executes the pure domain plan against live catalog
+   * state (kit + design-only hardware + agregado with recipe, one atomic
+   * catalog mutation). Throws with a workshop-facing message when blocked.
+   */
+  readonly createHardwareKit: (
+    req: HardwareKitCreateRequest,
+  ) => Promise<HardwareKitResult>;
   readonly updateAgregado: (item: Agregado) => void;
   /** #1369: simular un cambio de receta (dry-run clasificado; server authority). */
   readonly simulateAgregadoRecipe: RecipeChangeActions['simulate'];

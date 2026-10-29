@@ -87,6 +87,15 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
         active: true,
       },
     ];
+    // El código FRENTE lo siembran otros specs del mismo shard (el reparto
+    // se re-balancea al añadir specs): REUTILIZAR su id si ya existe —
+    // crear otro group con el mismo código es 409 y el upsert no lo sabe.
+    const existingFrente = (catalog.optionGroups ?? []).find((g) => g.code === 'FRENTE');
+    const frenteGroupId = existingFrente?.id ?? '77777777-0000-4777-8777-000000000002';
+    // Mismo tratamiento para BISAGRA: hardware-group-quote siembra el mismo
+    // código en este shard — reutilizar su id si existe.
+    const existingBisagra = (catalog.optionGroups ?? []).find((g) => g.code === 'BISAGRA');
+    const bisagraGroupId = existingBisagra?.id ?? HWG_GROUP;
     await repository.saveCatalog({
       ...catalog,
       materials,
@@ -99,16 +108,16 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
         // El grupo FRENTE también lo siembra el spec: la parte de la puerta
         // consume la choice y el snapshot exige el label comercial del grupo.
         {
-          id: '77777777-0000-4777-8777-000000000002',
+          id: frenteGroupId,
           code: 'FRENTE',
           name: 'Frente',
           kind: 'board' as const,
           required: true,
           optionIds: [frenteMaterialId],
         },
-        ...catalog.optionGroups.filter((g) => g.id !== HWG_GROUP && g.code !== 'FRENTE'),
+        ...catalog.optionGroups.filter((g) => g.id !== bisagraGroupId && g.id !== frenteGroupId),
         {
-          id: HWG_GROUP,
+          id: bisagraGroupId,
           code: 'BISAGRA',
           name: 'Bisagras',
           kind: 'hardware' as const,

@@ -36,6 +36,10 @@ export {
   createApiHardwareAssetService,
 } from './hardwareAssetService';
 export {
+  uploadHardwareAssetBinding,
+  type UploadHardwareAssetBindingRequest,
+} from './hardwareAssetUpload';
+export {
   loadReleaseCutPlan,
   saveReleaseCutPlan,
   type ReleaseCutPlanScope,

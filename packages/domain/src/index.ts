@@ -1712,6 +1712,9 @@ export {
 export * from "./agregadoAssembly";
 export * from "./recipeChangeDiff";
 
+// Hardware kit wizard plan (#1416)
+export * from "./hardwareKit";
+
 // GLB representation contract (#669)
 export * from "./glbRepresentation";
 

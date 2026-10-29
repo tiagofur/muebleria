@@ -39,6 +39,8 @@ import type {
   QuoteBreakdown,
   Structure,
   WorkshopSettings,
+  HardwareKitCreateRequest,
+  HardwareKitResult,
   ProjectPickingState,
   PickingStatus,
   MaterialStock,
@@ -284,6 +286,7 @@ export interface ShellViewCtx {
   readonly createEdge: (draft: EdgeDraft) => Promise<string>;
   readonly createFromTemplate: (templateId: string, draft: ProjectDraft) => void;
   readonly createHardware: (draft: HardwareDraft) => void;
+  readonly createHardwareKit: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
   readonly createMaterial: (draft: MaterialDraft) => Promise<void>;
   readonly createMaterialCategory: (draft: CategoryDraft) => void;
   readonly createModule: (draft: ModuleDraft) => Promise<void>;
@@ -611,6 +614,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     createEdge,
     createFromTemplate,
     createHardware,
+    createHardwareKit,
     createMaterial,
     createMaterialCategory,
     createModule,
@@ -2002,6 +2006,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         <HardwareCatalog
           hardware={hardware}
           onCreate={createHardware}
+          onCreateKit={createHardwareKit}
+          agregadoCodes={agregados.map((a) => a.code)}
           onUpdate={updateHardware}
           onDeactivate={(id) => setHardwareActive(id, false)}
           onReactivate={(id) => setHardwareActive(id, true)}
