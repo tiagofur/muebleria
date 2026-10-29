@@ -32,30 +32,52 @@ SketchUp y el renderer web consumen `member.designParts`.
 
 ## Tareas
 
-1. [ ] domain TS: tipos + validateHardwareDesignParts + resolución al miembro
-       (ResolvedRigidMember.designParts) + tests.
-2. [ ] Go espejo + fixture de paridad contracts/hardwareDesignParts.contract.json.
-3. [ ] Migration 000170 + storage (arg jsonb) + API PUT/POST validan (422
-       HARDWARE_DESIGN_PARTS_INVALID) + tests storage/api.
-4. [ ] UI: sección «Partes del diseño» en el editor de herrajes + modo
-       «2 herrajes con partes» del asistente #1416 (crea IZQ/DER con partes
-       en vez de 4 herrajes).
-5. [ ] tests UI + typecheck + suites.
+1. [x] domain TS: tipos + validateHardwareDesignParts + attach al miembro resuelto
+       (attachHardwareDesignParts, misma ruta que pins visuales) + proyección 3D
+       pasa designParts + tests (6) + fixture de paridad (1).
+2. [x] Go espejo: HardwareDesignPart + validador (mismo vocabulario #1376) +
+       AttachHardwareDesignParts en engine + ResolvedRigidMember.DesignParts +
+       fixture de paridad contracts/hardwareDesignParts.contract.json (claves
+       camel para TS y snake para Go). Tests ambos lados PASS.
+3. [x] Contratos: design_parts en Hardware + HardwareWrite del OpenAPI →
+       openapi:generate → drift 0 (types TS y Go regenerados).
+4. [x] Migration 000170 (hardwares.design_parts JSONB NULL) + storage Go
+       (SELECT×2/INSERT×2/UPDATE + scan/arg helpers) + tests de roundtrip
+       (2 partes, replace en update, legacy NULL→nil). API POST/PUT validan
+       fail-closed → 422 HARDWARE_DESIGN_PARTS_INVALID + tests negativos
+       discriminantes.
+5. [x] Mapper TS hardwareToApi/FromApi (normalización fail-closed: forma
+       inválida se descarta entera) + draft (designParts opcional, forma form)
+       + sección «Partes del diseño» en HardwareFormModal (filas CRUD,
+       vocabulario #1376) + store convierte filas→dominio con validador
+       (throw → error visible del modal, nada persiste) + tests jsdom (3).
+6. [x] E2E browser: tests/organization/hardware-design-parts.spec.ts —
+       **1 passed** (autora 2 partes → readback exacto design_parts → F5
+       persiste → fila duplicada bloquea en cliente SIN PUT).
+
+## Verificación (V0/V1/V2) — evidencia congelada
+
+- V0: typecheck workspace 0 · gofmt limpio en tocados · openapi drift 0 ·
+  migración additiva ( columna nueva NULL).
+- V1: domain 2039/2039 · ui catalogs 189/189 · storage TS 276/276 · go
+  storage TestHardware*/TestMaterial* OK (roundtrip + legacy NULL) · go api
+  TestHandleHardware* OK (422 en POST y PUT). Fix SQL incidental: el parche
+  inicial por número de línea corrompió los VALUES de material_boards
+  ($24/$23) y dejó el INSERT de hardware sin la columna — detectado por el
+  gate («expected 23 arguments, got 24»), corregido con reemplazos exactos y
+  re-verificado (hardware + materiales OK sobre PG real desechable).
+- V2: gate organization browser — hardware-design-parts **1 passed** ·
+  regresiones hardware-kit-wizard + agregado-recipe-authoring **4 passed**.
+  Host SketchUp: NOT_RUN (consumo Ruby de partes = alcance restante).
 
 ## Entrega explícitamente restante (Delivery: partial)
 
 - Runtime host SketchUp (Ruby): separar/repintar sub-componentes por nombre
   con la membresía de la parte + validación de nombres contra el SKP real +
   TestUp. PR propio dentro de la issue.
+- Modo «2 herrajes con partes» del asistente #1416 (UX aditiva; el asistente
+  sigue creando 4 herrajes de diseño hoy).
 - Verificación con SKP real del owner (datos) y separación visible al abrir
   en host (aceptación completa de la issue).
-- GLB por parte vs grupos con nombre (open question de la issue): web hoy
-  renderiza procedural; se decide cuando exista pipeline GLB de partes.
-
-## Verificación planificada
-
-- V0: typecheck ws, gofmt, drift de contratos (OpenAPI sin cambios si el campo
-  viaja por el dominio… revisar: hardwares son generated API → revisar drift).
-- V1: vitest domain/ui, go storage+api.
-- V2: gate browser — autoría de partes en editor + asistente modo 2 herrajes
-  con readback; regresiones 1416/1412.
+- GLB por parte vs grupos con nombre: se decide cuando exista pipeline GLB
+  de partes (open question de la issue intacta).
