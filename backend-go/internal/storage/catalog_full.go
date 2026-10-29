@@ -44,39 +44,8 @@ func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID strin
 		if err := rows.Scan(&ci.ComponentID, &ci.Quantity, &placementOverride, &lengthFormula, &widthFormula, &overridesJSON); err != nil {
 			return nil, err
 		}
-		if placementOverride != nil && *placementOverride != "" {
-			p := domain.ComponentPlacement(*placementOverride)
-			ci.PlacementOverride = &p
-		}
-		// Materialize overrides when formulas, edges, or spatial fields are set.
-		hasFormula := (lengthFormula != nil && *lengthFormula != "") || (widthFormula != nil && *widthFormula != "")
-		hasJSON := len(overridesJSON) > 0 && string(overridesJSON) != "null" && string(overridesJSON) != "{}"
-		if hasFormula || hasJSON {
-			ov := &domain.ComponentInstanceOverrides{}
-			if lengthFormula != nil {
-				ov.LengthFormula = *lengthFormula
-			}
-			if widthFormula != nil {
-				ov.WidthFormula = *widthFormula
-			}
-			if hasJSON {
-				// Full override blob: edges + spatial formulas/rotates.
-				if err := json.Unmarshal(overridesJSON, ov); err != nil {
-					// Fallback: edges-only legacy shape.
-					var edgeStruct struct {
-						Edges []domain.EdgeAssignment `json:"edges"`
-					}
-					if err2 := json.Unmarshal(overridesJSON, &edgeStruct); err2 == nil && len(edgeStruct.Edges) > 0 {
-						ov.Edges = edgeStruct.Edges
-					}
-				}
-			}
-			// One emptiness contract with the writer and the structures twin
-			// (#858): the bag survives when ANY persisted family is present —
-			// hardwarePlacements included.
-			if !isEmptyComponentInstanceOverrides(ov) {
-				ci.Overrides = ov
-			}
+		if err := materializeComponentInstanceRow(&ci, placementOverride, lengthFormula, widthFormula, overridesJSON); err != nil {
+			return nil, err
 		}
 		out = append(out, ci)
 	}
@@ -84,6 +53,53 @@ func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID strin
 		out = []domain.ComponentInstance{}
 	}
 	return out, rows.Err()
+}
+
+// materializeComponentInstanceRow applies the shared row semantics of
+// module_components (ONE definition used by both the single-module and the
+// batched full-catalog loaders): placement override, formula columns, and the
+// overrides JSONB blob with its edges-only legacy fallback (#858).
+func materializeComponentInstanceRow(
+	ci *domain.ComponentInstance,
+	placementOverride *string,
+	lengthFormula, widthFormula *string,
+	overridesJSON []byte,
+) error {
+	if placementOverride != nil && *placementOverride != "" {
+		p := domain.ComponentPlacement(*placementOverride)
+		ci.PlacementOverride = &p
+	}
+	// Materialize overrides when formulas, edges, or spatial fields are set.
+	hasFormula := (lengthFormula != nil && *lengthFormula != "") || (widthFormula != nil && *widthFormula != "")
+	hasJSON := len(overridesJSON) > 0 && string(overridesJSON) != "null" && string(overridesJSON) != "{}"
+	if hasFormula || hasJSON {
+		ov := &domain.ComponentInstanceOverrides{}
+		if lengthFormula != nil {
+			ov.LengthFormula = *lengthFormula
+		}
+		if widthFormula != nil {
+			ov.WidthFormula = *widthFormula
+		}
+		if hasJSON {
+			// Full override blob: edges + spatial formulas/rotates.
+			if err := json.Unmarshal(overridesJSON, ov); err != nil {
+				// Fallback: edges-only legacy shape.
+				var edgeStruct struct {
+					Edges []domain.EdgeAssignment `json:"edges"`
+				}
+				if err2 := json.Unmarshal(overridesJSON, &edgeStruct); err2 == nil && len(edgeStruct.Edges) > 0 {
+					ov.Edges = edgeStruct.Edges
+				}
+			}
+		}
+		// One emptiness contract with the writer and the structures twin
+		// (#858): the bag survives when ANY persisted family is present —
+		// hardwarePlacements included.
+		if !isEmptyComponentInstanceOverrides(ov) {
+			ci.Overrides = ov
+		}
+	}
+	return nil
 }
 
 // componentInstanceOverridesJSON serializes instance overrides (edges + spatial)
@@ -278,10 +294,11 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		return cat, err
 	}
 	rows.Close()
-	for i := range cat.Modules {
-		if err := s.loadCatalogModuleDetails(ctx, &cat.Modules[i]); err != nil {
-			return cat, err
-		}
+	// #1415: cuatro queries totales en vez de ~4 por módulo — el N+1 con el
+	// catálogo crecido empujó la resolución de autoría y la hidratación del
+	// workspace más allá de cualquier deadline razonable.
+	if err := s.loadCatalogModuleDetailsBatched(ctx, cat.Modules); err != nil {
+		return cat, err
 	}
 	if cat.Modules == nil {
 		cat.Modules = []domain.Module{}
@@ -304,49 +321,132 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	return cat, nil
 }
 
-func (s *PostgresStore) loadCatalogModuleDetails(ctx context.Context, m *domain.Module) error {
-	var err error
-	m.Components, err = s.loadModuleComponents(ctx, m.ID)
+// loadCatalogModuleDetailsBatched hydrates every module's detail tables in
+// FOUR total queries (module_id = ANY($1)) instead of ~4 per module: with the
+// catalog grown by production seeds the per-module N+1 pushed the full-catalog
+// read — and everything built on it (authoring resolve, workspace hydration) —
+// past every sane deadline in loaded environments (#1415). Grouping in query
+// order preserves each table's per-module ordering contract exactly (the
+// ORDER BYs pin the served wire and the goldens on it).
+func (s *PostgresStore) loadCatalogModuleDetailsBatched(ctx context.Context, modules []domain.Module) error {
+	if len(modules) == 0 {
+		return nil
+	}
+	org := OrgFromCtx(ctx)
+	ids := make([]string, len(modules))
+	byID := make(map[string]*domain.Module, len(modules))
+	for i := range modules {
+		ids[i] = modules[i].ID
+		byID[modules[i].ID] = &modules[i]
+	}
+
+	// 1) Component instances — ORDER BY created_at, component_id is the
+	// determinism contract of the single-module loader; grouping in query
+	// order keeps each module's relative order byte-identical.
+	compRows, err := s.db(ctx).Query(ctx, `
+		SELECT module_id, component_id, quantity, placement_override, length_formula, width_formula, overrides
+		FROM module_components
+		WHERE module_id = ANY($1) AND organization_id = $2
+		ORDER BY created_at ASC, component_id ASC;
+	`, ids, org)
 	if err != nil {
 		return err
 	}
-	m.Presets, err = s.loadModulePresets(ctx, m.ID)
+	defer compRows.Close()
+	for compRows.Next() {
+		var moduleID string
+		var ci domain.ComponentInstance
+		var placementOverride *string
+		var lengthFormula, widthFormula *string
+		var overridesJSON []byte
+		if err := compRows.Scan(&moduleID, &ci.ComponentID, &ci.Quantity, &placementOverride, &lengthFormula, &widthFormula, &overridesJSON); err != nil {
+			return err
+		}
+		if err := materializeComponentInstanceRow(&ci, placementOverride, lengthFormula, widthFormula, overridesJSON); err != nil {
+			return err
+		}
+		if m := byID[moduleID]; m != nil {
+			m.Components = append(m.Components, ci)
+		}
+	}
+	if err := compRows.Err(); err != nil {
+		return err
+	}
+	compRows.Close()
+
+	// 2) Dimension presets — the id tiebreaker never reorders between reads
+	// or the content-addressed catalog revision oscillates (#466).
+	presetRows, err := s.db(ctx).Query(ctx, `
+		SELECT module_id, id, name, width_mm, height_mm, depth_mm
+		FROM module_presets
+		WHERE module_id = ANY($1) AND organization_id = $2
+		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC, id ASC;
+	`, ids, org)
+	if err != nil {
+		return fmt.Errorf("error query module presets: %w", err)
+	}
+	defer presetRows.Close()
+	for presetRows.Next() {
+		var moduleID string
+		var pr domain.DimensionPreset
+		if err := presetRows.Scan(&moduleID, &pr.ID, &pr.Name, &pr.WidthMm, &pr.HeightMm, &pr.DepthMm); err != nil {
+			return err
+		}
+		if m := byID[moduleID]; m != nil {
+			m.Presets = append(m.Presets, pr)
+		}
+	}
+	if err := presetRows.Err(); err != nil {
+		return err
+	}
+	presetRows.Close()
+
+	// 3) Board parts (sin ORDER BY hoy: misma semántica que el loader por módulo).
+	partRows, err := s.db(ctx).Query(ctx, `
+		SELECT module_id, id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2
+		FROM board_parts
+		WHERE module_id = ANY($1) AND organization_id = $2;
+	`, ids, org)
 	if err != nil {
 		return err
 	}
-	partsQuery := `SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2 FROM board_parts WHERE module_id = $1 AND organization_id = $2`
-	pRows, err := s.db(ctx).Query(ctx, partsQuery, m.ID, OrgFromCtx(ctx))
-	if err != nil {
-		return err
-	}
-	for pRows.Next() {
+	defer partRows.Close()
+	for partRows.Next() {
+		var moduleID string
 		var p domain.BoardPart
 		var code *string
 		var l1, l2, w1, w2 bool
-		if err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2); err != nil {
-			pRows.Close()
+		if err := partRows.Scan(&moduleID, &p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2); err != nil {
 			return err
 		}
 		if code != nil {
 			p.Code = *code
 		}
 		p.Edges = []domain.EdgeAssignment{{Side: "L1", Enabled: l1}, {Side: "L2", Enabled: l2}, {Side: "W1", Enabled: w1}, {Side: "W2", Enabled: w2}}
-		m.BoardParts = append(m.BoardParts, p)
+		if m := byID[moduleID]; m != nil {
+			m.BoardParts = append(m.BoardParts, p)
+		}
 	}
-	if err := pRows.Err(); err != nil {
-		pRows.Close()
+	if err := partRows.Err(); err != nil {
 		return err
 	}
-	pRows.Close()
-	hRows, err := s.db(ctx).Query(ctx, `SELECT id, quantity, description_override, option_role, hardware_id, component_id FROM hardware_lines WHERE module_id = $1 AND organization_id = $2`, m.ID, OrgFromCtx(ctx))
+	partRows.Close()
+
+	// 4) Hardware lines (sin ORDER BY hoy: misma semántica que el loader por módulo).
+	hwRows, err := s.db(ctx).Query(ctx, `
+		SELECT module_id, id, quantity, description_override, option_role, hardware_id, component_id
+		FROM hardware_lines
+		WHERE module_id = ANY($1) AND organization_id = $2;
+	`, ids, org)
 	if err != nil {
 		return err
 	}
-	defer hRows.Close()
-	for hRows.Next() {
+	defer hwRows.Close()
+	for hwRows.Next() {
+		var moduleID string
 		var hl domain.HardwareLine
 		var desc, hwID, compID *string
-		if err := hRows.Scan(&hl.ID, &hl.Quantity, &desc, &hl.OptionRole, &hwID, &compID); err != nil {
+		if err := hwRows.Scan(&moduleID, &hl.ID, &hl.Quantity, &desc, &hl.OptionRole, &hwID, &compID); err != nil {
 			return err
 		}
 		if desc != nil {
@@ -358,13 +458,29 @@ func (s *PostgresStore) loadCatalogModuleDetails(ctx context.Context, m *domain.
 		if compID != nil {
 			hl.ComponentID = *compID
 		}
-		m.HardwareLines = append(m.HardwareLines, hl)
+		if m := byID[moduleID]; m != nil {
+			m.HardwareLines = append(m.HardwareLines, hl)
+		}
 	}
-	if m.BoardParts == nil {
-		m.BoardParts = []domain.BoardPart{}
+	if err := hwRows.Err(); err != nil {
+		return err
 	}
-	if m.HardwareLines == nil {
-		m.HardwareLines = []domain.HardwareLine{}
+
+	// Same emptiness contract as the single-module loaders: every module gets
+	// non-nil slices so the served wire keeps its exact shape.
+	for i := range modules {
+		if modules[i].Components == nil {
+			modules[i].Components = []domain.ComponentInstance{}
+		}
+		if modules[i].Presets == nil {
+			modules[i].Presets = []domain.DimensionPreset{}
+		}
+		if modules[i].BoardParts == nil {
+			modules[i].BoardParts = []domain.BoardPart{}
+		}
+		if modules[i].HardwareLines == nil {
+			modules[i].HardwareLines = []domain.HardwareLine{}
+		}
 	}
-	return hRows.Err()
+	return nil
 }
