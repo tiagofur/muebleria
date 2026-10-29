@@ -12,29 +12,30 @@ import (
 func TestHardwareKitLinkRoundtrip(t *testing.T) {
 	store, _ := migratedConnectStore(t)
 	actor := connectStoreInitialActor
-	kitID, partID := uniqueID("hw-kit"), uniqueID("hw-part")
+	// SIN ids explícitos: hardwares.id es UUID (server genera) — un id no-
+	// UUID es rechazado por CI (DB fresca; el drift local engaña).
 	t.Cleanup(func() {
-		cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE id IN ($1, $2)`, kitID, partID)
+		cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code IN ('KIT-LINK', 'PART-LINK')`)
 	})
 
-	kit := &domain.Hardware{ID: kitID, Code: "KIT-LINK", Name: "Kit link", Unit: "set", CostPerUnit: 100, Active: true}
+	kit := &domain.Hardware{Code: "KIT-LINK", Name: "Kit link", Unit: "set", CostPerUnit: 100, Active: true}
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
 		return store.CreateHardware(txCtx, kit)
 	})
-	part := &domain.Hardware{ID: partID, Code: "PART-LINK", Name: "Parte link", Unit: "piece", CostPerUnit: 0, Active: true, KitHardwareID: &kitID}
+	part := &domain.Hardware{Code: "PART-LINK", Name: "Parte link", Unit: "piece", CostPerUnit: 0, Active: true, KitHardwareID: &kit.ID}
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
 		return store.CreateHardware(txCtx, part)
 	})
 
 	got := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
-		return store.GetHardwareByID(txCtx, partID)
+		return store.GetHardwareByID(txCtx, part.ID)
 	})
-	if got.KitHardwareID == nil || *got.KitHardwareID != kitID {
+	if got.KitHardwareID == nil || *got.KitHardwareID != kit.ID {
 		t.Fatalf("kit link lost on create: %+v", got.KitHardwareID)
 	}
 
-	legacy := &domain.Hardware{ID: uniqueID("hw-mono"), Code: "HW-MONO-LINK", Name: "Mono", Unit: "piece", CostPerUnit: 0, Active: true}
-	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE id = $1`, legacy.ID) })
+	legacy := &domain.Hardware{Code: "HW-MONO-LINK", Name: "Mono", Unit: "piece", CostPerUnit: 0, Active: true}
+	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code = 'HW-MONO-LINK'`) })
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
 		return store.CreateHardware(txCtx, legacy)
 	})
