@@ -94,6 +94,52 @@ export function AgregadoRecipeAuthoringPanel({
     });
   };
 
+  // #1418: presets de receta — un clic arma el esqueleto completo; el usuario
+  // ajusta herrajes y offsets después. El kit existente manda (bomRole).
+  const applyPreset = (kind: 'drawer-slides' | 'center-rail') => {
+    const hardwareId = catalogHardware[0]?.id ?? '';
+    const bomRole: AgregadoRigidMember['bomRole'] = kitId !== '' ? 'included_in_kit' : 'separately_purchased';
+    const base = (id: string, role: string): AgregadoRigidMember => ({
+      memberId: id,
+      role,
+      source: { kind: 'fixed', fixed: { hardwareId } },
+      placement: {
+        x: { ref: 'min', offsetMm: 0 },
+        y: { ref: 'min', offsetMm: 0 },
+        z: { ref: 'min', offsetMm: 0 },
+      },
+      bomRole,
+    });
+    if (kind === 'drawer-slides') {
+      const mk = (id: string, role: string, ref: 'min' | 'max', sign: 1 | -1, membership: string): AgregadoRigidMember => ({
+        ...base(id, role),
+        placement: {
+          x: { ref, offsetMm: sign * 10 },
+          y: { ref: 'min', offsetMm: 0 },
+          z: { ref: 'min', offsetMm: 0 },
+        },
+        actorMembership: membership,
+      });
+      patchDraft({
+        rigidMembers: [
+          mk('fixed_rail_left', 'fixed_rail', 'min', 1, 'body'),
+          mk('fixed_rail_right', 'fixed_rail', 'max', -1, 'body'),
+          mk('moving_rail_left', 'moving_rail', 'min', 1, 'actor:drawer'),
+          mk('moving_rail_right', 'moving_rail', 'max', -1, 'actor:drawer'),
+        ],
+      });
+      return;
+    }
+    const centered: AgregadoRigidMember = {
+      ...base('rail_center', 'center_rail'),
+      placement: {
+        ...base('rail_center', 'center_rail').placement,
+        x: { ref: 'center', offsetMm: 0, offsetFormula: 'PW/2' },
+      },
+    };
+    patchDraft({ rigidMembers: [centered] });
+  };
+
   const removeMember = (idx: number) => {
     patchDraft({ rigidMembers: members.filter((_, i) => i !== idx) });
   };
@@ -240,15 +286,37 @@ export function AgregadoRecipeAuthoringPanel({
       <section className="agregado-recipe__section" aria-label="Miembros rígidos">
         <div className="agregado-editor__panel-header">
           <h5>Miembros rígidos ({members.length})</h5>
-          <button
-            type="button"
-            className="btn btn--secondary btn--small"
-            onClick={addMember}
-            disabled={catalogHardware.length === 0}
-            data-testid={`${testId}-add-member`}
-          >
-            <Plus size={14} /> Añadir miembro
-          </button>
+          <div className="agregado-editor__panel-actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--small"
+              onClick={() => applyPreset('drawer-slides')}
+              disabled={catalogHardware.length === 0}
+              title="Arma 4 miembros: guías fijas a los costados + correderas móviles del cajón"
+              data-testid={`${testId}-preset-drawer-slides`}
+            >
+              Preset: cajón con correderas
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--small"
+              onClick={() => applyPreset('center-rail')}
+              disabled={catalogHardware.length === 0}
+              title="Arma 1 miembro centrado con fórmula (acompaña el ancho)"
+              data-testid={`${testId}-preset-center-rail`}
+            >
+              Preset: riel centrado
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--small"
+              onClick={addMember}
+              disabled={catalogHardware.length === 0}
+              data-testid={`${testId}-add-member`}
+            >
+              <Plus size={14} /> Añadir miembro
+            </button>
+          </div>
         </div>
         {members.length === 0 ? (
           <p className="catalog-empty">
@@ -484,21 +552,27 @@ export function AgregadoRecipeAuthoringPanel({
                             ))}
                           </select>
                           <input
-                            type="number"
+                            type="text"
                             className="catalog-form__input"
-                            value={m.placement[axis].offsetMm}
-                            onChange={(e) =>
+                            value={m.placement[axis].offsetFormula ?? String(m.placement[axis].offsetMm)}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              // Número puro → offsetMm numérico; lo demás es
+                              // fórmula acotada (#1418: PW/PH/PD con + - * /).
+                              const isPlainNumber = raw.trim() !== '' && !Number.isNaN(Number(raw));
                               updateMember(idx, {
                                 placement: {
                                   ...m.placement,
                                   [axis]: {
                                     ...m.placement[axis],
-                                    offsetMm: Number(e.target.value) || 0,
+                                    offsetMm: isPlainNumber ? Number(raw) : m.placement[axis].offsetMm,
+                                    offsetFormula: isPlainNumber ? undefined : raw,
                                   },
                                 },
-                              })
-                            }
-                            aria-label={`${axisLabel(axis)} offset mm`}
+                              });
+                            }}
+                            placeholder="ej. -10 o PW/2 - 100"
+                            aria-label={`${axisLabel(axis)} offset mm o fórmula`}
                             data-testid={`${testId}-member-${idx}-anchor-${axis}-offset`}
                           />
                         </div>
