@@ -520,5 +520,24 @@ func calculateAxisPlacementCoord(axisName string, p domain.AssemblyAxisPlacement
 	default:
 		return 0.0, fmt.Errorf("axis %s has invalid reference '%s'", axisName, p.Ref)
 	}
+	if p.OffsetFormula != nil && strings.TrimSpace(*p.OffsetFormula) != "" {
+		// #1418: the formula replaces the numeric offset; whole-mm rounding
+		// (the shared evaluator's convention) keeps TS and Go identical.
+		d := int(math.Round(dimensionMm))
+		dims := formulaDims{W: d, H: d, D: d}
+		switch axisName {
+		case "x":
+			dims.PW = d
+		case "y":
+			dims.PD = d
+		default:
+			dims.PH = d
+		}
+		offset, err := evaluatePartFormula(strings.TrimSpace(*p.OffsetFormula), dims)
+		if err != nil {
+			return 0.0, fmt.Errorf("axis %s offset formula: %w", axisName, err)
+		}
+		return base + float64(offset), nil
+	}
 	return base + p.OffsetMm, nil
 }
