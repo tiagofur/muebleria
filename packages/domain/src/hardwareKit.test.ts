@@ -1,0 +1,140 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  DEFAULT_FIXED_OFFSET_MM,
+  DEFAULT_MOVING_OFFSET_MM,
+  HARDWARE_KIT_SLOTS,
+  defaultAgregadoCode,
+  planHardwareKit,
+  validateHardwareKitInput,
+  type HardwareKitPlanInput,
+} from './hardwareKit';
+
+const baseInput: HardwareKitPlanInput = {
+  code: 'HER-CORR-TEL-50',
+  name: 'Corredera Telescópica 500',
+  kitCostPerUnit: 420,
+  widthMm: 400,
+  heightMm: 150,
+  depthMm: 500,
+  fixedOffsetMm: DEFAULT_FIXED_OFFSET_MM,
+  movingOffsetMm: DEFAULT_MOVING_OFFSET_MM,
+};
+
+const noExisting = {
+  hardwareCodes: new Set<string>(),
+  agregadoCodes: new Set<string>(),
+};
+
+describe('planHardwareKit (#1416)', () => {
+  it('deriva kit + 4 herrajes de diseño + agregado con códigos predecibles', () => {
+    const plan = planHardwareKit(baseInput, noExisting);
+
+    expect(plan.kit).toMatchObject({
+      code: 'HER-CORR-TEL-50',
+      unit: 'set',
+      costPerUnit: 420,
+      exists: false,
+    });
+    expect(plan.designs.map((d) => d.code)).toEqual([
+      'HER-CORR-TEL-50-FIJ-I',
+      'HER-CORR-TEL-50-FIJ-D',
+      'HER-CORR-TEL-50-MOV-I',
+      'HER-CORR-TEL-50-MOV-D',
+    ]);
+    expect(plan.agregado.code).toBe('HER-CORR-TEL-50-CAJON');
+    expect(plan.agregado.motion).toBe('translate');
+    expect(plan.blockedCode).toBeNull();
+    expect(plan.designs.every((d) => !d.exists)).toBe(true);
+  });
+
+  it('ancla fijas y móviles con el offset con signo correcto por lado', () => {
+    const plan = planHardwareKit(baseInput, noExisting);
+    const byMember = new Map(plan.designs.map((d) => [d.memberId, d]));
+
+    expect(byMember.get('fixed_rail_left')?.placement.x).toEqual({ ref: 'min', offsetMm: 10 });
+    expect(byMember.get('fixed_rail_right')?.placement.x).toEqual({ ref: 'max', offsetMm: -10 });
+    expect(byMember.get('moving_rail_left')?.placement.x).toEqual({ ref: 'min', offsetMm: 35 });
+    expect(byMember.get('moving_rail_right')?.placement.x).toEqual({ ref: 'max', offsetMm: -35 });
+    for (const d of plan.designs) {
+      expect(d.placement.y).toEqual({ ref: 'min', offsetMm: 0 });
+      expect(d.placement.z).toEqual({ ref: 'min', offsetMm: 0 });
+    }
+  });
+
+  it('membresías fijo/móvil por miembro (#1376): body vs actor:drawer', () => {
+    const plan = planHardwareKit(baseInput, noExisting);
+    const byMember = new Map(plan.designs.map((d) => [d.memberId, d]));
+    expect(byMember.get('fixed_rail_left')?.membership).toBe('body');
+    expect(byMember.get('fixed_rail_right')?.membership).toBe('body');
+    expect(byMember.get('moving_rail_left')?.membership).toBe('actor:drawer');
+    expect(byMember.get('moving_rail_right')?.membership).toBe('actor:drawer');
+  });
+
+  it('marca herrajes existentes como reutilizados sin bloquear el plan', () => {
+    const plan = planHardwareKit(baseInput, {
+      hardwareCodes: new Set(['HER-CORR-TEL-50', 'HER-CORR-TEL-50-MOV-I']),
+      agregadoCodes: new Set<string>(),
+    });
+    expect(plan.kit.exists).toBe(true);
+    expect(plan.designs.find((d) => d.slot === 'moving_left')?.exists).toBe(true);
+    expect(plan.designs.find((d) => d.slot === 'fixed_left')?.exists).toBe(false);
+    expect(plan.blockedCode).toBeNull();
+  });
+
+  it('bloquea fail-closed si el agregado destino ya existe', () => {
+    const plan = planHardwareKit(baseInput, {
+      hardwareCodes: new Set<string>(),
+      agregadoCodes: new Set(['HER-CORR-TEL-50-CAJON']),
+    });
+    expect(plan.blockedCode).toBe('HER-CORR-TEL-50-CAJON');
+  });
+
+  it('respeta un código de agregado explícito y lo valida contra colisiones', () => {
+    const plan = planHardwareKit(
+      { ...baseInput, agregadoCode: 'GRA-CAJ-TEL' },
+      { hardwareCodes: new Set<string>(), agregadoCodes: new Set(['GRA-OTRO']) },
+    );
+    expect(plan.agregado.code).toBe('GRA-CAJ-TEL');
+    expect(plan.blockedCode).toBeNull();
+
+    const blocked = planHardwareKit(
+      { ...baseInput, agregadoCode: 'GRA-OTRO' },
+      { hardwareCodes: new Set<string>(), agregadoCodes: new Set(['GRA-OTRO']) },
+    );
+    expect(blocked.blockedCode).toBe('GRA-OTRO');
+  });
+
+  it('defaultAgregadoCode deriva del código del kit', () => {
+    expect(defaultAgregadoCode('HER-X')).toBe('HER-X-CAJON');
+  });
+
+  it('HARDWARE_KIT_SLOTS expone los 4 slots con sufijos únicos', () => {
+    expect(HARDWARE_KIT_SLOTS).toHaveLength(4);
+    expect(new Set(HARDWARE_KIT_SLOTS.map((s) => s.suffix)).size).toBe(4);
+    expect(new Set(HARDWARE_KIT_SLOTS.map((s) => s.memberId)).size).toBe(4);
+  });
+});
+
+describe('validateHardwareKitInput (#1416)', () => {
+  it('rechaza código, nombre y precio inválidos', () => {
+    expect(() => validateHardwareKitInput({ ...baseInput, code: '  ' })).toThrow('código');
+    expect(() => validateHardwareKitInput({ ...baseInput, name: '' })).toThrow('nombre');
+    expect(() => validateHardwareKitInput({ ...baseInput, kitCostPerUnit: -1 })).toThrow('precio');
+    expect(() => validateHardwareKitInput({ ...baseInput, kitCostPerUnit: Number.NaN })).toThrow(
+      'precio',
+    );
+  });
+
+  it('rechaza dimensiones y offsets inválidos', () => {
+    expect(() => validateHardwareKitInput({ ...baseInput, widthMm: 0 })).toThrow('ancho');
+    expect(() => validateHardwareKitInput({ ...baseInput, depthMm: -5 })).toThrow('profundidad');
+    expect(() =>
+      validateHardwareKitInput({ ...baseInput, fixedOffsetMm: Number.POSITIVE_INFINITY }),
+    ).toThrow('offset');
+  });
+
+  it('acepta la entrada base sin lanzar', () => {
+    expect(() => validateHardwareKitInput(baseInput)).not.toThrow();
+  });
+});
