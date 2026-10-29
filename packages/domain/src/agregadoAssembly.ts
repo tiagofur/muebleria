@@ -56,6 +56,13 @@ export type AssemblyAxisRef = 'min' | 'max' | 'center';
 export interface AssemblyAxisPlacement {
   readonly ref: AssemblyAxisRef;
   readonly offsetMm: number;
+  /**
+   * #1418: bounded formula (PW/PH/PD with + - * / and numbers) evaluated
+   * against the assembly envelope (X→PW, Y→PD, Z→PH). When present it
+   * REPLACES offsetMm; both engines round the result to whole mm so TS and
+   * Go resolve identically. Legacy numeric offsets stay byte-identical.
+   */
+  readonly offsetFormula?: string;
 }
 
 export interface AssemblyAnchorRule {
@@ -522,6 +529,18 @@ export function validateAxisPlacement(axisName: string, p: AssemblyAxisPlacement
   if (!Number.isFinite(p.offsetMm) || Math.abs(p.offsetMm) > 100000.0) {
     throw new Error(`axis ${axisName} has non-finite or out-of-bounds offsetMm: ${p.offsetMm}`);
   }
+  if (p.offsetFormula !== undefined) {
+    if (!p.offsetFormula.trim()) {
+      throw new Error(`axis ${axisName} has an empty offsetFormula (omit it or provide a formula)`);
+    }
+    try {
+      evaluatePartFormula(p.offsetFormula, {
+        W: 1, H: 1, D: 1, PW: 1, PH: 1, PD: 1,
+      }, { structureCode: 'agregado', partDescription: `axis ${axisName}`, field: 'x' });
+    } catch (err) {
+      throw new Error(`axis ${axisName} has an invalid offsetFormula: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 }
 
 export function validateAssemblyAnchorRule(rule: AssemblyAnchorRule): void {
@@ -753,6 +772,20 @@ function calculateAxisPlacementCoord(
       break;
     default:
       throw new Error(`axis ${axisName} has invalid reference '${(p as { ref: string }).ref}'`);
+  }
+  if (p.offsetFormula !== undefined) {
+    // #1418: the formula replaces the numeric offset. The axis variable is
+    // the envelope the ref resolves against (X→PW, Y→PD, Z→PH); both engines
+    // round to whole mm so TS and Go resolve identically.
+    const vars = axisName === 'x' ? { PW: dimensionMm } : axisName === 'y' ? { PD: dimensionMm } : { PH: dimensionMm };
+    const evaluated = evaluatePartFormula(p.offsetFormula, {
+      W: dimensionMm, H: dimensionMm, D: dimensionMm, ...vars,
+    }, {
+      structureCode: 'agregado',
+      partDescription: `axis ${axisName}`,
+      field: axisName === 'x' ? 'x' : axisName === 'y' ? 'y' : 'z',
+    });
+    return base + Math.round(evaluated);
   }
   return base + p.offsetMm;
 }

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "agregadoOffsetFormula.contract",
+  "comment": [
+    "#1418 — paridad TS↔Go de offsetFormula en anclajes de miembros.",
+    "Convención de paridad: el resultado de la fórmula se REDONDEA a mm",
+    "entero en ambos motores (el evaluador Go ya redondea; TS aplica",
+    "Math.round). X usa PW, Y usa PD, Z usa PH; el ancla (ref) sigue",
+    "aportando la base (min=0, max=dim, center=dim/2).",
+    "expectedX = base + round(evaluación) para cada ancho."
+  ],
+  "agregado": {
+    "id": "agr-formula-parity",
+    "code": "AGR-FORMULA",
+    "name": "Cajón ancla paramétrica",
+    "rigidMembers": [
+      {
+        "memberId": "rail_center",
+        "role": "center_rail",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-x"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "center",
+            "offsetMm": 0,
+            "offsetFormula": "PW/2 - 100"
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "non_purchasing"
+      }
+    ],
+    "rigid_members": [
+      {
+        "memberId": "rail_center",
+        "role": "center_rail",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-x"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "center",
+            "offsetMm": 0,
+            "offsetFormula": "PW/2 - 100"
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "non_purchasing"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "widthMm": 400,
+      "expectedX": 300
+    },
+    {
+      "widthMm": 450,
+      "expectedX": 350
+    },
+    {
+      "widthMm": 900,
+      "expectedX": 800
+    },
+    {
+      "widthMm": 451,
+      "expectedX": 351.5
+    }
+  ]
+}

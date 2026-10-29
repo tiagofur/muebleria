@@ -1711,3 +1711,76 @@ describe('attachHardwareDesignParts (#1417)', () => {
     ).toBeUndefined();
   });
 });
+
+describe('offsetFormula en anclajes (#1418)', () => {
+  const formulaMember = (formula: string): AgregadoAssemblyInput => ({
+    id: 'agr-formula',
+    rigidMembers: [
+      {
+        memberId: 'centrado',
+        role: 'center_rail',
+        source: { kind: 'fixed', fixed: { hardwareId: 'hw-x' } },
+        placement: {
+          x: { ref: 'center', offsetMm: 0, offsetFormula: formula },
+          y: { ref: 'min', offsetMm: 0 },
+          z: { ref: 'min', offsetMm: 0 },
+        },
+        bomRole: 'non_purchasing',
+      },
+    ],
+  });
+
+  it('evalúa la fórmula contra la envolvente del eje (X→PW) con redondeo a mm entero', () => {
+    // ref center (base 225) + fórmula (450/2 − 100 = 125)
+    const resolved = resolveAgregadoAssembly(formulaMember('PW/2 - 100'), {
+      widthMm: 450, depthMm: 500, heightMm: 150,
+    });
+    expect(resolved.rigidMembers[0]?.localTransform.translationMm[0]).toBe(350);
+    // ancho impar: base 225.5 + round(451/2 − 100 = 125.5 → 126) = 351.5
+    const odd = resolveAgregadoAssembly(formulaMember('PW/2 - 100'), {
+      widthMm: 451, depthMm: 500, heightMm: 150,
+    });
+    expect(odd.rigidMembers[0]?.localTransform.translationMm[0]).toBe(351.5);
+  });
+
+  it('la fórmula re-acompaña el cambio de ancho sin escalar (ancla paramétrica)', () => {
+    const at = (w: number) =>
+      resolveAgregadoAssembly(formulaMember('PW - 35'), { widthMm: w, depthMm: 500, heightMm: 150 })
+        .rigidMembers[0]?.localTransform.translationMm[0];
+    // ref center (base w/2) + (PW − 35): ancla paramétrica exacta
+    expect(at(400)).toBe(565);
+    expect(at(800)).toBe(1165);
+  });
+
+  it('rechaza fail-closed fórmulas vacías o con vocabulario inválido', () => {
+    expect(() =>
+      validateAgregadoAssemblyDefinition(formulaMember('   ')),
+    ).toThrow(/empty offsetFormula/);
+    expect(() =>
+      validateAgregadoAssemblyDefinition(formulaMember('PW; DROP')),
+    ).toThrow(/invalid offsetFormula/);
+  });
+
+  it('el offset numérico legacy sigue resolviendo byte-idéntico', () => {
+    const resolved = resolveAgregadoAssembly(
+      {
+        id: 'agr-legacy',
+        rigidMembers: [
+          {
+            memberId: 'm',
+            role: 'r',
+            source: { kind: 'fixed', fixed: { hardwareId: 'hw-x' } },
+            placement: {
+              x: { ref: 'max', offsetMm: -10 },
+              y: { ref: 'min', offsetMm: 0 },
+              z: { ref: 'min', offsetMm: 0 },
+            },
+            bomRole: 'non_purchasing',
+          },
+        ],
+      },
+      { widthMm: 400, depthMm: 500, heightMm: 150 },
+    );
+    expect(resolved.rigidMembers[0]?.localTransform.translationMm[0]).toBe(390);
+  });
+});
