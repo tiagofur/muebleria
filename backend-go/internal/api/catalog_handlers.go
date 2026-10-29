@@ -453,6 +453,13 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &h) {
 			return
 		}
+		if err := domain.ValidateHardwareDesignParts(h.DesignParts); err != nil {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "HARDWARE_DESIGN_PARTS_INVALID",
+				"message": err.Error(),
+			})
+			return
+		}
 		if err := domain.ValidateHardwareFinishIDs(h.AvailableFinishes); err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
@@ -511,6 +518,13 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		}
 		var h domain.Hardware
 		if !decodeJSONBody(w, r, &h) {
+			return
+		}
+		if err := domain.ValidateHardwareDesignParts(h.DesignParts); err != nil {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "HARDWARE_DESIGN_PARTS_INVALID",
+				"message": err.Error(),
+			})
 			return
 		}
 		if err := domain.ValidateHardwareFinishIDs(h.AvailableFinishes); err != nil {
