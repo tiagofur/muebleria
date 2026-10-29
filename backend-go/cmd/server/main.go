@@ -129,12 +129,19 @@ func main() {
 	// Timeouts mitigate slowloris and hung clients (issue #20).
 	// TLS/HSTS: this process serves plain HTTP; terminate TLS at a reverse
 	// proxy (Caddy/nginx) in production and set DATABASE_URL with sslmode=require.
+	// WriteTimeout cubre TODA la ejecución del handler: los endpoints que leen
+	// el catálogo completo (resolución de autoría, hidratación del workspace)
+	// superan 10s legítimos con el catálogo crecido o la máquina cargada —
+	// el deadline los mataba a mitad de respuesta y el cliente veía «Failed
+	// to fetch» / panel en error (#1415). 60s mantiene la protección mientras
+	// deja completar los heavies; slowloris sigue cubierto por
+	// ReadTimeout+ReadHeaderTimeout+IdleTimeout.
 	srv := &http.Server{
 		Addr:              listenAddress,
 		Handler:           handler,
 		ReadTimeout:       10 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
-		WriteTimeout:      10 * time.Second,
+		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20, // 1 MiB
 	}

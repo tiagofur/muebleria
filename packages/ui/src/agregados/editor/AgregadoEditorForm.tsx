@@ -27,7 +27,7 @@ import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import type { AgregadoDraft } from '../agregadoDraft';
 import { AgregadoEditorGeneralPanel } from './AgregadoEditorGeneralPanel';
 import { AgregadoEditorPreview3D } from './AgregadoEditorPreview3D';
-import { AgregadoRecipePanel } from './AgregadoRecipePanel';
+import { AgregadoRecipeAuthoringPanel } from './AgregadoRecipeAuthoringPanel';
 
 export type AgregadoEditorTab = 'general' | 'components' | 'hardware' | 'recipe';
 
@@ -181,8 +181,9 @@ export function AgregadoEditorForm({
   const tabBadge: Partial<Record<AgregadoEditorTab, number>> = {
     components: draft.components.length,
     hardware: draft.hardwareLines.length + totalHardwarePlacements,
-    // #1369: la pestaña muestra la receta GUARDADA (no el borrador).
-    recipe: recipeAgregado?.rigidMembers?.length,
+    // #1412: la pestaña ahora AUTORA la receta del borrador; el resumen de la
+    // guardada vive dentro (lectura) y «Simular cambio» sigue contra la guardada.
+    recipe: draft.rigidMembers?.length,
   };
 
   const tabDefs: readonly TabDefinition<AgregadoEditorTab>[] = TABS.map(
@@ -644,11 +645,13 @@ export function AgregadoEditorForm({
       )}
       </form>
 
-      {/* Tab: Receta (#1369) — read-only sobre la entidad guardada */}
+      {/* Tab: Receta (#1412) — autoría del borrador + resumen de la guardada */}
       {editorTab === 'recipe' && (
-        <AgregadoRecipePanel
-          saved={recipeAgregado ?? null}
+        <AgregadoRecipeAuthoringPanel
+          draft={draft}
+          setDraft={setDraft}
           catalogHardware={catalogHardware}
+          saved={recipeAgregado ?? null}
           onSimulateChange={onSimulateChange}
         />
       )}

@@ -238,14 +238,46 @@ test.describe.serial('Joinery live panel (#875) Browser E2E', () => {
   });
 
   test('live panel shows the real Go floor-side diagnosis for a design', async ({ page }) => {
-    test.setTimeout(60_000);
+    // #1415: el resolve de autoría lee el catálogo completo; en CI cargado
+    // tarda órdenes de más que en local. La ASERCIÓN es la misma (diagnóstico
+    // real del servidor); sólo se tolera la latencia del entorno.
+    test.setTimeout(180_000);
+    // #1415 diagnóstico: respuestas no-ok y errores de página quedan en el log
+    // del gate — sin esto, un panel en estado de error no dice QUÉ falló.
+    page.on('response', async (res) => {
+      if (!res.ok()) {
+        let body = '';
+        if (res.url().includes('/auth/refresh') || res.url().includes('/furniture/definitions')) {
+          body = (await res.text().catch(() => '')).slice(0, 300);
+        }
+        console.log(`[HTTP ${res.status()}] ${res.request().method()} ${res.url()} ${body}`);
+      }
+    });
+    // #1415: estado de la cookie de refresh EN EL MOMENTO del 401 — discrimina
+    // «el browser no la guardó/mandó» de «el servidor la rechazó».
+    page.on('response', async (res) => {
+      if (res.url().includes('/auth/refresh') && res.status() === 401) {
+        const cookies = await page.context().cookies();
+        console.log(
+          `[AUTH-COOKIE-STATE] guardadas=${cookies.map((c) => `${c.name}@${c.domain}:${c.path}`).join(',') || 'NINGUNA'}`,
+        );
+      }
+    });
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        console.log(`[BROWSER ERROR] ${msg.text()}`);
+      }
+    });
+    page.on('pageerror', (err) => {
+      console.log(`[PAGE UNCAUGHT ERROR] ${err.message}`);
+    });
     await loginToA(page);
     await page.goto(`/quotes/${seeded.projectId}/disenos?design=${seeded.designAId}`);
 
     const panel = page.getByTestId('joinery-status-panel');
     // The resolved backend state: 2 valid contacts, stations from the
     // parameter (4), honest TECHNICAL_PROFILE_REQUIRED blocker, zero ops.
-    await expect(panel.getByTestId('joinery-relationships')).toBeVisible({ timeout: 20_000 });
+    await expect(panel.getByTestId('joinery-relationships')).toBeVisible({ timeout: 60_000 });
     const text = await panel.getByTestId('joinery-relationships').textContent();
     expect(text).toContain('floor-side');
     expect(text).toContain('válido');
@@ -256,17 +288,17 @@ test.describe.serial('Joinery live panel (#875) Browser E2E', () => {
   });
 
   test('switching designs repaints from the new context, never the old one', async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(180_000);
     await loginToA(page);
     await page.goto(`/quotes/${seeded.projectId}/disenos?design=${seeded.designAId}`);
     const panel = page.getByTestId('joinery-status-panel');
-    await expect(panel.getByTestId('joinery-relationships')).toBeVisible({ timeout: 20_000 });
+    await expect(panel.getByTestId('joinery-relationships')).toBeVisible({ timeout: 60_000 });
     await expect(panel.getByTestId('joinery-relationships')).toContainText('Estaciones: 4');
 
     // Switch to design B (3 stations): the panel must converge on B's
     // resolved context and never fall back to A's.
     await page.goto(`/quotes/${seeded.projectId}/disenos?design=${seeded.designBId}`);
-    await expect(panel.getByTestId('joinery-relationships')).toContainText('Estaciones: 3', { timeout: 20_000 });
+    await expect(panel.getByTestId('joinery-relationships')).toContainText('Estaciones: 3', { timeout: 60_000 });
     await page.waitForTimeout(1_000);
     await expect(panel.getByTestId('joinery-relationships')).toContainText('Estaciones: 3');
     await expect(panel.getByTestId('joinery-relationships')).not.toContainText('Estaciones: 4');

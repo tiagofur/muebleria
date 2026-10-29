@@ -36,6 +36,15 @@ func (s *Server) HandleAgregados(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &a) {
 			return
 		}
+		// #1412: same fail-closed recipe gate as the PUT — authoring cannot
+		// create an agregado whose recipe would not resolve.
+		if err := domain.ValidateAgregadoAssemblyDefinition(a); err != nil {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "AGREGADO_RECIPE_INVALID",
+				"message": err.Error(),
+			})
+			return
+		}
 		a.Active = true
 		if err := s.Store.CreateAgregado(r.Context(), &a); err != nil {
 			if isDuplicateKey(err) {
@@ -92,6 +101,18 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 		}
 		var a domain.Agregado
 		if !decodeJSONBody(w, r, &a) {
+			return
+		}
+		// #1412: the PUT is the apply path for recipe authoring — an invalid
+		// recipe must be rejected fail-closed, never persisted into an
+		// immutable revision. Legacy rows without recipe validate trivially.
+		// Identity comes from the path, never the body (same rule as simulate).
+		a.ID = id
+		if err := domain.ValidateAgregadoAssemblyDefinition(a); err != nil {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "AGREGADO_RECIPE_INVALID",
+				"message": err.Error(),
+			})
 			return
 		}
 		// #1168: the catalog update and its audit revision commit in ONE

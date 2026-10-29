@@ -21,7 +21,7 @@ import type {
   MaterialBoard,
   OptionGroup,
 } from '@granete/domain';
-import { findHardwarePlacementsWithoutIdentity } from '@granete/domain';
+import { findHardwarePlacementsWithoutIdentity, validateAgregadoAssemblyDefinition } from '@granete/domain';
 import {
   EntityEditorLayout,
   ConfirmDialog,
@@ -235,6 +235,21 @@ export function AgregadosScreen({
         `Herrajes posicionados sin identidad en ${piece}: elegí grupo de opciones o herraje específico.`,
       );
       setEditorTab('hardware');
+      return;
+    }
+
+    // #1412: mismo validador fail-closed del dominio que exige el servidor —
+    // una receta inválida se bloquea acá con la pestaña Receta a la vista,
+    // antes de intentar una revisión que el PUT rechazaría con 422.
+    try {
+      validateAgregadoAssemblyDefinition(
+        draftToAgregado(editingId ?? 'borrador', draft),
+      );
+    } catch (e) {
+      setError(
+        `Receta inválida: ${e instanceof Error ? e.message : 'revisá los miembros y sets de variantes.'}`,
+      );
+      setEditorTab('recipe');
       return;
     }
 

@@ -537,6 +537,18 @@ export function validateAgregadoRigidMember(
   if (!m.role.trim()) {
     throw new Error(`rigid member '${m.memberId}' must have a non-empty role`);
   }
+  // #1376 contract: consumers compare the raw string ('' | 'body' | 'actor:<id>'),
+  // so no trim normalization here — anything else would silently change membership.
+  if (
+    m.actorMembership !== undefined &&
+    m.actorMembership !== '' &&
+    m.actorMembership !== 'body' &&
+    !/^actor:\S+$/.test(m.actorMembership)
+  ) {
+    throw new Error(
+      `rigid member '${m.memberId}': invalid actorMembership '${m.actorMembership}' (expected '', 'body', or 'actor:<id>')`,
+    );
+  }
   validateRigidMemberSource(m.source);
   validateAssemblyAnchorRule(m.placement);
 

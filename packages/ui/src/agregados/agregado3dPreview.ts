@@ -199,54 +199,71 @@ export function resolveAgregado3DPreview(
       { optionChoices },
     );
 
-    // #669: project the catalog agregado's own assembly recipe at identity
-    // placement. Same canonical path as module previews
-    // (resolveAgregadoAssembly → enrich R3 authority → attachVisualPins →
-    // projectResolvedAssemblyFor3D); a recipe or authority failure is an honest
-    // diagnostic that keeps the resolved pieces — never a render-time crash.
+    // #669: project the agregado's own assembly recipe at identity placement.
+    // Same canonical path as module previews (resolveAgregadoAssembly → enrich
+    // R3 authority → attachVisualPins → projectResolvedAssemblyFor3D); a recipe
+    // or authority failure is an honest diagnostic that keeps the resolved
+    // pieces — never a render-time crash.
+    // #1412: la receta del BORRADOR gana sobre la guardada — el preview refleja
+    // la autoría en vivo; sin miembros en el borrador cae a la receta guardada.
     let assemblies: readonly ProjectedAssembly[] = [];
     let assemblyError: string | null = null;
     const trimmedId = agregadoId?.trim() ?? '';
-    if (trimmedId) {
-      const recipe = (catalogInput.agregados ?? []).find((a) => a.id === trimmedId);
-      if (recipe && recipe.rigidMembers && recipe.rigidMembers.length > 0) {
-        try {
-          const resolved = resolveAgregadoAssembly(
-            {
-              id: recipe.id,
-              commercialKitHardwareId: recipe.commercialKitHardwareId,
-              components: recipe.components,
-              rigidMembers: recipe.rigidMembers,
-              variantSets: recipe.variantSets,
-              compatibilityRules: recipe.compatibilityRules,
-            },
-            { widthMm: dims.width, depthMm: dims.depth, heightMm: dims.height },
-          );
-          const enriched = {
-            ...resolved,
-            fabricatedComponents: enrichFabricatedComponentsWithAuthority(
-              resolved.fabricatedComponents,
-              { components: catalogInput.components, materials: catalogInput.materials },
-              optionChoices,
-            ),
-          };
-          const pinned = attachVisualPins(
-            enriched,
-            createCatalogVisualAssetLookup(catalogInput.hardware),
-          );
-          assemblies = [
-            projectResolvedAssemblyFor3D({
-              assembly: pinned,
-              placement: { originMm: [0, 0, 0] },
-              assemblyInstanceId: `agregado-preview:${trimmedId}`,
-            }),
-          ];
-        } catch (e) {
-          assemblyError =
-            e instanceof Error
-              ? `No se pudo proyectar el ensamble del agregado: ${e.message}`
-              : 'No se pudo proyectar el ensamble del agregado.';
-        }
+    const draftMembers = draft.rigidMembers ?? [];
+    const savedRecipe = trimmedId
+      ? (catalogInput.agregados ?? []).find((a) => a.id === trimmedId)
+      : undefined;
+    const recipe = (
+      draftMembers.length > 0
+        ? {
+            id: trimmedId || 'borrador',
+            commercialKitHardwareId: draft.commercialKitHardwareId,
+            components: draft.components,
+            rigidMembers: draft.rigidMembers,
+            variantSets: draft.variantSets,
+            compatibilityRules: draft.compatibilityRules,
+          }
+        : savedRecipe && savedRecipe.rigidMembers && savedRecipe.rigidMembers.length > 0
+        ? savedRecipe
+        : null
+    );
+    if (recipe && recipe.rigidMembers && recipe.rigidMembers.length > 0) {
+      try {
+        const resolved = resolveAgregadoAssembly(
+          {
+            id: recipe.id,
+            commercialKitHardwareId: recipe.commercialKitHardwareId,
+            components: recipe.components,
+            rigidMembers: recipe.rigidMembers,
+            variantSets: recipe.variantSets,
+            compatibilityRules: recipe.compatibilityRules,
+          },
+          { widthMm: dims.width, depthMm: dims.depth, heightMm: dims.height },
+        );
+        const enriched = {
+          ...resolved,
+          fabricatedComponents: enrichFabricatedComponentsWithAuthority(
+            resolved.fabricatedComponents,
+            { components: catalogInput.components, materials: catalogInput.materials },
+            optionChoices,
+          ),
+        };
+        const pinned = attachVisualPins(
+          enriched,
+          createCatalogVisualAssetLookup(catalogInput.hardware),
+        );
+        assemblies = [
+          projectResolvedAssemblyFor3D({
+            assembly: pinned,
+            placement: { originMm: [0, 0, 0] },
+            assemblyInstanceId: `agregado-preview:${recipe.id}`,
+          }),
+        ];
+      } catch (e) {
+        assemblyError =
+          e instanceof Error
+            ? `No se pudo proyectar el ensamble del agregado: ${e.message}`
+            : 'No se pudo proyectar el ensamble del agregado.';
       }
     }
 

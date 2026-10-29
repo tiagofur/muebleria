@@ -47,6 +47,27 @@ async function loginToA(page: Page): Promise<void> {
 }
 
 test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', () => {
+  // #1415: el walkthrough recorre el catálogo por UI y su CTA «Nuevo herraje»
+  // sólo existe con filas (en catálogo vacío la acción es del EmptyState, por
+  // diseño K5 #1032). Autocontenido por convención del gate: siembra su propio
+  // herraje base por API en vez de depender de la semilla que otro spec/composición
+  // dejó cargada — sin esto, cualquier re-reparto de shards lo deja sin botón.
+  test.beforeAll(async () => {
+    const { base, token } = await getApi();
+    const res = await fetch(base + '/catalog/hardware', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        code: 'HW-3D-SEED',
+        name: 'Bisagra base (semilla del spec)',
+        unit: 'piece',
+        cost_per_unit: 1,
+      }),
+    });
+    // 201 creado; 409 = ya existía de un reintento, igualmente sirve de semilla.
+    expect([201, 409], `seed hardware: ${await res.text()}`).toContain(res.status);
+  });
+
   test('end-to-end hardware 3D asset lifecycle across real PostgreSQL and browser viewports', async ({ page }) => {
     test.setTimeout(120_000);
     const { repository } = await getApi();

@@ -110,6 +110,68 @@ func TestAgregadoByID_StoreErrorsMapByType(t *testing.T) {
 // (nunca 409/412/500). La prueba equivalente a nivel storage (la fila no
 // resucita y el error es not-found, no ErrVersionConflict) vive en
 // TestCatalog_UpdateAfterHardDeleteDoesNotResurrect.
+// recordingUpdateAgregadoStubStore fails closed observable: cuenta si el PUT
+// llegó a la store (una receta inválida debe rechazarse SIN persistir nada).
+type recordingUpdateAgregadoStubStore struct {
+	stubStore
+	updateCalls int
+}
+
+func (s *recordingUpdateAgregadoStubStore) UpdateAgregadoWithRevision(_ context.Context, _ string, _ int64, _ *domain.Agregado, _ *string) error {
+	s.updateCalls++
+	return nil
+}
+
+// #1412: el PUT es el apply de la autoría de receta — una receta inválida se
+// rechaza 422 tipado ANTES de tocar la store (la revisión es inmutable).
+func TestAgregado_PutValidatesRecipeFailClosed(t *testing.T) {
+	member := func(id string) string {
+		return `{"memberId":"` + id + `","role":"runner_left","source":{"kind":"fixed","fixed":{"hardwareId":"hw-1"}},` +
+			`"placement":{"x":{"ref":"min","offsetMm":0},"y":{"ref":"min","offsetMm":0},"z":{"ref":"min","offsetMm":0}},"bomRole":"non_purchasing"}`
+	}
+
+	t.Run("receta inválida → 422 AGREGADO_RECIPE_INVALID y la store no se toca", func(t *testing.T) {
+		store := &recordingUpdateAgregadoStubStore{stubStore: stubStore{getOrgByID: customLibraryOrg()}}
+		cases := map[string]string{
+			"memberId duplicado": `{"code":"AGR-1","name":"Uno","rigid_members":[` + member("m1") + `,` + member("m1") + `]}`,
+			"actorMembership malformado": `{"code":"AGR-1","name":"Uno","rigid_members":[` +
+				strings.Replace(member("m1"), `"bomRole":"non_purchasing"`, `"bomRole":"non_purchasing","actorMembership":"drawer"`, 1) + `]}`,
+			"included_in_kit sin kit": `{"code":"AGR-1","name":"Uno","rigid_members":[` +
+				strings.Replace(member("m1"), `"bomRole":"non_purchasing"`, `"bomRole":"included_in_kit"`, 1) + `]}`,
+		}
+		for name, body := range cases {
+			rec := agregadoByIDRequest(t, &Server{Store: store}, http.MethodPut, body, `"v1"`)
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("%s: status = %d body=%s", name, rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), "AGREGADO_RECIPE_INVALID") {
+				t.Fatalf("%s: falta el código tipado: %s", name, rec.Body.String())
+			}
+		}
+		if store.updateCalls != 0 {
+			t.Fatalf("la store se llamó %d veces con recetas inválidas", store.updateCalls)
+		}
+	})
+
+	t.Run("receta válida y cuerpo legacy pasan y llegan a la store", func(t *testing.T) {
+		store := &recordingUpdateAgregadoStubStore{stubStore: stubStore{getOrgByID: customLibraryOrg()}}
+		validKit := `{"code":"AGR-1","name":"Uno","commercial_kit_hardware_id":"hw-kit","rigid_members":[` +
+			strings.Replace(member("m1"), `"bomRole":"non_purchasing"`, `"bomRole":"included_in_kit","actorMembership":"actor:drawer"`, 1) + `]}`
+		rec := agregadoByIDRequest(t, &Server{Store: store}, http.MethodPut, validKit, `"v1"`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("receta válida: status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		legacy := `{"id":"agr-1","code":"AGR-1","name":"Uno"}`
+		rec = agregadoByIDRequest(t, &Server{Store: store}, http.MethodPut, legacy, `"v1"`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("cuerpo legacy sin receta: status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		if store.updateCalls != 2 {
+			t.Fatalf("expected 2 store calls, got %d", store.updateCalls)
+		}
+	})
+}
+
 func TestAgregado_PutAfterDeleteIsNotFound(t *testing.T) {
 	putBody := `{"id":"agr-1","code":"AGR-1","name":"Uno"}`
 

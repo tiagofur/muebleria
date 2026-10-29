@@ -261,3 +261,52 @@ describe('AgregadosScreen — save contract (S3 #1009)', () => {
     expect(screen.queryByTestId('agregado-editor-save-error')).toBeNull();
   });
 });
+
+describe('AgregadosScreen — guard de receta (#1412)', () => {
+  afterEach(cleanDraftStorage);
+
+  const hwCorredera = [
+    { id: 'hw-corr', code: 'CORR', name: 'Corredera Telescópica', unit: 'set' as const, costPerUnit: 90, active: true },
+  ];
+
+  it('bloquea el guardado con una receta inválida, abre la pestaña Receta y no llama al servidor', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    renderScreen({ onUpdate, catalogHardware: hwCorredera });
+
+    await user.click(screen.getByTestId('agregado-detail-edit'));
+    await screen.findByTestId('agregado-editor-page');
+
+    await user.click(screen.getByRole('tab', { name: 'Receta' }));
+    await user.click(screen.getByTestId('agregado-tab-recipe-authoring-add-member'));
+    await user.clear(
+      screen.getByTestId('agregado-tab-recipe-authoring-member-0-id'),
+    );
+
+    await user.click(screen.getByTestId('agregado-save-btn'));
+
+    expect(screen.getByTestId('agregado-editor-page').textContent).toContain(
+      'Receta inválida',
+    );
+    expect(screen.getByTestId('agregado-tab-recipe-authoring')).toBeTruthy();
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it('una receta válida viaja al guardar — el form general ya NO la borra', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    renderScreen({ onUpdate, catalogHardware: hwCorredera });
+
+    await user.click(screen.getByTestId('agregado-detail-edit'));
+    await screen.findByTestId('agregado-editor-page');
+    await user.click(screen.getByRole('tab', { name: 'Receta' }));
+    await user.click(screen.getByTestId('agregado-tab-recipe-authoring-add-member'));
+    await user.click(screen.getByTestId('agregado-save-btn'));
+
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+    const saved = onUpdate.mock.calls[0]![0] as Agregado;
+    expect(saved.rigidMembers).toHaveLength(1);
+    expect(saved.rigidMembers?.[0]?.memberId).toBe('miembro-1');
+    expect(saved.rigidMembers?.[0]?.bomRole).toBe('separately_purchased');
+  });
+});

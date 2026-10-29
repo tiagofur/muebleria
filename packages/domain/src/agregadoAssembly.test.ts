@@ -264,6 +264,47 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
     });
   });
 
+  describe('actorMembership format (#1376 contract)', () => {
+    const member: AgregadoRigidMember = {
+      memberId: 'runner_l',
+      role: 'runner_left',
+      source: {
+        kind: 'fixed',
+        fixed: { hardwareId: 'hw-runner' },
+      },
+      placement: {
+        x: { ref: 'min', offsetMm: 0 },
+        y: { ref: 'min', offsetMm: 0 },
+        z: { ref: 'min', offsetMm: 0 },
+      },
+      bomRole: 'included_in_kit',
+    };
+
+    it('accepts absent, empty, body, and actor:<id> memberships', () => {
+      expect(() => validateAgregadoRigidMember(member, true)).not.toThrow();
+      expect(() => validateAgregadoRigidMember({ ...member, actorMembership: '' }, true)).not.toThrow();
+      expect(() => validateAgregadoRigidMember({ ...member, actorMembership: 'body' }, true)).not.toThrow();
+      expect(() => validateAgregadoRigidMember({ ...member, actorMembership: 'actor:drawer' }, true)).not.toThrow();
+    });
+
+    it('rejects values the runtime would misread as a moving actor', () => {
+      // The #1376 consumers compare the raw string: anything not ''/'body'/actor:<id>
+      // would silently count as a moving member.
+      expect(() => validateAgregadoRigidMember({ ...member, actorMembership: 'drawer' }, true)).toThrow(
+        /invalid actorMembership 'drawer'/,
+      );
+      expect(() => validateAgregadoRigidMember({ ...member, actorMembership: 'actor:' }, true)).toThrow(
+        /invalid actorMembership 'actor:'/,
+      );
+      expect(() =>
+        validateAgregadoRigidMember({ ...member, actorMembership: 'actor:two words' }, true),
+      ).toThrow(/invalid actorMembership/);
+      expect(() => validateAgregadoRigidMember({ ...member, actorMembership: '  ' }, true)).toThrow(
+        /invalid actorMembership/,
+      );
+    });
+  });
+
   describe('validateAgregadoVariantSet', () => {
     it('accepts valid variant set', () => {
       const vs: AgregadoVariantSet = {
