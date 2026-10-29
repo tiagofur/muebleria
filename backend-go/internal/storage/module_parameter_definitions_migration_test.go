@@ -326,3 +326,83 @@ func applyModuleParameterDefinitionsMigration(t *testing.T, pool *pgxpool.Pool, 
 	}
 	t.Fatal("migration 103 is not embedded")
 }
+
+// TestCreateAndUpdateModuleRejectOrphanedParameterBindings (#1415): write-time
+// mirror of the read-side composition contract. A binding that points at a
+// component this module can never resolve (e.g. cloned from a template whose
+// entrepaño row belongs to the ORIGINAL module) must fail the write with a
+// typed error — persisting it poisons GET /furniture/definitions (422) for
+// the whole org and every authoring resolve.
+func TestCreateAndUpdateModuleRejectOrphanedParameterBindings(t *testing.T) {
+	pool := multiOrgFreshMigrationDB(t)
+	identityApplyThrough(t, pool, 168)
+	store := &storage.PostgresStore{Pool: pool}
+	ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
+
+	// La fila real que el binding VÁLIDO debe referenciar (module_components
+	// exige el FK contra components).
+	if err := store.CreateComponent(ctx, &domain.Component{
+		ID: "f1415000-0000-0000-0000-0000000000aa", Code: "EST-REAL", Name: "Entrepaño real",
+		Placement: domain.PlacementInterno, GeometryKind: "rectangular_board",
+		LengthMm: 590, WidthMm: 600, ThicknessMm: 18,
+	}); err != nil {
+		t.Fatalf("create component: %v", err)
+	}
+
+	orphaned := &domain.Module{
+		ID: "f1415000-0000-0000-0000-000000000001", Code: "CLON-HUERFANO", Name: "Clon con binding huérfano",
+		WidthMm: 600, HeightMm: 720, DepthMm: 590,
+		Components: []domain.ComponentInstance{{ComponentID: "f1415000-0000-0000-0000-0000000000aa", Quantity: 1}},
+		ParameterDefinitions: []domain.FurnitureParameterDefinition{{
+			Name: "entrepanos", Label: "Entrepaños", Type: domain.FurnitureParameterTypeNumber,
+			DefaultValue: float64(4), Required: true, Unit: domain.FurnitureParameterUnitCount,
+			Category: domain.FurnitureParameterCategoryConfiguration,
+			Min:      func() *float64 { v := 0.0; return &v }(), Max: func() *float64 { v := 8.0; return &v }(),
+			Step: func() *float64 { v := 1.0; return &v }(), Integer: true,
+			Binding: &domain.FurnitureParameterBinding{
+				Version: 1, Kind: domain.FurnitureParameterBindingComponentQuantity,
+				ComponentID: "00000000-0000-0000-0000-000000000000",
+			},
+		}},
+	}
+	var definitionsErr *domain.FurnitureParameterDefinitionsError
+	if err := store.CreateModule(ctx, orphaned); !errors.As(err, &definitionsErr) {
+		t.Fatalf("create con binding huérfano: expected FurnitureParameterDefinitionsError, got %v", err)
+	}
+
+	valid := &domain.Module{
+		ID: "f1415000-0000-0000-0000-000000000002", Code: "GAB-VALIDO", Name: "Binding propio directo",
+		WidthMm: 600, HeightMm: 720, DepthMm: 590,
+		Components: []domain.ComponentInstance{{ComponentID: "f1415000-0000-0000-0000-0000000000aa", Quantity: 1}},
+		ParameterDefinitions: []domain.FurnitureParameterDefinition{{
+			Name: "entrepanos", Label: "Entrepaños", Type: domain.FurnitureParameterTypeNumber,
+			DefaultValue: float64(4), Required: true, Unit: domain.FurnitureParameterUnitCount,
+			Category: domain.FurnitureParameterCategoryConfiguration,
+			Min:      func() *float64 { v := 0.0; return &v }(), Max: func() *float64 { v := 8.0; return &v }(),
+			Step: func() *float64 { v := 1.0; return &v }(), Integer: true,
+			Binding: &domain.FurnitureParameterBinding{
+				Version: 1, Kind: domain.FurnitureParameterBindingComponentQuantity,
+				ComponentID: "f1415000-0000-0000-0000-0000000000aa",
+			},
+		}},
+	}
+	if err := store.CreateModule(ctx, valid); err != nil {
+		t.Fatalf("create con binding propio: %v", err)
+	}
+	got, err := store.GetModuleByID(ctx, valid.ID)
+	if err != nil {
+		t.Fatalf("get module: %v", err)
+	}
+	// El update que huérfana el binding también se rechaza y no toca la fila.
+	got.Components = []domain.ComponentInstance{}
+	if err := store.UpdateModule(ctx, got.ID, got.Version, got); !errors.As(err, &definitionsErr) {
+		t.Fatalf("update que huérfana el binding: expected FurnitureParameterDefinitionsError, got %v", err)
+	}
+	readback, err := store.GetModuleByID(ctx, valid.ID)
+	if err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if len(readback.Components) != 1 {
+		t.Fatalf("el update rechazado tocó la fila: %+v", readback.Components)
+	}
+}

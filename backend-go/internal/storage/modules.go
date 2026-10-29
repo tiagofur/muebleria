@@ -327,9 +327,43 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	return &m, nil
 }
 
+// validateModuleParameterConsumers proves the module's parameter bindings
+// point at composition this module can actually resolve — the same domain
+// predicate the read side (definitions, authoring resolve, release) enforces.
+// Modules without bindings skip the composition load entirely.
+func (s *PostgresStore) validateModuleParameterConsumers(ctx context.Context, m *domain.Module) error {
+	hasBinding := false
+	for _, definition := range m.ParameterDefinitions {
+		if definition.Binding != nil {
+			hasBinding = true
+			break
+		}
+	}
+	if !hasBinding {
+		return nil
+	}
+	structures, err := s.ListStructures(ctx)
+	if err != nil {
+		return err
+	}
+	composition := domain.Catalog{Structures: structures}
+	if issues := domain.ValidateModuleFurnitureParameterConsumers(*m, composition); len(issues) > 0 {
+		return &domain.FurnitureParameterDefinitionsError{Issues: issues}
+	}
+	return nil
+}
+
 func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) error {
 	if issues := domain.ValidatePersistedFurnitureParameterDefinitions(m.ParameterDefinitions); len(issues) > 0 {
 		return &domain.FurnitureParameterDefinitionsError{Issues: issues}
+	}
+	// #1415: write-time mirror of the read-side composition contract that
+	// GET /furniture/definitions, authoring resolve and release enforce. A
+	// cloned/tampered binding (e.g. pointing at a component of the template's
+	// module) must fail HERE with a typed error — persisting it poisons the
+	// whole org's definitions read (422 for everyone) and every resolve.
+	if err := s.validateModuleParameterConsumers(ctx, m); err != nil {
+		return err
 	}
 	tx, err := s.beginTx(ctx)
 	if err != nil {
@@ -516,6 +550,11 @@ func replaceModuleComponentsTx(ctx context.Context, tx pgx.Tx, moduleID string, 
 func (s *PostgresStore) UpdateModule(ctx context.Context, id string, expectedVersion int64, m *domain.Module) error {
 	if issues := domain.ValidatePersistedFurnitureParameterDefinitions(m.ParameterDefinitions); len(issues) > 0 {
 		return &domain.FurnitureParameterDefinitionsError{Issues: issues}
+	}
+	// #1415: same composition contract as CreateModule (see above) — an
+	// update that orphans a binding must fail here, before the row is touched.
+	if err := s.validateModuleParameterConsumers(ctx, m); err != nil {
+		return err
 	}
 	if expectedVersion < 1 {
 		return ErrVersionConflict

@@ -209,6 +209,12 @@ export async function prepareLifecycleSubject(): Promise<LifecycleSubject> {
  * the server generates them on create, and a template clone that kept the
  * source module's ids used to collide on module_presets and surface as a
  * generic 500 instead of a typed conflict.
+ *
+ * Parameter definitions do NOT travel with the clone (#1415): their bindings
+ * point at the template module's composition rows, and cloning them onto a
+ * module that lacks those rows persists an orphaned binding — which poisons
+ * GET /furniture/definitions (422) for the whole org. A spec that needs
+ * parameters declares its own on the clone.
  */
 export function moduleCreatePayload<
   M extends {
@@ -217,8 +223,13 @@ export function moduleCreatePayload<
     boardParts?: readonly { id: string }[];
   },
 >(template: M): M {
+  const { parameterDefinitions: _templateParameters, ...rest } = template as M & {
+    parameterDefinitions?: unknown;
+  };
+  void _templateParameters;
   return {
-    ...template,
+    ...rest,
+    parameterDefinitions: [],
     presets: template.presets?.map((preset) => ({ ...preset, id: '' })),
     hardwareLines: template.hardwareLines?.map((line) => ({ ...line, id: '' })),
     boardParts: template.boardParts?.map((part) => ({ ...part, id: '' })),

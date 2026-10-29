@@ -253,6 +253,16 @@ test.describe.serial('Joinery live panel (#875) Browser E2E', () => {
         console.log(`[HTTP ${res.status()}] ${res.request().method()} ${res.url()} ${body}`);
       }
     });
+    // #1415: estado de la cookie de refresh EN EL MOMENTO del 401 — discrimina
+    // «el browser no la guardó/mandó» de «el servidor la rechazó».
+    page.on('response', async (res) => {
+      if (res.url().includes('/auth/refresh') && res.status() === 401) {
+        const cookies = await page.context().cookies();
+        console.log(
+          `[AUTH-COOKIE-STATE] guardadas=${cookies.map((c) => `${c.name}@${c.domain}:${c.path}`).join(',') || 'NINGUNA'}`,
+        );
+      }
+    });
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
         console.log(`[BROWSER ERROR] ${msg.text()}`);
