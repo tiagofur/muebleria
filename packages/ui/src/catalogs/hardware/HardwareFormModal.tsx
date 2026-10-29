@@ -18,6 +18,7 @@ import type { HardwareAssetService } from '@granete/storage';
 import { CatalogImage, Modal } from '../../common';
 import { Hardware3DSection } from './Hardware3DSection';
 import { HardwareMachiningSection } from './HardwareMachiningSection';
+import { HardwareDesignPartsSection } from './HardwareDesignPartsSection';
 import { UNIT_LABELS, type HardwareDraft } from './hardwareDraft';
 
 export interface HardwareFormModalProps {
@@ -227,6 +228,9 @@ export function HardwareFormModal({
           draft={draft}
           setDraft={setDraft}
         />
+
+        {/* #1417: internal design parts (by SKP component name). */}
+        <HardwareDesignPartsSection draft={draft} setDraft={setDraft} />
       </form>
     </Modal>
   );

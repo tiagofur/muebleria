@@ -2,7 +2,7 @@
  * catalog/hardware — Hardware mutations incl. 3D preview fields (F069/F080).
  */
 
-import { normalizeHardwarePartFinishes } from '@granete/domain';
+import { normalizeHardwarePartFinishes, validateHardwareDesignParts, type HardwareDesignPart } from '@granete/domain';
 import type { Hardware } from '@granete/domain';
 import type { HardwareDraft } from '@granete/ui';
 
@@ -51,7 +51,28 @@ function hardwarePreviewFields(
     ...(draft.previewClearcoat ? { previewClearcoat: parseDraftNum(draft.previewClearcoat, true) } : {}),
     ...(partFinishes ? { partFinishes } : {}),
     ...(maxOpeningAngleDeg ? { maxOpeningAngleDeg } : {}),
+    ...hardwareDesignPartsField(draft),
   };
+}
+
+/**
+ * #1417: convierte las filas de form a partes de dominio. Una fila sin
+ * componentName se descarta (fila vacía del form); cualquier invalidez real
+ * lanza — el modal muestra el mensaje y nada persiste (fail-closed).
+ */
+function hardwareDesignPartsField(draft: HardwareDraft): Pick<Hardware, 'designParts'> | {} {
+  const rows = (draft.designParts ?? [])
+    .filter((p) => p.componentName.trim() !== '')
+    .map((p) => ({
+      componentName: p.componentName.trim(),
+      actorMembership: p.actorMembership,
+      ...(p.label.trim() ? { label: p.label.trim() } : {}),
+      ...(p.finishKey.trim() ? { finishKey: p.finishKey.trim() } : {}),
+    }));
+  if (rows.length === 0) return {};
+  const parts: HardwareDesignPart[] = rows;
+  validateHardwareDesignParts(parts);
+  return { designParts: parts };
 }
 
 type HardwareSlice = Pick<
