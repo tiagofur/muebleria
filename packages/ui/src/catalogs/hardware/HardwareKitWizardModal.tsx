@@ -18,7 +18,13 @@ import type {
   HardwareKitPlan,
   HardwareKitResult,
 } from '@granete/domain';
-import { DEFAULT_FIXED_OFFSET_MM, DEFAULT_MOVING_OFFSET_MM, HARDWARE_KIT_SLOTS, planHardwareKit } from '@granete/domain';
+import {
+  DEFAULT_FIXED_OFFSET_MM,
+  DEFAULT_MOVING_OFFSET_MM,
+  HARDWARE_KIT_TEMPLATES,
+  hardwareKitTemplateById,
+  planHardwareKit,
+} from '@granete/domain';
 import { Modal } from '../../common';
 import { uploadHardwareAssetBinding, type HardwareAssetService } from '@granete/storage';
 
@@ -32,13 +38,6 @@ export interface HardwareKitWizardModalProps {
 }
 
 type WizardPhase = 'form' | 'running' | 'done';
-
-const SLOT_TESTID: Record<string, string> = {
-  fixed_left: 'fixed-left',
-  fixed_right: 'fixed-right',
-  moving_left: 'moving-left',
-  moving_right: 'moving-right',
-};
 
 function parseNumber(value: string): number {
   const n = Number(value.trim());
@@ -62,12 +61,9 @@ export function HardwareKitWizardModal({
   const [fixedOffset, setFixedOffset] = useState(String(DEFAULT_FIXED_OFFSET_MM));
   const [movingOffset, setMovingOffset] = useState(String(DEFAULT_MOVING_OFFSET_MM));
   const [agregadoCode, setAgregadoCode] = useState('');
-  const [files, setFiles] = useState<Record<string, File | null>>({
-    fixed_left: null,
-    fixed_right: null,
-    moving_left: null,
-    moving_right: null,
-  });
+  const [templateId, setTemplateId] = useState('drawer-slides');
+  const template = useMemo(() => hardwareKitTemplateById(templateId), [templateId]);
+  const [files, setFiles] = useState<Record<string, File | null>>({});
   const [phase, setPhase] = useState<WizardPhase>('form');
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -105,15 +101,18 @@ export function HardwareKitWizardModal({
           fixedOffsetMm: fo,
           movingOffsetMm: mo,
           ...(agregadoCode.trim() ? { agregadoCode } : {}),
+          templateId,
         },
         existing,
       );
     } catch {
       return null;
     }
-  }, [code, name, price, width, height, depth, fixedOffset, movingOffset, agregadoCode, existing]);
+  }, [code, name, price, width, height, depth, fixedOffset, movingOffset, agregadoCode, templateId, existing]);
 
   const running = phase === 'running';
+
+  const slotTestId = (slot: string): string => slot.replaceAll('_', '-');
 
   const resetAfterDone = () => {
     setCode('');
@@ -125,7 +124,8 @@ export function HardwareKitWizardModal({
     setFixedOffset(String(DEFAULT_FIXED_OFFSET_MM));
     setMovingOffset(String(DEFAULT_MOVING_OFFSET_MM));
     setAgregadoCode('');
-    setFiles({ fixed_left: null, fixed_right: null, moving_left: null, moving_right: null });
+    setTemplateId('drawer-slides');
+    setFiles({});
     for (const input of Object.values(filesResetRef.current)) {
       if (input) input.value = '';
     }
@@ -166,6 +166,7 @@ export function HardwareKitWizardModal({
       fixedOffsetMm: fo,
       movingOffsetMm: mo,
       ...(agregadoCode.trim() ? { agregadoCode } : {}),
+      templateId,
     };
     try {
       // Strict validation happens inside the planner; surface its message.
@@ -187,10 +188,13 @@ export function HardwareKitWizardModal({
       setPhase('running');
       const designs: NonNullable<HardwareKitCreateRequest['designs']> = {};
       for (const design of withFiles) {
-        const slot = HARDWARE_KIT_SLOTS.find((s) => s.slot === design.slot)!;
-        setProgress(`Subiendo diseño: ${slot.labelEs}…`);
+        const slotLabel =
+          template.slots.find((s) => s.slot === design.slot)?.labelEs ?? design.slot;
+        setProgress(`Subiendo diseño: ${slotLabel}…`);
+        const file = files[design.slot];
+        if (!file) continue;
         designs[design.slot] = await uploadHardwareAssetBinding(assetService!, {
-          file: files[design.slot]!,
+          file,
           displayName: design.name,
         });
       }
@@ -251,8 +255,8 @@ export function HardwareKitWizardModal({
       {phase === 'done' && result ? (
         <div data-testid="hardware-kit-wizard-result" className="catalog-form">
           <p role="status">
-            Juego creado. Cajón <strong>{result.agregadoCode}</strong> con las 4 piezas
-            de diseño y su kit comercial.
+            Juego creado. Ensamble <strong>{result.agregadoCode}</strong> con las
+            piezas de diseño y su kit comercial.
           </p>
           {result.createdCodes.length > 0 ? (
             <p>
@@ -335,6 +339,25 @@ export function HardwareKitWizardModal({
             </div>
           </fieldset>
 
+          <fieldset className="catalog-form__section" data-testid="hardware-kit-wizard-template">
+            <legend className="catalog-form__section-title">Tipo de juego</legend>
+            <div className="catalog-form__field">
+              <label htmlFor="kit-template">Plantilla</label>
+              <select
+                id="kit-template"
+                value={templateId}
+                onChange={(e) => setTemplateId(e.target.value)}
+                data-testid="hardware-kit-wizard-template-select"
+              >
+                {HARDWARE_KIT_TEMPLATES.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.labelEs}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </fieldset>
+
           <fieldset className="catalog-form__section" data-testid="hardware-kit-wizard-dims">
             <legend className="catalog-form__section-title">Cajón de referencia</legend>
             <div className="catalog-form__field">
@@ -367,6 +390,8 @@ export function HardwareKitWizardModal({
                 data-testid="hardware-kit-wizard-depth"
               />
             </div>
+            {templateId === 'drawer-slides' ? (
+            <>
             <div className="catalog-form__field">
               <label htmlFor="kit-fixed-offset">Separación de guías fijas (mm)</label>
               <input
@@ -387,6 +412,8 @@ export function HardwareKitWizardModal({
                 data-testid="hardware-kit-wizard-moving-offset"
               />
             </div>
+            </>
+            ) : null}
           </fieldset>
 
           <fieldset className="catalog-form__section" data-testid="hardware-kit-wizard-designs">
@@ -396,18 +423,18 @@ export function HardwareKitWizardModal({
               representación genérica de corredera y podés subir el diseño después
               desde su ficha.
             </p>
-            {HARDWARE_KIT_SLOTS.map((slot) => {
+            {template.slots.map((slot) => {
               const planSlot = preview?.designs.find((d) => d.slot === slot.slot);
               return (
                 <div className="catalog-form__field" key={slot.slot}>
-                  <label htmlFor={`kit-file-${SLOT_TESTID[slot.slot]}`}>{slot.labelEs}</label>
+                  <label htmlFor={`kit-file-${slotTestId(slot.slot)}`}>{slot.labelEs}</label>
                   <input
-                    id={`kit-file-${SLOT_TESTID[slot.slot]}`}
+                    id={`kit-file-${slotTestId(slot.slot)}`}
                     type="file"
                     accept=".skp,.glb"
                     onChange={onFileChange(slot.slot)}
                     disabled={planSlot?.exists}
-                    data-testid={`hardware-kit-wizard-file-${SLOT_TESTID[slot.slot]}`}
+                    data-testid={`hardware-kit-wizard-file-${slotTestId(slot.slot)}`}
                     ref={(el) => {
                       filesResetRef.current[slot.slot] = el;
                     }}

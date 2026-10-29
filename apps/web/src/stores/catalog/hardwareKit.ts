@@ -15,7 +15,7 @@ import type {
   HardwareKitCreateRequest,
   HardwareKitResult,
 } from '@granete/domain';
-import { HARDWARE_KIT_SLOTS, planHardwareKit } from '@granete/domain';
+import { planHardwareKit } from '@granete/domain';
 
 import type { CatalogStoreCtx } from './shared';
 
@@ -123,23 +123,44 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           height: plan.agregado.heightMm,
           depth: plan.agregado.depthMm,
         },
-        presentationMotion: {
-          kind: 'translate',
-          axis: { x: 0, y: 1, z: 0 },
-          distanceMm: Math.round(plan.agregado.depthMm * 0.8),
-        },
+        // Motion por plantilla (#1422 slice 2): translate (cajón), rotate
+        // (bisagra/puerta) o none (jaladera).
+        ...(plan.agregado.motion === 'translate'
+          ? {
+              presentationMotion: {
+                kind: 'translate',
+                axis: { x: 0, y: 1, z: 0 },
+                distanceMm: Math.round(plan.agregado.depthMm * 0.8),
+              } as Agregado['presentationMotion'],
+            }
+          : plan.agregado.motion === 'rotate_left'
+          ? {
+              presentationMotion: {
+                kind: 'rotate',
+                pivot: 'left',
+                axis: { x: 0, y: 0, z: 1 },
+                openAngleDeg: 110,
+              } as Agregado['presentationMotion'],
+            }
+          : plan.agregado.motion === 'rotate_right'
+          ? {
+              presentationMotion: {
+                kind: 'rotate',
+                pivot: 'right',
+                axis: { x: 0, y: 0, z: -1 },
+                openAngleDeg: 110,
+              } as Agregado['presentationMotion'],
+            }
+          : {}),
         commercialKitHardwareId: idFor(plan.kit.code),
-        rigidMembers: plan.designs.map((design) => {
-          const slot = HARDWARE_KIT_SLOTS.find((s) => s.slot === design.slot)!;
-          return {
-            memberId: slot.memberId,
-            role: design.role,
-            source: { kind: 'fixed', fixed: { hardwareId: idFor(design.code) } },
-            placement: design.placement,
-            bomRole: 'included_in_kit',
-            actorMembership: design.membership,
-          };
-        }),
+        rigidMembers: plan.designs.map((design) => ({
+          memberId: design.memberId,
+          role: design.role,
+          source: { kind: 'fixed', fixed: { hardwareId: idFor(design.code) } },
+          placement: design.placement,
+          bomRole: 'included_in_kit',
+          actorMembership: design.membership,
+        })),
       };
 
       await ctx.saveAndToast(

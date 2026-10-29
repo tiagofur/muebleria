@@ -67,3 +67,14 @@ link al crear; RE-ejecutar el asistente sobre un juego legacy (p. ej.
 
 `Refs #1422` + `Delivery: partial` (slice 2 plantillas dinámicas queda en
 la issue; guard de hardwareLines sobre partes = open question).
+
+## Slice 2 en rama apilada (feat/1422-kit-templates)
+
+Plantillas de juego declaradas en el dominio (cajón/bisagra/jaladera con
+slots, membresías, anclas y motion por plantilla); el asistente pregunta
+«Tipo de juego» y arma slots/preview/agregado desde la plantilla
+(bisagra → agregado PUERTA con motion rotate y memberships
+body/actor:door). Offsets legacy del input solo en el template del cajón.
+Tests: dominio 17/17, wizard 7/7, gate bisagra+grouping+wizard 3 passed
+(assertion del spec de bisagra corregida: el link apunta al id GENERADO
+del kit, no a una constante).
