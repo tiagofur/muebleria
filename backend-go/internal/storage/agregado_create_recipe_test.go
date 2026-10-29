@@ -15,7 +15,10 @@ func TestCreateAgregado_PersistsRecipeAsRevisionOneWhenPresent(t *testing.T) {
 	store, _ := migratedConnectStore(t)
 	actor := connectStoreInitialActor
 	id := "create-recipe-agregado"
+	// Cleanup LIFO: la revisión (FK ON DELETE RESTRICT) sale ANTES que la
+	// fila — crear con receta ahora escribe revisión 1 (#1416).
 	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM agregados WHERE id = $1`, id) })
+	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM agregado_revisions WHERE agregado_id = $1`, id) })
 
 	kitID := "kit-create-recipe"
 	in := &domain.Agregado{
