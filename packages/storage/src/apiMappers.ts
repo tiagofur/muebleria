@@ -143,9 +143,11 @@ import {
 
 import {
   isHardwareFinishId,
+  isValidActorMembership,
   normalizeHardwarePartFinishes,
   normalizeMachiningProfile,
   resolveWorkshopSettings,
+  type HardwareDesignPart,
   type HardwareFinishId,
 } from '@granete/domain';
 
@@ -434,6 +436,8 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     visual_asset: h.visualAsset
       ? { assetId: h.visualAsset.assetId, assetRevisionId: h.visualAsset.assetRevisionId }
       : null,
+    // Design parts (#1417); null = monolithic hardware (legacy).
+    design_parts: h.designParts ? h.designParts.map((p) => ({ ...p })) : null,
   };
 }
 
@@ -490,6 +494,8 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     // Versioned 3D asset binding (#667 M1) — identifiers plus the
     // server-resolved facts; malformed shapes never enter the catalog.
     ...normalizeVisualAsset(raw.visual_asset ?? raw.visualAsset),
+    // Design parts (#1417) — format-validated; malformed shapes never enter.
+    ...(normalizeHardwareDesignParts(raw.design_parts ?? raw.designParts)),
   };
 }
 
@@ -534,6 +540,34 @@ function normalizeVisualAsset(
   };
 }
 
+
+/**
+ * Design parts (#1417): keeps only well-formed parts (non-empty name, valid
+ * #1376 membership); a malformed array is dropped entirely so garbage never
+ * enters the catalog state.
+ */
+function normalizeHardwareDesignParts(
+  raw: unknown,
+): Pick<Hardware, 'designParts'> | {} {
+  if (!Array.isArray(raw)) return {};
+  const parts: HardwareDesignPart[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') return {};
+    const value = item as Record<string, unknown>;
+    const componentName = str(value.componentName ?? value.component_name);
+    const actorMembership = str(value.actorMembership ?? value.actor_membership);
+    if (!componentName || !isValidActorMembership(actorMembership)) return {};
+    const label = str(value.label);
+    const finishKey = str(value.finishKey ?? value.finish_key);
+    parts.push({
+      componentName,
+      actorMembership,
+      ...(label ? { label } : {}),
+      ...(finishKey ? { finishKey } : {}),
+    });
+  }
+  return parts.length > 0 ? { designParts: parts } : {};
+}
 /**
  * MountFrame of the bound revision (#668 server-resolved fact): origin mm +
  * orthonormal basis triples. Loose shape check only — the domain revalidates

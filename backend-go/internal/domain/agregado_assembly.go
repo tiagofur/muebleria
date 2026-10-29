@@ -155,6 +155,7 @@ type ResolvedRigidMember struct {
 	SHA256          *string                 `json:"sha256,omitempty"`
 	MountFrame      *HardwareMountFrame     `json:"mountFrame,omitempty"`
 	ActorMembership string                  `json:"actorMembership,omitempty"` // #1376: "body" | "actor:<id>" | ""
+	DesignParts     []HardwareDesignPart    `json:"designParts,omitempty"`    // #1417: parts of the member's hardware (by SKP component name).
 }
 
 // AssemblyBOMItem is one purchasing row produced by the assembly.

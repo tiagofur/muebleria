@@ -27,6 +27,7 @@ import type {
   Structure,
 } from './types';
 import { calculateAgregadoSubspaceUnits, type SubspaceUnit } from './agregados';
+import type { HardwareDesignPart } from './hardwareDesignParts';
 import { evaluatePartFormula } from './engine/shared';
 import { materialBindingRole } from './materialRole';
 import { resolveBoardOptionChoiceId } from './plinth';
@@ -160,6 +161,12 @@ export interface ResolvedRigidMember {
   readonly glb?: MemberGlbRepresentation;
   /** #1376: Actor membership for presentation kinematics ('body' | 'actor:<id>' | undefined). */
   readonly actorMembership?: string;
+  /**
+   * #1417: design parts of this member's hardware (declared by SKP component
+   * name). Attached from the catalog at resolution time — the same flow as
+   * visual pins. Absent = monolithic member (legacy behavior).
+   */
+  readonly designParts?: readonly HardwareDesignPart[];
 }
 
 export interface AssemblyBOMItem {
@@ -1072,6 +1079,37 @@ export function attachVisualPins(
 }
 
 /**
+ * #1417: attaches the design parts declared on each member's hardware (by SKP
+ * component name). Same flow as visual pins: parts live on the catalog
+ * hardware and flow to the resolved member at resolution time; a monolithic
+ * hardware (no parts) leaves its members untouched.
+ */
+export function attachHardwareDesignParts(
+  assembly: ResolvedAssembly,
+  hardwareCatalog?: readonly Hardware[],
+): ResolvedAssembly {
+  if (!hardwareCatalog || hardwareCatalog.length === 0) {
+    return assembly;
+  }
+  const partsByHardware = new Map<string, readonly HardwareDesignPart[]>();
+  for (const hw of hardwareCatalog) {
+    if (hw.designParts && hw.designParts.length > 0) {
+      partsByHardware.set(hw.id, hw.designParts);
+    }
+  }
+  if (partsByHardware.size === 0) {
+    return assembly;
+  }
+  return {
+    ...assembly,
+    rigidMembers: assembly.rigidMembers.map((m) => {
+      const parts = partsByHardware.get(m.hardwareId);
+      return parts ? { ...m, designParts: parts } : m;
+    }),
+  };
+}
+
+/**
  * freezePublishedAssemblySnapshot explicitly produces an immutable published snapshot (R11, R13).
  * Enforces:
  * 1. Authoritative positive recipe revision (recipeRevision > 0).
@@ -1154,6 +1192,8 @@ export interface ProjectedRigidMember {
   readonly effectiveTransform: AssemblyMemberTransform;
   readonly renderStatus: AssemblyRenderStatus;
   readonly statusDiagnostic?: string;
+  /** #1417: design parts (SKP component name + membership + finish key). */
+  readonly designParts?: readonly HardwareDesignPart[];
   /**
    * Exact GLB representation to render for web consumers (#669). Absent means
    * the renderer must show the explicit procedural representation (partial
@@ -1235,6 +1275,7 @@ export function projectResolvedAssemblyFor3D(
       localTransform: m.localTransform,
       effectiveTransform,
       renderStatus,
+      ...(m.designParts ? { designParts: m.designParts } : {}),
       ...(m.glb ? { glb: m.glb } : {}),
     };
   });
@@ -1598,10 +1639,13 @@ export function resolveModuleAgregadoAssemblies(
           options.optionChoices,
         );
 
+        // #1417: attach design parts from the catalog hardware (same flow as pins).
+        const withParts = attachHardwareDesignParts(resolved, catalog.hardware);
+
         // Attach visual pins (R2)
         const pinned = attachVisualPins(
           {
-            ...resolved,
+            ...withParts,
             fabricatedComponents: enrichedFabricated,
           },
           visualLookup,

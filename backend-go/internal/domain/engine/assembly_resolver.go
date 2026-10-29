@@ -374,6 +374,38 @@ func AttachVisualPins(
 	return assemblyCopy, nil
 }
 
+// AttachHardwareDesignParts (#1417): enriches each resolved member with the
+// design parts declared on its catalog hardware (by SKP component name) —
+// the same flow as visual pins. A monolithic hardware (no parts) leaves its
+// members untouched; unknown hardware ids simply attach nothing.
+func AttachHardwareDesignParts(
+	assembly domain.ResolvedAssembly,
+	hardwareByID map[string]domain.Hardware,
+) domain.ResolvedAssembly {
+	if len(hardwareByID) == 0 {
+		return assembly
+	}
+	updated := make([]domain.ResolvedRigidMember, len(assembly.RigidMembers))
+	changed := false
+	for i, m := range assembly.RigidMembers {
+		updated[i] = m
+		hw, ok := hardwareByID[m.HardwareID]
+		if !ok || len(hw.DesignParts) == 0 {
+			continue
+		}
+		parts := make([]domain.HardwareDesignPart, len(hw.DesignParts))
+		copy(parts, hw.DesignParts)
+		updated[i].DesignParts = parts
+		changed = true
+	}
+	if !changed {
+		return assembly
+	}
+	assemblyCopy := assembly
+	assemblyCopy.RigidMembers = updated
+	return assemblyCopy
+}
+
 // FreezePublishedAssemblySnapshot explicitly produces an immutable published snapshot (R11, R13).
 // Enforces:
 // 1. Authoritative positive recipe revision (recipeRevision > 0).

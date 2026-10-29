@@ -52,6 +52,12 @@ export type HardwareDraft = {
    * Empty string or undefined = not specified / not rotational.
    */
   maxOpeningAngleDeg?: string;
+  /**
+   * #1417: partes internas del SKP pineado por nombre de componente. Cada
+   * fila es la forma de form (strings); la validación estricta corre en el
+   * dominio al armar el payload.
+   */
+  designParts?: { componentName: string; actorMembership: string; label: string; finishKey: string }[];
 };
 
 export const emptyPartFinishes = (): { body: string; base: string; grip: string } => ({
@@ -80,6 +86,7 @@ export const emptyDraft = (): HardwareDraft => ({
   machining: null,
   visualAsset: null,
   maxOpeningAngleDeg: '',
+  designParts: [],
 });
 
 export function toDraft(item: Hardware): HardwareDraft {
@@ -108,5 +115,11 @@ export function toDraft(item: Hardware): HardwareDraft {
     machining: item.machining ?? null,
     visualAsset: item.visualAsset ? { ...item.visualAsset } : null,
     maxOpeningAngleDeg: item.maxOpeningAngleDeg !== undefined ? String(item.maxOpeningAngleDeg) : '',
+    designParts: (item.designParts ?? []).map((p) => ({
+      componentName: p.componentName,
+      actorMembership: p.actorMembership,
+      label: p.label ?? '',
+      finishKey: p.finishKey ?? '',
+    })),
   };
 }

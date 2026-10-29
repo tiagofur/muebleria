@@ -137,9 +137,13 @@ type Hardware struct {
 	// representation, digest and validation state are resolved server-side.
 	// Nil = no exact model associated (generic procedural preview).
 	VisualAsset *HardwareVisualAssetBinding `json:"visual_asset,omitempty"`
-	Active      bool                        `json:"active"`
-	CreatedAt   time.Time                   `json:"created_at"`
-	UpdatedAt   time.Time                   `json:"updated_at"`
+	// DesignParts declares internal parts of the pinned SKP by component
+	// name (#1417): per-part presentation membership and optional finish
+	// key. Nil = monolithic hardware (legacy behavior, exactly as before).
+	DesignParts []HardwareDesignPart `json:"design_parts,omitempty"`
+	Active      bool                 `json:"active"`
+	CreatedAt   time.Time            `json:"created_at"`
+	UpdatedAt   time.Time            `json:"updated_at"`
 	// Version is server-owned optimistic-concurrency state (#443/#448):
 	// writes carry the expected version as If-Match and the server bumps it.
 	Version int64 `json:"version"`

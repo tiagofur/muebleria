@@ -1715,6 +1715,9 @@ export * from "./recipeChangeDiff";
 // Hardware kit wizard plan (#1416)
 export * from "./hardwareKit";
 
+// Hardware design parts (#1417)
+export * from "./hardwareDesignParts";
+
 // GLB representation contract (#669)
 export * from "./glbRepresentation";
 
