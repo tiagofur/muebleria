@@ -173,7 +173,7 @@ export function HardwareKitWizardModal({
       const plan = planHardwareKit(input, existing);
       if (plan.blockedCode) {
         setError(
-          `Ya existe un agregado con el código «${plan.blockedCode}». Cambiá el código del cajón para continuar.`,
+          `Ya existe un ensamble con el código «${plan.blockedCode}». Cambiá el código del ensamble para continuar.`,
         );
         return;
       }
@@ -199,7 +199,7 @@ export function HardwareKitWizardModal({
         });
       }
 
-      setProgress('Creando el juego y el cajón…');
+      setProgress('Creando el juego y su ensamble…');
       const created = await onCreateKit({ input, designs });
       setResult(created);
       setPhase('done');
@@ -327,12 +327,18 @@ export function HardwareKitWizardModal({
               />
             </div>
             <div className="catalog-form__field">
-              <label htmlFor="kit-agregado-code">Código del cajón (opcional)</label>
+              <label htmlFor="kit-agregado-code">Código del ensamble (opcional)</label>
               <input
                 id="kit-agregado-code"
                 value={agregadoCode}
                 onChange={(e) => setAgregadoCode(e.target.value)}
-                placeholder={code.trim() ? `${code.trim()}-CAJON` : 'Se deriva del código del juego'}
+                placeholder={
+                  code.trim()
+                    ? template.agregadoLabelEs === 'Cajón'
+                      ? `${code.trim()}-CAJON`
+                      : `${code.trim()}-${template.agregadoLabelEs.toUpperCase()}`
+                    : 'Se deriva del tipo de juego'
+                }
                 autoComplete="off"
                 data-testid="hardware-kit-wizard-agregado-code"
               />
@@ -359,7 +365,7 @@ export function HardwareKitWizardModal({
           </fieldset>
 
           <fieldset className="catalog-form__section" data-testid="hardware-kit-wizard-dims">
-            <legend className="catalog-form__section-title">Cajón de referencia</legend>
+            <legend className="catalog-form__section-title">Ensamble de referencia</legend>
             <div className="catalog-form__field">
               <label htmlFor="kit-width">Ancho (mm)</label>
               <input
@@ -420,8 +426,8 @@ export function HardwareKitWizardModal({
             <legend className="catalog-form__section-title">Diseños 3D (opcionales)</legend>
             <p className="catalog-form__hint">
               Un archivo por pieza (.skp). Las piezas sin diseño se ven con la
-              representación genérica de corredera y podés subir el diseño después
-              desde su ficha.
+              representación genérica y podés subir el diseño después desde su
+              ficha.
             </p>
             {template.slots.map((slot) => {
               const planSlot = preview?.designs.find((d) => d.slot === slot.slot);
@@ -459,14 +465,18 @@ export function HardwareKitWizardModal({
               <ul>
                 <li>
                   Kit <strong>{preview.kit.code}</strong> (1 juego
-                  {preview.kit.exists ? ' — ya existe, se reutiliza' : ''}) + cajón{' '}
-                  <strong>{preview.agregado.code}</strong> con apertura de cajón y 4
-                  piezas: {preview.designs.map((d) => d.code).join(', ')}.
+                  {preview.kit.exists ? ' — ya existe, se reutiliza' : ''}) +{' '}
+                  {template.agregadoLabelEs.toLowerCase()}{' '}
+                  <strong>{preview.agregado.code}</strong> con{' '}
+                  {preview.designs.length}{' '}
+                  {preview.designs.length === 1 ? 'pieza' : 'piezas'}:{' '}
+                  {preview.designs.map((d) => d.code).join(', ')}.
                 </li>
               </ul>
               {preview.blockedCode ? (
                 <p className="catalog-form__error" role="alert">
-                  El cajón «{preview.blockedCode}» ya existe: cambiale el código arriba.
+                  El ensamble «{preview.blockedCode}» ya existe: cambiale el código
+                  arriba.
                 </p>
               ) : null}
             </div>

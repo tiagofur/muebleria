@@ -41,7 +41,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       });
       if (plan.blockedCode) {
         throw new Error(
-          `Ya existe un agregado con el código «${plan.blockedCode}». Cambiá el código del cajón para continuar.`,
+          `Ya existe un ensamble con el código «${plan.blockedCode}». Cambiá el código del ensamble para continuar.`,
         );
       }
 
