@@ -9,14 +9,17 @@ import (
 
 // #1417: design parts round-trip through the JSONB column; NULL (legacy
 // monolithic hardware) reads back as nil.
+//
+// SIN id explícito: hardwares.id es UUID y el server lo genera; un id no-
+// UUID en el fixture es rechazado por CI (DB fresca) aunque una DB local
+// con drift lo acepte.
 func TestHardwareDesignPartsRoundtrip(t *testing.T) {
 	store, _ := migratedConnectStore(t)
 	actor := connectStoreInitialActor
-	id := uniqueID("hw-parts")
-	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE id = $1`, id) })
+	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code = 'HW-PARTS'`) })
 
 	in := &domain.Hardware{
-		ID: id, Code: "HW-PARTS", Name: "Corredera con partes",
+		Code: "HW-PARTS", Name: "Corredera con partes",
 		Unit: "piece", CostPerUnit: 0, Active: true,
 		DesignParts: []domain.HardwareDesignPart{
 			{ComponentName: "riel_fijo", ActorMembership: "body", Label: "Riel fijo"},
@@ -26,9 +29,12 @@ func TestHardwareDesignPartsRoundtrip(t *testing.T) {
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
 		return store.CreateHardware(txCtx, in)
 	})
+	if in.ID == "" {
+		t.Fatal("server must assign the hardware id on create")
+	}
 
 	got := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
-		return store.GetHardwareByID(txCtx, id)
+		return store.GetHardwareByID(txCtx, in.ID)
 	})
 	if len(got.DesignParts) != 2 {
 		t.Fatalf("expected 2 design parts after roundtrip, got %+v", got.DesignParts)
@@ -46,10 +52,10 @@ func TestHardwareDesignPartsRoundtrip(t *testing.T) {
 		{ComponentName: "unico", ActorMembership: "actor:cajon"},
 	}
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
-		return store.UpdateHardware(txCtx, id, got.Version, in)
+		return store.UpdateHardware(txCtx, in.ID, got.Version, in)
 	})
 	updated := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
-		return store.GetHardwareByID(txCtx, id)
+		return store.GetHardwareByID(txCtx, in.ID)
 	})
 	if len(updated.DesignParts) != 1 || updated.DesignParts[0].ComponentName != "unico" {
 		t.Fatalf("update did not replace parts: %+v", updated.DesignParts)
@@ -59,15 +65,14 @@ func TestHardwareDesignPartsRoundtrip(t *testing.T) {
 func TestHardwareDesignPartsLegacyNull(t *testing.T) {
 	store, _ := migratedConnectStore(t)
 	actor := connectStoreInitialActor
-	id := uniqueID("hw-mono")
-	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE id = $1`, id) })
+	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code = 'HW-MONO-LINK'`) })
 
-	in := &domain.Hardware{ID: id, Code: "HW-MONO", Name: "Monolítica", Unit: "piece", CostPerUnit: 0, Active: true}
+	in := &domain.Hardware{Code: "HW-MONO-LINK", Name: "Monolítica", Unit: "piece", CostPerUnit: 0, Active: true}
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
 		return store.CreateHardware(txCtx, in)
 	})
 	got := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
-		return store.GetHardwareByID(txCtx, id)
+		return store.GetHardwareByID(txCtx, in.ID)
 	})
 	if got.DesignParts != nil {
 		t.Fatalf("legacy hardware must read back with nil parts, got %+v", got.DesignParts)
