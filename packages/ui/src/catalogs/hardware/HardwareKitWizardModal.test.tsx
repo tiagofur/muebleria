@@ -9,7 +9,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Hardware, HardwareKitResult } from '@granete/domain';
+import type { Hardware, HardwareKitCreateRequest, HardwareKitResult } from '@granete/domain';
 
 import { HardwareKitWizardModal } from './HardwareKitWizardModal';
 
@@ -35,12 +35,16 @@ const okResult: HardwareKitResult = {
   agregadoId: 'agr-1',
 };
 
+type CreateKitMock = ReturnType<
+  typeof vi.fn<(req: HardwareKitCreateRequest) => Promise<HardwareKitResult>>
+>;
+
 function setup(opts?: {
   readonly hardware?: readonly Hardware[];
   readonly agregadoCodes?: readonly string[];
-  readonly onCreateKit?: ReturnType<typeof vi.fn>;
+  readonly onCreateKit?: CreateKitMock;
 }) {
-  const onCreateKit = opts?.onCreateKit ?? vi.fn(async () => okResult);
+  const onCreateKit: CreateKitMock = opts?.onCreateKit ?? vi.fn(async () => okResult);
   render(
     <HardwareKitWizardModal
       open
@@ -100,7 +104,7 @@ describe('HardwareKitWizardModal (#1416)', () => {
 
   it('submit feliz: llama al store con el input del plan y muestra el resumen', async () => {
     const user = userEvent.setup();
-    const onCreateKit = vi.fn(async () => okResult);
+    const onCreateKit = vi.fn(async (_req: HardwareKitCreateRequest) => okResult);
     setup({ onCreateKit });
     await fillBasics(user);
 
@@ -110,10 +114,9 @@ describe('HardwareKitWizardModal (#1416)', () => {
       expect(screen.getByTestId('hardware-kit-wizard-result')).toBeTruthy();
     });
     expect(onCreateKit).toHaveBeenCalledTimes(1);
-    const req = onCreateKit.mock.calls[0][0] as {
-      input: { code: string; kitCostPerUnit: number; widthMm: number; depthMm: number };
-      designs: Record<string, unknown>;
-    };
+    const req = onCreateKit.mock.calls[0]?.[0];
+    expect(req).toBeDefined();
+    if (!req) return;
     expect(req.input).toMatchObject({
       code: 'HER-NEW-1',
       kitCostPerUnit: 380,
@@ -130,7 +133,7 @@ describe('HardwareKitWizardModal (#1416)', () => {
 
   it('input inválido: error visible y SIN llamada al store', async () => {
     const user = userEvent.setup();
-    const onCreateKit = vi.fn(async () => okResult);
+    const onCreateKit = vi.fn(async (_req: HardwareKitCreateRequest) => okResult);
     setup({ onCreateKit });
     await user.type(screen.getByTestId('hardware-kit-wizard-code'), 'HER-X');
     await user.type(screen.getByTestId('hardware-kit-wizard-name'), 'X');
@@ -149,7 +152,7 @@ describe('HardwareKitWizardModal (#1416)', () => {
 
   it('fallo del store: error visible, fase form y sin resumen', async () => {
     const user = userEvent.setup();
-    const onCreateKit = vi.fn(async () => {
+    const onCreateKit = vi.fn(async (_req: HardwareKitCreateRequest) => {
       throw new Error('Ya existe un agregado con el código «X».');
     });
     setup({ onCreateKit });
