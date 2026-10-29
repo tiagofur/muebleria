@@ -275,6 +275,12 @@ export interface Hardware {
    */
   readonly designParts?: readonly HardwareDesignPart[];
   /**
+   * #1422: when set, this hardware is a DESIGN PART of the referenced kit
+   * (the commercial set sold as one). Server-validated: the kit must exist
+   * in the same organization, never be self, and never be a part itself.
+   */
+  readonly kitHardwareId?: string;
+  /**
    * Maximum physical opening angle in degrees for kinematic hardware
    * (e.g. hinges: 110, 95, 155, 170; lift flaps: 107). Omitted for
    * non-rotational hardware (slides, pulls, legs).

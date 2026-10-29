@@ -7,6 +7,7 @@ import {
   defaultAgregadoCode,
   planHardwareKit,
   validateHardwareKitInput,
+  validateHardwareKitLink,
   type HardwareKitPlanInput,
 } from './hardwareKit';
 
@@ -136,5 +137,29 @@ describe('validateHardwareKitInput (#1416)', () => {
 
   it('acepta la entrada base sin lanzar', () => {
     expect(() => validateHardwareKitInput(baseInput)).not.toThrow();
+  });
+});
+
+describe('validateHardwareKitLink (#1422 slice 1)', () => {
+  const catalog = [
+    { id: 'kit-1', code: 'KIT-1', kitHardwareId: undefined },
+    { id: 'parte-1', code: 'KIT-1-FIJ-I', kitHardwareId: 'kit-1' },
+    { id: 'libre', code: 'LIBRE', kitHardwareId: undefined },
+  ];
+
+  it('acepta un link válido a un kit existente que no es parte', () => {
+    expect(() => validateHardwareKitLink('nueva-parte', 'kit-1', catalog)).not.toThrow();
+  });
+
+  it('rechaza kit inexistente, self y kit-que-es-parte', () => {
+    expect(() => validateHardwareKitLink('nueva', 'desconocido', catalog)).toThrow(
+      'no existe en este taller',
+    );
+    expect(() => validateHardwareKitLink('kit-1', 'kit-1', catalog)).toThrow(
+      'parte de sí mismo',
+    );
+    expect(() => validateHardwareKitLink('nueva', 'parte-1', catalog)).toThrow(
+      'no puede ser parte de otro',
+    );
   });
 });
