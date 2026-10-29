@@ -63,6 +63,7 @@ test.describe.serial('#1046 — bisagra por grupo: elección en proyecto con dem
       getAccessToken: () => owner.token,
     });
     const catalog = await repository.getCatalog();
+    const existingBisagra = (catalog.optionGroups ?? []).find((g) => g.code === 'BISAGRA');
     await repository.saveCatalog({
       ...catalog,
       hardware: [
@@ -71,9 +72,11 @@ test.describe.serial('#1046 — bisagra por grupo: elección en proyecto con dem
         { id: HWG_ECO, code: 'HWG-ECO', name: 'Bisagra económica', unit: 'piece', costPerUnit: 12, active: true },
       ],
       optionGroups: [
-        ...catalog.optionGroups.filter((g) => g.id !== HWG_GROUP),
+        // hinge-demand-bands siembra el mismo código en este shard (el reparto
+        // se re-balancea al añadir specs): reutilizar su id si ya existe.
+        ...catalog.optionGroups.filter((g) => g.id !== existingBisagra?.id),
         {
-          id: HWG_GROUP,
+          id: existingBisagra?.id ?? HWG_GROUP,
           code: 'BISAGRA',
           name: 'Bisagras',
           kind: 'hardware',
