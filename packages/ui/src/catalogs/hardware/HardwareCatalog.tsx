@@ -130,14 +130,35 @@ export function HardwareCatalog({
   const [readbackError, setReadbackError] = useState<string | null>(null);
   // #1416: kit wizard («Juego de herraje»).
   const [kitWizardOpen, setKitWizardOpen] = useState(false);
+  // #1422 slice 1: las partes de diseño viven «dentro» de su kit — ocultas
+  // por defecto; el chip del toolbar las muestra. Con búsqueda activa se
+  // muestran siempre (el search debe encontrarlas).
+  const [showDesignParts, setShowDesignParts] = useState(false);
+
+  const partsByKit = useMemo(() => {
+    const map = new Map<string, Hardware[]>();
+    for (const h of hardware) {
+      if (!h.kitHardwareId) continue;
+      const list = map.get(h.kitHardwareId) ?? [];
+      list.push(h);
+      map.set(h.kitHardwareId, list);
+    }
+    return map;
+  }, [hardware]);
+  const kitById = useMemo(() => new Map(hardware.map((h) => [h.id, h] as const)), [hardware]);
 
   const rows = useMemo(
     () =>
       filterCatalogItems(hardware, {
         status,
         query: debouncedSearch,
-      }),
-    [hardware, status, debouncedSearch],
+      }).filter(
+        (h) =>
+          showDesignParts ||
+          debouncedSearch.trim() !== '' ||
+          !h.kitHardwareId,
+      ),
+    [hardware, status, debouncedSearch, showDesignParts],
   );
 
   const closeModal = () => {
@@ -241,7 +262,32 @@ export function HardwareCatalog({
           <span className="catalog-row-detail__value--mono">{r.code}</span>
         ),
       },
-      { key: 'name', header: 'Nombre', render: (r) => r.name },
+      {
+        key: 'name',
+        header: 'Nombre',
+        render: (r) => {
+          const parts = partsByKit.get(r.id);
+          const kit = r.kitHardwareId ? kitById.get(r.kitHardwareId) : undefined;
+          return (
+            <span className="catalog-hw-name">
+              {r.name}
+              {parts && parts.length > 0 ? (
+                <span
+                  className="catalog-badge catalog-badge--kit"
+                  data-testid={`hardware-kit-parts-badge-${r.code}`}
+                >
+                  {parts.length} {parts.length === 1 ? 'parte' : 'partes'} de diseño
+                </span>
+              ) : null}
+              {kit ? (
+                <span className="catalog-badge catalog-badge--part">
+                  Parte de {kit.code}
+                </span>
+              ) : null}
+            </span>
+          );
+        },
+      },
       {
         key: 'unit',
         header: 'Unidad',
@@ -317,7 +363,23 @@ export function HardwareCatalog({
               aria-label="Buscar herrajes"
             />
           }
-          filters={<StatusChips value={status} onChange={setStatus} />}
+          filters={
+            <>
+              <StatusChips value={status} onChange={setStatus} />
+              <button
+                type="button"
+                className={
+                  showDesignParts
+                    ? 'ui-status-chips__chip is-selected'
+                    : 'ui-status-chips__chip'
+                }
+                onClick={() => setShowDesignParts((v) => !v)}
+                data-testid="hardware-toggle-design-parts"
+              >
+                Partes de diseño: {showDesignParts ? 'visibles' : 'ocultas'}
+              </button>
+            </>
+          }
         />
       ) : null}
 
@@ -354,6 +416,26 @@ export function HardwareCatalog({
             onRowClick={(row) => toggleSelectedId(row.id)}
             renderExpandedDetail={(row) => (
               <>
+                {(partsByKit.get(row.id)?.length ?? 0) > 0 ? (
+                  <div
+                    className="catalog-row-detail__field catalog-row-detail__field--full"
+                    data-testid={`hardware-kit-parts-${row.code}`}
+                  >
+                    <span className="catalog-row-detail__label">
+                      Partes de este juego
+                    </span>
+                    <ul className="catalog-kit-parts">
+                      {partsByKit.get(row.id)!.map((part) => (
+                        <li key={part.id}>
+                          <span className="catalog-row-detail__value catalog-row-detail__value--mono">
+                            {part.code}
+                          </span>{' '}
+                          — {part.name}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 <div className="catalog-row-detail__field">
                   <span className="catalog-row-detail__label">Foto</span>
                   <CatalogImage

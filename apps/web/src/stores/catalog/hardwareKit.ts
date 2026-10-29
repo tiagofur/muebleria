@@ -58,10 +58,14 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         idByCode.set(code, fresh);
         return fresh;
       };
+      // El id del kit se decide UNA vez antes de crear/vincular partes
+      // (#1422 slice 1): el link de cada parte apunta aquí.
+      const kitId = idFor(plan.kit.code);
 
       const createdCodes: string[] = [];
       const reusedCodes: string[] = [];
       const newHardware: Hardware[] = [];
+      const updatedHardware: Hardware[] = [];
 
       if (plan.kit.exists) {
         reusedCodes.push(plan.kit.code);
@@ -81,6 +85,16 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       for (const design of plan.designs) {
         if (design.exists) {
           reusedCodes.push(design.code);
+          // #1422 slice 1: un juego legacy (creado antes del link) se
+          // vincula al RE-ejecutar el asistente — misma mutación, sin UI
+          // extra. Solo si la parte aún no tiene kit.
+          const existingPart = hardwareList.find((h) => h.code === design.code);
+          if (existingPart && !existingPart.kitHardwareId) {
+            updatedHardware.push({
+              ...existingPart,
+              kitHardwareId: kitId,
+            });
+          }
           continue;
         }
         const binding = req.designs?.[design.slot];
@@ -93,6 +107,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           active: true,
           previewShape: 'slide',
           notes: DESIGN_NOTES(plan.kit.code),
+          kitHardwareId: kitId,
           ...(binding ? { visualAsset: binding } : {}),
         });
         createdCodes.push(design.code);
@@ -130,7 +145,10 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       await ctx.saveAndToast(
         (c) => ({
           ...c,
-          hardware: [...(c.hardware ?? []), ...newHardware],
+          hardware: [
+            ...(c.hardware ?? []).map((h) => updatedHardware.find((u) => u.id === h.id) ?? h),
+            ...newHardware,
+          ],
           agregados: [...(c.agregados ?? []), agregado],
         }),
         `✓ Juego «${plan.kit.code}» creado`,

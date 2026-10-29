@@ -1183,3 +1183,36 @@
   margin: 0;
   font-size: var(--text-xs);
 }
+
+/* #1422 slice 1: kit↔partes de diseño en la lista de herrajes */
+.catalog-hw-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.catalog-badge--kit,
+.catalog-badge--part {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle, #e2e2e2);
+  background: var(--surface-subtle, #f6f6f4);
+  color: var(--text-secondary, #555);
+  white-space: nowrap;
+}
+
+.catalog-badge--kit {
+  background: var(--surface-accent-subtle, #eef2ee);
+  border-color: var(--border-accent-subtle, #cfe0cf);
+  color: var(--text-accent, #2f5e2f);
+}
+
+.catalog-kit-parts {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
