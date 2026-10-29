@@ -115,19 +115,18 @@ test.describe.serial('Herrajes — agrupación kit↔partes (#1422 slice 1)', ()
       expect(part?.kit_hardware_id, code).toBe(KIT_ID);
     }
 
-    // Lista: partes OCULTAS por defecto (1 sola fila del juego, con badge);
-    // el chip las muestra; el search las encuentra siempre.
+    // Lista SIN búsqueda: las partes están OCULTAS por defecto — el kit es
+    // una fila con badge y su código de parte NO aparece.
     await page.goto('/hardware');
     await page.getByTestId('hardware-toggle-design-parts').waitFor({ state: 'visible', timeout: 20_000 });
-    await page.getByLabel('Buscar herrajes').fill(KIT_CODE);
     await expect(page.getByTestId(`hardware-kit-parts-badge-${KIT_CODE}`)).toContainText('4 partes');
     await expect(page.getByText(`${KIT_CODE}-FIJ-I`)).toHaveCount(0);
 
+    // El chip las muestra (sin búsqueda).
     await page.getByTestId('hardware-toggle-design-parts').click();
-    await expect(page.getByText(`${KIT_CODE}-FIJ-I`)).toBeVisible();
+    await expect(page.getByText(`${KIT_CODE}-FIJ-I`).first()).toBeVisible();
 
-    // Buscar una parte directamente también la encuentra (con búsqueda activa
-    // las partes se muestran aunque el chip esté en ocultas).
+    // Y el search las encuentra aunque el chip vuelva a ocultas.
     await page.getByTestId('hardware-toggle-design-parts').click();
     await page.getByLabel('Buscar herrajes').fill(`${KIT_CODE}-MOV-D`);
     await expect(page.getByText(`${KIT_CODE}-MOV-D`).first()).toBeVisible();

@@ -435,12 +435,16 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 // validateHardwareKitLink (#1422 slice 1): the referenced kit must exist in
 // the same organization, never be self, and never itself be a part of
 // another kit (a kit is never a part).
-func (s *Server) validateHardwareKitLink(ctx context.Context, h *domain.Hardware) error {
+func (s *Server) validateHardwareKitLink(ctx context.Context, h *domain.Hardware, effectiveID string) error {
 	kitID := strings.TrimSpace(*h.KitHardwareID)
 	if kitID == "" {
+		// trimmed-empty del wire → sin link (evita 500 del cast a UUID).
+		h.KitHardwareID = nil
 		return nil
 	}
-	if kitID == h.ID {
+	// El id EFECTIVO es el del path en PUT (el body puede omitirlo) —
+	// sin esto, un PUT self-link con body sin id saltearía el check (#1423 B1).
+	if kitID == effectiveID || kitID == h.ID {
 		return fmt.Errorf("un herraje no puede ser parte de sí mismo")
 	}
 	kit, err := s.Store.GetHardwareByID(ctx, kitID)
@@ -484,7 +488,7 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if h.KitHardwareID != nil && *h.KitHardwareID != "" {
-			if err := s.validateHardwareKitLink(r.Context(), &h); err != nil {
+			if err := s.validateHardwareKitLink(r.Context(), &h, h.ID); err != nil {
 				respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
 					"code":    "HARDWARE_KIT_INVALID",
 					"message": err.Error(),
@@ -560,7 +564,7 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if h.KitHardwareID != nil && *h.KitHardwareID != "" {
-			if err := s.validateHardwareKitLink(r.Context(), &h); err != nil {
+			if err := s.validateHardwareKitLink(r.Context(), &h, id); err != nil {
 				respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
 					"code":    "HARDWARE_KIT_INVALID",
 					"message": err.Error(),
