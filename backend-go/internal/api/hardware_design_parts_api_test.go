@@ -51,3 +51,24 @@ func TestHandleHardwareByIDPutRejectsInvalidDesignParts(t *testing.T) {
 		t.Fatalf("body missing typed code: %s", rr.Body.String())
 	}
 }
+
+// #1422 slice 1: the kit link is validated fail-closed — a kit that does
+// not exist in the organization is a typed 422, nothing persists.
+func TestHandleHardwaresPostRejectsUnknownKitLink(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+
+	body := strings.NewReader(`{
+		"code":"PARTE-X","name":"Parte X","unit":"piece","cost_per_unit":0,"active":true,
+		"kit_hardware_id":"kit-inexistente"
+	}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/hardware", body), "admin", string(domain.RoleAdmin))
+	rr := httptest.NewRecorder()
+	srv.HandleHardwares(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "HARDWARE_KIT_INVALID") {
+		t.Fatalf("body missing typed code: %s", rr.Body.String())
+	}
+}

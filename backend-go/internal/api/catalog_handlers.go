@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -430,6 +432,27 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// validateHardwareKitLink (#1422 slice 1): the referenced kit must exist in
+// the same organization, never be self, and never itself be a part of
+// another kit (a kit is never a part).
+func (s *Server) validateHardwareKitLink(ctx context.Context, h *domain.Hardware) error {
+	kitID := strings.TrimSpace(*h.KitHardwareID)
+	if kitID == "" {
+		return nil
+	}
+	if kitID == h.ID {
+		return fmt.Errorf("un herraje no puede ser parte de sí mismo")
+	}
+	kit, err := s.Store.GetHardwareByID(ctx, kitID)
+	if err != nil || kit == nil {
+		return fmt.Errorf("el kit del herraje no existe en este taller")
+	}
+	if kit.KitHardwareID != nil && *kit.KitHardwareID != "" {
+		return fmt.Errorf("«%s» ya es parte de otro juego: un juego no puede ser parte de otro", kit.Code)
+	}
+	return nil
+}
+
 // --- HARDWARES ---
 
 func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
@@ -459,6 +482,15 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 				"message": err.Error(),
 			})
 			return
+		}
+		if h.KitHardwareID != nil && *h.KitHardwareID != "" {
+			if err := s.validateHardwareKitLink(r.Context(), &h); err != nil {
+				respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+					"code":    "HARDWARE_KIT_INVALID",
+					"message": err.Error(),
+				})
+				return
+			}
 		}
 		if err := domain.ValidateHardwareFinishIDs(h.AvailableFinishes); err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
@@ -526,6 +558,15 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 				"message": err.Error(),
 			})
 			return
+		}
+		if h.KitHardwareID != nil && *h.KitHardwareID != "" {
+			if err := s.validateHardwareKitLink(r.Context(), &h); err != nil {
+				respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+					"code":    "HARDWARE_KIT_INVALID",
+					"message": err.Error(),
+				})
+				return
+			}
 		}
 		if err := domain.ValidateHardwareFinishIDs(h.AvailableFinishes); err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())

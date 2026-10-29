@@ -438,6 +438,8 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
       : null,
     // Design parts (#1417); null = monolithic hardware (legacy).
     design_parts: h.designParts ? h.designParts.map((p) => ({ ...p })) : null,
+    // Kit link (#1422 slice 1); null = herraje independiente.
+    kit_hardware_id: h.kitHardwareId ?? null,
   };
 }
 
@@ -496,6 +498,8 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     ...normalizeVisualAsset(raw.visual_asset ?? raw.visualAsset),
     // Design parts (#1417) — format-validated; malformed shapes never enter.
     ...(normalizeHardwareDesignParts(raw.design_parts ?? raw.designParts)),
+    // Kit link (#1422 slice 1) — passthrough validado server-side.
+    ...(kitHardwareId(raw.kit_hardware_id ?? raw.kitHardwareId)),
   };
 }
 
@@ -4770,3 +4774,8 @@ export function machineOutputSelectionToApi(
 }
 
 export type MachineOutputSelectionsReadModelView = ReturnType<typeof machineOutputSelectionsReadModelFromApi>;
+
+function kitHardwareId(raw: unknown): Pick<Hardware, 'kitHardwareId'> | {} {
+  if (typeof raw !== 'string' || !raw.trim()) return {};
+  return { kitHardwareId: raw };
+}

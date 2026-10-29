@@ -18108,6 +18108,13 @@
             },
             "description": "#1417 internal parts of the pinned SKP design declared by SketchUp component name; null = monolithic hardware."
           },
+          "kit_hardware_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#1422 slice 1: when set, this hardware is a design part of the referenced kit hardware (same organization). Server-validated: kit exists, never self, kit never a part."
+          },
           "active": {
             "type": "boolean"
           },
@@ -18265,6 +18272,13 @@
               "description": "#1417 design part payload: componentName + actorMembership + optional finishKey/label."
             },
             "description": "#1417 internal parts of the pinned SKP design by component name; null = monolithic hardware."
+          },
+          "kit_hardware_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#1422 slice 1: design part of the referenced kit hardware."
           },
           "active": {
             "type": "boolean"

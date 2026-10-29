@@ -141,9 +141,13 @@ type Hardware struct {
 	// name (#1417): per-part presentation membership and optional finish
 	// key. Nil = monolithic hardware (legacy behavior, exactly as before).
 	DesignParts []HardwareDesignPart `json:"design_parts,omitempty"`
-	Active      bool                 `json:"active"`
-	CreatedAt   time.Time            `json:"created_at"`
-	UpdatedAt   time.Time            `json:"updated_at"`
+	// KitHardwareID (#1422 slice 1): when set, this hardware is a design
+	// part of the referenced kit (same organization). Server-validated:
+	// kit exists, never self, kit never itself a part.
+	KitHardwareID *string   `json:"kit_hardware_id,omitempty"`
+	Active        bool      `json:"active"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 	// Version is server-owned optimistic-concurrency state (#443/#448):
 	// writes carry the expected version as If-Match and the server bumps it.
 	Version int64 `json:"version"`

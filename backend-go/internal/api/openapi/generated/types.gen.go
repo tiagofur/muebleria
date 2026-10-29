@@ -2970,6 +2970,7 @@ type Hardware struct {
 	Machining           *map[string]any    `json:"machining,omitempty"`
 	VisualAsset         *map[string]any    `json:"visual_asset,omitempty"`
 	DesignParts         []map[string]any   `json:"design_parts,omitempty"`
+	KitHardwareID       *string            `json:"kit_hardware_id,omitempty"`
 	Active              bool               `json:"active"`
 	CreatedAt           *string            `json:"created_at,omitempty"`
 	UpdatedAt           *string            `json:"updated_at,omitempty"`
@@ -2998,6 +2999,7 @@ type HardwareWrite struct {
 	Machining           *map[string]any    `json:"machining,omitempty"`
 	VisualAsset         *map[string]string `json:"visual_asset,omitempty"`
 	DesignParts         []map[string]any   `json:"design_parts,omitempty"`
+	KitHardwareID       *string            `json:"kit_hardware_id,omitempty"`
 	Active              bool               `json:"active"`
 }
 
