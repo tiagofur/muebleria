@@ -137,6 +137,39 @@ func (s *PostgresStore) GetAgregadoByIDWithRecipe(ctx context.Context, id string
 }
 
 func (s *PostgresStore) CreateAgregado(ctx context.Context, a *domain.Agregado) error {
+	// #1416: when the POST carries a recipe, persist it as revision 1 in the
+	// SAME tenant transaction — before this, the API validated the recipe
+	// (422 AGREGADO_RECIPE_INVALID since #1412) and then CreateAgregado
+	// silently dropped it, so a created agregado was born blind. Legacy POSTs
+	// without a recipe keep the exact previous behavior (no revision row; the
+	// first PUT still allocates revision 1).
+	if agregadoPostHasRecipe(a) {
+		return s.createAgregadoWithRevision(ctx, a)
+	}
+	return s.insertAgregado(ctx, a)
+}
+
+func agregadoPostHasRecipe(a *domain.Agregado) bool {
+	return len(a.RigidMembers) > 0 ||
+		len(a.VariantSets) > 0 ||
+		len(a.CompatibilityRules) > 0 ||
+		(a.CommercialKitHardwareID != nil && *a.CommercialKitHardwareID != "")
+}
+
+func (s *PostgresStore) createAgregadoWithRevision(ctx context.Context, a *domain.Agregado) error {
+	return runInTenantTxErr(s, ctx, func(ctx context.Context) error {
+		if err := s.insertAgregado(ctx, a); err != nil {
+			return err
+		}
+		rev, err := s.CreateAgregadoRevision(ctx, a.ID, a.ToRecipePayload(), nil)
+		if err != nil {
+			return fmt.Errorf("create agregado revision: %w", err)
+		}
+		return s.SetAgregadoCurrentRevision(ctx, a.ID, rev.ID)
+	})
+}
+
+func (s *PostgresStore) insertAgregado(ctx context.Context, a *domain.Agregado) error {
 	componentsJSON, err := json.Marshal(a.Components)
 	if err != nil {
 		return fmt.Errorf("error marshaling agregado components: %w", err)
