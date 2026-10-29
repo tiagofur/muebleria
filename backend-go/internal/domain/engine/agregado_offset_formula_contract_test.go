@@ -3,6 +3,7 @@ package engine_test
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -42,5 +43,41 @@ func TestAgregadoOffsetFormulaSharedContract(t *testing.T) {
 		if gotX != c.ExpectedX {
 			t.Fatalf("width %g: expected x=%g, got %g", c.WidthMm, c.ExpectedX, gotX)
 		}
+	}
+}
+
+// #1418 review B3: evaluation errors at resolve time fail with an explicit
+// error (never a silent fallback to the numeric offset).
+func TestResolveAgregadoAssemblyOffsetFormulaEvaluationError(t *testing.T) {
+	formula := "PW/(PW-1)"
+	agregado := domain.Agregado{
+		ID:   "agr-formula-err",
+		Code: "FORMULA-ERR",
+		Name: "Fórmula con división por cero",
+		RigidMembers: []domain.AgregadoRigidMember{
+			{
+				MemberID: "m",
+				Role:     "r",
+				Source: domain.RigidMemberSource{
+					Kind:  domain.RigidMemberSourceFixed,
+					Fixed: &domain.FixedHardwareSource{HardwareID: "hw-x"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetFormula: &formula},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+				},
+				BOMRole: domain.BOMRoleNonPurchasing,
+			},
+		},
+	}
+	_, err := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{
+		WidthMm: 1, DepthMm: 500, HeightMm: 150,
+	})
+	if err == nil {
+		t.Fatal("expected resolve error for PW/(PW-1) at width 1 (division by zero), got nil")
+	}
+	if !strings.Contains(err.Error(), "offset formula") {
+		t.Fatalf("expected offset formula error context, got: %v", err)
 	}
 }

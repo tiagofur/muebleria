@@ -55,6 +55,23 @@ de una vez. TS y Go resuelven idéntico (paridad con fixture compartida).
   pesado de esta fase expuso — endurecido esperando el PUT explícitamente
   (patrón aplicado también al spec nuevo).
 
+## Ronda de corrección (review REQUEST_CHANGES → corregido)
+
+- **B1 paridad del redondeo**: el evaluador TS (engine/shared) hacía half
+  hacia +∞ y Go half away-from-zero — drift de 1mm en seminegativos
+  (−24.5 → −24 TS vs −25 Go). TS alineado al convenio Go; caso
+  discriminante 151 en la fixture (base 75.5 + −25 = 50.5). 2044/2044 sin
+  shifts (el legacy nunca producía seminegativos).
+- **B2 preset «riel centrado»**: ref center + PW/2 caía en el BORDE
+  derecho (w). Corregido a min + PW/2 (centro real, w/2) + test de
+  posición resuelta (200@400, 400@800) + readback del e2e actualizado.
+- **B3 validador Go sin tests**: tabla fail-closed (vacía, charset,
+  símbolos) + caso de error de resolución (PW/(PW-1) @ w=1) con contexto
+  «offset formula».
+- Evidencia de la ronda: domain 2046/2046 · ui agregados 86/86 · go
+  domain+engine OK · tsc ws 0 · gate agregado-offset-formula +
+  recipe-authoring 4 passed.
+
 ## Entrega
 
 `Refs #1418` + `Delivery: partial` (restante: navegación bidireccional

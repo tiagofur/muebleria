@@ -148,7 +148,7 @@ test.describe.serial('Agregado — presets y anclas con fórmula (#1418)', () =>
     expect(fMembers).toHaveLength(1);
     expect(fMembers[0]).toMatchObject({
       memberId: 'rail_center',
-      placement: { x: { ref: 'center', offsetMm: 0, offsetFormula: 'PW/2' } },
+      placement: { x: { ref: 'min', offsetMm: 0, offsetFormula: 'PW/2' } },
     });
 
     // La receta con fórmula es VÁLIDA en el servidor (el PUT validó fail-closed)
