@@ -10,7 +10,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Hardware } from '@granete/domain';
+import type { Hardware, HardwareKitCreateRequest, HardwareKitResult } from '@granete/domain';
 import {
   ValidationError,
   countMachiningOperations,
@@ -18,7 +18,7 @@ import {
   suggestDuplicateCode,
 } from '@granete/domain';
 import type { HardwareAssetService } from '@granete/storage';
-import { Copy, Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, PackagePlus, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   ConfirmDialog,
   CatalogImage,
@@ -40,6 +40,7 @@ import {
 } from '../catalogHelpers';
 import { ActiveBadge, CatalogTable, type CatalogColumn } from '../CatalogTable';
 import { HardwareFormModal } from './HardwareFormModal';
+import { HardwareKitWizardModal } from './HardwareKitWizardModal';
 import {
   UNIT_LABELS,
   type HardwareDraft,
@@ -68,6 +69,10 @@ export interface HardwareCatalogProps {
   readonly onReload?: () => Promise<void>;
   /** F042: upload catalog image. */
   readonly onUploadImage?: (file: File) => Promise<string>;
+  /** #1416: kit wizard — creates kit + design parts + drawer agregado. */
+  readonly onCreateKit?: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
+  /** #1416: agregado codes for the wizard's fail-closed collision check. */
+  readonly agregadoCodes?: readonly string[];
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 }
 
@@ -96,6 +101,8 @@ export function HardwareCatalog({
   assetService,
   onReload,
   onUploadImage,
+  onCreateKit,
+  agregadoCodes = [],
   resolveImageUrl = (u) => u,
 }: HardwareCatalogProps): ReactNode {
   const formId = useId();
@@ -121,6 +128,8 @@ export function HardwareCatalog({
     ? (hardware.find((h) => h.id === editingId) ?? null)
     : null;
   const [readbackError, setReadbackError] = useState<string | null>(null);
+  // #1416: kit wizard («Juego de herraje»).
+  const [kitWizardOpen, setKitWizardOpen] = useState(false);
 
   const rows = useMemo(
     () =>
@@ -266,6 +275,21 @@ export function HardwareCatalog({
         title="Herrajes"
         subtitle="Bisagras, correderas y demás del catálogo"
         icon={<Settings2 size={16} strokeWidth={1.5} />}
+        secondaryActions={
+          // #1416: kit wizard as a visible secondary action (K5: «Nuevo
+          // herraje» remains the single primary CTA).
+          canMutate && !isTrulyEmpty && onCreateKit ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setKitWizardOpen(true)}
+              data-testid="hardware-kit-wizard-open"
+            >
+              <PackagePlus size={16} strokeWidth={1.5} aria-hidden />
+              Juego de herraje
+            </button>
+          ) : undefined
+        }
         primaryAction={
           // K5 #1032: ONE creation CTA per state — on the truly-empty state
           // the EmptyState owns the action (same contract as Perfiles).
@@ -305,6 +329,9 @@ export function HardwareCatalog({
             description="Agregá el primer herraje del catálogo o cargá la semilla del workspace."
             actionLabel="Agregar herraje"
             onAction={startCreate}
+            secondaryActionLabel={onCreateKit ? 'Juego de herraje' : undefined}
+            onSecondaryAction={onCreateKit ? () => setKitWizardOpen(true) : undefined}
+            secondaryActionTestId="hardware-kit-wizard-open"
           />
         ) : isFilterEmpty ? (
           <EmptyState
@@ -486,6 +513,17 @@ export function HardwareCatalog({
         onSubmit={handleSubmit}
         onClose={closeModal}
       />
+
+      {onCreateKit ? (
+        <HardwareKitWizardModal
+          open={kitWizardOpen}
+          onClose={() => setKitWizardOpen(false)}
+          hardware={hardware}
+          agregadoCodes={agregadoCodes}
+          onCreateKit={onCreateKit}
+          assetService={assetService}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={confirmDeactivate != null}
