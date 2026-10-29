@@ -3,6 +3,7 @@
  */
 
 import type { HardwareFinishId } from './hardwareFinishes';
+import type { HardwareDesignPart } from './hardwareDesignParts';
 import type { HingeDemandPolicy } from './hingeDemand';
 import type { FurnitureParameter } from './smartFurnitureDomain';
 import type {
@@ -266,6 +267,13 @@ export interface Hardware {
    * Omitted = no exact model associated (generic procedural preview).
    */
   readonly visualAsset?: HardwareVisualAssetBinding;
+  /**
+   * Internal parts of the pinned SKP design declared by SketchUp component
+   * name (#1417): per-part presentation membership (fijo/móvil — #1376
+   * vocabulary) and optional finish key. Omitted = monolithic hardware
+   * (legacy behavior, exactly as before).
+   */
+  readonly designParts?: readonly HardwareDesignPart[];
   /**
    * Maximum physical opening angle in degrees for kinematic hardware
    * (e.g. hinges: 110, 95, 155, 170; lift flaps: 107). Omitted for

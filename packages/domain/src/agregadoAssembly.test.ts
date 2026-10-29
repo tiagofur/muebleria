@@ -13,6 +13,7 @@ import {
   applyAssetNormalization,
   applyAssetNormalizationVector,
   applyAssemblyBasis,
+  attachHardwareDesignParts,
   attachVisualPins,
   composeMemberTransform,
   createCatalogVisualAssetLookup,
@@ -1642,5 +1643,71 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
       expect(lookup('hw-bad-glb')?.glb).toBeUndefined();
       expect(lookup('hw-unknown')).toBeNull();
     });
+  });
+});
+
+describe('attachHardwareDesignParts (#1417)', () => {
+  const hwWithParts: Hardware = {
+    id: 'hw-parts-1417',
+    designParts: [
+      { componentName: 'riel_fijo', actorMembership: 'body', label: 'Riel fijo' },
+      { componentName: 'riel_movil', actorMembership: 'actor:drawer', finishKey: 'body' },
+    ],
+  } as Hardware;
+
+  it('adjunta las partes del herraje de catálogo a los miembros que lo referencian', () => {
+    const resolved = resolveAgregadoAssembly(
+      {
+        id: 'agr-parts',
+        rigidMembers: [
+          {
+            memberId: 'izq',
+            role: 'slide_left',
+            source: { kind: 'fixed', fixed: { hardwareId: 'hw-parts-1417' } },
+            placement: {
+              x: { ref: 'min', offsetMm: 0 },
+              y: { ref: 'min', offsetMm: 0 },
+              z: { ref: 'min', offsetMm: 0 },
+            },
+            bomRole: 'non_purchasing',
+          },
+        ],
+      },
+      { widthMm: 400, depthMm: 500, heightMm: 150 },
+    );
+    const out = attachHardwareDesignParts(resolved, [hwWithParts]);
+    expect(out.rigidMembers[0]?.designParts).toHaveLength(2);
+    expect(out.rigidMembers[0]?.designParts?.[1]).toMatchObject({
+      componentName: 'riel_movil',
+      actorMembership: 'actor:drawer',
+    });
+    // el assembly original no muta
+    expect(resolved.rigidMembers[0]?.designParts).toBeUndefined();
+  });
+
+  it('herraje monolítico y catálogo vacío dejan el miembro intacto', () => {
+    const resolved = resolveAgregadoAssembly(
+      {
+        id: 'agr-parts-2',
+        rigidMembers: [
+          {
+            memberId: 'mono',
+            role: 'slide',
+            source: { kind: 'fixed', fixed: { hardwareId: 'hw-mono' } },
+            placement: {
+              x: { ref: 'min', offsetMm: 0 },
+              y: { ref: 'min', offsetMm: 0 },
+              z: { ref: 'min', offsetMm: 0 },
+            },
+            bomRole: 'non_purchasing',
+          },
+        ],
+      },
+      { widthMm: 400, depthMm: 500, heightMm: 150 },
+    );
+    expect(attachHardwareDesignParts(resolved, []).rigidMembers[0]?.designParts).toBeUndefined();
+    expect(
+      attachHardwareDesignParts(resolved, [hwWithParts]).rigidMembers[0]?.designParts,
+    ).toBeUndefined();
   });
 });
