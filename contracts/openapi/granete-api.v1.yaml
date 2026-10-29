@@ -18096,6 +18096,18 @@
             "additionalProperties": true,
             "description": "#667 M1 versioned 3D asset binding; representation/digest/validation state is resolved server-side."
           },
+          "design_parts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "#1417 design part: componentName + actorMembership (#1376) + optional finishKey/label. Format validated server-side; name-vs-SKP existence is host-validated."
+            },
+            "description": "#1417 internal parts of the pinned SKP design declared by SketchUp component name; null = monolithic hardware."
+          },
           "active": {
             "type": "boolean"
           },
@@ -18241,6 +18253,18 @@
               "type": "string"
             },
             "description": "Identifiers only (assetId/assetRevisionId); resolved facts are replaced server-side."
+          },
+          "design_parts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "#1417 design part payload: componentName + actorMembership + optional finishKey/label."
+            },
+            "description": "#1417 internal parts of the pinned SKP design by component name; null = monolithic hardware."
           },
           "active": {
             "type": "boolean"

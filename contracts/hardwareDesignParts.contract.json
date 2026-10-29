@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "hardwareDesignParts.contract",
+  "comment": [
+    "#1417 — paridad TS↔Go de la resolución de partes de diseño.",
+    "Un herraje de catálogo declara partes por nombre de componente SKP",
+    "(membresía #1376 + finishKey); resolveAgregadoAssembly/ResolveAgregadoAssembly",
+    "deben adjuntarlas al miembro rigid que referencia ese herraje, y un",
+    "herraje monolítico (sin partes) deja su miembro intacto."
+  ],
+  "hardware": [
+    {
+      "id": "hw-slide-left-parts",
+      "code": "CORR-IZQ",
+      "name": "Corredera izquierda con partes",
+      "unit": "piece",
+      "costPerUnit": 0,
+      "designParts": [
+        {
+          "componentName": "riel_fijo",
+          "actorMembership": "body",
+          "label": "Riel fijo"
+        },
+        {
+          "componentName": "riel_movil",
+          "actorMembership": "actor:drawer",
+          "finishKey": "body"
+        }
+      ],
+      "design_parts": [
+        {
+          "componentName": "riel_fijo",
+          "actorMembership": "body",
+          "label": "Riel fijo"
+        },
+        {
+          "componentName": "riel_movil",
+          "actorMembership": "actor:drawer",
+          "finishKey": "body"
+        }
+      ]
+    },
+    {
+      "id": "hw-slide-mono",
+      "code": "CORR-MONO",
+      "name": "Corredera monolítica",
+      "unit": "piece",
+      "costPerUnit": 0
+    }
+  ],
+  "agregado": {
+    "id": "agr-parts-parity",
+    "code": "AGR-PARTS",
+    "name": "Cajón paridad partes",
+    "rigidMembers": [
+      {
+        "memberId": "slide_left",
+        "role": "slide_left",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-slide-left-parts"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 10
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "non_purchasing",
+        "actorMembership": "body"
+      },
+      {
+        "memberId": "slide_mono",
+        "role": "slide",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-slide-mono"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "max",
+            "offsetMm": -10
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "non_purchasing",
+        "actorMembership": "body"
+      }
+    ],
+    "rigid_members": [
+      {
+        "memberId": "slide_left",
+        "role": "slide_left",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-slide-left-parts"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "min",
+            "offsetMm": 10
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "non_purchasing",
+        "actorMembership": "body"
+      },
+      {
+        "memberId": "slide_mono",
+        "role": "slide",
+        "source": {
+          "kind": "fixed",
+          "fixed": {
+            "hardwareId": "hw-slide-mono"
+          }
+        },
+        "placement": {
+          "x": {
+            "ref": "max",
+            "offsetMm": -10
+          },
+          "y": {
+            "ref": "min",
+            "offsetMm": 0
+          },
+          "z": {
+            "ref": "min",
+            "offsetMm": 0
+          }
+        },
+        "bomRole": "non_purchasing",
+        "actorMembership": "body"
+      }
+    ]
+  },
+  "params": {
+    "widthMm": 400,
+    "depthMm": 500,
+    "heightMm": 150
+  },
+  "expectedMembers": [
+    {
+      "memberId": "slide_left",
+      "expectedDesignParts": [
+        {
+          "componentName": "riel_fijo",
+          "actorMembership": "body",
+          "label": "Riel fijo"
+        },
+        {
+          "componentName": "riel_movil",
+          "actorMembership": "actor:drawer",
+          "finishKey": "body"
+        }
+      ]
+    },
+    {
+      "memberId": "slide_mono",
+      "expectedDesignParts": null
+    }
+  ]
+}
