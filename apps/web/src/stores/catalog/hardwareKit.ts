@@ -129,6 +129,11 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         // switch cubre la unión y el default (none) omite el campo
         // (#1424 rev; cálculo único — #1428 rev S5).
         commercialKitHardwareId: idFor(plan.kit.code),
+        // Motion por plantilla (#1422 slice 2): translate (cajón), rotate
+        // (bisagra/puerta) o ausente (jaladera). Mapeo tipado sin casts;
+        // cálculo único (#1428 rev S5) — el E2E del wizard lo assertiona
+        // (presentation_motion {kind: translate} en el readback).
+        ...(presentationMotion ? { presentationMotion } : {}),
         rigidMembers: plan.designs.map((design) => ({
           memberId: design.memberId,
           role: design.role,
