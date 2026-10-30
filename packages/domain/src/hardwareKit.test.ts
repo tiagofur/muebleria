@@ -163,3 +163,43 @@ describe('validateHardwareKitLink (#1422 slice 1)', () => {
     );
   });
 });
+
+describe('plantillas de juego (#1422 slice 2)', () => {
+  it('plantilla bisagra: 2 partes (copa body / brazo actor:door), agregado Puerta con rotate', () => {
+    const plan = planHardwareKit(
+      { ...baseInput, code: 'BIS-1', name: 'Bisagra 110', templateId: 'hinge' },
+      noExisting,
+    );
+    expect(plan.designs.map((d) => d.code)).toEqual(['BIS-1-COPA', 'BIS-1-BRAZO']);
+    expect(plan.designs.map((d) => d.membership)).toEqual(['body', 'actor:door']);
+    expect(plan.agregado.name).toBe('Puerta Bisagra 110');
+    expect(plan.agregado.motion).toBe('rotate_left');
+    expect(plan.agregado.code).toBe('BIS-1-PUERTA');
+  });
+
+  it('plantilla jaladera: 1 pieza sin motion', () => {
+    const plan = planHardwareKit(
+      { ...baseInput, code: 'JAL-1', name: 'Jaladera', templateId: 'handle' },
+      noExisting,
+    );
+    expect(plan.designs).toHaveLength(1);
+    expect(plan.agregado.motion).toBe('none');
+    expect(plan.agregado.code).toBe('JAL-1-FRENTE');
+  });
+
+  it('plantilla desconocida falla cerrado', () => {
+    expect(() =>
+      validateHardwareKitInput({ ...baseInput, templateId: 'levantadza-mágica' }),
+    ).toThrow('Plantilla de juego desconocida');
+  });
+
+  it('el cajón sigue honrando los offsets legacy del input (#1416 compat)', () => {
+    const plan = planHardwareKit(
+      { ...baseInput, fixedOffsetMm: 22, movingOffsetMm: 44 },
+      noExisting,
+    );
+    const byMember = new Map(plan.designs.map((d) => [d.memberId, d]));
+    expect(byMember.get('fixed_rail_left')?.placement.x).toEqual({ ref: 'min', offsetMm: 22 });
+    expect(byMember.get('moving_rail_right')?.placement.x).toEqual({ ref: 'max', offsetMm: -44 });
+  });
+});

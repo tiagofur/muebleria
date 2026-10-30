@@ -168,3 +168,28 @@ describe('HardwareKitWizardModal (#1416)', () => {
     expect(screen.getByTestId('hardware-kit-wizard-submit')).toHaveTextContent('Crear juego');
   });
 });
+
+describe('HardwareKitWizardModal — plantillas (#1422 slice 2)', () => {
+  it('plantilla bisagra: 2 slots, payload con templateId y motion de puerta', async () => {
+    const user = userEvent.setup();
+    const onCreateKit = vi.fn(async (_req: HardwareKitCreateRequest) => okResult);
+    setup({ onCreateKit });
+    await user.type(screen.getByTestId('hardware-kit-wizard-code'), 'BIS-1');
+    await user.type(screen.getByTestId('hardware-kit-wizard-name'), 'Bisagra 110');
+    await user.type(screen.getByTestId('hardware-kit-wizard-price'), '60');
+    await user.selectOptions(screen.getByTestId('hardware-kit-wizard-template-select'), 'hinge');
+
+    const preview = screen.getByTestId('hardware-kit-wizard-preview');
+    expect(preview.textContent).toContain('BIS-1-COPA');
+    expect(preview.textContent).toContain('BIS-1-BRAZO');
+    // el template del cajón ya no muestra sus slots
+    expect(screen.queryByTestId('hardware-kit-wizard-file-fixed-left')).toBeNull();
+
+    await user.click(screen.getByTestId('hardware-kit-wizard-submit'));
+    await waitFor(() => {
+      expect(screen.getByTestId('hardware-kit-wizard-result')).toBeTruthy();
+    });
+    const req = onCreateKit.mock.calls[0]?.[0];
+    expect(req?.input.templateId).toBe('hinge');
+  });
+});

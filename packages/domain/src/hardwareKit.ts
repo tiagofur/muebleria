@@ -77,8 +77,13 @@ export const HARDWARE_KIT_SLOTS: readonly HardwareKitSlotInfo[] = [
 export const DEFAULT_FIXED_OFFSET_MM = 10;
 export const DEFAULT_MOVING_OFFSET_MM = 35;
 
-export function defaultAgregadoCode(kitCode: string): string {
-  return `${kitCode}-CAJON`;
+export function defaultAgregadoCode(kitCode: string, labelEs = 'Cajón'): string {
+  const suffixes: Record<string, string> = {
+    Cajón: '-CAJON',
+    Puerta: '-PUERTA',
+    Frente: '-FRENTE',
+  };
+  return `${kitCode}${suffixes[labelEs] ?? '-ENSAMBLE'}`;
 }
 
 export interface HardwareKitPlanInput {
@@ -86,32 +91,152 @@ export interface HardwareKitPlanInput {
   readonly code: string;
   readonly name: string;
   readonly kitCostPerUnit: number;
-  /** Reference envelope of the generated drawer agregado. */
+  /** Reference envelope of the generated agregado. */
   readonly widthMm: number;
   readonly heightMm: number;
   readonly depthMm: number;
-  /** X offsets from the min/max anchors (fixed guides vs moving rails). */
-  readonly fixedOffsetMm: number;
-  readonly movingOffsetMm: number;
-  /** Agregado code; defaults to `${code}-CAJON`. */
+  /**
+   * Drawer-template offsets (#1416 legacy inputs): only the drawer
+   * template's body/actor slots honor them; other templates use the
+   * slot's own defaultOffsetMm.
+   */
+  readonly fixedOffsetMm?: number;
+  readonly movingOffsetMm?: number;
+  /** Agregado code; defaults per template. */
   readonly agregadoCode?: string;
+  /** #1422 slice 2: plantilla del juego; default = cajón con correderas. */
+  readonly templateId?: string;
 }
 
 export interface HardwareKitPlanDesignEntry {
-  readonly slot: HardwareKitDesignSlot;
+  readonly slot: string;
   readonly code: string;
   readonly name: string;
   readonly role: string;
   readonly memberId: string;
   readonly membership: string;
   readonly placement: {
-    readonly x: { readonly ref: 'min' | 'max'; readonly offsetMm: number };
+    readonly x: { readonly ref: 'min' | 'max' | 'center'; readonly offsetMm: number };
     readonly y: { readonly ref: 'min'; readonly offsetMm: 0 };
     readonly z: { readonly ref: 'min'; readonly offsetMm: 0 };
   };
   /** True when a hardware with this code already exists → reuse, don't create. */
   readonly exists: boolean;
 }
+
+/**
+ * #1422 slice 2 — plantillas de juego declaradas: el asistente deja de
+ * tener el template del cajón hardcodeado y arma los slots desde una
+ * plantilla (membresía #1376, ancla y sufijo por slot; motion del
+ * agregado). Una plantilla nueva (bisagra, jaladera, levantadza…) es DATO,
+ * no código.
+ */
+export interface HardwareKitSlotTemplate {
+  /** Stable slot key (file upload testid). */
+  readonly slot: string;
+  /** Rigid member id in the generated recipe (e2e/demo contract). */
+  readonly memberId: string;
+  /** Code suffix appended to the kit code. */
+  readonly suffix: string;
+  readonly labelEs: string;
+  readonly role: string;
+  readonly membership: string;
+  readonly anchorXRef: 'min' | 'max' | 'center';
+  readonly offsetSign: 1 | -1;
+  readonly defaultOffsetMm: number;
+}
+
+export interface HardwareKitTemplate {
+  readonly id: string;
+  readonly labelEs: string;
+  readonly slots: readonly HardwareKitSlotTemplate[];
+  /** Cinemática del agregado generado (presentationMotion del editor). */
+  readonly motion: 'translate' | 'rotate_left' | 'rotate_right' | 'none';
+  /** Prefijo del nombre del agregado generado («Cajón X», «Puerta X»…). */
+  readonly agregadoLabelEs: string;
+}
+
+export const HARDWARE_KIT_TEMPLATES: readonly HardwareKitTemplate[] = [
+  {
+    id: 'drawer-slides',
+    labelEs: 'Cajón con correderas (4 partes)',
+    motion: 'translate',
+    agregadoLabelEs: 'Cajón',
+    slots: HARDWARE_KIT_SLOTS.map((s) => ({
+      slot: s.slot,
+      memberId: s.memberId,
+      suffix: s.suffix,
+      labelEs: s.labelEs,
+      role: s.role,
+      membership: s.membership,
+      anchorXRef: s.anchorXRef,
+      offsetSign: s.offsetSign,
+      defaultOffsetMm: s.membership === 'body'
+        ? DEFAULT_FIXED_OFFSET_MM
+        : DEFAULT_MOVING_OFFSET_MM,
+    })),
+  },
+  {
+    id: 'hinge',
+    labelEs: 'Bisagra (2 partes: copa fija + brazo móvil)',
+    motion: 'rotate_left',
+    agregadoLabelEs: 'Puerta',
+    slots: [
+      {
+        slot: 'cup_fixed',
+        memberId: 'hinge_cup',
+        suffix: '-COPA',
+        labelEs: 'Copa (fija al mueble)',
+        role: 'hinge_cup',
+        membership: 'body',
+        anchorXRef: 'min',
+        offsetSign: 1,
+        defaultOffsetMm: 0,
+      },
+      {
+        slot: 'arm_moving',
+        memberId: 'hinge_arm',
+        suffix: '-BRAZO',
+        labelEs: 'Brazo (móvil de la puerta)',
+        role: 'hinge_arm',
+        membership: 'actor:door',
+        anchorXRef: 'min',
+        offsetSign: 1,
+        defaultOffsetMm: 0,
+      },
+    ],
+  },
+  {
+    id: 'handle',
+    labelEs: 'Jaladera (1 pieza, sin apertura)',
+    motion: 'none',
+    agregadoLabelEs: 'Frente',
+    slots: [
+      {
+        slot: 'handle',
+        memberId: 'handle',
+        suffix: '-PIEZA',
+        labelEs: 'Jaladera',
+        role: 'handle',
+        membership: 'body',
+        anchorXRef: 'min',
+        offsetSign: 1,
+        defaultOffsetMm: 0,
+      },
+    ],
+  },
+];
+
+export function hardwareKitTemplateById(id: string): HardwareKitTemplate {
+  const template = HARDWARE_KIT_TEMPLATES.find((t) => t.id === id);
+  if (!template) {
+    throw new Error(`Plantilla de juego desconocida: «${id}».`);
+  }
+  return template;
+}
+
+/** La plantilla por defecto (cajón) mantiene el comportamiento de #1416. */
+export const DEFAULT_KIT_TEMPLATE_ID = 'drawer-slides';
 
 export interface HardwareKitPlan {
   readonly kit: {
@@ -128,7 +253,7 @@ export interface HardwareKitPlan {
     readonly widthMm: number;
     readonly heightMm: number;
     readonly depthMm: number;
-    readonly motion: 'translate';
+    readonly motion: HardwareKitTemplate['motion'];
   };
   /**
    * Non-null when the plan cannot execute: an agregado with the target code
@@ -166,9 +291,12 @@ export function validateHardwareKitInput(input: HardwareKitPlanInput): void {
     ['offset de guías fijas', input.fixedOffsetMm],
     ['offset de correderas móviles', input.movingOffsetMm],
   ] as const) {
-    if (!Number.isFinite(value) || Math.abs(value) > 100000) {
+    if (value !== undefined && (!Number.isFinite(value) || Math.abs(value) > 100000)) {
       throw new Error(`El ${label} debe ser un número finito y razonable.`);
     }
+  }
+  if (input.templateId !== undefined) {
+    hardwareKitTemplateById(input.templateId);
   }
 }
 
@@ -180,11 +308,17 @@ export function planHardwareKit(
 
   const kitCode = input.code.trim();
   const kitName = input.name.trim();
-  const agregadoCode = (input.agregadoCode?.trim() || defaultAgregadoCode(kitCode));
+  const template = hardwareKitTemplateById(input.templateId ?? DEFAULT_KIT_TEMPLATE_ID);
+  const isDrawer = template.id === DEFAULT_KIT_TEMPLATE_ID;
+  const agregadoCode =
+    input.agregadoCode?.trim() || defaultAgregadoCode(kitCode, template.agregadoLabelEs);
 
-  const designs: HardwareKitPlanDesignEntry[] = HARDWARE_KIT_SLOTS.map((slot) => {
-    const offset =
+  const designs: HardwareKitPlanDesignEntry[] = template.slots.map((slot) => {
+    // Los offsets del input solo aplican al template del cajón (compat #1416);
+    // el resto de plantillas usa el default del slot.
+    const legacyOffset =
       slot.membership === 'body' ? input.fixedOffsetMm : input.movingOffsetMm;
+    const offset = isDrawer && legacyOffset !== undefined ? legacyOffset : slot.defaultOffsetMm;
     const code = `${kitCode}${slot.suffix}`;
     return {
       slot: slot.slot,
@@ -213,11 +347,11 @@ export function planHardwareKit(
     designs,
     agregado: {
       code: agregadoCode,
-      name: `Cajón ${kitName}`,
+      name: `${template.agregadoLabelEs} ${kitName}`,
       widthMm: input.widthMm,
       heightMm: input.heightMm,
       depthMm: input.depthMm,
-      motion: 'translate',
+      motion: template.motion,
     },
     blockedCode: existing.agregadoCodes.has(agregadoCode) ? agregadoCode : null,
   };
@@ -226,7 +360,7 @@ export function planHardwareKit(
 /** Request the store executes: the plan input plus optional uploaded bindings. */
 export interface HardwareKitCreateRequest {
   readonly input: HardwareKitPlanInput;
-  readonly designs?: Partial<Record<HardwareKitDesignSlot, HardwareVisualAssetBinding>>;
+  readonly designs?: Record<string, HardwareVisualAssetBinding>;
 }
 
 export interface HardwareKitResult {
