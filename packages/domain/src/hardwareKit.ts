@@ -235,3 +235,29 @@ export interface HardwareKitResult {
   readonly agregadoCode: string;
   readonly agregadoId: string;
 }
+
+/**
+ * #1422 slice 1: validates a kit↔design-part link. `catalogHardware` is the
+ * organization's hardware catalog (or the relevant subset the caller
+ * loaded): the kit must exist, never be self, and never itself be a part
+ * (a kit is never a part of another kit).
+ */
+export function validateHardwareKitLink(
+  selfId: string,
+  kitHardwareId: string,
+  catalogHardware: readonly { readonly id: string; readonly code: string; readonly kitHardwareId?: string }[],
+): void {
+  if (!kitHardwareId.trim()) {
+    throw new Error('El kit del herraje no puede estar vacío.');
+  }
+  if (kitHardwareId === selfId) {
+    throw new Error('Un herraje no puede ser parte de sí mismo.');
+  }
+  const kit = catalogHardware.find((h) => h.id === kitHardwareId);
+  if (!kit) {
+    throw new Error('El kit del herraje no existe en este taller.');
+  }
+  if (kit.kitHardwareId) {
+    throw new Error(`«${kit.code}» ya es parte de otro juego: un juego no puede ser parte de otro.`);
+  }
+}

@@ -58,6 +58,12 @@ export type HardwareDraft = {
    * dominio al armar el payload.
    */
   designParts?: { componentName: string; actorMembership: string; label: string; finishKey: string }[];
+  /**
+   * #1422 slice 1: kit al que pertenece esta parte de diseño (solo lectura
+   * en el form — lo escribe el asistente; el payload lo repite para que
+   * editar una parte NO borre su link).
+   */
+  kitHardwareId?: string;
 };
 
 export const emptyPartFinishes = (): { body: string; base: string; grip: string } => ({
@@ -121,5 +127,6 @@ export function toDraft(item: Hardware): HardwareDraft {
       label: p.label ?? '',
       finishKey: p.finishKey ?? '',
     })),
+    kitHardwareId: item.kitHardwareId,
   };
 }

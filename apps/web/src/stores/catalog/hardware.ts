@@ -52,6 +52,8 @@ function hardwarePreviewFields(
     ...(partFinishes ? { partFinishes } : {}),
     ...(maxOpeningAngleDeg ? { maxOpeningAngleDeg } : {}),
     ...hardwareDesignPartsField(draft),
+    // #1422 slice 1: el link kit↔parte sobrevive a cualquier edición del form.
+    ...(draft.kitHardwareId ? { kitHardwareId: draft.kitHardwareId } : {}),
   };
 }
 
