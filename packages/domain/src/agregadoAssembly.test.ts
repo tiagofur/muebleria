@@ -1653,7 +1653,7 @@ describe('attachHardwareDesignParts (#1417)', () => {
       { componentName: 'riel_fijo', actorMembership: 'body', label: 'Riel fijo' },
       { componentName: 'riel_movil', actorMembership: 'actor:drawer', finishKey: 'body' },
     ],
-  } as Hardware;
+  } as unknown as Hardware;
 
   it('adjunta las partes del herraje de catálogo a los miembros que lo referencian', () => {
     const resolved = resolveAgregadoAssembly(
