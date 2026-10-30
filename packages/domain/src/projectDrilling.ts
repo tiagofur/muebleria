@@ -197,6 +197,7 @@ export function resolveProjectDrilling(
   const derivedByKey = new Map<string, DerivedJointPlacement[]>();
   const partsByKey = new Map<string, readonly ResolvedBoardPart[]>();
   const moduleIdByKey = new Map<string, string>();
+  const itemIdByKey = new Map<string, string>();
   const choicesByKey = new Map<string, ReturnType<typeof effectiveOptionChoices>>();
   const resolutionIssues: ProjectDrillingResolutionIssue[] = [];
 
@@ -238,6 +239,9 @@ export function resolveProjectDrilling(
     }
     partsByKey.set(cacheKey, parts);
     moduleIdByKey.set(cacheKey, module.id);
+    // Exact attribution for resolution issues: the FIRST item that resolved
+    // this template owns it (same identity rule as the partId→module map).
+    itemIdByKey.set(cacheKey, item.id);
     // #1046: role-based placements resolve holes through the effective
     // choices. Templates are first-wins per module (same identity rule as the
     // canonical piece codes — duplicated module lines share holes), so the
@@ -298,8 +302,7 @@ export function resolveProjectDrilling(
         code: 'DRILLING_AGREGADO_HOST_UNRESOLVED',
         message: `La pieza de agregado ${link.partId} no resolvió su componente anfitrión; sus perforaciones de herraje no se calculan. Verifique la receta del agregado y sus instancias en el módulo.`,
         projectId: project.id,
-        projectItemId:
-          project.items.find((i) => i.moduleId === moduleId && i.quantity > 0)?.id ?? '',
+        projectItemId: cacheKey ? (itemIdByKey.get(cacheKey) ?? '') : '',
         moduleId: moduleId ?? '',
         stage: 'agregado-host',
         blocking: true,
