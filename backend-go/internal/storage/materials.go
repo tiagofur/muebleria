@@ -762,6 +762,12 @@ func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, expectedV
 			if err := s.ensureHardwareNotInUse(ctx, id); err != nil {
 				return err
 			}
+			// #1422 perfección (review B1): el camino PUT es el ÚNICO que el
+			// producto usa para desactivar — el guard de kit↔partes debe
+			// aplicar acá igual que en DeactivateHardware.
+			if err := s.ensureHardwareNotReferencedAsKit(ctx, id); err != nil {
+				return err
+			}
 		} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}

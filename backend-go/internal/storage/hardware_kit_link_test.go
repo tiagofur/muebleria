@@ -92,3 +92,48 @@ func TestDeactivateHardware_KitWithLinkedPartsBlocked(t *testing.T) {
 		t.Fatalf("desvinculada la parte, el kit debe desactivarse: %v", err)
 	}
 }
+
+// #1422 perfección (review B1): the PUT is the ONLY deactivation path the
+// product uses — UpdateHardware active→false must refuse a kit with linked
+// parts exactly like DeactivateHardware does.
+func TestUpdateHardware_KitWithLinkedPartsBlocked(t *testing.T) {
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	t.Cleanup(func() {
+		cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code LIKE $1`, "KIT-UPD-%")
+		cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code LIKE $1`, "PART-UPD-%")
+	})
+
+	kit := &domain.Hardware{Code: "KIT-UPD-" + suffix, Name: "Kit upd", Unit: "set", CostPerUnit: 100, Active: true}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateHardware(txCtx, kit)
+	})
+	part := &domain.Hardware{Code: "PART-UPD-" + suffix, Name: "Parte upd", Unit: "piece", CostPerUnit: 0, Active: true, KitHardwareID: &kit.ID}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateHardware(txCtx, part)
+	})
+
+	// PUT con active=false sobre el kit → rechazado.
+	deactivated := *kit
+	deactivated.Active = false
+	err := store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error {
+		return store.UpdateHardware(txCtx, kit.ID, kit.Version, &deactivated)
+	})
+	if err == nil || !errors.Is(err, storage.ErrHardwareKitHasParts) {
+		t.Fatalf("expected ErrHardwareKitHasParts on PUT, got %v", err)
+	}
+
+	// Desvincular la parte desbloquea el PUT.
+	part.Version = 1
+	part.KitHardwareID = nil
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.UpdateHardware(txCtx, part.ID, part.Version, part)
+	})
+	deactivated.Version = kit.Version
+	if err := store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error {
+		return store.UpdateHardware(txCtx, kit.ID, kit.Version, &deactivated)
+	}); err != nil {
+		t.Fatalf("desvinculada la parte, el PUT debe desactivar: %v", err)
+	}
+}

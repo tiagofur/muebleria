@@ -81,3 +81,40 @@ func TestResolveAgregadoAssemblyOffsetFormulaEvaluationError(t *testing.T) {
 		t.Fatalf("expected offset formula error context, got: %v", err)
 	}
 }
+
+// #1422 perfección (review B2): the RESULT of an offset formula carries the
+// same magnitude bound as offsetMm — a regression deleting the bound check
+// would fail this test (mirror of the TS case).
+func TestResolveAgregadoAssemblyOffsetFormulaOutOfBounds(t *testing.T) {
+	formula := "PW*99999999"
+	agregado := domain.Agregado{
+		ID:   "agr-formula-bounds",
+		Code: "FORMULA-BOUNDS",
+		Name: "Fórmula fuera de cota",
+		RigidMembers: []domain.AgregadoRigidMember{
+			{
+				MemberID: "m",
+				Role:     "r",
+				Source: domain.RigidMemberSource{
+					Kind:  domain.RigidMemberSourceFixed,
+					Fixed: &domain.FixedHardwareSource{HardwareID: "hw-x"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetFormula: &formula},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+				},
+				BOMRole: domain.BOMRoleNonPurchasing,
+			},
+		},
+	}
+	_, err := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{
+		WidthMm: 400, DepthMm: 500, HeightMm: 150,
+	})
+	if err == nil {
+		t.Fatal("expected out-of-bounds error for PW*99999999, got nil")
+	}
+	if !strings.Contains(err.Error(), "out of bounds") {
+		t.Fatalf("expected out of bounds error, got: %v", err)
+	}
+}

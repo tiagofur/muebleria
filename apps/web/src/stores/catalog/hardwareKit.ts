@@ -113,6 +113,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         createdCodes.push(design.code);
       }
 
+      const presentationMotion = presentationMotionFor(plan.agregado.motion, plan.agregado.depthMm);
       const agregado: Agregado = {
         id: ctx.newId(),
         code: plan.agregado.code,
@@ -124,11 +125,9 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           depth: plan.agregado.depthMm,
         },
         // Motion por plantilla (#1422 slice 2): translate (cajón), rotate
-        // (bisagra/puerta) o none (jaladera). Mapeo tipado — sin casts: si la
-        // unión del dominio cambia, tsc lo detecta (#1424 rev).
-        ...(presentationMotionFor(plan.agregado.motion, plan.agregado.depthMm)
-          ? { presentationMotion: presentationMotionFor(plan.agregado.motion, plan.agregado.depthMm) }
-          : {}),
+        // (bisagra/puerta) o none (jaladera). Mapeo tipado sin casts; el
+        // switch cubre la unión y el default (none) omite el campo
+        // (#1424 rev; cálculo único — #1428 rev S5).
         commercialKitHardwareId: idFor(plan.kit.code),
         rigidMembers: plan.designs.map((design) => ({
           memberId: design.memberId,

@@ -73,18 +73,25 @@ test.describe.serial('Herrajes — asistente Juego de herraje (#1416)', () => {
     const token = await loginOwner(page);
 
     // Limpieza defensiva de corridas previas interrumpidas (DB del gate es
-    // desechable, pero el spec puede re-correr sobre la misma base).
+    // desechable, pero el spec puede re-correr sobre la misma base). Partes
+    // PRIMERO (un kit con partes vinculadas responde 409 al desactivarse —
+    // #1422 perfección) y el kit tolera 409 defensivamente.
     const staleAgr = await readAgregadoByCode(token, `${KIT_CODE}-CAJON`);
     if (staleAgr) {
       const del = await api(token, 'DELETE', `/catalog/agregados/${staleAgr.id as string}`);
       expect([200, 204]).toContain(del.status);
     }
-    for (const suffix of ['', '-FIJ-I', '-FIJ-D', '-MOV-I', '-MOV-D']) {
+    for (const suffix of ['-FIJ-I', '-FIJ-D', '-MOV-I', '-MOV-D']) {
       const stale = await readHardwareByCode(token, `${KIT_CODE}${suffix}`);
       if (stale) {
         const del = await api(token, 'DELETE', `/catalog/hardware/${stale.id as string}`);
         expect([200, 204]).toContain(del.status);
       }
+    }
+    const staleKit = await readHardwareByCode(token, KIT_CODE);
+    if (staleKit) {
+      const del = await api(token, 'DELETE', `/catalog/hardware/${staleKit.id as string}`);
+      expect([200, 204, 409]).toContain(del.status);
     }
 
     await page.goto('/hardware');

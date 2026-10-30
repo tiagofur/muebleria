@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -533,7 +534,14 @@ func calculateAxisPlacementCoord(axisName string, p domain.AssemblyAxisPlacement
 		default:
 			dims.PH = d
 		}
-		offset, err := evaluatePartFormula(strings.TrimSpace(*p.OffsetFormula), dims)
+		// Strip ALL whitespace before evaluating (TS strips \s+ — parity).
+		formula := strings.Map(func(r rune) rune {
+			if unicode.IsSpace(r) {
+				return -1
+			}
+			return r
+		}, strings.TrimSpace(*p.OffsetFormula))
+		offset, err := evaluatePartFormula(formula, dims)
 		if err != nil {
 			return 0.0, fmt.Errorf("axis %s offset formula: %w", axisName, err)
 		}

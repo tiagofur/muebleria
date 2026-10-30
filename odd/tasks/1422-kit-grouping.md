@@ -78,3 +78,16 @@ body/actor:door). Offsets legacy del input solo en el template del cajón.
 Tests: dominio 17/17, wizard 7/7, gate bisagra+grouping+wizard 3 passed
 (assertion del spec de bisagra corregida: el link apunta al id GENERADO
 del kit, no a una constante).
+
+## Pasada de perfección (PR #1428, 10-30)
+
+Consolida TODAS las sugerencias de los reviews (1419/1420/1421/1423/1424)
++ guards: paridad de validación de fórmulas (charset-only en ambos motores,
+bounds del resultado ≤100000 con tests discriminantes TS y Go), guard
+kit-con-partes en AMBOS caminos de desactivación (PUT y DELETE — review B1
+del propio #1428, 409 tipado), tests re-corribles (códigos únicos),
+input-vacío→0, confirm de presets, motion tipado sin casts, navegación
+kit→diseño en la ficha, mapper honesto, specs pineados (frase genérica,
+link en alta nueva). Ronda del propio #1428: B1 (guard bypaseable por PUT)
+y B2 (test Go del bound) corregidos; S1 (whitespace en resolve), S2
+(cleanup del spec), S5 (cálculo único) aplicados.
