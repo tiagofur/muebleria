@@ -18,9 +18,11 @@ import {
 import { resolvePartDrilling, type ResolvedPartDrilling } from './partDrillingResolver';
 import { effectiveOptionChoices } from './optionChoices';
 import type {
+  Agregado,
   Catalog,
   HardwarePlacement,
   JointDrillingRules,
+  Module,
   ModuleComponentInstance,
   Project,
   ProjectItem,
@@ -48,19 +50,20 @@ export interface ProjectDrillingResult {
 }
 
 export interface ProjectDrillingResolutionIssue {
-  readonly code: 'DRILLING_BOM_RESOLUTION_FAILED';
+  readonly code: 'DRILLING_BOM_RESOLUTION_FAILED' | 'DRILLING_AGREGADO_HOST_UNRESOLVED';
   readonly message: string;
   readonly projectId: string;
   readonly projectItemId: string;
   readonly moduleId: string;
-  readonly stage: 'secondary-bom';
+  readonly stage: 'secondary-bom' | 'agregado-host';
   readonly blocking: true;
 }
 
 /**
  * Manual placements for one expanded part id: instances of the source
  * component carry overrides.hardwarePlacements that apply to every copy.
- * Structure + module level instances; agregado-scoped placements are F131.
+ * Structure + module level instances; agregado-scoped placements resolve
+ * through `agregadoManualPlacementsForPart` (F131).
  */
 function manualPlacementsForPart(
   instances: readonly ModuleComponentInstance[],
@@ -80,6 +83,80 @@ function manualPlacementsForPart(
     }
   }
   return out;
+}
+
+export interface AgregadoPlacementLookup {
+  readonly placements: readonly HardwarePlacement[];
+  /**
+   * Set ONLY for an `agr-*` part id that could not resolve to its host
+   * component (broken link, missing definition or missing component) — the
+   * fail-closed signal: the piece's manual drilling is NOT computed and the
+   * caller must surface it explicitly, never skip silently.
+   */
+  readonly unresolved?: string;
+}
+
+/**
+ * Manual placements authored on an AGREGADO definition's board components
+ * (F131). An agregado part id is built as
+ * `agr-<agregadoId>-[instance-<iid>-]u<unit>-<componentId>-copy-<k>`
+ * (engine/bom.ts resolveComposedModule, #388/#995 K3-parity); placements live
+ * on the catalog agregado's components and apply to EVERY unit and copy —
+ * identical holes per physical unit, same identity rule as module copies.
+ *
+ * The id is matched by EXACT PREFIX enumeration (per agregado instance, its
+ * repeated-instance tag and its unit range) instead of parsing backwards:
+ * commercial ids carry dashes, so a generic regex is ambiguous by
+ * construction. Returns `unresolved` when an `agr-*` id matches no instance
+ * prefix, definition or component — a data-integrity failure, never a
+ * silently-drillless piece.
+ */
+export function agregadoManualPlacementsForPart(
+  partId: string,
+  structure: Structure | undefined,
+  module: Pick<Module, 'agregados'> | undefined,
+  catalogAgregados: readonly Agregado[],
+): AgregadoPlacementLookup {
+  if (!partId.startsWith('agr-')) return { placements: [] };
+
+  const instances = [
+    ...(structure?.agregados ?? []),
+    ...(module?.agregados ?? []),
+  ];
+  const countByAgregadoId = new Map<string, number>();
+  for (const inst of instances) {
+    countByAgregadoId.set(
+      inst.agregadoId,
+      (countByAgregadoId.get(inst.agregadoId) ?? 0) + 1,
+    );
+  }
+
+  for (const inst of instances) {
+    // Mirrors bom.ts instanceTag: only repeated instances disambiguate with
+    // the persisted instance id (a repeated instance without one throws in
+    // the BOM long before drilling runs).
+    const tags =
+      (countByAgregadoId.get(inst.agregadoId) ?? 0) > 1
+        ? [`instance-${(inst.id ?? '').trim()}-`]
+        : [''];
+    for (const tag of tags) {
+      const units = Math.max(1, inst.quantity);
+      for (let unit = 0; unit < units; unit++) {
+        const prefix = `agr-${inst.agregadoId}-${tag}u${unit}-`;
+        if (!partId.startsWith(prefix)) continue;
+        const componentId = partId.slice(prefix.length).match(/^(.+)-copy-\d+$/)?.[1];
+        const agregado = catalogAgregados.find((a) => a.id === inst.agregadoId);
+        const component = agregado?.components?.find(
+          (c) => c.componentId === componentId,
+        );
+        if (!componentId || !component) {
+          return { placements: [], unresolved: partId };
+        }
+        return { placements: component.overrides?.hardwarePlacements ?? [] };
+      }
+    }
+  }
+  return { placements: [], unresolved: partId };
 }
 
 function instancesForModule(
@@ -194,6 +271,7 @@ export function resolveProjectDrilling(
 
   const patterns: ResolvedPartDrilling[] = [];
   let totalHoles = 0;
+  const reportedUnresolvedHosts = new Set<string>();
   for (const link of links) {
     const cacheKey = keyByPartId.get(link.partId);
     const moduleId = cacheKey ? moduleIdByKey.get(cacheKey) : undefined;
@@ -201,7 +279,36 @@ export function resolveProjectDrilling(
     const instances = module
       ? instancesForModule(module, catalog.structures ?? [], module.components)
       : [];
-    const manualForPart = manualPlacementsForPart(instances, link.partId);
+    const structure = module?.structureId
+      ? catalog.structures?.find((s) => s.id === module.structureId)
+      : undefined;
+    // F131: only evaluated when the secondary BOM resolved — a BOM failure
+    // already reports its own blocking issue and must not double-report.
+    const agregadoForPart = cacheKey
+      ? agregadoManualPlacementsForPart(
+          link.partId,
+          structure,
+          module,
+          catalog.agregados ?? [],
+        )
+      : undefined;
+    if (agregadoForPart?.unresolved && !reportedUnresolvedHosts.has(agregadoForPart.unresolved)) {
+      reportedUnresolvedHosts.add(agregadoForPart.unresolved);
+      resolutionIssues.push({
+        code: 'DRILLING_AGREGADO_HOST_UNRESOLVED',
+        message: `La pieza de agregado ${link.partId} no resolvió su componente anfitrión; sus perforaciones de herraje no se calculan. Verifique la receta del agregado y sus instancias en el módulo.`,
+        projectId: project.id,
+        projectItemId:
+          project.items.find((i) => i.moduleId === moduleId && i.quantity > 0)?.id ?? '',
+        moduleId: moduleId ?? '',
+        stage: 'agregado-host',
+        blocking: true,
+      });
+    }
+    const manualForPart = [
+      ...manualPlacementsForPart(instances, link.partId),
+      ...(agregadoForPart?.placements ?? []),
+    ];
     const derivedForPart = (cacheKey ? derivedByKey.get(cacheKey) ?? [] : []).filter(
       (p) => p.partId === link.partId,
     );
