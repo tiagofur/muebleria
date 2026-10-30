@@ -137,6 +137,12 @@ test.describe.serial('Herrajes — asistente Juego de herraje (#1416)', () => {
 
     const designLeft = await readHardwareByCode(token, `${KIT_CODE}-FIJ-I`);
     expect(designLeft).toMatchObject({ unit: 'piece', cost_per_unit: 0, preview_shape: 'slide' });
+    // #1423 rev: el link kit↔parte también en ALTA NUEVA (no solo reuso
+    // legacy) — las 4 partes nacen vinculadas al kit generado.
+    for (const suffix of ['-FIJ-I', '-FIJ-D', '-MOV-I', '-MOV-D']) {
+      const part = await readHardwareByCode(token, `${KIT_CODE}${suffix}`);
+      expect(part?.kit_hardware_id, `${KIT_CODE}${suffix}`).toBe(kitRow!.id as string);
+    }
     expect(byId.get('fixed_rail_left')!.source).toMatchObject({
       kind: 'fixed',
       fixed: { hardwareId: designLeft!.id },

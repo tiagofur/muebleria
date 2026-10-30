@@ -182,6 +182,10 @@ describe('HardwareKitWizardModal — plantillas (#1422 slice 2)', () => {
     const preview = screen.getByTestId('hardware-kit-wizard-preview');
     expect(preview.textContent).toContain('BIS-1-COPA');
     expect(preview.textContent).toContain('BIS-1-BRAZO');
+    // Frase genérica pineada (#1424 rev B1): nada de «cajón»/«4 piezas» para
+    // la bisagra — la frase se arma desde la plantilla.
+    expect(preview.textContent).toContain('puerta BIS-1-PUERTA con 2 piezas');
+    expect(preview.textContent).not.toContain('cajón');
     // el template del cajón ya no muestra sus slots
     expect(screen.queryByTestId('hardware-kit-wizard-file-fixed-left')).toBeNull();
 

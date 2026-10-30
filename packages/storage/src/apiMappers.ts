@@ -546,9 +546,10 @@ function normalizeVisualAsset(
 
 
 /**
- * Design parts (#1417): keeps only well-formed parts (non-empty name, valid
- * #1376 membership); a malformed array is dropped entirely so garbage never
- * enters the catalog state.
+ * Design parts (#1417): the list is accepted ONLY if every part is
+ * well-formed (trimmed non-empty name, valid #1376 membership) — ANY
+ * malformed item drops the ENTIRE list (fail-closed, no partial filtering
+ * — garbage never enters the catalog state; #1420 rev wording).
  */
 function normalizeHardwareDesignParts(
   raw: unknown,
@@ -558,7 +559,9 @@ function normalizeHardwareDesignParts(
   for (const item of raw) {
     if (!item || typeof item !== 'object') return {};
     const value = item as Record<string, unknown>;
-    const componentName = str(value.componentName ?? value.component_name);
+    // trim: un nombre de solo espacios debe descartarse igual que uno vacío
+    // (alineado con el validador de dominio; #1420 rev).
+    const componentName = str(value.componentName ?? value.component_name).trim();
     const actorMembership = str(value.actorMembership ?? value.actor_membership);
     if (!componentName || !isValidActorMembership(actorMembership)) return {};
     const label = str(value.label);

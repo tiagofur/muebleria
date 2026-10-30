@@ -2008,6 +2008,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onCreate={createHardware}
           onCreateKit={createHardwareKit}
           agregadoCodes={agregados.map((a) => a.code)}
+          agregados={agregados}
           onUpdate={updateHardware}
           onDeactivate={(id) => setHardwareActive(id, false)}
           onReactivate={(id) => setHardwareActive(id, true)}

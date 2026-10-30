@@ -15,7 +15,7 @@ import type {
   HardwareKitCreateRequest,
   HardwareKitResult,
 } from '@granete/domain';
-import { planHardwareKit } from '@granete/domain';
+import { planHardwareKit, type HardwareKitTemplate } from '@granete/domain';
 
 import type { CatalogStoreCtx } from './shared';
 
@@ -124,33 +124,10 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           depth: plan.agregado.depthMm,
         },
         // Motion por plantilla (#1422 slice 2): translate (cajón), rotate
-        // (bisagra/puerta) o none (jaladera).
-        ...(plan.agregado.motion === 'translate'
-          ? {
-              presentationMotion: {
-                kind: 'translate',
-                axis: { x: 0, y: 1, z: 0 },
-                distanceMm: Math.round(plan.agregado.depthMm * 0.8),
-              } as Agregado['presentationMotion'],
-            }
-          : plan.agregado.motion === 'rotate_left'
-          ? {
-              presentationMotion: {
-                kind: 'rotate',
-                pivot: 'left',
-                axis: { x: 0, y: 0, z: 1 },
-                openAngleDeg: 110,
-              } as Agregado['presentationMotion'],
-            }
-          : plan.agregado.motion === 'rotate_right'
-          ? {
-              presentationMotion: {
-                kind: 'rotate',
-                pivot: 'right',
-                axis: { x: 0, y: 0, z: -1 },
-                openAngleDeg: 110,
-              } as Agregado['presentationMotion'],
-            }
+        // (bisagra/puerta) o none (jaladera). Mapeo tipado — sin casts: si la
+        // unión del dominio cambia, tsc lo detecta (#1424 rev).
+        ...(presentationMotionFor(plan.agregado.motion, plan.agregado.depthMm)
+          ? { presentationMotion: presentationMotionFor(plan.agregado.motion, plan.agregado.depthMm) }
           : {}),
         commercialKitHardwareId: idFor(plan.kit.code),
         rigidMembers: plan.designs.map((design) => ({
@@ -183,4 +160,39 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       };
     },
   };
+}
+
+/**
+ * #1422 slice 2 (#1424 rev): motion de la plantilla → presentationMotion del
+ * agregado, con la MISMA convención del editor (agregadoDraft.draftToAgregado).
+ * Tipo de retorno sin casts — el shape lo verifica tsc.
+ */
+function presentationMotionFor(
+  motion: HardwareKitTemplate['motion'],
+  depthMm: number,
+): Agregado['presentationMotion'] {
+  switch (motion) {
+    case 'translate':
+      return {
+        kind: 'translate',
+        axis: { x: 0, y: 1, z: 0 },
+        distanceMm: Math.round(depthMm * 0.8),
+      };
+    case 'rotate_left':
+      return {
+        kind: 'rotate',
+        pivot: 'left',
+        axis: { x: 0, y: 0, z: 1 },
+        openAngleDeg: 110,
+      };
+    case 'rotate_right':
+      return {
+        kind: 'rotate',
+        pivot: 'right',
+        axis: { x: 0, y: 0, z: -1 },
+        openAngleDeg: 110,
+      };
+    default:
+      return undefined;
+  }
 }
