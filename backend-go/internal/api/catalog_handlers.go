@@ -649,6 +649,12 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusConflict, err.Error())
 				return
 			}
+			if errors.Is(err, storage.ErrHardwareKitHasParts) {
+				// #1422 slice 1 review: a kit with linked parts must not be
+				// deactivated — the parts' kit link would dangle.
+				respondWithError(w, http.StatusConflict, err.Error())
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}
