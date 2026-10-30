@@ -22,12 +22,24 @@ a second workflow, or treat an artifact as authorization.
    `PREFLIGHT_OK_NOT_VERIFIED`; it is not a test, reservation, or write authority.
 4. Assign exactly one writer. Give it the outcome, exclusions, paths, invariants,
    V0/V1/V2 checks, exact base, and the smallest relevant source references.
+   If the issue carries `ux:shape`, require the published UX brief
+   (`.agents/skills/ux-brief/`) before the writer starts; an unbriefed `ux:shape`
+   issue goes back to triage, not straight to code.
 5. After a coherent candidate is frozen, assign a different fresh reviewer with the
    exact issue, HEAD/base, diff, execution artifact (when the lane uses one), and
-   verification evidence.
-6. Consolidate real blockers into at most one correction round when feasible. If a
+   verification evidence. Prefer the deterministic bundle
+   (`python3 scripts/factory_review_bundle.py --base <base> --head <head> --issue <N>`)
+   so the reviewer evaluates pins instead of narrative, and never forward the
+   writer's chat transcript or reasoning (see
+   `docs/demo/software-factory-clean-context-review.md`).
+6. Escalate to blind dual review (`judgment-day`, two independent judges on the
+   same frozen bundle) when the diff touches auth/RLS, migrations, shared
+   contracts/parity fixtures, factory guardrails, exceeds ~400 authored lines,
+   or a correction round already failed once. Confirmed findings block;
+   contradictions go to the human.
+7. Consolidate real blockers into at most one correction round when feasible. If a
    blocker remains, return the decision to the human; the target is not a dogma.
-7. Publish only after exact readback of current metadata, CI, review, and pins.
+8. Publish only after exact readback of current metadata, CI, review, and pins.
 
 One-shot means one prepared candidate, not skipped exploration or checks. A bounded
 read-only explorer may answer one named uncertainty but cannot become another writer.
@@ -40,6 +52,9 @@ Do not copy full backlogs, logs, or historical ledgers into handoffs.
 - Partial: first line `Refs #N`; second line `Delivery: partial`; remaining scope
   explicit and issue open.
 - Require exactly one supported `type:*` label and current `status:approved`.
+- Require the `## Risk` line in the PR body and, on `ux:shape` PRs,
+  `## Visual Evidence` honoring the published UX brief. Autonomous technical
+  defaults are documented under `## Decisions made without asking`.
 - `scripts/check_pr_metadata.py` proves metadata shape, not the Definition of Done.
 - CI validates the candidate; it is not the debugging loop. Required checks must be
   successful for the exact HEAD/base and cannot be an empty or stale set.

@@ -35,7 +35,9 @@ independent review, or merge.
    as authorization for extra scope.
 6. Implement the approved root change in one coherent pass. Keep tests and docs with
    behavior and avoid adjacent refactors. Use configured TDD when explicitly active;
-   otherwise run ordinary focused checks while developing.
+   otherwise run ordinary focused checks while developing. On a `ux:shape` issue,
+   honor the published UX brief; divergence is a scope change that goes back
+   through the issue, not a styling choice.
 7. Freeze the candidate and prove applicable levels: V0 structural, V1 functional,
    and V2 operational. Unavailable required infrastructure is `NOT_RUN`/`BLOCKED`.
 8. Inspect the conservative plan with
@@ -62,5 +64,6 @@ Use `delivery_mode=complete` only with full acceptance and
 `delivery_mode=partial`, `Refs + Delivery: partial`, and name remaining scope.
 
 Return `IMPLEMENTED_PENDING_REVIEW` with issue, exact HEAD/base, changed paths,
-execution artifact (if any), V0/V1/V2 results, delivery mode, and limits; or return
+execution artifact (if any), V0/V1/V2 results, delivery mode, an explicit
+`Risk:` line (`Risk: none` or `Risk: item N (<reason>)`), and limits; or return
 `BLOCKED` with the cause and smallest next action.

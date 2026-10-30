@@ -50,7 +50,9 @@ mirror context but never overrides repository, GitHub, code, tests, or remote st
 | --- | --- |
 | Líder | `.agents/skills/leader/SKILL.md` |
 | Implementador (por defecto) | `.agents/skills/implementer/SKILL.md` |
-| Revisor independiente | `.agents/skills/reviewer/SKILL.md` |
+| Revisor independiente | `.agents/skills/reviewer/SKILL.md`, `docs/demo/software-factory-clean-context-review.md` |
+| Explorer read-only / triage DoR | `.agents/skills/explorer/SKILL.md` |
+| UX brief (issues `ux:shape`, antes de implementar) | `.agents/skills/ux-brief/SKILL.md` |
 | Mapa de documentación (routing; no leer todo) | `docs/README.md` |
 | Arquitectura / convenciones | `docs/architecture.md`, `docs/conventions.md` |
 | Arquitectura Agent-First (organización del repo para agentes; regla de extracción al tocar monolitos) | `docs/agent-first-methodology.md` |

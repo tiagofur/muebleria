@@ -46,7 +46,7 @@ prerequisites listed below.
 | CNC, machine formats, receiver profiles, DXF/PTX | [Verification contract](verification.md) | Exact receiver's README/profile and relevant document under `machines/`; use source artifacts and golden examples rather than reading every dossier |
 | Deploy, environment, database operations | [Deployment](deployment.md) | [PostgreSQL RLS operations](postgresql-rls-operations.md), [desktop release](desktop-release.md) |
 | Tests, CI, release evidence | [Verification](verification.md) | [Test database isolation](architecture/test-database-isolation.md), [pilot readiness](pilot-readiness.md), exact workflow |
-| Agent workflow / G-ODD / execution artifact | [Root AGENTS](../AGENTS.md), [human-start contract](demo/software-factory-human-start.md) | Role skill under `.agents/skills/`, then exactly the approved issue's `odd/tasks/<issue>-<slug>.md` if the chosen topology requires one |
+| Agent workflow / G-ODD / execution artifact | [Root AGENTS](../AGENTS.md), [human-start contract](demo/software-factory-human-start.md), [clean-context review](demo/software-factory-clean-context-review.md) | Role skill under `.agents/skills/`, then exactly the approved issue's `odd/tasks/<issue>-<slug>.md` if the chosen topology requires one |
 | How to reorganize code/docs for agents | [Agent-first methodology](agent-first-methodology.md) | Applicable local `AGENTS.md` and exact change scope |
 
 ## Canonical vs. dated / historical documents
