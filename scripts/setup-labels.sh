@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Idempotent GitHub label setup for the Granete Software Factory.
-# Only ADDS missing factory labels; never renames or deletes existing ones.
+# Adds missing factory labels and refreshes color/description of existing ones
+# (--force); it never renames, deletes, or rewrites label names.
 set -euo pipefail
 
 if ! command -v gh >/dev/null 2>&1; then

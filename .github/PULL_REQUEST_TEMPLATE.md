@@ -36,7 +36,7 @@ Select exactly one and apply its matching live PR label.
 ## Test evidence
 Record commands, results, exact tested revision, and runtime proof. Explain N/A; do not claim skipped tests passed.
 
-## Visual evidence
+## Visual Evidence
 <!-- Only for PRs labeled `ux:shape`: screenshots naming which file proves what, linking the published UX brief being honored. Otherwise: -->
 N/A
 

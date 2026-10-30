@@ -91,6 +91,18 @@ class ReviewBundleTest(unittest.TestCase):
         state = self.build(head=head)
         self.assertIn("high-risk-keyword:backend-go/internal/api/token_rotation.go", state["high_risk_triggers"])
 
+    def test_root_guardrail_files_flip_judgment_day(self):
+        # Regression for the jd-judge P1: prefixes and keywords miss the root
+        # guardrail files the clean-context protocol names as triggers.
+        head = self.commit_change("AGENTS.md", "# changed\n")
+        state = self.build(head=head)
+        self.assertEqual(state["high_risk_triggers"], ["sensitive-surface:AGENTS.md"])
+        self.assertTrue(state["judgment_day_required"])
+        head = self.commit_change("CHECKPOINTS.md", "# changed\n")
+        state = self.build(head=head)
+        self.assertIn("sensitive-surface:CHECKPOINTS.md", state["high_risk_triggers"])
+        self.assertTrue(state["judgment_day_required"])
+
     def test_invalid_inputs_fail_closed_before_git(self):
         with patch.object(bundle_script, "run_git", side_effect=AssertionError("network reached")):
             for args in ((self.root, self.base, "HEAD", 0, "", ""), (self.root, "", "HEAD", 1, "", "")):
@@ -107,7 +119,12 @@ class ReviewBundleTest(unittest.TestCase):
                 "--issue", "42", "--output-md", str(out_md), "--output-json", str(out_json),
             ])
         self.assertEqual(code, 0)
-        self.assertIn("BUNDLE_READY issue=42", buffer.getvalue())
+        # Strict format: the summary proves pins only; nothing else is echoed.
+        self.assertRegex(
+            buffer.getvalue().strip(),
+            r"^BUNDLE_READY issue=42 base=[0-9a-f]{7} head=[0-9a-f]{7} "
+            r"scope_sha256=[0-9a-f]{12} judgment_day=(true|false)$",
+        )
         parsed = json.loads(out_json.read_text())
         self.assertEqual(parsed["issue"], 42)
         self.assertIn("Clean-context review bundle", out_md.read_text())

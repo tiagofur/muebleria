@@ -10,6 +10,7 @@ factory-test: ## Run factory guardrail tests (C3 structural)
 	python3 -m unittest discover -s scripts -p test_factory_efficiency.py -v
 	python3 -m unittest discover -s scripts -p test_factory_workflow_contract.py -v
 	python3 -m unittest discover -s scripts -p test_factory_handoff.py -v
+	python3 -m unittest discover -s scripts -p test_check_pr_metadata.py -v
 	python3 -m unittest discover -s scripts -p test_factory_review_bundle.py -v
 
 handoff: ## Advisory exact-PR evidence handoff (C4); requires --pr --issue --head --base

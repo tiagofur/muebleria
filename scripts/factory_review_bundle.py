@@ -18,6 +18,14 @@ HIGH_RISK_PATH_PREFIXES = (
     ".agents/skills/",
 )
 
+# Root guardrail files named by the clean-context protocol's trigger list;
+# startswith prefixes and keywords do not catch them.
+HIGH_RISK_EXACT_PATHS = (
+    "AGENTS.md",
+    "CHECKPOINTS.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+)
+
 HIGH_RISK_KEYWORDS = (
     "migration",
     "auth",
@@ -51,7 +59,9 @@ def detect_high_risk(changed_files):
     triggers = []
     for path in changed_files:
         lowered = path.lower()
-        if any(path.startswith(prefix) for prefix in HIGH_RISK_PATH_PREFIXES):
+        if path in HIGH_RISK_EXACT_PATHS or any(
+            path.startswith(prefix) for prefix in HIGH_RISK_PATH_PREFIXES
+        ):
             triggers.append("sensitive-surface:" + path)
         elif any(keyword in lowered for keyword in HIGH_RISK_KEYWORDS):
             triggers.append("high-risk-keyword:" + path)
@@ -71,9 +81,12 @@ def build_bundle(root, base, head, issue, acceptance, verification_note):
         r"[0-9a-f]{40}", head_sha
     ):
         raise ValueError("Invalid arguments")
-    names = run_git(root, "diff", "--name-only", base_sha + "..." + head_sha)
-    stat = run_git(root, "diff", "--stat", base_sha + "..." + head_sha).strip()
-    patch = run_git(root, "diff", base_sha + "..." + head_sha)
+    # Two-dot endpoint diff: the patch always corresponds to the two pinned
+    # SHAs even when base is not an ancestor of head; three-dot would silently
+    # diff from the merge-base instead of the pinned base.
+    names = run_git(root, "diff", "--name-only", base_sha, head_sha)
+    stat = run_git(root, "diff", "--stat", base_sha, head_sha).strip()
+    patch = run_git(root, "diff", base_sha, head_sha)
     changed_files = [line.strip() for line in names.splitlines() if line.strip()]
     triggers = detect_high_risk(changed_files)
     scope = json.dumps(
@@ -155,9 +168,9 @@ def render_markdown(bundle):
             "```",
             "",
             "## Full diff",
-            "```diff",
+            "````diff",
             bundle["diff"],
-            "```",
+            "````",
         ]
     )
     return "\n".join(lines) + "\n"

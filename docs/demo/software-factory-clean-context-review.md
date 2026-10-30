@@ -80,7 +80,8 @@ the human — stop/narrow/extend is a human decision, never loop-until-green.
 ## 5. Automatic `judgment-day` escalation
 
 Routine work gets one clean-context reviewer. When the pinned diff touches a
-high-risk boundary, or review has already failed twice, the leader escalates to
+high-risk boundary, or a correction round already failed with a remaining
+P0/P1, the leader escalates to
 **blind dual review**: two independent read-only judges receive the identical
 frozen bundle without seeing each other's output; both must confirm a finding
 before it blocks, and contradictions escalate to the human.
@@ -92,6 +93,7 @@ Triggers:
 3. Shared contracts and TS↔Go parity fixtures under `contracts/`, or generated
    API surface changes.
 4. Factory guardrails: `scripts/`, `.github/workflows/`, `CHECKPOINTS.md`,
-   `AGENTS.md`, or the `.agents/skills/` contract.
+   `AGENTS.md`, `.github/PULL_REQUEST_TEMPLATE.md`, or the `.agents/skills/`
+   contract.
 5. Any PR exceeding the ~400 authored-line review budget (`chained-pr` slices).
 6. Any candidate that failed one correction round and still carries a P0/P1.
