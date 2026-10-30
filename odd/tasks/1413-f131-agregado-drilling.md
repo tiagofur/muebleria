@@ -115,3 +115,18 @@
   verificación en vivo owner + evidence pack #1061). Open question de la
   issue resuelta: miembros rígidos → issue propia (diferido autorizado por la
   issue).
+
+## Ronda de corrección (post-review dual, 10-30)
+
+- **Review**: judgment-day ciega, 2 jueces (A/B), ronda 1 — 0 severos,
+  2 WARNINGs coincidentes (info), CI 22/22 en 13ecd88e.
+- **Fix 1 (atribución)**: `DRILLING_AGREGADO_HOST_UNRESOLVED` cita ahora el
+  item DUEÑO de la plantilla vía `itemIdByKey` (primera línea que resolvió el
+  cacheKey, misma regla de identidad del mapa partId→módulo) en vez de
+  first-match por moduleId — con varias líneas del mismo módulo (o con
+  customDims distintos) antes podía citar la línea equivocada.
+- **Fix 2 (aserción)**: el negativo «sin perfil» fija directamente
+  `fallbackUsed === true` y el patrón byte-idéntico a la misma pieza SIN el
+  placement (línea base) — cualquier taladro inventado rompería la igualdad.
+- Revalidación V1 local: 2064/2064 dominio, tsc 0. Nuevo HEAD → CI y
+  re-juzgamiento scoped (ledger congelado + delta) re-corridos.

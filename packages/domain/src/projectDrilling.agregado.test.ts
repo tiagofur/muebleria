@@ -233,9 +233,38 @@ describe('resolveProjectDrilling con agregado (#1413 F131)', () => {
       catalog: catalogSP,
       generatedAt: '2026-10-30T00:00:00.000Z',
     });
+    const agrSinPlacement: Agregado = {
+      ...agrSinPerfil,
+      components: [{ componentId: 'comp-agr-lat', quantity: 1 }],
+    };
+    const catalogBase: Catalog = {
+      ...catalogSP,
+      agregados: catalogSP.agregados?.map((a) => (a.id === agrSinPerfil.id ? agrSinPlacement : a)),
+    };
+    const resultBase = resolveProjectDrilling({
+      project: {
+        ...plantillaProject,
+        items: [
+          {
+            id: 'item-f131-sp',
+            moduleId: 'mod-f131-sp',
+            quantity: 1,
+            optionChoices: { INTERIOR: IDS.matArauco },
+          },
+        ],
+      },
+      catalog: catalogBase,
+      generatedAt: '2026-10-30T00:00:00.000Z',
+    });
     const pattern = resultSP.patterns.find((p) => p.partName.includes('F131'));
     expect(pattern).toBeDefined();
-    expect(pattern!.holes.every((h) => h.description !== undefined && !h.description.includes('sin perfil'))).toBe(true);
+    const baseline = resultBase.patterns.find((p) => p.partName.includes('F131'));
+    expect(baseline).toBeDefined();
+    // Sin perfil, el placement no aporta NINGÚN agujero: el patrón queda en
+    // fallback F074 y es byte-idéntico a la misma pieza SIN el placement —
+    // cualquier taladro inventado del placement rompería esta igualdad.
+    expect(pattern!.fallbackUsed).toBe(true);
+    expect(pattern!.holes).toEqual(baseline!.holes);
     expect(resultSP.resolutionIssues).toEqual([]);
   });
 });
