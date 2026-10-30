@@ -1835,3 +1835,94 @@ describe('preset equivalente: riel centrado real (#1418 review B2)', () => {
     expect(x).toBe(-25);
   });
 });
+
+describe('offsetFormula — alineación de validación y bounds (#1421 rev, pasada de perfección)', () => {
+  it('acepta en validación fórmulas que Go acepta (evaluación con dims reales, no centinela)', () => {
+    // PW/(PW-1) es legítima con ancho real (divide por 0 SOLO con w=1);
+    // el validador TS ya no evalúa con dims centinela.
+    expect(() =>
+      validateAgregadoAssemblyDefinition({
+        id: 'agr-div',
+        rigidMembers: [
+          {
+            memberId: 'm',
+            role: 'r',
+            source: { kind: 'fixed', fixed: { hardwareId: 'hw-x' } },
+            placement: {
+              x: { ref: 'min', offsetMm: 0, offsetFormula: 'PW/(PW-1)' },
+              y: { ref: 'min', offsetMm: 0 },
+              z: { ref: 'min', offsetMm: 0 },
+            },
+            bomRole: 'non_purchasing',
+          },
+        ],
+      }),
+    ).not.toThrow();
+    // y resuelve bien con ancho real
+    const resolved = resolveAgregadoAssembly(
+      {
+        id: 'agr-div',
+        rigidMembers: [
+          {
+            memberId: 'm',
+            role: 'r',
+            source: { kind: 'fixed', fixed: { hardwareId: 'hw-x' } },
+            placement: {
+              x: { ref: 'min', offsetMm: 0, offsetFormula: 'PW/(PW-1)' },
+              y: { ref: 'min', offsetMm: 0 },
+              z: { ref: 'min', offsetMm: 0 },
+            },
+            bomRole: 'non_purchasing',
+          },
+        ],
+      },
+      { widthMm: 400, depthMm: 500, heightMm: 150 },
+    );
+    expect(resolved.rigidMembers[0]?.localTransform.translationMm[0]).toBe(1);
+  });
+
+  it('rechaza el resultado fuera de bounds (misma cota que offsetMm)', () => {
+    expect(() =>
+      resolveAgregadoAssembly(
+        {
+          id: 'agr-huge',
+          rigidMembers: [
+            {
+              memberId: 'm',
+              role: 'r',
+              source: { kind: 'fixed', fixed: { hardwareId: 'hw-x' } },
+              placement: {
+                x: { ref: 'min', offsetMm: 0, offsetFormula: 'PW*99999999' },
+                y: { ref: 'min', offsetMm: 0 },
+                z: { ref: 'min', offsetMm: 0 },
+              },
+              bomRole: 'non_purchasing',
+            },
+          ],
+        },
+        { widthMm: 400, depthMm: 500, heightMm: 150 },
+      ),
+    ).toThrow(/out of bounds/);
+  });
+
+  it('tabulaciones y saltos en la fórmula pasan validación (TS strip \\s+, paridad Go)', () => {
+    expect(() =>
+      validateAgregadoAssemblyDefinition({
+        id: 'agr-ws',
+        rigidMembers: [
+          {
+            memberId: 'm',
+            role: 'r',
+            source: { kind: 'fixed', fixed: { hardwareId: 'hw-x' } },
+            placement: {
+              x: { ref: 'min', offsetMm: 0, offsetFormula: 'PW\t/2' },
+              y: { ref: 'min', offsetMm: 0 },
+              z: { ref: 'min', offsetMm: 0 },
+            },
+            bomRole: 'non_purchasing',
+          },
+        ],
+      }),
+    ).not.toThrow();
+  });
+});

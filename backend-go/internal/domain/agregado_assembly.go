@@ -556,9 +556,14 @@ func ValidateAxisPlacement(axisName string, p AssemblyAxisPlacement) error {
 		}
 		// Format-only check at validation time (the bounded evaluator lives
 		// in the engine package and runs at resolve time with real params).
-		// Same charset as the TS shared evaluator (TS parity); whitespace
-		// is stripped first (the evaluator ignores it too).
-		if !isValidOffsetFormulaCharset(strings.ReplaceAll(formula, " ", "")) {
+		// Same charset as the TS shared evaluator (TS parity); ALL whitespace
+		// is stripped first (the evaluator ignores it too — TS strips \s+).
+		if !isValidOffsetFormulaCharset(strings.Map(func(r rune) rune {
+			if unicode.IsSpace(r) {
+				return -1
+			}
+			return r
+		}, formula)) {
 			return fmt.Errorf("axis %s has an invalid offsetFormula: %q (only numbers, PW/PH/PD and + - * / parentheses)", axisName, *p.OffsetFormula)
 		}
 	}

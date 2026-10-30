@@ -537,6 +537,10 @@ func calculateAxisPlacementCoord(axisName string, p domain.AssemblyAxisPlacement
 		if err != nil {
 			return 0.0, fmt.Errorf("axis %s offset formula: %w", axisName, err)
 		}
+		// Same magnitude bound as offsetMm (#1421 rev, TS parity).
+		if math.Abs(float64(offset)) > 100000.0 {
+			return 0.0, fmt.Errorf("axis %s offset formula evaluates out of bounds: %d (|offset| must be ≤ 100000 mm)", axisName, offset)
+		}
 		return base + float64(offset), nil
 	}
 	return base + p.OffsetMm, nil
