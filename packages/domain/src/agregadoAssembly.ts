@@ -529,16 +529,18 @@ export function validateAxisPlacement(axisName: string, p: AssemblyAxisPlacement
   if (!Number.isFinite(p.offsetMm) || Math.abs(p.offsetMm) > 100000.0) {
     throw new Error(`axis ${axisName} has non-finite or out-of-bounds offsetMm: ${p.offsetMm}`);
   }
-  if (p.offsetFormula !== undefined) {
-    if (!p.offsetFormula.trim()) {
+  if (p.offsetFormula != null) {
+    // Sintaxis only (espejo exacto del validador Go): la evaluación corre en
+    // resolve con dimensiones reales — validar evaluando con dims centinela
+    // rechazaría fórmulas legítimas tipo PW/(PW-1) que Go acepta (#1421 rev).
+    const clean = p.offsetFormula.replace(/\s+/g, '');
+    if (!clean) {
       throw new Error(`axis ${axisName} has an empty offsetFormula (omit it or provide a formula)`);
     }
-    try {
-      evaluatePartFormula(p.offsetFormula, {
-        W: 1, H: 1, D: 1, PW: 1, PH: 1, PD: 1,
-      }, { structureCode: 'agregado', partDescription: `axis ${axisName}`, field: 'x' });
-    } catch (err) {
-      throw new Error(`axis ${axisName} has an invalid offsetFormula: ${err instanceof Error ? err.message : String(err)}`);
+    if (!/^[0-9.WHDTPBLiN+\-*/()]+$/.test(clean)) {
+      throw new Error(
+        `axis ${axisName} has an invalid offsetFormula: "${p.offsetFormula}" (only numbers, W/H/D/P/T/B/L/i/N and + - * / parentheses)`,
+      );
     }
   }
 }
@@ -773,10 +775,11 @@ function calculateAxisPlacementCoord(
     default:
       throw new Error(`axis ${axisName} has invalid reference '${(p as { ref: string }).ref}'`);
   }
-  if (p.offsetFormula !== undefined) {
+  if (p.offsetFormula != null) {
     // #1418: the formula replaces the numeric offset. The axis variable is
     // the envelope the ref resolves against (X→PW, Y→PD, Z→PH); both engines
-    // round to whole mm so TS and Go resolve identically.
+    // round to whole mm (half away from zero) so TS and Go resolve
+    // identically. Same magnitude bound as offsetMm (#1421 rev).
     const vars = axisName === 'x' ? { PW: dimensionMm } : axisName === 'y' ? { PD: dimensionMm } : { PH: dimensionMm };
     const evaluated = evaluatePartFormula(p.offsetFormula, {
       W: dimensionMm, H: dimensionMm, D: dimensionMm, ...vars,
@@ -785,7 +788,10 @@ function calculateAxisPlacementCoord(
       partDescription: `axis ${axisName}`,
       field: axisName === 'x' ? 'x' : axisName === 'y' ? 'y' : 'z',
     });
-    return base + Math.round(evaluated);
+    if (Math.abs(evaluated) > 100000.0) {
+      throw new Error(`axis ${axisName} offset formula evaluates out of bounds: ${evaluated} (|offset| must be ≤ 100000 mm)`);
+    }
+    return base + evaluated;
   }
   return base + p.offsetMm;
 }

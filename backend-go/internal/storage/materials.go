@@ -704,6 +704,30 @@ func (s *PostgresStore) countHardwareUsage(ctx context.Context, id string) (line
 	return
 }
 
+// ErrHardwareKitHasParts marks a refused active→false transition on a KIT
+// whose design parts still reference it (#1422 slice 1 review): deactivating
+// it would leave the parts' kit_hardware_id dangling.
+var ErrHardwareKitHasParts = errors.New("el juego tiene partes de diseño vinculadas")
+
+// ensureHardwareNotReferencedAsKit rejects an active→false transition when
+// OTHER hardware rows still point at this one as their kit.
+func (s *PostgresStore) ensureHardwareNotReferencedAsKit(ctx context.Context, id string) error {
+	var parts int
+	if err := s.db(ctx).QueryRow(ctx,
+		`SELECT count(*) FROM hardwares WHERE kit_hardware_id = $1 AND organization_id = $2 AND active`,
+		id, OrgFromCtx(ctx),
+	).Scan(&parts); err != nil {
+		return err
+	}
+	if parts > 0 {
+		return fmt.Errorf(
+			"%w: %d parte(s) de diseño siguen vinculadas; desvinculalas (re-ejecutá el asistente o editá las partes) antes de desactivarlo",
+			ErrHardwareKitHasParts, parts,
+		)
+	}
+	return nil
+}
+
 // ensureHardwareNotInUse rejects an active→false transition when the hardware
 // is still referenced (#1215).
 func (s *PostgresStore) ensureHardwareNotInUse(ctx context.Context, id string) error {
@@ -738,6 +762,12 @@ func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, expectedV
 			if err := s.ensureHardwareNotInUse(ctx, id); err != nil {
 				return err
 			}
+			// #1422 perfección (review B1): el camino PUT es el ÚNICO que el
+			// producto usa para desactivar — el guard de kit↔partes debe
+			// aplicar acá igual que en DeactivateHardware.
+			if err := s.ensureHardwareNotReferencedAsKit(ctx, id); err != nil {
+				return err
+			}
 		} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
@@ -768,6 +798,11 @@ func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, expectedV
 func (s *PostgresStore) DeactivateHardware(ctx context.Context, id string, expectedVersion int64) error {
 	// #1215: soft delete must not brick designs that still reference the item.
 	if err := s.ensureHardwareNotInUse(ctx, id); err != nil {
+		return err
+	}
+	// #1422 slice 1 review: a kit with linked parts must not be deactivated —
+	// the parts' kit_hardware_id would dangle.
+	if err := s.ensureHardwareNotReferencedAsKit(ctx, id); err != nil {
 		return err
 	}
 	query := `UPDATE hardwares SET active = false, updated_at = CURRENT_TIMESTAMP, version = version + 1 WHERE id = $1 AND organization_id = $2 AND version = $3`

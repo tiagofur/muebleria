@@ -10,7 +10,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Hardware, HardwareKitCreateRequest, HardwareKitResult } from '@granete/domain';
+import type { Agregado, Hardware, HardwareKitCreateRequest, HardwareKitResult } from '@granete/domain';
 import {
   ValidationError,
   countMachiningOperations,
@@ -73,6 +73,8 @@ export interface HardwareCatalogProps {
   readonly onCreateKit?: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
   /** #1416: agregado codes for the wizard's fail-closed collision check. */
   readonly agregadoCodes?: readonly string[];
+  /** #1418 restante (perfección): catálogo de agregados para el link kit→diseño. */
+  readonly agregados?: readonly Agregado[];
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 }
 
@@ -103,6 +105,7 @@ export function HardwareCatalog({
   onUploadImage,
   onCreateKit,
   agregadoCodes = [],
+  agregados = [],
   resolveImageUrl = (u) => u,
 }: HardwareCatalogProps): ReactNode {
   const formId = useId();
@@ -146,6 +149,16 @@ export function HardwareCatalog({
     return map;
   }, [hardware]);
   const kitById = useMemo(() => new Map(hardware.map((h) => [h.id, h] as const)), [hardware]);
+  // #1418 restante: kit → agregado de diseño (la receta cuyo kit es este herraje).
+  const designByKit = useMemo(() => {
+    const map = new Map<string, Agregado>();
+    for (const a of agregados) {
+      if (a.commercialKitHardwareId && !map.has(a.commercialKitHardwareId)) {
+        map.set(a.commercialKitHardwareId, a);
+      }
+    }
+    return map;
+  }, [agregados]);
 
   const rows = useMemo(
     () =>
@@ -391,8 +404,8 @@ export function HardwareCatalog({
             description="Agregá el primer herraje del catálogo o cargá la semilla del workspace."
             actionLabel="Agregar herraje"
             onAction={startCreate}
-            secondaryActionLabel={onCreateKit ? 'Juego de herraje' : undefined}
-            onSecondaryAction={onCreateKit ? () => setKitWizardOpen(true) : undefined}
+            secondaryActionLabel={onCreateKit && canMutate ? 'Juego de herraje' : undefined}
+            onSecondaryAction={onCreateKit && canMutate ? () => setKitWizardOpen(true) : undefined}
             secondaryActionTestId="hardware-kit-wizard-open"
           />
         ) : isFilterEmpty ? (
@@ -434,6 +447,17 @@ export function HardwareCatalog({
                         </li>
                       ))}
                     </ul>
+                  </div>
+                ) : null}
+                {designByKit.get(row.id) ? (
+                  <div
+                    className="catalog-row-detail__field catalog-row-detail__field--full"
+                    data-testid={`hardware-kit-design-${row.code}`}
+                  >
+                    <span className="catalog-row-detail__label">Diseño (receta)</span>
+                    <span className="catalog-row-detail__value">
+                      {designByKit.get(row.id)!.code} — {designByKit.get(row.id)!.name}
+                    </span>
                   </div>
                 ) : null}
                 <div className="catalog-row-detail__field">

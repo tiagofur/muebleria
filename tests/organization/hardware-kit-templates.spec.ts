@@ -10,7 +10,6 @@ import { required } from './support/api';
 const apiBase = required('ORGANIZATION_API_BASE');
 const password = required('ORGANIZATION_GATE_PASSWORD');
 
-const KIT_ID = '09690000-0000-4000-8000-000000001427';
 const KIT_CODE = 'AUT-BIS-HINGE';
 
 type Json = Record<string, unknown>;

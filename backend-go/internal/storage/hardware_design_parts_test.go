@@ -2,7 +2,9 @@ package storage_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -16,10 +18,11 @@ import (
 func TestHardwareDesignPartsRoundtrip(t *testing.T) {
 	store, _ := migratedConnectStore(t)
 	actor := connectStoreInitialActor
-	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code = 'HW-PARTS'`) })
+	code := fmt.Sprintf("HW-PARTS-%d", time.Now().UnixNano())
+	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code = $1`, code) })
 
 	in := &domain.Hardware{
-		Code: "HW-PARTS", Name: "Corredera con partes",
+		Code: code, Name: "Corredera con partes",
 		Unit: "piece", CostPerUnit: 0, Active: true,
 		DesignParts: []domain.HardwareDesignPart{
 			{ComponentName: "riel_fijo", ActorMembership: "body", Label: "Riel fijo"},
@@ -65,9 +68,10 @@ func TestHardwareDesignPartsRoundtrip(t *testing.T) {
 func TestHardwareDesignPartsLegacyNull(t *testing.T) {
 	store, _ := migratedConnectStore(t)
 	actor := connectStoreInitialActor
-	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code = 'HW-MONO-LINK'`) })
+	code := fmt.Sprintf("HW-MONO-LINK-%d", time.Now().UnixNano())
+	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code = $1`, code) })
 
-	in := &domain.Hardware{Code: "HW-MONO-LINK", Name: "Monolítica", Unit: "piece", CostPerUnit: 0, Active: true}
+	in := &domain.Hardware{Code: code, Name: "Monolítica", Unit: "piece", CostPerUnit: 0, Active: true}
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
 		return store.CreateHardware(txCtx, in)
 	})

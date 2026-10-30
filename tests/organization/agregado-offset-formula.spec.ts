@@ -134,6 +134,11 @@ test.describe.serial('Agregado — presets y anclas con fórmula (#1418)', () =>
       .getByTestId('agregado-tab-recipe-authoring-member-3')
       .waitFor({ state: 'visible', timeout: 20_000 });
     await page.getByTestId('agregado-tab-recipe-authoring-preset-center-rail').click();
+    // Con miembros existentes el preset pide confirmación (#1422 perfección,
+    // sin pérdida silenciosa de autoría): aceptar el reemplazo.
+    await page
+      .getByTestId('agregado-tab-recipe-authoring-preset-confirm-yes')
+      .click({ timeout: 5_000 });
     // El panel debe mostrar EXACTAMENTE 1 miembro antes de guardar; si una
     // hidratación tardía lo pisó, falla acá y no en el readback.
     await expect(

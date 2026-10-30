@@ -73,18 +73,25 @@ test.describe.serial('Herrajes — asistente Juego de herraje (#1416)', () => {
     const token = await loginOwner(page);
 
     // Limpieza defensiva de corridas previas interrumpidas (DB del gate es
-    // desechable, pero el spec puede re-correr sobre la misma base).
+    // desechable, pero el spec puede re-correr sobre la misma base). Partes
+    // PRIMERO (un kit con partes vinculadas responde 409 al desactivarse —
+    // #1422 perfección) y el kit tolera 409 defensivamente.
     const staleAgr = await readAgregadoByCode(token, `${KIT_CODE}-CAJON`);
     if (staleAgr) {
       const del = await api(token, 'DELETE', `/catalog/agregados/${staleAgr.id as string}`);
       expect([200, 204]).toContain(del.status);
     }
-    for (const suffix of ['', '-FIJ-I', '-FIJ-D', '-MOV-I', '-MOV-D']) {
+    for (const suffix of ['-FIJ-I', '-FIJ-D', '-MOV-I', '-MOV-D']) {
       const stale = await readHardwareByCode(token, `${KIT_CODE}${suffix}`);
       if (stale) {
         const del = await api(token, 'DELETE', `/catalog/hardware/${stale.id as string}`);
         expect([200, 204]).toContain(del.status);
       }
+    }
+    const staleKit = await readHardwareByCode(token, KIT_CODE);
+    if (staleKit) {
+      const del = await api(token, 'DELETE', `/catalog/hardware/${staleKit.id as string}`);
+      expect([200, 204, 409]).toContain(del.status);
     }
 
     await page.goto('/hardware');
@@ -137,6 +144,12 @@ test.describe.serial('Herrajes — asistente Juego de herraje (#1416)', () => {
 
     const designLeft = await readHardwareByCode(token, `${KIT_CODE}-FIJ-I`);
     expect(designLeft).toMatchObject({ unit: 'piece', cost_per_unit: 0, preview_shape: 'slide' });
+    // #1423 rev: el link kit↔parte también en ALTA NUEVA (no solo reuso
+    // legacy) — las 4 partes nacen vinculadas al kit generado.
+    for (const suffix of ['-FIJ-I', '-FIJ-D', '-MOV-I', '-MOV-D']) {
+      const part = await readHardwareByCode(token, `${KIT_CODE}${suffix}`);
+      expect(part?.kit_hardware_id, `${KIT_CODE}${suffix}`).toBe(kitRow!.id as string);
+    }
     expect(byId.get('fixed_rail_left')!.source).toMatchObject({
       kind: 'fixed',
       fixed: { hardwareId: designLeft!.id },

@@ -2,7 +2,9 @@ package storage_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -14,7 +16,7 @@ import (
 func TestCreateAgregado_PersistsRecipeAsRevisionOneWhenPresent(t *testing.T) {
 	store, _ := migratedConnectStore(t)
 	actor := connectStoreInitialActor
-	id := "create-recipe-agregado"
+	id := fmt.Sprintf("create-recipe-agregado-%d", time.Now().UnixNano())
 	// Sin cleanup: este test corre sobre una DB desechable fresca (migraciones
 	// por test) y la revisión es INMUTABLE una vez escrita (trigger P0001) —
 	// borrarla en cleanup es imposible por diseño (#1168).
@@ -22,7 +24,7 @@ func TestCreateAgregado_PersistsRecipeAsRevisionOneWhenPresent(t *testing.T) {
 	kitID := "kit-create-recipe"
 	in := &domain.Agregado{
 		ID:      id,
-		Code:    "CREATE-RECIPE",
+		Code:    fmt.Sprintf("CREATE-RECIPE-%d", time.Now().UnixNano()),
 		Name:    "Cajón con receta al nacer",
 		Active:  true,
 		WidthMm: 400, HeightMm: 150, DepthMm: 500,
@@ -72,7 +74,7 @@ func TestCreateAgregado_LegacyWithoutRecipeKeepsNoRevisionRow(t *testing.T) {
 	id := "create-legacy-agregado"
 	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM agregados WHERE id = $1`, id) })
 
-	in := &domain.Agregado{ID: id, Code: "CREATE-LEGACY", Name: "Legacy sin receta", Active: true}
+	in := &domain.Agregado{ID: id, Code: fmt.Sprintf("CREATE-LEGACY-%d", time.Now().UnixNano()), Name: "Legacy sin receta", Active: true}
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
 		return store.CreateAgregado(txCtx, in)
 	})

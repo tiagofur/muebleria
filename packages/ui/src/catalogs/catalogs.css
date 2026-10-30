@@ -1216,3 +1216,16 @@
   display: grid;
   gap: 2px;
 }
+
+/* #1422 perfección: confirmación inline de presets de receta */
+.agregado-recipe__preset-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border-accent-subtle, #cfe0cf);
+  border-radius: var(--radius-md);
+  background: var(--surface-accent-subtle, #eef2ee);
+}

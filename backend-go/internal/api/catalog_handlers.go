@@ -612,6 +612,12 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusConflict, err.Error())
 				return
 			}
+			if errors.Is(err, storage.ErrHardwareKitHasParts) {
+				// #1422 perfección (review B1): same 409 on the PUT path —
+				// the ONLY deactivation path the product actually uses.
+				respondWithError(w, http.StatusConflict, err.Error())
+				return
+			}
 			if isDuplicateKey(err) {
 				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
@@ -646,6 +652,12 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 			if errors.Is(err, storage.ErrHardwareInUse) {
 				// #1215: refuse to deactivate a referenced hardware with a
 				// clear 409 instead of a later opaque calculate failure.
+				respondWithError(w, http.StatusConflict, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrHardwareKitHasParts) {
+				// #1422 slice 1 review: a kit with linked parts must not be
+				// deactivated — the parts' kit link would dangle.
 				respondWithError(w, http.StatusConflict, err.Error())
 				return
 			}

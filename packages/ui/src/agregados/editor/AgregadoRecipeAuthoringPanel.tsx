@@ -8,7 +8,8 @@
  * la revisión guardada, nunca contra este borrador.
  */
 
-import { type ChangeEvent, type Dispatch, type ReactNode, type SetStateAction, useRef } from 'react';
+import {
+  useState, type ChangeEvent, type Dispatch, type ReactNode, type SetStateAction, useRef } from 'react';
 import type {
   Agregado,
   AgregadoRigidMember,
@@ -96,6 +97,16 @@ export function AgregadoRecipeAuthoringPanel({
 
   // #1418: presets de receta — un clic arma el esqueleto completo; el usuario
   // ajusta herrajes y offsets después. El kit existente manda (bomRole).
+  // Con miembros existentes pide confirmación explícita (los reemplaza
+  // completos — #1421 rev, sin pérdida silenciosa de autoría).
+  const [presetConfirm, setPresetConfirm] = useState<'drawer-slides' | 'center-rail' | null>(null);
+  const requestPreset = (kind: 'drawer-slides' | 'center-rail') => {
+    if (members.length === 0) {
+      applyPreset(kind);
+      return;
+    }
+    setPresetConfirm(kind);
+  };
   const applyPreset = (kind: 'drawer-slides' | 'center-rail') => {
     const hardwareId = catalogHardware[0]?.id ?? '';
     const bomRole: AgregadoRigidMember['bomRole'] = kitId !== '' ? 'included_in_kit' : 'separately_purchased';
@@ -292,7 +303,7 @@ export function AgregadoRecipeAuthoringPanel({
             <button
               type="button"
               className="btn btn--secondary btn--small"
-              onClick={() => applyPreset('drawer-slides')}
+              onClick={() => requestPreset('drawer-slides')}
               disabled={catalogHardware.length === 0}
               title="Arma 4 miembros: guías fijas a los costados + correderas móviles del cajón"
               data-testid={`${testId}-preset-drawer-slides`}
@@ -302,7 +313,7 @@ export function AgregadoRecipeAuthoringPanel({
             <button
               type="button"
               className="btn btn--secondary btn--small"
-              onClick={() => applyPreset('center-rail')}
+              onClick={() => requestPreset('center-rail')}
               disabled={catalogHardware.length === 0}
               title="Arma 1 miembro centrado con fórmula (acompaña el ancho)"
               data-testid={`${testId}-preset-center-rail`}
@@ -320,6 +331,38 @@ export function AgregadoRecipeAuthoringPanel({
             </button>
           </div>
         </div>
+        {presetConfirm ? (
+          <div
+            className="agregado-recipe__preset-confirm"
+            role="alertdialog"
+            aria-label="Confirmar reemplazo de miembros"
+            data-testid={`${testId}-preset-confirm`}
+          >
+            <span>
+              ¿Reemplazar los {members.length} miembro(s) actuales por la
+              plantilla?
+            </span>
+            <button
+              type="button"
+              className="btn btn--secondary btn--small"
+              onClick={() => {
+                applyPreset(presetConfirm);
+                setPresetConfirm(null);
+              }}
+              data-testid={`${testId}-preset-confirm-yes`}
+            >
+              Reemplazar
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--small"
+              onClick={() => setPresetConfirm(null)}
+              data-testid={`${testId}-preset-confirm-no`}
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : null}
         {members.length === 0 ? (
           <p className="catalog-empty">
             Sin miembros. Un miembro es una parte comprada del ensamble (una
@@ -559,16 +602,24 @@ export function AgregadoRecipeAuthoringPanel({
                             value={m.placement[axis].offsetFormula ?? String(m.placement[axis].offsetMm)}
                             onChange={(e) => {
                               const raw = e.target.value;
-                              // Número puro → offsetMm numérico; lo demás es
-                              // fórmula acotada (#1418: PW/PH/PD con + - * /).
+                              // Vacío → sin offset (0 numérico, sin fórmula):
+                              // borrar el campo no debe dejar una fórmula
+                              // vacía que bloquee el guardado (#1421 rev).
+                              // Número puro → offsetMm; lo demás es fórmula
+                              // acotada (#1418: PW/PH/PD con + - * /).
                               const isPlainNumber = raw.trim() !== '' && !Number.isNaN(Number(raw));
                               updateMember(idx, {
                                 placement: {
                                   ...m.placement,
                                   [axis]: {
                                     ...m.placement[axis],
-                                    offsetMm: isPlainNumber ? Number(raw) : m.placement[axis].offsetMm,
-                                    offsetFormula: isPlainNumber ? undefined : raw,
+                                    offsetMm: isPlainNumber
+                                      ? Number(raw)
+                                      : raw.trim() === ''
+                                      ? 0
+                                      : m.placement[axis].offsetMm,
+                                    offsetFormula:
+                                      isPlainNumber || raw.trim() === '' ? undefined : raw,
                                   },
                                 },
                               });
