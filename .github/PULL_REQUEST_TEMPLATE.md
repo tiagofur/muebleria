@@ -23,6 +23,11 @@ Select exactly one and apply its matching live PR label.
 ## Summary
 - Describe the outcome and its boundaries.
 
+## Decisions made without asking
+- Document autonomous technical defaults chosen under active ADRs, architecture,
+  and conventions docs instead of blocking on human input; write None if there
+  were none.
+
 ## Changes
 | File | Change |
 | --- | --- |
@@ -30,6 +35,21 @@ Select exactly one and apply its matching live PR label.
 
 ## Test evidence
 Record commands, results, exact tested revision, and runtime proof. Explain N/A; do not claim skipped tests passed.
+
+## Visual evidence
+<!-- Only for PRs labeled `ux:shape`: screenshots naming which file proves what, linking the published UX brief being honored. Otherwise: -->
+N/A
+
+## Risk
+Risk: none
+<!-- `Risk: none` or `Risk: item N (<reason>)`; name residual risk honestly. -->
+
+## Clean-context review handoff
+<!-- Pins from `scripts/factory_review_bundle.py` (advisory); a new HEAD invalidates them. -->
+- Base SHA: `<base_sha>`
+- Head SHA: `<head_sha>`
+- Scope digest: `<scope_sha256>`
+- Reviewer verdict: `<APPROVED | CHANGES_REQUESTED | BLOCKED>`
 
 ## Contributor checklist
 Check only verified statements; append an explicit reason when an item is N/A.

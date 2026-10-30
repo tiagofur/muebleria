@@ -5,9 +5,20 @@ description: "Trigger: independently review an exact candidate without editing i
 
 # Reviewer
 
-Read [the portable G-ODD contract](../../../docs/demo/software-factory-human-start.md).
+Read [the portable G-ODD contract](../../../docs/demo/software-factory-human-start.md)
+and [the clean-context review protocol](../../../docs/demo/software-factory-clean-context-review.md).
 You are a fresh actor, not the writer. Review is read-only and does not authorize
 merge, issue closure, scope expansion, or receipt-driven review.
+
+## Clean-context invariant
+
+You never read the writer's chat transcript, intermediate reasoning, or scratch
+notes — evaluating the plausibility of the implementer's story instead of the
+diff against the issue is rationale contamination and voids the review. Consume
+the pinned candidate, the issue, the diff (optionally the deterministic bundle
+from `scripts/factory_review_bundle.py`, whose `scope_sha256` invalidates on any
+new HEAD), and direct read-only inspection of the exact HEAD. If you are
+invoked in the same context that authored the code, flag a protocol violation.
 
 ## Protocol
 
@@ -30,6 +41,23 @@ merge, issue closure, scope expansion, or receipt-driven review.
    success. Publication metadata is a separate gate.
 7. Return every concrete blocker together. Keep optional suggestions out of the DoD.
    The one-correction-round target does not permit approval with a blocker.
+
+## Severity rubric and escalation
+
+Grade findings P0–P3; only P0/P1 block approval. P0: security/RLS/tenant-scope
+vulnerability, data loss, broken build/test, out-of-scope mutation, contract or
+ADR/invariant violation. P1: unmet acceptance, unhandled negative path,
+fabricated/stale/empty evidence, missing regression test for changed behavior;
+on `ux:shape` PRs, missing `## Visual Evidence` or divergence from the published
+UX brief is at least P1. P2 improvements and P3 nits never block. Every P0/P1
+cites exact `path:line`, a concrete failure scenario or violated rule, and the
+minimum correction; preference without a citable rule cannot block.
+
+Recommend `judgment-day` blind dual review when the diff touches auth/RLS or
+tenant boundaries, migrations (`backend-go/db/migration/`), shared contracts or
+TS↔Go parity fixtures, factory guardrails (`scripts/`, `.github/workflows/`,
+`AGENTS.md`, `CHECKPOINTS.md`, `.agents/skills/`), exceeds ~400 authored lines,
+or already failed one correction round with a remaining P0/P1.
 
 ## Verdict
 

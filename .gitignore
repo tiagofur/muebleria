@@ -61,3 +61,7 @@ backend-go/admin
 
 # #793 — local final-review field packs (never committed, never sent)
 /artifacts-local/
+
+# Local reference clone of the portable software-factory template
+# (canonical copy lives outside this repository).
+/software-factory-base/
