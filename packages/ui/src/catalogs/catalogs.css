@@ -1285,3 +1285,10 @@
 .catalog-kit-part-row__name {
   flex: 1 1 auto;
 }
+
+/* #1422 owner: el bloque de partes del kit ocupa la FILA COMPLETA del grid
+   del detalle expandido — sin él, los cards anidados desbordan su celda
+   (~9.5rem) y se encima del resto de los campos. */
+.catalog-row-detail__field--full {
+  grid-column: 1 / -1;
+}
