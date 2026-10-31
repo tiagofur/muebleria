@@ -99,6 +99,23 @@ EDITOR (browser real), usarla en el asistente, readback exacto del agregado
   (+2 UUID), web 610/610, builds+vet limpios. Nuevo HEAD → CI + 
   re-juzgamiento scoped (ledger congelado + delta).
 
+## Ronda 2 de corrección (CI shard 3/3 rojo, 10-31)
+
+- CI roja en el HEAD aprobado: el E2E nuevo fallaba al REABRIR el
+  asistente tras crear el juego — el click quedaba interceptado por el
+  overlay del PROPIO wizard (modal md, pantalla de resultado aún abierta:
+  el test nunca cerraba con «Listo»). Reproducido localmente en el gate
+  aislado (misma firma: ui-modal__overlay intercepta, 180s de reintentos);
+  un spec de diagnóstico instrumentado (elementFromPoint + dump de modales)
+  descartó modales remanentes del editor y confirmó el mecanismo.
+- Fix (sólo test): cerrar la pantalla de resultado con «Listo» antes de
+  reabrir (flujo real de usuario) + reload determinista entre la fase de
+  edición y la de creación. Producto sin cambios.
+- Hallazgo colateral archivado como issue propia #1432: fuga del
+  scroll-lock del body con modales anidados (infra Modal pre-existente, no
+  bloquea clicks).
+- Verificación local: gate aislado 3/3 PASS (13.1s) sobre el árbol exacto.
+
 ## Fuera de alcance (partial)
 
 - Apertura de puerta en host SketchUp (aceptación de la issue) → verificación

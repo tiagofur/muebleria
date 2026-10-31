@@ -131,6 +131,14 @@ test.describe.serial('Herrajes — plantillas del taller editables (#1422 slice 
     expect(savedSlots[1]).toMatchObject({ membership: 'actor:door', anchorXRef: 'center', defaultOffsetMm: 24 });
 
     // El asistente ofrece la plantilla del taller y arma desde ella.
+    // Recarga determinista: la plantilla ya está persistida (readback API
+    // arriba); la coreografía de cierre wizard↔editor (animaciones de 350ms
+    // + portales) no es lo que este test demuestra, y en runners lentos el
+    // re-click sobre la misma página quedó tapado por el remanente del modal
+    // (fallo CI shard 3/3: interceptado por ui-modal__overlay). Tras reload
+    // el estado es el de cualquier usuario que abre el asistente de nuevo.
+    await page.reload();
+    await page.getByTestId('hardware-kit-wizard-open').waitFor({ state: 'visible', timeout: 20_000 });
     await page.getByTestId('hardware-kit-wizard-open').click();
     const select = page.getByTestId('hardware-kit-wizard-template-select');
     await select.selectOption({ label: 'Levantadza del taller' });
@@ -156,6 +164,13 @@ test.describe.serial('Herrajes — plantillas del taller editables (#1422 slice 
     expect(members.map((m) => m.memberId)).toEqual(['lift_arm', 'lift_spring']);
     expect(members[0]).toMatchObject({ actorMembership: 'body' });
     expect(members[1]).toMatchObject({ actorMembership: 'actor:door' });
+
+    // El usuario cierra la pantalla de resultado con «Listo» antes de
+    // reabrir el asistente: sin ese cierre, el propio wizard (modal md)
+    // tapa el botón del toolbar y el click nunca dispatchea (fallo CI
+    // shard 3/3 — el interceptor era el overlay del propio wizard).
+    await page.getByTestId('hardware-kit-wizard-close').click();
+    await expect(page.getByTestId('hardware-kit-wizard')).not.toBeVisible({ timeout: 10_000 });
 
     // Edición alcanzable desde el asistente (#1422 review C2): seleccionada
     // la plantilla del taller, «Editar» abre el editor precargado y el
