@@ -1,0 +1,112 @@
+---
+import { Box, ShieldCheck, Wrench, FileCode2, PackageCheck, Binary } from '@lucide/astro';
+---
+
+<section id="capacidades" class="py-28 bg-[#090C14] border-t border-slate-800/80">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center max-w-3xl mx-auto mb-20 space-y-4">
+      <span class="text-xs font-semibold uppercase tracking-widest text-sky-400 bg-sky-500/10 px-3.5 py-1.5 rounded-full border border-sky-500/20">
+        Ingeniería Real para Madera y Placas
+      </span>
+      <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+        Por qué Granete no es otro software <br class="hidden sm:inline" />
+        de diseño genérico.
+      </h2>
+      <p class="text-slate-400 text-base sm:text-lg">
+        La mayoría de los programas son o visores 3D bonitos sin noción de taller, o ERPs contables que no entienden qué es un canto de PVC de 2mm. Granete une ambos mundos.
+      </p>
+    </div>
+
+    <!-- Bento Grid Layout -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <!-- Bento 1: Large feature - SketchUp native (span 2) -->
+      <div class="md:col-span-2 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-8 flex flex-col justify-between hover:border-indigo-500/40 transition-all duration-300 relative overflow-hidden group">
+        <div class="absolute -right-10 -bottom-10 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="space-y-4 max-w-xl">
+          <div class="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+            <Box class="w-6 h-6" />
+          </div>
+          <h3 class="text-2xl font-bold text-white">Extensión Nativa para SketchUp</h3>
+          <p class="text-slate-300 text-sm leading-relaxed">
+            No obligues a tus diseñadores a aprender un software rígido desde cero. Granete se integra de forma directa dentro de SketchUp: inserta módulos paramétricos de tu biblioteca, ajusta dimensiones y el motor calcula la ingeniería detrás de escena en tiempo real.
+          </p>
+          <ul class="grid grid-cols-2 gap-2 text-xs text-slate-400 font-mono pt-2">
+            <li class="flex items-center gap-2">✓ HUD de cotización en vivo</li>
+            <li class="flex items-center gap-2">✓ Validación de espesor de placa</li>
+            <li class="flex items-center gap-2">✓ Agregados paramétricos</li>
+            <li class="flex items-center gap-2">✓ Sincronización bidireccional</li>
+          </ul>
+        </div>
+        <div class="mt-6 pt-6 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+          <span class="font-mono text-indigo-400 font-semibold">Granete for SketchUp Pro</span>
+          <span>Sin exportar archivos manuales</span>
+        </div>
+      </div>
+
+      <!-- Bento 2: Control de Revisiones (span 1) -->
+      <div class="rounded-2xl bg-slate-900/60 border border-slate-800 p-8 flex flex-col justify-between hover:border-indigo-500/40 transition-all duration-300">
+        <div class="space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <ShieldCheck class="w-6 h-6" />
+          </div>
+          <h3 class="text-xl font-bold text-white">Revisiones Inmutables</h3>
+          <p class="text-slate-300 text-sm leading-relaxed">
+            En una obra promedio hay 5 cambios de cliente. Granete nunca sobreescribe: congela versiones exactas. La orden de corte en fábrica siempre responde a la última revisión aprobada.
+          </p>
+        </div>
+        <div class="mt-6 pt-4 border-t border-slate-800/80 text-xs text-slate-500 font-mono">
+          Cero piezas cortadas por planos obsoletos
+        </div>
+      </div>
+
+      <!-- Bento 3: Herrajes como Activos Industriales (span 1) -->
+      <div class="rounded-2xl bg-slate-900/60 border border-slate-800 p-8 flex flex-col justify-between hover:border-indigo-500/40 transition-all duration-300">
+        <div class="space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <Wrench class="w-6 h-6" />
+          </div>
+          <h3 class="text-xl font-bold text-white">Herrajes Técnicos Reales</h3>
+          <p class="text-slate-300 text-sm leading-relaxed">
+            Un herraje no es un dibujo 3D hueco. Granete incluye reglas de perforación, descuentos de madera para cajones ocultos o tipo Box, y enlace directo a compras y almacén.
+          </p>
+        </div>
+        <div class="mt-6 pt-4 border-t border-slate-800/80 text-xs text-slate-500 font-mono">
+          Mecanizados y holguras precisas
+        </div>
+      </div>
+
+      <!-- Bento 4: Salida directa a Máquina (span 1) -->
+      <div class="rounded-2xl bg-slate-900/60 border border-slate-800 p-8 flex flex-col justify-between hover:border-indigo-500/40 transition-all duration-300">
+        <div class="space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400">
+            <FileCode2 class="w-6 h-6" />
+          </div>
+          <h3 class="text-xl font-bold text-white">Archivos para Seccionadora y CNC</h3>
+          <p class="text-slate-300 text-sm leading-relaxed">
+            Genera directamente archivos de corte PTX (para Homag/CADmatic y compatibles) y planos DXF de perforación. Cero transcripción a planillas intermedias.
+          </p>
+        </div>
+        <div class="mt-6 pt-4 border-t border-slate-800/80 text-xs text-slate-500 font-mono">
+          Compatibilidad industrial verificada
+        </div>
+      </div>
+
+      <!-- Bento 5: Preflight y Compras (span 1) -->
+      <div class="rounded-2xl bg-slate-900/60 border border-slate-800 p-8 flex flex-col justify-between hover:border-indigo-500/40 transition-all duration-300">
+        <div class="space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
+            <PackageCheck class="w-6 h-6" />
+          </div>
+          <h3 class="text-xl font-bold text-white">Preflight de Fabricación</h3>
+          <p class="text-slate-300 text-sm leading-relaxed">
+            Como en la aviación: antes de mandar una orden al taller, el sistema valida que no haya piezas sin material, cantos incompatibles ni herrajes sin asignar.
+          </p>
+        </div>
+        <div class="mt-6 pt-4 border-t border-slate-800/80 text-xs text-slate-500 font-mono">
+          Detección preventiva de errores
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+

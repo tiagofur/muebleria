@@ -1,0 +1,186 @@
+---
+import { MessageSquare, Shield, Clock, Send, Sparkles } from '@lucide/astro';
+---
+
+<section id="demo" class="py-28 bg-[#0B0F19] relative overflow-hidden">
+  <!-- Glow background -->
+  <div class="absolute bottom-0 right-1/4 w-[500px] h-[300px] bg-indigo-600/10 blur-[130px] pointer-events-none -z-10"></div>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+      <!-- Left side: Persuasive copy (5 cols) -->
+      <div class="lg:col-span-5 space-y-6">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-medium">
+          <Sparkles class="w-3.5 h-3.5 text-indigo-400" />
+          <span>Implementación Consultiva Directa</span>
+        </div>
+
+        <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
+          Cada fábrica es única. <br />
+          Evaluemos juntos tu flujo <br />
+          y tus máquinas.
+        </h2>
+
+        <p class="text-slate-300 text-base leading-relaxed">
+          No vendemos licencias enlatadas ni dejamos a tu equipo abandonado con tutoriales genéricos. Analizamos tu combinación exacta de diseño, seccionadoras, CNC y métodos de armado para calibrar Granete a tu producción real.
+        </p>
+
+        <div class="space-y-4 pt-2">
+          <div class="flex items-start gap-3">
+            <div class="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+              <Clock class="w-4 h-4" />
+            </div>
+            <div>
+              <div class="text-sm font-bold text-white">Demostración 1 a 1 de 30 minutos</div>
+              <div class="text-xs text-slate-400">Verás una obra real pasar de SketchUp a la orden de corte en minutos.</div>
+            </div>
+          </div>
+
+          <div class="flex items-start gap-3">
+            <div class="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+              <Shield class="w-4 h-4" />
+            </div>
+            <div>
+              <div class="text-sm font-bold text-white">Compatibilidad con tu maquinaria</div>
+              <div class="text-xs text-slate-400">Evaluamos tus archivos de corte (PTX, DXF, hojas de sierra) sin compromiso.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- WhatsApp Quick Link -->
+        <div class="pt-4 border-t border-slate-800">
+          <p class="text-xs text-slate-400 mb-2">¿Prefieres una consulta inmediata?</p>
+          <a 
+            href="https://wa.me/?text=Hola,%20me%20interesa%20conocer%20Granete%20para%20mi%20f%C3%A1brica%20de%20muebles" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-2 text-sm font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+          >
+            <MessageSquare class="w-4 h-4" />
+            <span>Hablar por WhatsApp con un especialista</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Right side: High-converting Lead Form (7 cols) -->
+      <div class="lg:col-span-7">
+        <div class="rounded-3xl border border-slate-700/80 bg-slate-900/80 p-8 sm:p-10 shadow-2xl shadow-indigo-950/40 backdrop-blur-xl">
+          <div class="mb-8">
+            <h3 class="text-2xl font-bold text-white mb-2">Solicitar Demostración de Granete</h3>
+            <p class="text-xs sm:text-sm text-slate-400">
+              Completa los datos de tu empresa y coordinaremos una sesión personalizada para tu fábrica.
+            </p>
+          </div>
+
+          <form class="space-y-5" onsubmit="event.preventDefault(); alert('¡Gracias! Nos pondremos en contacto contigo a la brevedad para coordinar la demostración.');">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label for="name" class="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Tu Nombre *</label>
+                <input 
+                  type="text" 
+                  id="name" 
+                  name="name" 
+                  required 
+                  placeholder="Ej. Carlos Martínez" 
+                  class="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label for="email" class="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Email de Contacto *</label>
+                <input 
+                  type="email" 
+                  id="email" 
+                  name="email" 
+                  required 
+                  placeholder="carlos@tufabrica.com" 
+                  class="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label for="phone" class="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Teléfono / WhatsApp *</label>
+                <input 
+                  type="tel" 
+                  id="phone" 
+                  name="phone" 
+                  required 
+                  placeholder="+54 9 11 ..." 
+                  class="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label for="company" class="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Nombre de tu Fábrica / Taller *</label>
+                <input 
+                  type="text" 
+                  id="company" 
+                  name="company" 
+                  required 
+                  placeholder="Ej. Amoblamientos del Sur" 
+                  class="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label for="team-size" class="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Personal en Planta / Taller</label>
+                <select 
+                  id="team-size" 
+                  name="team-size" 
+                  class="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                >
+                  <option value="1-3">1 a 3 personas (Taller a medida)</option>
+                  <option value="4-10" selected>4 a 10 personas (Carpintería mediana)</option>
+                  <option value="11-30">11 a 30 personas (Fábrica industrial)</option>
+                  <option value="30+">Más de 30 personas (Planta mayor)</option>
+                </select>
+              </div>
+
+              <div>
+                <label for="machines" class="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Maquinaria Principal</label>
+                <select 
+                  id="machines" 
+                  name="machines" 
+                  class="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                >
+                  <option value="sierra">Sierra Escuadradora / Mesa de corte</option>
+                  <option value="seccionadora">Seccionadora vertical u horizontal</option>
+                  <option value="cnc" selected>Centro de Mecanizado / CNC Nesting</option>
+                  <option value="mixto">Seccionadora + CNC + Enchapadora</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label for="challenge" class="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">¿Cuál es tu principal desafío actual?</label>
+              <textarea 
+                id="challenge" 
+                name="challenge" 
+                rows="3" 
+                placeholder="Ej. Tardo mucho cotizando y paso demasiadas horas transcribiendo medidas a Excel para el corte..." 
+                class="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all resize-none"
+              ></textarea>
+            </div>
+
+            <button 
+              type="submit" 
+              class="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-indigo-600/30 hover:shadow-indigo-500/50 transition-all duration-200 transform hover:-translate-y-0.5 text-base"
+            >
+              <span>Agendar Demostración para mi Fábrica</span>
+              <Send class="w-4 h-4" />
+            </button>
+
+            <p class="text-[11px] text-center text-slate-500 pt-1">
+              Tus datos son 100% confidenciales. Sin ventas agresivas ni compromisos.
+            </p>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+

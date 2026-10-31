@@ -1,0 +1,188 @@
+---
+import { ArrowRight, Sparkles, CheckCircle2, Layers, Cpu, QrCode, FileSpreadsheet } from '@lucide/astro';
+---
+
+<section class="relative pt-32 pb-20 md:pt-40 md:pb-28 overflow-hidden">
+  <!-- Glow background effects -->
+  <div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[350px] bg-gradient-to-tr from-indigo-600/20 via-purple-600/15 to-transparent blur-[120px] pointer-events-none -z-10"></div>
+  <div class="absolute top-1/3 left-1/4 w-[400px] h-[250px] bg-amber-500/10 blur-[100px] pointer-events-none -z-10"></div>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Top Pill -->
+    <div class="flex justify-center mb-6">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs sm:text-sm font-medium shadow-inner shadow-indigo-500/20 backdrop-blur-sm">
+        <Sparkles class="w-3.5 h-3.5 text-indigo-400" />
+        <span>ERP / MRP / MES Vertical para Mueblerías y Carpinterías</span>
+      </div>
+    </div>
+
+    <!-- Main Headline -->
+    <div class="text-center max-w-4xl mx-auto space-y-6">
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.12]">
+        De la cotización a la máquina <br class="hidden sm:inline" />
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-sky-300 to-indigo-200">
+          sin retrabajos ni planillas sueltas.
+        </span>
+      </h1>
+      <p class="text-lg sm:text-xl text-slate-300 font-normal leading-relaxed max-w-2xl mx-auto">
+        Conecta tu cartera de ventas, el diseño 3D en SketchUp, el despiece paramétrico y el taller de fabricación en una <strong>única fuente de verdad</strong>. El fin del teléfono descompuesto entre oficina y planta.
+      </p>
+
+      <!-- Action Buttons -->
+      <div class="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a 
+          href="#demo" 
+          class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-7 py-4 rounded-xl text-base shadow-xl shadow-indigo-600/25 hover:shadow-indigo-500/40 transition-all duration-200 transform hover:-translate-y-0.5"
+        >
+          <span>Solicitar Demostración Consultiva</span>
+          <ArrowRight class="w-5 h-5" />
+        </a>
+        <a 
+          href="#flujo" 
+          class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/80 text-slate-200 font-medium px-6 py-4 rounded-xl text-base transition-colors"
+        >
+          <span>Ver Cómo Funciona el Hilo Digital</span>
+        </a>
+      </div>
+
+      <!-- Trust Badges -->
+      <div class="pt-6 flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-xs sm:text-sm text-slate-400">
+        <div class="flex items-center gap-2">
+          <CheckCircle2 class="w-4 h-4 text-emerald-400" />
+          <span>Cero planillas intermedias</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <CheckCircle2 class="w-4 h-4 text-emerald-400" />
+          <span>SketchUp integrado de forma nativa</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <CheckCircle2 class="w-4 h-4 text-emerald-400" />
+          <span>Archivos exactos para seccionadora y CNC</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Platform Showcase Mockup -->
+    <div class="mt-14 max-w-5xl mx-auto">
+      <div class="relative rounded-2xl border border-slate-700/70 bg-gradient-to-b from-slate-900/90 to-[#0F1422] p-3 sm:p-5 shadow-2xl shadow-indigo-950/50 backdrop-blur-xl">
+        <!-- Mockup top bar -->
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800 text-xs text-slate-400 mb-4 px-2">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-rose-500/80"></span>
+            <span class="w-3 h-3 rounded-full bg-amber-500/80"></span>
+            <span class="w-3 h-3 rounded-full bg-emerald-500/80"></span>
+            <span class="ml-2 font-mono text-slate-300">Granete Core // Obra: Residencia Los Álamos - Cocina Principal</span>
+          </div>
+          <div class="hidden sm:flex items-center gap-3">
+            <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/20 text-[11px]">Revisión R-03 [LIBERADA]</span>
+            <span class="font-mono text-[11px]">Sync SketchUp: Conectado</span>
+          </div>
+        </div>
+
+        <!-- 3 Columns Preview: Design, Calculation, Workshop Output -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Col 1: Authoring & SketchUp -->
+          <div class="bg-slate-950/60 rounded-xl p-4 border border-slate-800/80 space-y-3">
+            <div class="flex items-center justify-between text-xs">
+              <span class="flex items-center gap-1.5 text-indigo-400 font-semibold">
+                <Layers class="w-4 h-4" />
+                1. Autoría 3D
+              </span>
+              <span class="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono">SketchUp Client</span>
+            </div>
+            <div class="h-36 rounded-lg bg-slate-900 border border-slate-800 flex flex-col items-center justify-center relative overflow-hidden p-3 group">
+              <!-- Wireframe visual -->
+              <div class="w-28 h-24 border-2 border-dashed border-indigo-400/50 rounded flex flex-col justify-between p-1 bg-indigo-950/20">
+                <div class="flex justify-between text-[9px] text-indigo-300 font-mono">
+                  <span>An: 800</span>
+                  <span>Al: 850</span>
+                </div>
+                <div class="border-t border-indigo-400/30 flex h-8 items-center justify-center text-[10px] text-slate-400 font-mono">
+                  2x Cajón Box
+                </div>
+                <div class="text-[8px] text-slate-500 font-mono text-center">Fondo: 580mm</div>
+              </div>
+              <div class="absolute bottom-2 left-2 right-2 bg-slate-950/90 text-[10px] px-2 py-1 rounded border border-slate-800 text-slate-300 flex justify-between">
+                <span>Módulo: Bajo Mesada 80</span>
+                <span class="text-emerald-400 font-semibold">Reglas OK</span>
+              </div>
+            </div>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              Diseño paramétrico con espesores reales (18mm), fondos ranurados y anclajes técnicos reales.
+            </p>
+          </div>
+
+          <!-- Col 2: Live Commercial & BOM Resolution -->
+          <div class="bg-slate-950/60 rounded-xl p-4 border border-slate-800/80 space-y-3">
+            <div class="flex items-center justify-between text-xs">
+              <span class="flex items-center gap-1.5 text-amber-400 font-semibold">
+                <FileSpreadsheet class="w-4 h-4" />
+                2. Resolución & Costo
+              </span>
+              <span class="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Delta en Vivo</span>
+            </div>
+            <div class="h-36 rounded-lg bg-slate-900 border border-slate-800 p-3 flex flex-col justify-between text-xs font-mono">
+              <div class="space-y-1.5">
+                <div class="flex justify-between text-slate-300">
+                  <span class="text-slate-400">Cotización R-02:</span>
+                  <span>$4,120.00</span>
+                </div>
+                <div class="flex justify-between text-indigo-300 font-semibold bg-indigo-950/40 px-1.5 py-0.5 rounded">
+                  <span>Delta por Herraje:</span>
+                  <span>+$140.00</span>
+                </div>
+                <div class="flex justify-between text-emerald-400 font-bold border-t border-slate-800 pt-1">
+                  <span>Costo Proyectado:</span>
+                  <span>$4,260.00</span>
+                </div>
+              </div>
+              <div class="text-[10px] text-slate-400 bg-slate-950 px-2 py-1 rounded border border-slate-800/80 flex justify-between items-center">
+                <span>Piezas: 38</span>
+                <span>Herrajes: 12</span>
+                <span class="text-sky-400">Tableros: 4.2</span>
+              </div>
+            </div>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              El motor recalcula al milímetro el costo, consumo de tableros y margen real ante cualquier cambio de diseño.
+            </p>
+          </div>
+
+          <!-- Col 3: Machine & Shop-floor Ready -->
+          <div class="bg-slate-950/60 rounded-xl p-4 border border-slate-800/80 space-y-3">
+            <div class="flex items-center justify-between text-xs">
+              <span class="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                <Cpu class="w-4 h-4" />
+                3. Salida de Planta
+              </span>
+              <span class="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Taller & CNC</span>
+            </div>
+            <div class="h-36 rounded-lg bg-slate-900 border border-slate-800 p-3 flex flex-col justify-between">
+              <div class="flex items-center justify-between bg-slate-950 p-2 rounded border border-slate-800 text-[11px]">
+                <div class="flex items-center gap-2">
+                  <QrCode class="w-7 h-7 text-white bg-slate-800 p-1 rounded" />
+                  <div>
+                    <div class="font-mono text-slate-200 text-[10px]">Pieza #14 - Lateral Izq</div>
+                    <div class="text-[9px] text-slate-400">Canto PVC 2mm / 4 Perf.</div>
+                  </div>
+                </div>
+                <span class="text-[9px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-mono">QR Activo</span>
+              </div>
+              <div class="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
+                <div class="bg-slate-950 p-1.5 rounded border border-slate-800 text-center text-slate-300">
+                  PTX Seccionadora ✓
+                </div>
+                <div class="bg-slate-950 p-1.5 rounded border border-slate-800 text-center text-slate-300">
+                  DXF Perforación ✓
+                </div>
+              </div>
+            </div>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              Etiquetas QR por estación y planos congelados. Cero dudas sobre qué versión cortar o armar en el banco.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+

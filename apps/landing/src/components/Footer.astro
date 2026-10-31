@@ -1,0 +1,48 @@
+---
+import { LogIn } from '@lucide/astro';
+---
+
+<footer class="bg-[#07090F] border-t border-slate-800/80 py-16 text-slate-400 text-xs">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col md:flex-row items-center justify-between gap-8 pb-12 border-b border-slate-800/60">
+      <!-- Brand & Description -->
+      <div class="space-y-3 text-center md:text-left max-w-sm">
+        <div class="flex items-center justify-center md:justify-start gap-3">
+          <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" class="w-5 h-5">
+              <path d="M8 11.5h16M8 16h16M8 20.5h11" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <span class="text-lg font-bold text-white tracking-tight">GRANETE</span>
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          La plataforma operativa que conecta venta comercial, diseño 3D en SketchUp, ingeniería paramétrica y piso de taller para carpinterías y fábricas de muebles.
+        </p>
+      </div>
+
+      <!-- Quick Links -->
+      <div class="flex flex-wrap items-center justify-center gap-6 sm:gap-8 font-medium text-slate-300">
+        <a href="#problema" class="hover:text-white transition-colors">El Problema</a>
+        <a href="#flujo" class="hover:text-white transition-colors">El Hilo Digital</a>
+        <a href="#capacidades" class="hover:text-white transition-colors">Capacidades</a>
+        <a href="#comparativa" class="hover:text-white transition-colors">Comparativa</a>
+        <a href="#roles" class="hover:text-white transition-colors">Para Quién</a>
+        <a href="https://app.granete.com/login" class="inline-flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors">
+          <LogIn class="w-3.5 h-3.5" />
+          <span>Acceso Clientes</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Bottom credits -->
+    <div class="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-500">
+      <div>
+        © {new Date().getFullYear()} Granete. Todos los derechos reservados.
+      </div>
+      <div class="flex items-center gap-6">
+        <span>Diseñado para la industria de la madera y amoblamientos</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
