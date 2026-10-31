@@ -143,6 +143,14 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	// apply is the guarded PUT above.
 	mux.Handle("POST /api/catalog/agregados/{id}/recipe-change/simulate", authMW(http.HandlerFunc(server.HandleAgregadoRecipeSimulation)))
 
+	// Catálogo: Plantillas de juego (#1422 slice 2) — blueprints del taller
+	// para el asistente de juego de herraje. DELETE = baja lógica.
+	mux.Handle("GET /api/catalog/kit-templates", authMW(http.HandlerFunc(server.HandleKitTemplates)))
+	mux.Handle("POST /api/catalog/kit-templates", authMW(http.HandlerFunc(server.HandleKitTemplates)))
+	mux.Handle("GET /api/catalog/kit-templates/{id}", authMW(http.HandlerFunc(server.HandleKitTemplateByID)))
+	mux.Handle("PUT /api/catalog/kit-templates/{id}", authMW(http.HandlerFunc(server.HandleKitTemplateByID)))
+	mux.Handle("DELETE /api/catalog/kit-templates/{id}", authMW(http.HandlerFunc(server.HandleKitTemplateByID)))
+
 	// Catálogo: Categorías jerárquicas de módulos (F025)
 	mux.Handle("GET /api/catalog/categories", authMW(http.HandlerFunc(server.HandleCategories)))
 	mux.Handle("POST /api/catalog/categories", authMW(http.HandlerFunc(server.HandleCategories)))

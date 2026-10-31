@@ -5,8 +5,10 @@ package api
 // las firmas son las de la sub-interface en store_modules.go
 import (
 	"context"
+
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 func (s *stubStore) ListOptionGroups(context.Context) ([]domain.OptionGroup, error) {
@@ -235,4 +237,60 @@ func (s *stubStore) DeleteComponent(_ context.Context, _ string, _ int64) error 
 
 func (s *stubStore) DeriveLiveProfileDemand(ctx context.Context, project *domain.Project, catalog domain.Catalog) ([][]engine.HardwareProfileDemandLine, error) {
 	return nil, nil
+}
+
+// --- #1422 slice 2: workshop kit templates ---
+
+func (s *stubStore) ListKitTemplates(context.Context) ([]domain.KitTemplate, error) {
+	if s.listKitTemplates == nil {
+		return []domain.KitTemplate{}, nil
+	}
+	return s.listKitTemplates, nil
+}
+
+func (s *stubStore) GetKitTemplateByID(_ context.Context, id string) (*domain.KitTemplate, error) {
+	for i := range s.listKitTemplates {
+		if s.listKitTemplates[i].ID == id {
+			return &s.listKitTemplates[i], nil
+		}
+	}
+	return nil, storage.ErrKitTemplateNotFound
+}
+
+func (s *stubStore) CreateKitTemplate(_ context.Context, t *domain.KitTemplate) error {
+	if s.createKitTemplateErr != nil {
+		return s.createKitTemplateErr
+	}
+	t.Version = 1
+	t.Active = true
+	s.listKitTemplates = append(s.listKitTemplates, *t)
+	return nil
+}
+
+func (s *stubStore) UpdateKitTemplate(_ context.Context, id string, expectedVersion int64, t *domain.KitTemplate) error {
+	for i := range s.listKitTemplates {
+		if s.listKitTemplates[i].ID == id {
+			if s.listKitTemplates[i].Version != expectedVersion {
+				return storage.ErrVersionConflict
+			}
+			t.Version = expectedVersion + 1
+			s.listKitTemplates[i] = *t
+			return nil
+		}
+	}
+	return storage.ErrKitTemplateNotFound
+}
+
+func (s *stubStore) DeactivateKitTemplate(_ context.Context, id string, expectedVersion int64) error {
+	for i := range s.listKitTemplates {
+		if s.listKitTemplates[i].ID == id {
+			if s.listKitTemplates[i].Version != expectedVersion {
+				return storage.ErrVersionConflict
+			}
+			s.listKitTemplates[i].Active = false
+			s.listKitTemplates[i].Version = expectedVersion + 1
+			return nil
+		}
+	}
+	return storage.ErrKitTemplateNotFound
 }
