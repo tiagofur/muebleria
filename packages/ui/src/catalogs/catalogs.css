@@ -1212,9 +1212,43 @@
 
 .catalog-kit-parts {
   margin: 4px 0 0;
-  padding-left: 18px;
   display: grid;
-  gap: 2px;
+  gap: 8px;
+}
+
+/* #1422 owner: partes del kit anidadas como cards editables dentro de la
+   expansión del kit (indentadas — <kit><parte/><parte/></kit>). */
+.catalog-kit-part-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  margin-left: 18px;
+  border: 1px solid var(--border-accent-subtle, #cfe0cf);
+  border-radius: var(--radius-md);
+  background: var(--surface-accent-subtle, #eef2ee);
+}
+
+.catalog-kit-part-card__photo {
+  width: 56px;
+}
+
+.catalog-kit-part-card__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
+.catalog-kit-part-card__fields .catalog-row-detail__field {
+  margin: 0;
+}
+
+.catalog-kit-part-card__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
 }
 
 /* #1422 perfección: confirmación inline de presets de receta */
@@ -1228,4 +1262,26 @@
   border: 1px solid var(--border-accent-subtle, #cfe0cf);
   border-radius: var(--radius-md);
   background: var(--surface-accent-subtle, #eef2ee);
+}
+
+/* #1422 owner: partes del kit indentadas dentro del EDITAR del kit. */
+.catalog-kit-part-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 8px 6px 18px;
+  margin-bottom: 6px;
+  border-left: 3px solid var(--border-accent-subtle, #cfe0cf);
+  background: var(--surface-accent-subtle, #eef2ee);
+  border-radius: var(--radius-sm);
+}
+
+.catalog-kit-part-row__code {
+  font-family: monospace;
+  font-size: 0.85em;
+}
+
+.catalog-kit-part-row__name {
+  flex: 1 1 auto;
 }

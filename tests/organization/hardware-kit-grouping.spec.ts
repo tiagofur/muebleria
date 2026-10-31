@@ -115,27 +115,27 @@ test.describe.serial('Herrajes — agrupación kit↔partes (#1422 slice 1)', ()
       expect(part?.kit_hardware_id, code).toBe(KIT_ID);
     }
 
-    // Lista SIN búsqueda: las partes están OCULTAS por defecto — el kit es
-    // una fila con badge y su código de parte NO aparece.
+    // Lista SIN búsqueda: las partes NUNCA son filas planas (#1422 owner) —
+    // viven anidadas dentro del card expandido del kit, con badge de
+    // membresía (fija/móvil) y acciones propias.
     await page.goto('/hardware');
-    await page.getByTestId('hardware-toggle-design-parts').waitFor({ state: 'visible', timeout: 20_000 });
     await expect(page.getByTestId(`hardware-kit-parts-badge-${KIT_CODE}`)).toContainText('4 partes');
     await expect(page.getByText(`${KIT_CODE}-FIJ-I`)).toHaveCount(0);
 
-    // El chip las muestra (sin búsqueda).
-    await page.getByTestId('hardware-toggle-design-parts').click();
-    await expect(page.getByText(`${KIT_CODE}-FIJ-I`).first()).toBeVisible();
+    // Expandir el kit (click en el badge, burbujea a la fila) → los cards
+    // anidados con el badge de membresía de la receta.
+    await page.getByTestId(`hardware-kit-parts-badge-${KIT_CODE}`).click();
+    await expect(page.getByTestId(`hardware-kit-parts-${KIT_CODE}`)).toBeVisible();
+    await expect(page.getByTestId(`hardware-kit-part-card-${KIT_CODE}-FIJ-I`)).toBeVisible();
+    await expect(
+      page.getByTestId(`hardware-kit-part-membership-${KIT_CODE}-FIJ-I`),
+    ).toContainText('Fija al mueble');
 
-    // Y el search las encuentra aunque el chip vuelva a ocultas.
-    await page.getByTestId('hardware-toggle-design-parts').click();
-    await page.getByLabel('Buscar herrajes').fill(`${KIT_CODE}-MOV-D`);
-    await expect(page.getByText(`${KIT_CODE}-MOV-D`).first()).toBeVisible();
-
-    // Editar una parte (nombre) → el link SOBREVIVE.
-    await page.getByLabel('Buscar herrajes').fill(KIT_CODE);
+    // Editar una parte desde su card anidado (nombre) → el link SOBREVIVE.
     await page
       .getByRole('button', { name: `Editar ${KIT_CODE}-FIJ-I` })
-      .evaluate((el) => (el as HTMLElement).click());
+      .first()
+      .click();
     await page.getByTestId('hardware-form-modal').waitFor({ state: 'visible' });
     const nameInput = page.getByLabel('Nombre');
     await nameInput.fill('Corredera agrupada — Guía fija izquierda (editada)');
