@@ -131,7 +131,13 @@ test.describe.serial('Herrajes — agrupación kit↔partes (#1422 slice 1)', ()
       page.getByTestId(`hardware-kit-part-membership-${KIT_CODE}-FIJ-I`),
     ).toContainText('Fija al mueble');
 
-    // Editar una parte desde su card anidado (nombre) → el link SOBREVIVE.
+    // Colapsar el kit: su detalle expandido taparía los clicks de las filas
+    // de abajo (con búsqueda, kit y partes conviven en la lista).
+    await page.getByTestId(`hardware-kit-parts-badge-${KIT_CODE}`).click();
+    await expect(page.getByTestId(`hardware-kit-parts-${KIT_CODE}`)).toHaveCount(0);
+
+    // Editar una parte desde su fila (búsqueda activa) → el link SOBREVIVE.
+    await page.getByLabel('Buscar herrajes').fill(KIT_CODE);
     await page
       .getByRole('button', { name: `Editar ${KIT_CODE}-FIJ-I` })
       .first()
