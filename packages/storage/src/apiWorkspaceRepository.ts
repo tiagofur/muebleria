@@ -81,14 +81,6 @@ export type WorkshopKitTemplateRow = HardwareKitTemplate & {
   readonly version: number;
 };
 
-const kitTemplateToApi = (t: WorkshopKitTemplateRow): Record<string, unknown> => ({
-  id: t.id,
-  code: t.code,
-  labelEs: t.labelEs,
-  agregadoLabelEs: t.agregadoLabelEs,
-  motion: t.motion,
-  slots: t.slots,
-});
 import { parseRecipeChangeSimulationResponse } from '@granete/domain';
 import type {
   CatalogModule,

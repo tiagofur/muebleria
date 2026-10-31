@@ -80,10 +80,12 @@ export function createKitTemplatesActions(ctx: CatalogStoreCtx): KitTemplatesSli
         // Red caída o error real: la lista previa queda STALE (no se borra —
         // borrarla escondería plantillas que siguen existiendo) y el asistente
         // muestra el aviso; los estados nunca se disfrazan de «sin datos».
+        const stale = ctx.get().kitTemplates.length > 0;
         ctx.set({
           kitTemplatesLoading: false,
-          kitTemplatesError:
-            'No se pudieron cargar las plantillas del taller; se muestran las últimas conocidas.',
+          kitTemplatesError: stale
+            ? 'No se pudieron cargar las plantillas del taller; se muestran las últimas conocidas.'
+            : 'No se pudieron cargar las plantillas del taller; el asistente ofrece las incorporadas.',
         });
       }
     },
