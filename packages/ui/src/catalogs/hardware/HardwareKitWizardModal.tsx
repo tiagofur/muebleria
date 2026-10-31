@@ -10,7 +10,7 @@
  * re-running the wizard over an existing kit never duplicates records.
  */
 
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 
 import type {
   Hardware,
@@ -21,12 +21,13 @@ import type {
 import {
   DEFAULT_FIXED_OFFSET_MM,
   DEFAULT_MOVING_OFFSET_MM,
+  DEFAULT_KIT_TEMPLATE_ID,
   HARDWARE_KIT_TEMPLATES,
   hardwareKitTemplateById,
   planHardwareKit,
 } from '@granete/domain';
 import { Modal } from '../../common';
-import { uploadHardwareAssetBinding, type HardwareAssetService } from '@granete/storage';
+import { uploadHardwareAssetBinding, type HardwareAssetService, type WorkshopKitTemplateRow } from '@granete/storage';
 
 export interface HardwareKitWizardModalProps {
   readonly open: boolean;
@@ -35,6 +36,14 @@ export interface HardwareKitWizardModalProps {
   readonly agregadoCodes: readonly string[];
   readonly onCreateKit: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
   readonly assetService?: HardwareAssetService;
+  /** Plantillas del taller (#1422 slice 2): se suman a las embebidas. */
+  readonly customTemplates?: readonly WorkshopKitTemplateRow[];
+  /** Abre el editor de plantillas del taller (cuando la sesión puede guardar). */
+  readonly onEditTemplates?: () => void;
+  /** Edita una plantilla del taller existente (#1422 review: baja/edición alcanzables). */
+  readonly onEditTemplate?: (row: WorkshopKitTemplateRow) => void;
+  /** Carga/estado de las plantillas del taller (loading + aviso de error). */
+  readonly templatesStatus?: { readonly loading: boolean; readonly notice: string | null };
 }
 
 type WizardPhase = 'form' | 'running' | 'done';
@@ -51,6 +60,10 @@ export function HardwareKitWizardModal({
   agregadoCodes,
   onCreateKit,
   assetService,
+  customTemplates = [],
+  onEditTemplates,
+  onEditTemplate,
+  templatesStatus,
 }: HardwareKitWizardModalProps): ReactNode {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -62,7 +75,27 @@ export function HardwareKitWizardModal({
   const [movingOffset, setMovingOffset] = useState(String(DEFAULT_MOVING_OFFSET_MM));
   const [agregadoCode, setAgregadoCode] = useState('');
   const [templateId, setTemplateId] = useState('drawer-slides');
-  const template = useMemo(() => hardwareKitTemplateById(templateId), [templateId]);
+  // Safe lookup: si la plantilla seleccionada desaparece de la lista del
+  // taller (carga fallida, otra pestaña la borró), el modal —siempre montado—
+  // NO puede tirar durante el render (#1422 review C1): cae a la embebida por
+  // defecto y el efecto de abajo corrige la selección.
+  const template = useMemo(() => {
+    try {
+      return hardwareKitTemplateById(templateId, customTemplates);
+    } catch {
+      return hardwareKitTemplateById(DEFAULT_KIT_TEMPLATE_ID);
+    }
+  }, [templateId, customTemplates]);
+
+  useEffect(() => {
+    if (templateId === DEFAULT_KIT_TEMPLATE_ID) return;
+    const known =
+      HARDWARE_KIT_TEMPLATES.some((t) => t.id === templateId) ||
+      customTemplates.some((t) => t.id === templateId);
+    if (!known) setTemplateId(DEFAULT_KIT_TEMPLATE_ID);
+  }, [templateId, customTemplates]);
+
+  const selectedWorkshopTemplate = customTemplates.find((t) => t.id === templateId) ?? null;
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [phase, setPhase] = useState<WizardPhase>('form');
   const [progress, setProgress] = useState<string | null>(null);
@@ -104,11 +137,12 @@ export function HardwareKitWizardModal({
           templateId,
         },
         existing,
+        customTemplates,
       );
     } catch {
       return null;
     }
-  }, [code, name, price, width, height, depth, fixedOffset, movingOffset, agregadoCode, templateId, existing]);
+  }, [code, name, price, width, height, depth, fixedOffset, movingOffset, agregadoCode, templateId, existing, customTemplates]);
 
   const running = phase === 'running';
 
@@ -170,7 +204,7 @@ export function HardwareKitWizardModal({
     };
     try {
       // Strict validation happens inside the planner; surface its message.
-      const plan = planHardwareKit(input, existing);
+      const plan = planHardwareKit(input, existing, customTemplates);
       if (plan.blockedCode) {
         setError(
           `Ya existe un ensamble con el código «${plan.blockedCode}». Cambiá el código del ensamble para continuar.`,
@@ -360,7 +394,40 @@ export function HardwareKitWizardModal({
                     {t.labelEs}
                   </option>
                 ))}
+                {customTemplates.length > 0 ? (
+                  <optgroup label="Del taller">
+                    {customTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.labelEs}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
               </select>
+              <div className="catalog-form__hint" data-testid="hardware-kit-wizard-templates-status">
+                {templatesStatus?.loading ? 'Cargando plantillas del taller…' : null}
+                {templatesStatus?.notice ?? null}
+              </div>
+              {onEditTemplates || onEditTemplate ? (
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  onClick={onEditTemplates}
+                  data-testid="hardware-kit-wizard-manage-templates"
+                >
+                  Plantillas del taller…
+                </button>
+              ) : null}
+              {onEditTemplate && selectedWorkshopTemplate ? (
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  onClick={() => onEditTemplate(selectedWorkshopTemplate)}
+                  data-testid="hardware-kit-wizard-edit-template"
+                >
+                  Editar «{selectedWorkshopTemplate.labelEs}»
+                </button>
+              ) : null}
             </div>
           </fieldset>
 

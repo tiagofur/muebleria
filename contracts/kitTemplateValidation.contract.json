@@ -1,0 +1,220 @@
+{
+  "schema": "granete.kit-template-validation.v1",
+  "description": "#1422 slice 2 — workshop kit template validation contract, consumed by TS (packages/domain hardwareKit.test) and Go (domain kit_template_test): one source of valid and fail-closed expectations for both runtimes. Twin rule: identical issue codes and paths; messages live per runtime (English twin text, Spanish at the API/UI edge).",
+  "validTemplates": [
+    {
+      "case": "custom-hinge-two-slots",
+      "template": {
+        "id": "b1a2c3d4-0000-4000-8000-000000000001",
+        "code": "PLANT-BIS-1",
+        "labelEs": "Bisagra del taller (2 partes)",
+        "agregadoLabelEs": "Puerta",
+        "motion": "rotate_left",
+        "slots": [
+          {
+            "slot": "cup_fixed",
+            "memberId": "hinge_cup",
+            "suffix": "-COPA",
+            "labelEs": "Copa (fija al mueble)",
+            "role": "hinge_cup",
+            "membership": "body",
+            "anchorXRef": "min",
+            "offsetSign": 1,
+            "defaultOffsetMm": 0
+          },
+          {
+            "slot": "arm_moving",
+            "memberId": "hinge_arm",
+            "suffix": "-BRAZO",
+            "labelEs": "Brazo (móvil de la puerta)",
+            "role": "hinge_arm",
+            "membership": "actor:door",
+            "anchorXRef": "center",
+            "offsetSign": -1,
+            "defaultOffsetMm": 24
+          }
+        ]
+      }
+    },
+    {
+      "case": "single-slot-no-code",
+      "template": {
+        "id": "levantadza-taller-1",
+        "labelEs": "Levantadza (1 pieza)",
+        "agregadoLabelEs": "Frente",
+        "motion": "none",
+        "slots": [
+          {
+            "slot": "arm",
+            "memberId": "lift_arm",
+            "suffix": "-PIEZA",
+            "labelEs": "Brazo levantadza",
+            "role": "lift_arm",
+            "membership": "body",
+            "anchorXRef": "max",
+            "offsetSign": -1,
+            "defaultOffsetMm": -12.5
+          }
+        ]
+      }
+    }
+  ],
+  "invalidTemplates": [
+    {
+      "case": "blank-label",
+      "template": {
+        "id": "t-blank-label",
+        "labelEs": "",
+        "agregadoLabelEs": "Puerta",
+        "motion": "none",
+        "slots": [
+          { "slot": "a", "memberId": "m_a", "suffix": "-A", "labelEs": "A", "role": "r_a", "membership": "body", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 0 }
+        ]
+      },
+      "expectedIssueCodes": ["KIT_TEMPLATE_INVALID"],
+      "expectedPaths": ["labelEs"]
+    },
+    {
+      "case": "blank-agregado-label",
+      "template": {
+        "id": "t-blank-agregado",
+        "labelEs": "X",
+        "agregadoLabelEs": "",
+        "motion": "translate",
+        "slots": [
+          { "slot": "a", "memberId": "m_a", "suffix": "-A", "labelEs": "A", "role": "r_a", "membership": "body", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 0 }
+        ]
+      },
+      "expectedIssueCodes": ["KIT_TEMPLATE_INVALID"],
+      "expectedPaths": ["agregadoLabelEs"]
+    },
+    {
+      "case": "unknown-motion",
+      "template": {
+        "id": "t-motion",
+        "labelEs": "X",
+        "agregadoLabelEs": "Puerta",
+        "motion": "swing",
+        "slots": [
+          { "slot": "a", "memberId": "m_a", "suffix": "-A", "labelEs": "A", "role": "r_a", "membership": "body", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 0 }
+        ]
+      },
+      "expectedIssueCodes": ["KIT_TEMPLATE_INVALID"],
+      "expectedPaths": ["motion"]
+    },
+    {
+      "case": "bad-code-charset",
+      "template": {
+        "id": "t-code",
+        "code": "PLANTA BIS 1",
+        "labelEs": "X",
+        "agregadoLabelEs": "Puerta",
+        "motion": "none",
+        "slots": [
+          { "slot": "a", "memberId": "m_a", "suffix": "-A", "labelEs": "A", "role": "r_a", "membership": "body", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 0 }
+        ]
+      },
+      "expectedIssueCodes": ["KIT_TEMPLATE_INVALID"],
+      "expectedPaths": ["code"]
+    },
+    {
+      "case": "empty-slots",
+      "template": {
+        "id": "t-empty",
+        "labelEs": "X",
+        "agregadoLabelEs": "Puerta",
+        "motion": "none",
+        "slots": []
+      },
+      "expectedIssueCodes": ["KIT_TEMPLATE_INVALID"],
+      "expectedPaths": ["slots"]
+    },
+    {
+      "case": "duplicate-slot-key",
+      "template": {
+        "id": "t-dup-slot",
+        "labelEs": "X",
+        "agregadoLabelEs": "Puerta",
+        "motion": "none",
+        "slots": [
+          { "slot": "a", "memberId": "m_a", "suffix": "-A", "labelEs": "A", "role": "r_a", "membership": "body", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 0 },
+          { "slot": "a", "memberId": "m_b", "suffix": "-B", "labelEs": "B", "role": "r_b", "membership": "body", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 0 }
+        ]
+      },
+      "expectedIssueCodes": ["KIT_TEMPLATE_INVALID"],
+      "expectedPaths": ["slots[1].slot"]
+    },
+    {
+      "case": "duplicate-member-id",
+      "template": {
+        "id": "t-dup-member",
+        "labelEs": "X",
+        "agregadoLabelEs": "Puerta",
+        "motion": "none",
+        "slots": [
+          { "slot": "a", "memberId": "m_a", "suffix": "-A", "labelEs": "A", "role": "r_a", "membership": "body", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 0 },
+          { "slot": "b", "memberId": "m_a", "suffix": "-B", "labelEs": "B", "role": "r_b", "membership": "body", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 0 }
+        ]
+      },
+      "expectedIssueCodes": ["KIT_TEMPLATE_INVALID"],
+      "expectedPaths": ["slots[1].memberId"]
+    },
+    {
+      "case": "duplicate-suffix",
+      "template": {
+        "id": "t-dup-suffix",
+        "labelEs": "X",
+        "agregadoLabelEs": "Puerta",
+        "motion": "none",
+        "slots": [
+          { "slot": "a", "memberId": "m_a", "suffix": "-A", "labelEs": "A", "role": "r_a", "membership": "body", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 0 },
+          { "slot": "b", "memberId": "m_b", "suffix": "-A", "labelEs": "B", "role": "r_b", "membership": "body", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 0 }
+        ]
+      },
+      "expectedIssueCodes": ["KIT_TEMPLATE_INVALID"],
+      "expectedPaths": ["slots[1].suffix"]
+    },
+    {
+      "case": "unknown-membership",
+      "template": {
+        "id": "t-membership",
+        "labelEs": "X",
+        "agregadoLabelEs": "Puerta",
+        "motion": "rotate_right",
+        "slots": [
+          { "slot": "a", "memberId": "m_a", "suffix": "-A", "labelEs": "A", "role": "r_a", "membership": "puerta", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 0 }
+        ]
+      },
+      "expectedIssueCodes": ["KIT_TEMPLATE_INVALID"],
+      "expectedPaths": ["slots[0].membership"]
+    },
+    {
+      "case": "bad-anchor-ref",
+      "template": {
+        "id": "t-anchor",
+        "labelEs": "X",
+        "agregadoLabelEs": "Puerta",
+        "motion": "none",
+        "slots": [
+          { "slot": "a", "memberId": "m_a", "suffix": "-A", "labelEs": "A", "role": "r_a", "membership": "body", "anchorXRef": "middle", "offsetSign": 1, "defaultOffsetMm": 0 }
+        ]
+      },
+      "expectedIssueCodes": ["KIT_TEMPLATE_INVALID"],
+      "expectedPaths": ["slots[0].anchorXRef"]
+    },
+    {
+      "case": "offset-out-of-bounds",
+      "template": {
+        "id": "t-offset",
+        "labelEs": "X",
+        "agregadoLabelEs": "Puerta",
+        "motion": "none",
+        "slots": [
+          { "slot": "a", "memberId": "m_a", "suffix": "-A", "labelEs": "A", "role": "r_a", "membership": "body", "anchorXRef": "min", "offsetSign": 1, "defaultOffsetMm": 100001 }
+        ]
+      },
+      "expectedIssueCodes": ["KIT_TEMPLATE_INVALID"],
+      "expectedPaths": ["slots[0].defaultOffsetMm"]
+    }
+  ]
+}

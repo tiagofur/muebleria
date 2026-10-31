@@ -332,6 +332,9 @@ type stubStore struct {
 	listStructures []domain.Structure
 	listComponents []domain.Component
 	listAgregados  []domain.Agregado
+	// #1422 slice 2: workshop kit templates stub state.
+	listKitTemplates     []domain.KitTemplate
+	createKitTemplateErr error
 	// #1369/#1393 combined row+current-recipe reads. The stub hands the row
 	// WITH its recipe already applied (or the real read error): the «revisión
 	// ausente vs error de lectura» distinction lives in the real store.

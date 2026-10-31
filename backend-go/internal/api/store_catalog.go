@@ -16,6 +16,14 @@ type CatalogStore interface {
 	ListAgregadosWithRecipes(ctx context.Context) ([]domain.Agregado, error)
 	GetAgregadoByIDWithRecipe(ctx context.Context, id string) (*domain.Agregado, error)
 
+	// Catalog: workshop kit templates (#1422 slice 2) — hardware-kit wizard
+	// blueprints. DELETE is the soft deactivate.
+	ListKitTemplates(ctx context.Context) ([]domain.KitTemplate, error)
+	GetKitTemplateByID(ctx context.Context, id string) (*domain.KitTemplate, error)
+	CreateKitTemplate(ctx context.Context, t *domain.KitTemplate) error
+	UpdateKitTemplate(ctx context.Context, id string, expectedVersion int64, t *domain.KitTemplate) error
+	DeactivateKitTemplate(ctx context.Context, id string, expectedVersion int64) error
+
 	// Catalog: the factory construction policy (#1078/#1218) — the parsed
 	// standard-library overlay; nil when no active overlay governs.
 	GetFactoryConstructionPolicy(ctx context.Context) (*engine.FactoryConstructionPolicy, error)

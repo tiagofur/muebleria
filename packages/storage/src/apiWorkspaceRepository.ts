@@ -42,6 +42,7 @@ import type {
   SurveyElementInput,
   RecipeChangeSimulationResponse,
   Agregado,
+  HardwareKitTemplate,
 } from '@granete/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
@@ -68,6 +69,18 @@ import {
 import { GraneteApiClient } from './apiClient';
 import type { ApiError } from './openapi/generated/types';
 import { CatalogEntityVersionUnknownError, GraneteApiError, HardwareVersionUnknownError, ModuleVersionUnknownError, GraneteNetworkError } from './apiErrors';
+
+/**
+ * #1422 slice 2 — one workshop kit template row (org-scoped, If-Match
+ * guarded). Shape-compatible with the domain HardwareKitTemplate (embedded
+ * templates omit code; workshop rows always carry it).
+ */
+export type WorkshopKitTemplateRow = HardwareKitTemplate & {
+  readonly code: string;
+  readonly active: boolean;
+  readonly version: number;
+};
+
 import { parseRecipeChangeSimulationResponse } from '@granete/domain';
 import type {
   CatalogModule,

@@ -88,3 +88,127 @@ test.describe.serial('Herrajes — plantilla bisagra (#1422 slice 2)', () => {
     expect(brazo?.kit_hardware_id).toBe(kit?.id);
   });
 });
+
+test.describe.serial('Herrajes — plantillas del taller editables (#1422 slice 2)', () => {
+  test('editor: alta de plantilla del taller → el asistente la consume y el readback coincide', async ({ page }) => {
+    test.setTimeout(180_000);
+    const token = await loginOwner(page);
+    const run = Date.now().toString(36);
+    const templateCode = `AUT-PLANT-${run}`;
+    const kitCode = `AUT-LEV-${run}`;
+
+    await page.goto('/hardware');
+    await page.getByTestId('hardware-kit-wizard-open').waitFor({ state: 'visible', timeout: 20_000 });
+    await page.getByTestId('hardware-kit-wizard-open').click();
+    await page.getByTestId('hardware-kit-wizard-manage-templates').click();
+
+    await page.getByTestId('kit-template-editor-code').fill(templateCode);
+    await page.getByTestId('kit-template-editor-label').fill('Levantadza del taller');
+    await page.getByTestId('kit-template-editor-agregado').fill('Frente');
+    await page.getByTestId('kit-template-editor-motion').selectOption('none');
+    await page.getByTestId('kit-template-slot-key-0').fill('lift_arm');
+    await page.getByTestId('kit-template-slot-label-0').fill('Brazo levantadza');
+    await page.getByTestId('kit-template-slot-suffix-0').fill('-BRAZO');
+    await page.getByTestId('kit-template-slot-membership-0').fill('body');
+    await page.getByTestId('kit-template-slot-add').click();
+    await page.getByTestId('kit-template-slot-key-1').fill('lift_spring');
+    await page.getByTestId('kit-template-slot-label-1').fill('Resorte');
+    await page.getByTestId('kit-template-slot-suffix-1').fill('-RESORTE');
+    await page.getByTestId('kit-template-slot-membership-1').fill('actor:door');
+    await page.getByTestId('kit-template-slot-anchor-1').selectOption('center');
+    await page.getByTestId('kit-template-slot-offset-1').fill('24');
+    await page.getByTestId('kit-template-editor-save').click();
+    await expect(page.getByTestId('kit-template-editor')).not.toBeVisible({ timeout: 15_000 });
+
+    // Readback por API: la plantilla quedó persistida con sus slots.
+    const tplRes = await api(token, 'GET', '/catalog/kit-templates');
+    expect(tplRes.status).toBe(200);
+    const templates = tplRes.body as readonly Json[];
+    const saved = templates.find((t) => t.code === templateCode);
+    expect(saved, 'plantilla persistida').toBeTruthy();
+    const savedSlots = (saved!.slots ?? []) as readonly Json[];
+    expect(savedSlots.map((sl) => sl.slot)).toEqual(['lift_arm', 'lift_spring']);
+    expect(savedSlots[1]).toMatchObject({ membership: 'actor:door', anchorXRef: 'center', defaultOffsetMm: 24 });
+
+    // El asistente ofrece la plantilla del taller y arma desde ella.
+    // Recarga determinista: la plantilla ya está persistida (readback API
+    // arriba); la coreografía de cierre wizard↔editor (animaciones de 350ms
+    // + portales) no es lo que este test demuestra, y en runners lentos el
+    // re-click sobre la misma página quedó tapado por el remanente del modal
+    // (fallo CI shard 3/3: interceptado por ui-modal__overlay). Tras reload
+    // el estado es el de cualquier usuario que abre el asistente de nuevo.
+    await page.reload();
+    await page.getByTestId('hardware-kit-wizard-open').waitFor({ state: 'visible', timeout: 20_000 });
+    await page.getByTestId('hardware-kit-wizard-open').click();
+    const select = page.getByTestId('hardware-kit-wizard-template-select');
+    await select.selectOption({ label: 'Levantadza del taller' });
+    await page.getByTestId('hardware-kit-wizard-code').fill(kitCode);
+    await page.getByTestId('hardware-kit-wizard-name').fill('Levantadza 900');
+    await page.getByTestId('hardware-kit-wizard-price').fill('150');
+    const preview = page.getByTestId('hardware-kit-wizard-preview');
+    await expect(preview).toContainText(`${kitCode}-BRAZO`);
+    await expect(preview).toContainText(`${kitCode}-RESORTE`);
+    await page.getByTestId('hardware-kit-wizard-submit').click();
+    await expect(page.getByTestId('hardware-kit-wizard-result')).toBeVisible({ timeout: 30_000 });
+
+    // Readback del juego: 2 partes + agregado «Frente» sin motion.
+    const hwRes = await api(token, 'GET', '/catalog/hardware');
+    const rows = hwRes.body as readonly Json[];
+    expect(rows.find((h) => h.code === `${kitCode}-BRAZO`)).toBeTruthy();
+    expect(rows.find((h) => h.code === `${kitCode}-RESORTE`)).toBeTruthy();
+    const agrRes = await api(token, 'GET', '/catalog/agregados');
+    const agregados = agrRes.body as readonly Json[];
+    const frente = agregados.find((a) => a.code === `${kitCode}-FRENTE`);
+    expect(frente, 'agregado frente creado').toBeTruthy();
+    const members = (frente!.rigid_members ?? []) as readonly Json[];
+    expect(members.map((m) => m.memberId)).toEqual(['lift_arm', 'lift_spring']);
+    expect(members[0]).toMatchObject({ actorMembership: 'body' });
+    expect(members[1]).toMatchObject({ actorMembership: 'actor:door' });
+
+    // El usuario cierra la pantalla de resultado con «Listo» antes de
+    // reabrir el asistente: sin ese cierre, el propio wizard (modal md)
+    // tapa el botón del toolbar y el click nunca dispatchea (fallo CI
+    // shard 3/3 — el interceptor era el overlay del propio wizard).
+    await page.getByTestId('hardware-kit-wizard-close').click();
+    await expect(page.getByTestId('hardware-kit-wizard')).not.toBeVisible({ timeout: 10_000 });
+
+    // Edición alcanzable desde el asistente (#1422 review C2): seleccionada
+    // la plantilla del taller, «Editar» abre el editor precargado y el
+    // rename persiste (PUT con If-Match) — readback por API.
+    await page.getByTestId('hardware-kit-wizard-open').click();
+    await select.selectOption({ label: 'Levantadza del taller' });
+    await page.getByTestId('hardware-kit-wizard-edit-template').click();
+    await expect(page.getByTestId('kit-template-editor-code')).toHaveValue(templateCode);
+    await page.getByTestId('kit-template-editor-label').fill('Levantadza del taller v2');
+    await page.getByTestId('kit-template-editor-save').click();
+    await expect(page.getByTestId('kit-template-editor')).not.toBeVisible({ timeout: 15_000 });
+    const tpl2 = await api(token, 'GET', '/catalog/kit-templates');
+    const saved2 = (tpl2.body as readonly Json[]).find((t) => t.code === templateCode);
+    expect(saved2?.labelEs).toBe('Levantadza del taller v2');
+  });
+
+  test('editor: validación inválida no persiste (membership inventada)', async ({ page }) => {
+    test.setTimeout(120_000);
+    const token = await loginOwner(page);
+    const run = Date.now().toString(36);
+
+    await page.goto('/hardware');
+    await page.getByTestId('hardware-kit-wizard-open').waitFor({ state: 'visible', timeout: 20_000 });
+    await page.getByTestId('hardware-kit-wizard-open').click();
+    await page.getByTestId('hardware-kit-wizard-manage-templates').click();
+    await page.getByTestId('kit-template-editor-code').fill(`AUT-BAD-${run}`);
+    await page.getByTestId('kit-template-editor-label').fill('Plantilla inválida');
+    await page.getByTestId('kit-template-editor-agregado').fill('Puerta');
+    await page.getByTestId('kit-template-slot-key-0').fill('a');
+    await page.getByTestId('kit-template-slot-label-0').fill('A');
+    await page.getByTestId('kit-template-slot-membership-0').fill('puerta');
+    await page.getByTestId('kit-template-editor-save').click();
+    await expect(page.getByTestId('kit-template-editor-error')).toBeVisible();
+
+    // La plantilla inválida NO está en el catálogo: la validación gemela la
+    // corta en el cliente y el servidor la rechazaría igual (422).
+    const tplRes = await api(token, 'GET', '/catalog/kit-templates');
+    const templates = tplRes.body as readonly Json[];
+    expect(templates.find((t) => t.code === `AUT-BAD-${run}`)).toBeFalsy();
+  });
+});

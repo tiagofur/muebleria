@@ -26,6 +26,7 @@ import { createMaterialsActions } from './catalog/materials';
 import { createEdgesActions } from './catalog/edges';
 import { createHardwareActions } from './catalog/hardware';
 import { createHardwareKitActions } from './catalog/hardwareKit';
+import { createKitTemplatesActions } from './catalog/kitTemplates';
 import { createAmbientActions } from './catalog/ambient';
 import { createOptionGroupsActions } from './catalog/optionGroups';
 import { createEntitiesActions } from './catalog/entities';
@@ -57,6 +58,7 @@ export function createCatalogStore(options: {
       ...createEdgesActions(ctx),
       ...createHardwareActions(ctx),
       ...createHardwareKitActions(ctx),
+      ...createKitTemplatesActions(ctx),
       ...createAmbientActions(ctx),
       ...createOptionGroupsActions(ctx),
       ...createEntitiesActions(ctx),
