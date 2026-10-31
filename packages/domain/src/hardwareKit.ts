@@ -146,14 +146,138 @@ export interface HardwareKitSlotTemplate {
   readonly defaultOffsetMm: number;
 }
 
+export type HardwareKitTemplateMotion = 'translate' | 'rotate_left' | 'rotate_right' | 'none';
+
 export interface HardwareKitTemplate {
   readonly id: string;
+  /**
+   * Workshop-facing code. Embedded templates omit it (their id is the
+   * stable selector); persisted workshop templates carry it (unique per org).
+   */
+  readonly code?: string;
   readonly labelEs: string;
   readonly slots: readonly HardwareKitSlotTemplate[];
   /** Cinemática del agregado generado (presentationMotion del editor). */
-  readonly motion: 'translate' | 'rotate_left' | 'rotate_right' | 'none';
+  readonly motion: HardwareKitTemplateMotion;
   /** Prefijo del nombre del agregado generado («Cajón X», «Puerta X»…). */
   readonly agregadoLabelEs: string;
+}
+
+// --- #1422 slice 2: plantillas de juego editables por taller ---
+
+export const KIT_TEMPLATE_MOTIONS: readonly HardwareKitTemplateMotion[] = [
+  'translate',
+  'rotate_left',
+  'rotate_right',
+  'none',
+];
+
+/** Same charset discipline as hardware profile codes (#912 twin). */
+export const KIT_TEMPLATE_CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const KIT_TEMPLATE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const KIT_TEMPLATE_KEY_PATTERN = /^[a-z0-9_]{1,40}$/;
+const KIT_TEMPLATE_ROLE_PATTERN = /^[a-z0-9_]{1,40}$/;
+/** Appended to the kit code: kitCode + suffix must stay a valid hardware code. */
+const KIT_TEMPLATE_SUFFIX_PATTERN = /^-[A-Za-z0-9._-]{1,15}$/;
+/** #1376 membership vocabulary: the body stays, an actor:<identifier> moves. */
+const KIT_TEMPLATE_ACTOR_MEMBERSHIP_PATTERN = /^actor:[a-z0-9_-]{1,32}$/;
+export const KIT_TEMPLATE_MAX_SLOTS = 12;
+export const KIT_TEMPLATE_MAX_OFFSET_MM = 100000;
+
+export interface HardwareKitTemplateIssue {
+  readonly code: 'KIT_TEMPLATE_INVALID';
+  readonly message: string;
+  readonly severity: 'error';
+  readonly entityId: string;
+  readonly path: string;
+}
+
+/**
+ * Structural, fail-closed validation of a workshop kit template — twin of the
+ * Go mirror (domain kit_template.go): identical messages and paths, one
+ * shared fixture (contracts/kitTemplateValidation.contract.json). The UI and
+ * API layers translate; the domain decision (pass/fail + field) is one
+ * contract.
+ */
+export function validateHardwareKitTemplate(
+  template: HardwareKitTemplate,
+): readonly HardwareKitTemplateIssue[] {
+  const issues: HardwareKitTemplateIssue[] = [];
+  const add = (message: string, path: string) =>
+    issues.push({ code: 'KIT_TEMPLATE_INVALID', message, severity: 'error', entityId: template.id, path });
+
+  if (template.id === '' || !KIT_TEMPLATE_ID_PATTERN.test(template.id)) {
+    add('kit template id must match ^[A-Za-z0-9_-]{1,64}$', 'id');
+  }
+  if (template.code !== undefined && !KIT_TEMPLATE_CODE_PATTERN.test(template.code)) {
+    add('kit template code must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$', 'code');
+  }
+  if (template.labelEs === '') add('kit template needs a non-blank labelEs', 'labelEs');
+  if (template.agregadoLabelEs === '') {
+    add('kit template needs a non-blank agregadoLabelEs', 'agregadoLabelEs');
+  }
+  if (!KIT_TEMPLATE_MOTIONS.includes(template.motion)) {
+    add(
+      `kit template motion must be one of ${KIT_TEMPLATE_MOTIONS.join(', ')}`,
+      'motion',
+    );
+  }
+  if (template.slots.length === 0) {
+    add('kit template needs at least one slot', 'slots');
+    return issues;
+  }
+  if (template.slots.length > KIT_TEMPLATE_MAX_SLOTS) {
+    add(`kit template carries more than ${KIT_TEMPLATE_MAX_SLOTS} slots`, 'slots');
+    return issues;
+  }
+
+  const seenSlots = new Set<string>();
+  const seenMembers = new Set<string>();
+  const seenSuffixes = new Set<string>();
+  template.slots.forEach((slot, index) => {
+    const path = `slots[${index}]`;
+    if (slot.slot === '' || !KIT_TEMPLATE_KEY_PATTERN.test(slot.slot)) {
+      add('kit template slot key must match ^[a-z0-9_]{1,40}$', `${path}.slot`);
+    } else if (seenSlots.has(slot.slot)) {
+      add(`slot ${slot.slot} appears more than once`, `${path}.slot`);
+    }
+    seenSlots.add(slot.slot);
+    if (slot.memberId === '' || !KIT_TEMPLATE_KEY_PATTERN.test(slot.memberId)) {
+      add('kit template member id must match ^[a-z0-9_]{1,40}$', `${path}.memberId`);
+    } else if (seenMembers.has(slot.memberId)) {
+      add(`member ${slot.memberId} appears more than once: recipe identity would collide`, `${path}.memberId`);
+    }
+    seenMembers.add(slot.memberId);
+    if (slot.suffix === '' || !KIT_TEMPLATE_SUFFIX_PATTERN.test(slot.suffix)) {
+      add('kit template slot suffix must match ^-[A-Za-z0-9._-]{1,15}$', `${path}.suffix`);
+    } else if (seenSuffixes.has(slot.suffix)) {
+      add(`suffix ${slot.suffix} appears more than once: part codes would collide`, `${path}.suffix`);
+    }
+    seenSuffixes.add(slot.suffix);
+    if (slot.labelEs === '') add('kit template slot needs a non-blank labelEs', `${path}.labelEs`);
+    if (slot.role === '' || !KIT_TEMPLATE_ROLE_PATTERN.test(slot.role)) {
+      add('kit template slot role must match ^[a-z0-9_]{1,40}$', `${path}.role`);
+    }
+    if (slot.membership !== 'body' && !KIT_TEMPLATE_ACTOR_MEMBERSHIP_PATTERN.test(slot.membership)) {
+      add('kit template slot membership must be body or actor:<identifier>', `${path}.membership`);
+    }
+    if (slot.anchorXRef !== 'min' && slot.anchorXRef !== 'max' && slot.anchorXRef !== 'center') {
+      add('kit template slot anchorXRef must be min, max or center', `${path}.anchorXRef`);
+    }
+    if (slot.offsetSign !== 1 && slot.offsetSign !== -1) {
+      add('kit template slot offsetSign must be 1 or -1', `${path}.offsetSign`);
+    }
+    if (
+      !Number.isFinite(slot.defaultOffsetMm) ||
+      Math.abs(slot.defaultOffsetMm) > KIT_TEMPLATE_MAX_OFFSET_MM
+    ) {
+      add(
+        `kit template slot offset must be a finite number within ±${KIT_TEMPLATE_MAX_OFFSET_MM} mm`,
+        `${path}.defaultOffsetMm`,
+      );
+    }
+  });
+  return issues;
 }
 
 export const HARDWARE_KIT_TEMPLATES: readonly HardwareKitTemplate[] = [
@@ -227,12 +351,23 @@ export const HARDWARE_KIT_TEMPLATES: readonly HardwareKitTemplate[] = [
   },
 ];
 
-export function hardwareKitTemplateById(id: string): HardwareKitTemplate {
-  const template = HARDWARE_KIT_TEMPLATES.find((t) => t.id === id);
-  if (!template) {
-    throw new Error(`Plantilla de juego desconocida: «${id}».`);
+export function hardwareKitTemplateById(
+  id: string,
+  customTemplates: readonly HardwareKitTemplate[] = [],
+): HardwareKitTemplate {
+  const embedded = HARDWARE_KIT_TEMPLATES.find((t) => t.id === id);
+  if (embedded) return embedded;
+  // Workshop template: validated fail-closed at RESOLVE time, never trusted
+  // from the wire — a broken custom template must not reach the plan.
+  const custom = customTemplates.find((t) => t.id === id);
+  if (custom) {
+    const issues = validateHardwareKitTemplate(custom);
+    if (issues.length > 0) {
+      throw new Error(`Plantilla de juego inválida (${issues[0]!.path}): ${issues[0]!.message}`);
+    }
+    return custom;
   }
-  return template;
+  throw new Error(`Plantilla de juego desconocida: «${id}».`);
 }
 
 /** La plantilla por defecto (cajón) mantiene el comportamiento de #1416. */
@@ -268,7 +403,10 @@ export interface HardwareKitPlanExisting {
   readonly agregadoCodes: ReadonlySet<string>;
 }
 
-export function validateHardwareKitInput(input: HardwareKitPlanInput): void {
+export function validateHardwareKitInput(
+  input: HardwareKitPlanInput,
+  customTemplates: readonly HardwareKitTemplate[] = [],
+): void {
   if (!input.code.trim()) {
     throw new Error('El código del juego es obligatorio.');
   }
@@ -296,19 +434,23 @@ export function validateHardwareKitInput(input: HardwareKitPlanInput): void {
     }
   }
   if (input.templateId !== undefined) {
-    hardwareKitTemplateById(input.templateId);
+    hardwareKitTemplateById(input.templateId, customTemplates);
   }
 }
 
 export function planHardwareKit(
   input: HardwareKitPlanInput,
   existing: HardwareKitPlanExisting,
+  customTemplates: readonly HardwareKitTemplate[] = [],
 ): HardwareKitPlan {
-  validateHardwareKitInput(input);
+  validateHardwareKitInput(input, customTemplates);
 
   const kitCode = input.code.trim();
   const kitName = input.name.trim();
-  const template = hardwareKitTemplateById(input.templateId ?? DEFAULT_KIT_TEMPLATE_ID);
+  const template = hardwareKitTemplateById(
+    input.templateId ?? DEFAULT_KIT_TEMPLATE_ID,
+    customTemplates,
+  );
   const isDrawer = template.id === DEFAULT_KIT_TEMPLATE_ID;
   const agregadoCode =
     input.agregadoCode?.trim() || defaultAgregadoCode(kitCode, template.agregadoLabelEs);

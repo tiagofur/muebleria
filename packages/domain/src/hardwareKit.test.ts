@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import {
   DEFAULT_FIXED_OFFSET_MM,
@@ -8,7 +10,9 @@ import {
   planHardwareKit,
   validateHardwareKitInput,
   validateHardwareKitLink,
+  validateHardwareKitTemplate,
   type HardwareKitPlanInput,
+  type HardwareKitTemplate,
 } from './hardwareKit';
 
 const baseInput: HardwareKitPlanInput = {
@@ -201,5 +205,86 @@ describe('plantillas de juego (#1422 slice 2)', () => {
     const byMember = new Map(plan.designs.map((d) => [d.memberId, d]));
     expect(byMember.get('fixed_rail_left')?.placement.x).toEqual({ ref: 'min', offsetMm: 22 });
     expect(byMember.get('moving_rail_right')?.placement.x).toEqual({ ref: 'max', offsetMm: -44 });
+  });
+});
+
+describe('plantillas del taller editables (#1422 slice 2 — fixture compartido TS↔Go)', () => {
+  interface FixtureCase {
+    readonly case: string;
+    readonly template: HardwareKitTemplate;
+    readonly expectedIssueCodes?: readonly string[];
+    readonly expectedPaths?: readonly string[];
+  }
+  const fixture = JSON.parse(
+    readFileSync(resolve(__dirname, '../../../contracts/kitTemplateValidation.contract.json'), 'utf8'),
+  ) as {
+    readonly schema: string;
+    readonly validTemplates: readonly FixtureCase[];
+    readonly invalidTemplates: readonly FixtureCase[];
+  };
+
+  it('acepta las plantillas válidas del contrato compartido', () => {
+    expect(fixture.schema).toBe('granete.kit-template-validation.v1');
+    for (const testCase of fixture.validTemplates) {
+      expect(validateHardwareKitTemplate(testCase.template), testCase.case).toEqual([]);
+    }
+  });
+
+  it('rechaza los casos inválidos del contrato compartido con el código y campo exactos', () => {
+    expect(fixture.invalidTemplates.length).toBeGreaterThan(0);
+    for (const testCase of fixture.invalidTemplates) {
+      const issues = validateHardwareKitTemplate(testCase.template);
+      const paths = new Set(issues.map((i) => i.path));
+      for (const expected of testCase.expectedPaths ?? []) {
+        expect(paths.has(expected), `${testCase.case}: ${[...paths].join(', ')}`).toBe(true);
+      }
+      for (const issue of issues) {
+        expect(issue.code).toBe('KIT_TEMPLATE_INVALID');
+        expect(issue.severity).toBe('error');
+      }
+    }
+  });
+
+  it('planHardwareKit arma el plan desde una plantilla del taller', () => {
+    const custom = fixture.validTemplates[0]!.template;
+    const plan = planHardwareKit(
+      { ...baseInput, code: 'BIS-TALLER', name: 'Bisagra Taller', templateId: custom.id },
+      noExisting,
+      [custom],
+    );
+    expect(plan.designs.map((d) => d.code)).toEqual(['BIS-TALLER-COPA', 'BIS-TALLER-BRAZO']);
+    expect(plan.designs.map((d) => d.membership)).toEqual(['body', 'actor:door']);
+    expect(plan.agregado.motion).toBe('rotate_left');
+    expect(plan.agregado.name).toBe('Puerta Bisagra Taller');
+  });
+
+  it('la plantilla del taller usa el defaultOffsetMm del slot (los offsets legacy son sólo del cajón)', () => {
+    const custom = fixture.validTemplates[0]!.template;
+    const plan = planHardwareKit(
+      { ...baseInput, fixedOffsetMm: 99, movingOffsetMm: 99, templateId: custom.id },
+      noExisting,
+      [custom],
+    );
+    const byMember = new Map(plan.designs.map((d) => [d.memberId, d]));
+    expect(byMember.get('hinge_cup')?.placement.x).toEqual({ ref: 'min', offsetMm: 0 });
+    expect(byMember.get('hinge_arm')?.placement.x).toEqual({ ref: 'center', offsetMm: -24 });
+  });
+
+  it('una plantilla del taller inválida falla cerrado ANTES de planear', () => {
+    const broken = fixture.invalidTemplates.find((c) => c.case === 'unknown-membership')!.template;
+    expect(() =>
+      planHardwareKit(
+        { ...baseInput, templateId: broken.id },
+        noExisting,
+        [broken],
+      ),
+    ).toThrow(/membership/);
+  });
+
+  it('un id de plantilla del taller sin lista custom sigue fallando cerrado', () => {
+    const custom = fixture.validTemplates[0]!.template;
+    expect(() =>
+      validateHardwareKitInput({ ...baseInput, templateId: custom.id }),
+    ).toThrow('Plantilla de juego desconocida');
   });
 });
