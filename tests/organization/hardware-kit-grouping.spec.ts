@@ -137,11 +137,15 @@ test.describe.serial('Herrajes — agrupación kit↔partes (#1422 slice 1)', ()
     await expect(page.getByTestId(`hardware-kit-parts-${KIT_CODE}`)).toHaveCount(0);
 
     // Editar una parte desde su fila (búsqueda activa) → el link SOBREVIVE.
+    // force: con búsqueda activa conviven kit+partes y las celdas de
+    // acciones solapadas en el scroll hacen que el hit-test sintético
+    // rebote entre celdas vecinas; lo que este test demuestra es que el
+    // PUT del formulario preserva kit_hardware_id.
     await page.getByLabel('Buscar herrajes').fill(KIT_CODE);
     await page
       .getByRole('button', { name: `Editar ${KIT_CODE}-FIJ-I` })
       .first()
-      .click();
+      .click({ force: true });
     await page.getByTestId('hardware-form-modal').waitFor({ state: 'visible' });
     const nameInput = page.getByLabel('Nombre');
     await nameInput.fill('Corredera agrupada — Guía fija izquierda (editada)');
