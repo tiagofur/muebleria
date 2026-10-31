@@ -1,0 +1,77 @@
+{
+  "schemaId": "granete.agregado-placement-drilling.v1",
+  "comment": "#1413 F131: un hardwarePlacement autorado sobre un COMPONENTE DE AGREGADO debe taladrar su pieza anfitriona en AMBOS runtimes. El host part id es `agr-<agregadoId>-[instance-<iid>-]u<N>-<componentId>-copy-<k>` (bom.ts resolveComposedModule / Go resolve.go instanceTag). El herraje HER-PLACA-BIS tiene perfil estático en Go (authoringManualMachiningProfiles: piloto tornillo Ø5×10) y perfil autorado idéntico en el catálogo TS — el agujero esperado es byte-idéntico en los dos lados: face=anchorFace (front), x/y=relativePosition, Ø5, 10mm, screw — el nombre del herraje evita «bisagra/placa» porque inferHoleType clasifica por nombre. Go congela 1 operación DRILL por board de agregado (provenance manualHardwarePlacement); TS deriva el patrón completo del perfil (1 op = 1 hole).",
+  "hardware": {
+    "id": "hw-placa-f131",
+    "code": "HER-PLACA-BIS",
+    "name": "Piloto Tornillo 5x10 F131",
+    "unit": "piece",
+    "costPerUnit": 6,
+    "active": true,
+    "machining": {
+      "parts": [
+        {
+          "id": "plate",
+          "role": "pilot",
+          "operations": [
+            {
+              "id": "pilot",
+              "kind": "screw_pilot",
+              "diameterMm": 5,
+              "depthMm": 10,
+              "xMm": 0,
+              "yMm": 0,
+              "face": "anchor"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "agregado": {
+    "id": "agr-caj-f131",
+    "code": "AGR-CAJ-F131",
+    "name": "Cajón F131",
+    "externalDims": {
+      "width": 500,
+      "height": 120,
+      "depth": 590
+    },
+    "components": [
+      {
+        "componentId": "comp-agr-lateral",
+        "quantity": 1,
+        "overrides": {
+          "hardwarePlacements": [
+            {
+              "hardwareId": "hw-placa-f131",
+              "anchorFace": "front",
+              "relativePosition": {
+                "xMm": 60,
+                "yMm": 40
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "agregadoInstances": [
+    {
+      "agregadoId": "agr-caj-f131",
+      "quantity": 2
+    }
+  ],
+  "expected": {
+    "hostPartIdUnit0": "agr-agr-caj-f131-u0-comp-agr-lateral-copy-0",
+    "hostPartIdUnit1": "agr-agr-caj-f131-u1-comp-agr-lateral-copy-0",
+    "hole": {
+      "face": "front",
+      "xMm": 60,
+      "yMm": 40,
+      "diameterMm": 5,
+      "depthMm": 10,
+      "type": "screw"
+    }
+  }
+}
