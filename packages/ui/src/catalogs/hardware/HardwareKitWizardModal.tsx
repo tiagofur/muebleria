@@ -26,7 +26,7 @@ import {
   planHardwareKit,
 } from '@granete/domain';
 import { Modal } from '../../common';
-import { uploadHardwareAssetBinding, type HardwareAssetService } from '@granete/storage';
+import { uploadHardwareAssetBinding, type HardwareAssetService, type WorkshopKitTemplateRow } from '@granete/storage';
 
 export interface HardwareKitWizardModalProps {
   readonly open: boolean;
@@ -35,6 +35,10 @@ export interface HardwareKitWizardModalProps {
   readonly agregadoCodes: readonly string[];
   readonly onCreateKit: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
   readonly assetService?: HardwareAssetService;
+  /** Plantillas del taller (#1422 slice 2): se suman a las embebidas. */
+  readonly customTemplates?: readonly WorkshopKitTemplateRow[];
+  /** Abre el editor de plantillas del taller (cuando la sesión puede guardar). */
+  readonly onEditTemplates?: () => void;
 }
 
 type WizardPhase = 'form' | 'running' | 'done';
@@ -51,6 +55,8 @@ export function HardwareKitWizardModal({
   agregadoCodes,
   onCreateKit,
   assetService,
+  customTemplates = [],
+  onEditTemplates,
 }: HardwareKitWizardModalProps): ReactNode {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -62,7 +68,10 @@ export function HardwareKitWizardModal({
   const [movingOffset, setMovingOffset] = useState(String(DEFAULT_MOVING_OFFSET_MM));
   const [agregadoCode, setAgregadoCode] = useState('');
   const [templateId, setTemplateId] = useState('drawer-slides');
-  const template = useMemo(() => hardwareKitTemplateById(templateId), [templateId]);
+  const template = useMemo(
+    () => hardwareKitTemplateById(templateId, customTemplates),
+    [templateId, customTemplates],
+  );
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [phase, setPhase] = useState<WizardPhase>('form');
   const [progress, setProgress] = useState<string | null>(null);
@@ -104,11 +113,12 @@ export function HardwareKitWizardModal({
           templateId,
         },
         existing,
+        customTemplates,
       );
     } catch {
       return null;
     }
-  }, [code, name, price, width, height, depth, fixedOffset, movingOffset, agregadoCode, templateId, existing]);
+  }, [code, name, price, width, height, depth, fixedOffset, movingOffset, agregadoCode, templateId, existing, customTemplates]);
 
   const running = phase === 'running';
 
@@ -170,7 +180,7 @@ export function HardwareKitWizardModal({
     };
     try {
       // Strict validation happens inside the planner; surface its message.
-      const plan = planHardwareKit(input, existing);
+      const plan = planHardwareKit(input, existing, customTemplates);
       if (plan.blockedCode) {
         setError(
           `Ya existe un ensamble con el código «${plan.blockedCode}». Cambiá el código del ensamble para continuar.`,
@@ -360,7 +370,26 @@ export function HardwareKitWizardModal({
                     {t.labelEs}
                   </option>
                 ))}
+                {customTemplates.length > 0 ? (
+                  <optgroup label="Del taller">
+                    {customTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.labelEs}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
               </select>
+              {onEditTemplates ? (
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  onClick={onEditTemplates}
+                  data-testid="hardware-kit-wizard-manage-templates"
+                >
+                  Plantillas del taller…
+                </button>
+              ) : null}
             </div>
           </fieldset>
 

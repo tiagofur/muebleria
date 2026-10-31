@@ -7,7 +7,7 @@
  * unchanged — see catalogStore.ts (combinator + singleton).
  */
 
-import { GraneteApiError, ModuleVersionUnknownError } from '@granete/storage';
+import { GraneteApiError, ModuleVersionUnknownError, type WorkshopKitTemplateRow } from '@granete/storage';
 import { useWorkspaceStore } from '../workspaceStore';
 import { notifyCatalogMutated } from '../../crossTabSync';
 
@@ -189,6 +189,12 @@ export interface CatalogState {
   readonly createHardwareKit: (
     req: HardwareKitCreateRequest,
   ) => Promise<HardwareKitResult>;
+  // --- Plantillas de juego del taller (#1422 slice 2) ---
+  readonly kitTemplates: readonly WorkshopKitTemplateRow[];
+  readonly kitTemplatesLoading: boolean;
+  readonly loadKitTemplates: () => Promise<void>;
+  readonly saveKitTemplate: (row: WorkshopKitTemplateRow) => Promise<WorkshopKitTemplateRow>;
+  readonly deleteKitTemplate: (id: string, expectedVersion: number) => Promise<void>;
   readonly updateAgregado: (item: Agregado) => void;
   /** #1369: simular un cambio de receta (dry-run clasificado; server authority). */
   readonly simulateAgregadoRecipe: RecipeChangeActions['simulate'];

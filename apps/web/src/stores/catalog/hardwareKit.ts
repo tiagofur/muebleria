@@ -35,10 +35,17 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       }
 
       const hardwareList = catalog.hardware ?? [];
-      const plan = planHardwareKit(req.input, {
-        hardwareCodes: new Set(hardwareList.map((h) => h.code)),
-        agregadoCodes: new Set((catalog.agregados ?? []).map((a) => a.code)),
-      });
+      // #1422 slice 2: las plantillas del taller participan de la
+      // re-derivación — el plan NUNCA confía en el preview del cliente; una
+      // plantilla custom inválida falla cerrado aquí igual que en la UI.
+      const plan = planHardwareKit(
+        req.input,
+        {
+          hardwareCodes: new Set(hardwareList.map((h) => h.code)),
+          agregadoCodes: new Set((catalog.agregados ?? []).map((a) => a.code)),
+        },
+        ctx.get().kitTemplates,
+      );
       if (plan.blockedCode) {
         throw new Error(
           `Ya existe un ensamble con el código «${plan.blockedCode}». Cambiá el código del ensamble para continuar.`,

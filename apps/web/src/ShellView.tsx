@@ -157,6 +157,7 @@ import {
 import {
   GraneteApiClient,
   createApiHardwareAssetService,
+  type WorkshopKitTemplateRow,
 } from '@granete/storage';
 import { GlbAssetSourceProvider } from '@granete/ui';
 import { useApiGlbAssetSource } from './glbAssetSource';
@@ -287,6 +288,11 @@ export interface ShellViewCtx {
   readonly createFromTemplate: (templateId: string, draft: ProjectDraft) => void;
   readonly createHardware: (draft: HardwareDraft) => void;
   readonly createHardwareKit: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
+  readonly kitTemplates: readonly WorkshopKitTemplateRow[];
+  readonly kitTemplatesLoading: boolean;
+  readonly loadKitTemplates: () => Promise<void>;
+  readonly saveKitTemplate: (row: WorkshopKitTemplateRow) => Promise<WorkshopKitTemplateRow>;
+  readonly deleteKitTemplate: (id: string, expectedVersion: number) => Promise<void>;
   readonly createMaterial: (draft: MaterialDraft) => Promise<void>;
   readonly createMaterialCategory: (draft: CategoryDraft) => void;
   readonly createModule: (draft: ModuleDraft) => Promise<void>;
@@ -596,6 +602,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     canMarkProduced,
     canMutateCatalog,
     canMutateCustomers,
+    kitTemplates,
+    loadKitTemplates,
+    saveKitTemplate,
+    deleteKitTemplate,
     canMutateModules,
     canMutateProjects,
     canOpenFabric,
@@ -2007,6 +2017,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           hardware={hardware}
           onCreate={createHardware}
           onCreateKit={createHardwareKit}
+          kitTemplates={kitTemplates}
+          onSaveKitTemplate={canMutateCatalog ? saveKitTemplate : undefined}
+          onDeleteKitTemplate={canMutateCatalog ? deleteKitTemplate : undefined}
+          onReloadKitTemplates={loadKitTemplates}
           agregadoCodes={agregados.map((a) => a.code)}
           agregados={agregados}
           onUpdate={updateHardware}

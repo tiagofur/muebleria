@@ -8,6 +8,7 @@ export type { WorkspaceRepository } from './workspaceRepository';
 export type { JobCostingView, SiteSurveyView } from './workspaceRepository';
 export { ProjectInlineUpdateHttpError } from './workspaceRepository';
 export { APIWorkspaceRepository } from './apiWorkspaceRepository';
+export type { WorkshopKitTemplateRow } from './apiWorkspaceRepository';
 export {
   LocalStorageWorkspaceRepository,
   GUEST_WORKSPACE_STORAGE_KEY,

@@ -17,7 +17,7 @@ import {
   validateMachiningProfile,
   suggestDuplicateCode,
 } from '@granete/domain';
-import type { HardwareAssetService } from '@granete/storage';
+import type { HardwareAssetService, WorkshopKitTemplateRow } from '@granete/storage';
 import { Copy, Eye, EyeOff, PackagePlus, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   ConfirmDialog,
@@ -41,6 +41,7 @@ import {
 import { ActiveBadge, CatalogTable, type CatalogColumn } from '../CatalogTable';
 import { HardwareFormModal } from './HardwareFormModal';
 import { HardwareKitWizardModal } from './HardwareKitWizardModal';
+import { KitTemplateEditorModal } from './KitTemplateEditorModal';
 import {
   UNIT_LABELS,
   type HardwareDraft,
@@ -73,6 +74,11 @@ export interface HardwareCatalogProps {
   readonly onCreateKit?: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
   /** #1416: agregado codes for the wizard's fail-closed collision check. */
   readonly agregadoCodes?: readonly string[];
+  /** #1422 slice 2: plantillas de juego del taller para el asistente. */
+  readonly kitTemplates?: readonly WorkshopKitTemplateRow[];
+  readonly onSaveKitTemplate?: (row: WorkshopKitTemplateRow) => Promise<WorkshopKitTemplateRow>;
+  readonly onDeleteKitTemplate?: (id: string, expectedVersion: number) => Promise<void>;
+  readonly onReloadKitTemplates?: () => Promise<void>;
   /** #1418 restante (perfección): catálogo de agregados para el link kit→diseño. */
   readonly agregados?: readonly Agregado[];
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
@@ -106,6 +112,10 @@ export function HardwareCatalog({
   onCreateKit,
   agregadoCodes = [],
   agregados = [],
+  kitTemplates = [],
+  onSaveKitTemplate,
+  onDeleteKitTemplate,
+  onReloadKitTemplates,
   resolveImageUrl = (u) => u,
 }: HardwareCatalogProps): ReactNode {
   const formId = useId();
@@ -133,6 +143,9 @@ export function HardwareCatalog({
   const [readbackError, setReadbackError] = useState<string | null>(null);
   // #1416: kit wizard («Juego de herraje»).
   const [kitWizardOpen, setKitWizardOpen] = useState(false);
+  // #1422 slice 2: editor de plantillas del taller (desde el asistente).
+  const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<WorkshopKitTemplateRow | null>(null);
   // #1422 slice 1: las partes de diseño viven «dentro» de su kit — ocultas
   // por defecto; el chip del toolbar las muestra. Con búsqueda activa se
   // muestran siempre (el search debe encontrarlas).
@@ -341,7 +354,10 @@ export function HardwareCatalog({
             <button
               type="button"
               className="btn"
-              onClick={() => setKitWizardOpen(true)}
+              onClick={() => {
+                onReloadKitTemplates?.();
+                setKitWizardOpen(true);
+              }}
               data-testid="hardware-kit-wizard-open"
             >
               <PackagePlus size={16} strokeWidth={1.5} aria-hidden />
@@ -628,6 +644,27 @@ export function HardwareCatalog({
           agregadoCodes={agregadoCodes}
           onCreateKit={onCreateKit}
           assetService={assetService}
+          customTemplates={kitTemplates}
+          onEditTemplates={
+            onSaveKitTemplate
+              ? () => {
+                  setEditingTemplate(null);
+                  setKitWizardOpen(false);
+                  setTemplateEditorOpen(true);
+                }
+              : undefined
+          }
+        />
+      ) : null}
+
+      {onSaveKitTemplate ? (
+        <KitTemplateEditorModal
+          open={templateEditorOpen}
+          onClose={() => setTemplateEditorOpen(false)}
+          editing={editingTemplate}
+          templates={kitTemplates}
+          onSave={onSaveKitTemplate}
+          onDelete={onDeleteKitTemplate}
         />
       ) : null}
 
