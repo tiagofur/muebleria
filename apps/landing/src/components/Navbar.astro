@@ -1,0 +1,47 @@
+---
+import { ArrowRight, LogIn } from '@lucide/astro';
+---
+
+<header class="fixed top-0 left-0 right-0 z-50 transition-all duration-300 backdrop-blur-md bg-[#0B0F19]/80 border-b border-slate-800/80">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+    <!-- Brand -->
+    <a href="#" class="flex items-center gap-3 group">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 p-0.5 shadow-lg shadow-indigo-500/20 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" class="w-6 h-6">
+          <path d="M8 11.5h16M8 16h16M8 20.5h11" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="flex flex-col">
+        <span class="text-xl font-bold tracking-tight text-white group-hover:text-indigo-400 transition-colors">GRANETE</span>
+        <span class="text-[10px] font-medium uppercase tracking-widest text-slate-400">Plataforma Operativa</span>
+      </div>
+    </a>
+
+    <!-- Nav Links (Desktop) -->
+    <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
+      <a href="#problema" class="hover:text-white transition-colors">El Problema</a>
+      <a href="#flujo" class="hover:text-white transition-colors">El Hilo Digital</a>
+      <a href="#capacidades" class="hover:text-white transition-colors">Capacidades</a>
+      <a href="#comparativa" class="hover:text-white transition-colors">Comparativa</a>
+      <a href="#roles" class="hover:text-white transition-colors">Para Quién</a>
+    </nav>
+
+    <!-- CTAs -->
+    <div class="flex items-center gap-3">
+      <a 
+        href="https://app.granete.com/login" 
+        class="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-800/60 transition-colors"
+      >
+        <LogIn class="w-4 h-4 text-indigo-400" />
+        <span>Ingresar</span>
+      </a>
+      <a 
+        href="#demo" 
+        class="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl shadow-md shadow-indigo-600/30 hover:shadow-indigo-500/50 transition-all duration-200"
+      >
+        <span>Agendar Demostración</span>
+        <ArrowRight class="w-4 h-4" />
+      </a>
+    </div>
+  </div>
+</header>

@@ -1,0 +1,121 @@
+---
+import { BadgeCheck, Layers, GitBranch, Cpu, ArrowRight } from '@lucide/astro';
+
+const steps = [
+  {
+    step: "01",
+    tag: "COMERCIAL",
+    title: "Venta y Cotización en Vivo",
+    icon: BadgeCheck,
+    color: "from-blue-500 to-indigo-500",
+    desc: "Presupuestos dinámicos basados en costos reales de materiales, cantos y herrajes. Modifica el diseño y el sistema calcula de inmediato el delta de costo frente a la versión acordada con el cliente.",
+    bullets: [
+      "Cotizaciones con snapshots inmutables",
+      "Comparativa instantánea ante cambios de cliente",
+      "Márgenes de ganancia protegidos antes de fabricar"
+    ]
+  },
+  {
+    step: "02",
+    tag: "DISEÑO 3D",
+    title: "Diseño Conectado en SketchUp",
+    icon: Layers,
+    color: "from-indigo-500 to-violet-500",
+    desc: "Tus proyectistas trabajan en su entorno profesional habitual con bibliotecas paramétricas inteligentes. Cada mueble ya sabe cómo se construye, qué holguras exige y qué herrajes lleva.",
+    bullets: [
+      "Extensión nativa Granete for SketchUp",
+      "Espesores reales y reglas constructivas en vivo",
+      "Sin inventar cotas imposibles de producir"
+    ]
+  },
+  {
+    step: "03",
+    tag: "INGENIERÍA",
+    title: "Liberación Técnica Congelada",
+    icon: GitBranch,
+    color: "from-violet-500 to-purple-500",
+    desc: "Al aprobar la obra, Granete genera una liberación inmutable. Nadie en planta corta un diseño no aprobado. Generación automática de BOM, preflight sin errores y listas de compra exactas.",
+    bullets: [
+      "Control de versiones exacto (Design -> Release)",
+      "Preflight automático: cero piezas o cantos huérfanos",
+      "BOM resuelto al milímetro para compras y logística"
+    ]
+  },
+  {
+    step: "04",
+    tag: "PRODUCCIÓN",
+    title: "Piso de Taller, QR y Salida a Máquina",
+    icon: Cpu,
+    color: "from-purple-500 to-pink-500",
+    desc: "De la liberación directo a tus máquinas. Archivos de corte para seccionadora (PTX/CADmatic), perforación CNC, optimización de tableros y etiquetas con QR para trazabilidad por estación.",
+    bullets: [
+      "Flujo por estaciones: Corte, CNC, Enchape, Armado",
+      "Etiquetas QR por pieza y bulto de mueble",
+      "Auditoría real: comparar lo presupuestado vs lo consumido"
+    ]
+  }
+];
+---
+
+<section id="flujo" class="py-28 bg-[#0B0F19] relative overflow-hidden">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center max-w-3xl mx-auto mb-20 space-y-4">
+      <span class="text-xs font-semibold uppercase tracking-widest text-indigo-400 bg-indigo-500/10 px-3.5 py-1.5 rounded-full border border-indigo-500/20">
+        El Hilo Digital Granete
+      </span>
+      <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+        Un flujo continuo y sin fisuras: <br />
+        de la venta al montaje final.
+      </h2>
+      <p class="text-slate-400 text-base sm:text-lg">
+        Elimina las islas de software. En Granete, cada área de tu empresa nutre la misma base de datos técnica sin reescribir ni un solo número.
+      </p>
+    </div>
+
+    <!-- Timeline Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 relative">
+      {steps.map((item, index) => {
+        const IconComponent = item.icon;
+        return (
+          <div class="relative flex flex-col bg-slate-900/40 border border-slate-800 rounded-2xl p-7 hover:border-slate-700 hover:bg-slate-900/70 transition-all duration-300 group">
+            <!-- Step badge & Tag -->
+            <div class="flex items-center justify-between mb-6">
+              <span class="text-2xl font-black font-mono text-slate-600 group-hover:text-indigo-400 transition-colors">
+                {item.step}
+              </span>
+              <span class="text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-md bg-slate-800/80 text-slate-300 border border-slate-700/60 font-mono">
+                {item.tag}
+              </span>
+            </div>
+
+            <!-- Icon -->
+            <div class={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.color} p-0.5 shadow-lg shadow-indigo-900/30 flex items-center justify-center mb-5`}>
+              <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+                <IconComponent class="w-6 h-6 text-white" />
+              </div>
+            </div>
+
+            <!-- Title & Description -->
+            <h3 class="text-xl font-bold text-white mb-3 group-hover:text-indigo-300 transition-colors">
+              {item.title}
+            </h3>
+            <p class="text-sm text-slate-400 leading-relaxed mb-6 flex-grow">
+              {item.desc}
+            </p>
+
+            <!-- Bullets -->
+            <div class="border-t border-slate-800/80 pt-4 space-y-2.5">
+              {item.bullets.map((b) => (
+                <div class="flex items-start gap-2 text-xs text-slate-300">
+                  <ArrowRight class="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
+                  <span>{b}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+</section>
+

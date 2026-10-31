@@ -1,0 +1,68 @@
+---
+import { AlertTriangle, Clock, RefreshCw, EyeOff } from '@lucide/astro';
+
+const pains = [
+  {
+    icon: Clock,
+    color: "from-amber-500/20 to-amber-600/10 text-amber-400 border-amber-500/20",
+    title: "Cotizaciones lentas y márgenes ciegos",
+    description: "Pasar días enteros calculando a mano un presupuesto. Si el cliente pide cambiar una melamina o un sistema de cajones, hay que rehacer el despiece para no perder dinero en la venta."
+  },
+  {
+    icon: AlertTriangle,
+    color: "from-rose-500/20 to-rose-600/10 text-rose-400 border-rose-500/20",
+    title: "Fabricar la versión equivocada",
+    description: "El proyectista cambia una medida en el 3D a última hora, pero el taller corta con la lista impresa de ayer. Tableros enteros tirados al descarte y discusiones internas de quién tuvo la culpa."
+  },
+  {
+    icon: RefreshCw,
+    color: "from-sky-500/20 to-sky-600/10 text-sky-400 border-sky-500/20",
+    title: "Triple carga manual de datos",
+    description: "Medidas pasadas de SketchUp a Excel, de Excel al optimizador de corte y de ahí a las órdenes de compra. Cada tipeo manual es una ruleta rusa de 1 milímetro que frena el armado."
+  },
+  {
+    icon: EyeOff,
+    color: "from-purple-500/20 to-purple-600/10 text-purple-400 border-purple-500/20",
+    title: "El taller como una 'caja negra'",
+    description: "No saber en qué estación está cada pieza, qué herraje falta para terminar de armar o si una obra realmente dejó la rentabilidad presupuestada hasta que ya está colocada en la casa del cliente."
+  }
+];
+---
+
+<section id="problema" class="py-24 bg-[#0A0D16] border-t border-slate-800/80 relative">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center max-w-3xl mx-auto mb-16 space-y-4">
+      <span class="text-xs font-semibold uppercase tracking-widest text-rose-400 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">
+        La Realidad del Taller Tradicional
+      </span>
+      <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+        El costo invisible que desangra <br class="hidden sm:inline" />
+        a las carpinterías y fábricas.
+      </h2>
+      <p class="text-slate-400 text-base sm:text-lg">
+        La mayoría de las pérdidas no ocurren por falta de clientes ni por falta de oficio, sino por la desconexión crítica entre lo que se cotiza, lo que se dibuja y lo que se corta.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {pains.map((pain) => {
+        const IconComponent = pain.icon;
+        return (
+          <div class="rounded-2xl bg-slate-900/50 border border-slate-800 p-6 flex flex-col justify-between hover:border-slate-700 hover:bg-slate-900/80 transition-all duration-300">
+            <div>
+              <div class={`w-12 h-12 rounded-xl bg-gradient-to-br ${pain.color} border flex items-center justify-center mb-5`}>
+                <IconComponent class="w-6 h-6" />
+              </div>
+              <h3 class="text-lg font-bold text-white mb-2.5">{pain.title}</h3>
+              <p class="text-sm text-slate-400 leading-relaxed">{pain.description}</p>
+            </div>
+            <div class="mt-6 pt-4 border-t border-slate-800/60 text-xs text-slate-500 font-mono">
+              Fuga directa de tiempo y rentabilidad
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+</section>
+

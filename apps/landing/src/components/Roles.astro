@@ -1,0 +1,91 @@
+---
+import { Briefcase, Compass, Hammer } from '@lucide/astro';
+
+const roles = [
+  {
+    icon: Briefcase,
+    color: "from-blue-500 to-indigo-600",
+    role: "Dueños y Gerentes",
+    subtitle: "Control económico, márgenes y tranquilidad",
+    benefits: [
+      "Visibilidad completa del estado y rentabilidad real de cada proyecto.",
+      "Protección de márgenes: cotizaciones basadas en costos actualizados de placas y herrajes.",
+      "Fin de los reclamos y pérdidas de clientes por plazos de entrega retrasados.",
+      "Una sola plataforma para toda la empresa en lugar de 5 programas desconectados."
+    ]
+  },
+  {
+    icon: Compass,
+    color: "from-indigo-500 to-violet-600",
+    role: "Proyectistas e Ingenieros",
+    subtitle: "Diseñar con libertad, sin trabajo administrativo",
+    benefits: [
+      "Trabaja directamente dentro de SketchUp con bibliotecas inteligentes.",
+      "El despiece y cálculo de tableros se genera automáticamente al diseñar.",
+      "Reglas constructivas en vivo que impiden diseñar muebles imposibles de armar.",
+      "Cero horas perdidas llenando planillas de Excel para el taller."
+    ]
+  },
+  {
+    icon: Hammer,
+    color: "from-amber-500 to-orange-600",
+    role: "Jefes de Taller y Operarios",
+    subtitle: "Corte y armado sin dudas ni planos viejos",
+    benefits: [
+      "Etiquetas QR en cada pieza con indicación exacta de cantos y mecanizados.",
+      "Archivos listos para la seccionadora y CNC sin cargar medidas a mano.",
+      "Seguridad total de estar fabricando la versión aprobada y liberada.",
+      "Estaciones de trabajo fluidas: Corte, CNC, Enchape, Armado y Despacho."
+    ]
+  }
+];
+---
+
+<section id="roles" class="py-24 bg-[#090C14] border-t border-slate-800/80">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center max-w-3xl mx-auto mb-16 space-y-4">
+      <span class="text-xs font-semibold uppercase tracking-widest text-indigo-400 bg-indigo-500/10 px-3.5 py-1.5 rounded-full border border-indigo-500/20">
+        Adopción Inmediata
+      </span>
+      <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+        Cada área ve exactamente lo que necesita.
+      </h2>
+      <p class="text-slate-400 text-base sm:text-lg">
+        Granete elimina la fricción entre la oficina técnica y el piso de producción, dándole a cada rol las herramientas precisas para su labor diaria.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      {roles.map((item) => {
+        const IconComponent = item.icon;
+        return (
+          <div class="rounded-2xl bg-slate-900/40 border border-slate-800 p-8 flex flex-col justify-between hover:border-slate-700 hover:bg-slate-900/70 transition-all duration-300">
+            <div>
+              <div class={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.color} p-0.5 shadow-lg shadow-indigo-950/40 flex items-center justify-center mb-6`}>
+                <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+                  <IconComponent class="w-6 h-6 text-white" />
+                </div>
+              </div>
+              <h3 class="text-xl font-bold text-white mb-1">{item.role}</h3>
+              <p class="text-xs text-indigo-400 font-medium mb-6">{item.subtitle}</p>
+
+              <ul class="space-y-3">
+                {item.benefits.map((benefit) => (
+                  <li class="flex items-start gap-2.5 text-xs text-slate-300 leading-relaxed">
+                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0 mt-1.5"></span>
+                    <span>{benefit}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            <div class="mt-8 pt-4 border-t border-slate-800/80 text-xs text-slate-500 font-mono">
+              Flujo integrado a su día a día
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+</section>
+

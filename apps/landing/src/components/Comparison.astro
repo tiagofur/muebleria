@@ -1,0 +1,83 @@
+---
+import { X, Check } from '@lucide/astro';
+
+const comparisons = [
+  {
+    metric: "Tiempo de cotización y cambios",
+    before: "2 a 4 días de cálculo manual en Excel. Si el cliente pide un cambio, hay que rehacer el despiece.",
+    after: "Minutos. El sistema calcula en vivo el delta de costo según materiales y herrajes seleccionados."
+  },
+  {
+    metric: "Paso de diseño 3D al taller",
+    before: "Horas transcribiendo medidas de SketchUp a mano o exportando listas que no reconocen mecanizados.",
+    after: "Liberación en 1 clic. Generación automática de BOM, preflight, planos y listas de compra."
+  },
+  {
+    metric: "Tableros desperdiciados y retrabajos",
+    before: "5% al 15% de pérdidas por piezas mal cortadas, medidas erróneas o planos viejos impresos.",
+    after: "Prácticamente cero. Piezas paramétricas exactas, cantos etiquetados y revisión congelada."
+  },
+  {
+    metric: "Archivos para seccionadoras y CNC",
+    before: "Doble carga en optimizadores externos o programas de máquina que no se comunican con el ERP.",
+    after: "Exportación nativa de archivos PTX y DXF listos para operar sin intermediarios."
+  },
+  {
+    metric: "Trazabilidad y control del taller",
+    before: "Preguntar al operario por WhatsApp en qué estado está cada mueble o buscar piezas en pilas.",
+    after: "Etiquetas QR por estación (Corte, CNC, Enchape, Armado) con avance visible en tiempo real."
+  }
+];
+---
+
+<section id="comparativa" class="py-24 bg-[#0B0F19] relative">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center max-w-3xl mx-auto mb-16 space-y-4">
+      <span class="text-xs font-semibold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-3.5 py-1.5 rounded-full border border-emerald-500/20">
+        Impacto Real en el Negocio
+      </span>
+      <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+        Tu operación hoy vs. Tu fábrica con Granete
+      </h2>
+      <p class="text-slate-400 text-base sm:text-lg">
+        La diferencia entre apagar incendios todos los días y operar una planta industrial sincronizada y rentable.
+      </p>
+    </div>
+
+    <!-- Comparison Cards/Table -->
+    <div class="space-y-4 max-w-5xl mx-auto">
+      {comparisons.map((item) => (
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 grid grid-cols-1 md:grid-cols-12 gap-6 items-center hover:bg-slate-900/70 transition-colors">
+          <!-- Metric Label (col 4) -->
+          <div class="md:col-span-4">
+            <h3 class="text-base font-bold text-white mb-1">{item.metric}</h3>
+            <span class="text-xs text-slate-500 font-mono">Punto crítico de operación</span>
+          </div>
+
+          <!-- Traditional / Before (col 4) -->
+          <div class="md:col-span-4 bg-rose-950/20 border border-rose-900/30 rounded-xl p-4 flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 mt-0.5">
+              <X class="w-4 h-4" />
+            </div>
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-rose-400 mb-1">Método Tradicional</div>
+              <p class="text-xs text-slate-300 leading-relaxed">{item.before}</p>
+            </div>
+          </div>
+
+          <!-- With Granete / After (col 4) -->
+          <div class="md:col-span-4 bg-emerald-950/20 border border-emerald-900/30 rounded-xl p-4 flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+              <Check class="w-4 h-4" />
+            </div>
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-emerald-400 mb-1">Con Granete</div>
+              <p class="text-xs text-slate-200 leading-relaxed font-medium">{item.after}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
