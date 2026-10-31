@@ -192,6 +192,7 @@ export interface CatalogState {
   // --- Plantillas de juego del taller (#1422 slice 2) ---
   readonly kitTemplates: readonly WorkshopKitTemplateRow[];
   readonly kitTemplatesLoading: boolean;
+  readonly kitTemplatesError: string | null;
   readonly loadKitTemplates: () => Promise<void>;
   readonly saveKitTemplate: (row: WorkshopKitTemplateRow) => Promise<WorkshopKitTemplateRow>;
   readonly deleteKitTemplate: (id: string, expectedVersion: number) => Promise<void>;

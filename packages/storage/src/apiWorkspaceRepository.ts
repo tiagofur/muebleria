@@ -42,9 +42,7 @@ import type {
   SurveyElementInput,
   RecipeChangeSimulationResponse,
   Agregado,
-  HardwareKitSlotTemplate,
   HardwareKitTemplate,
-  HardwareKitTemplateMotion,
 } from '@granete/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
@@ -1047,83 +1045,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     return agregadoFromApi((await res.json()) as Record<string, unknown>);
   }
 
-  // --- Workshop kit templates (#1422 slice 2) ---
-
-  /**
-   * Plantillas de juego del taller. La lista tolera backends viejos (sin el
-   * endpoint): se degrada a [] para que el asistente siga ofreciendo las
-   * plantillas embebidas — jamás un fallo de catálogo por la familia nueva.
-   */
-  async listKitTemplates(): Promise<WorkshopKitTemplateRow[]> {
-    const headers = this.getHeaders();
-    try {
-      const res = await this.fetch(`${this.baseUrl}/catalog/kit-templates`, { headers });
-      if (!res.ok) return [];
-      const rows = (await res.json()) as WorkshopKitTemplateRow[];
-      return Array.isArray(rows) ? rows : [];
-    } catch {
-      return [];
-    }
-  }
-
-  async createKitTemplate(t: WorkshopKitTemplateRow): Promise<WorkshopKitTemplateRow> {
-    const headers = this.getHeaders();
-    const res = await this.fetch(`${this.baseUrl}/catalog/kit-templates`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(kitTemplateToApi(t)),
-    });
-    return this.kitTemplateFromResponse(res, 'kit template create');
-  }
-
-  async updateKitTemplate(
-    id: string,
-    expectedVersion: number,
-    t: WorkshopKitTemplateRow,
-  ): Promise<WorkshopKitTemplateRow> {
-    const headers = this.getHeaders();
-    headers['If-Match'] = `"v${expectedVersion}"`;
-    const res = await this.fetch(`${this.baseUrl}/catalog/kit-templates/${encodeURIComponent(id)}`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify(kitTemplateToApi(t)),
-    });
-    return this.kitTemplateFromResponse(res, 'kit template update');
-  }
-
-  async deactivateKitTemplate(id: string, expectedVersion: number): Promise<void> {
-    const headers = this.getHeaders();
-    headers['If-Match'] = `"v${expectedVersion}"`;
-    const res = await this.fetch(`${this.baseUrl}/catalog/kit-templates/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-      headers,
-    });
-    if (!res.ok) {
-      throw new Error(`kit template deactivate failed: ${res.status}`);
-    }
-  }
-
-  private async kitTemplateFromResponse(res: Response, context: string): Promise<WorkshopKitTemplateRow> {
-    if (!res.ok) {
-      const payload = (await res.json().catch(() => null)) as
-        | { code?: string; message?: string; field?: string; requestId?: string; retryable?: boolean }
-        | null;
-      if (payload && payload.code) {
-        throw new GraneteApiError(res.status, {
-          code: payload.code as ApiError['code'],
-          message: payload.message ?? `la operación sobre la plantilla falló`,
-          fieldErrors: payload.field ? { [payload.field]: payload.message ?? '' } : {},
-          requestId: payload.requestId ?? '',
-          retryable: payload.retryable ?? res.status >= 500,
-          details: {},
-        });
-      }
-      throw new Error(`${context} failed: ${res.status}`);
-    }
-    return (await res.json()) as WorkshopKitTemplateRow;
-  }
-
-  async saveCatalog(catalog: Catalog): Promise<void> {    for (const m of catalog.materials) {
+  async saveCatalog(catalog: Catalog): Promise<void> {
+    for (const m of catalog.materials) {
       await this.upsertGuarded(
         `/catalog/materials/${m.id}`,
         '/catalog/materials',

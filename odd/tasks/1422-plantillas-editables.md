@@ -75,6 +75,30 @@ Extensión de `hardware-kit-templates.spec.ts`: crear plantilla custom por el
 EDITOR (browser real), usarla en el asistente, readback exacto del agregado
 (label + motion). La plantilla bisagra embebida ya está probada.
 
+## Ronda de corrección (review dual ciego, 10-31)
+
+- **Ronda 1** (2 jueces A/B sobre a609ce7d, CI 22/22): ledger consolidado —
+  2 CRITICAL de juez único (verificados por el padre en código antes de
+  corregir) + 5 WARNINGs (2 coincidentes). Owner había pre-autorizado la
+  ronda de fixes.
+- **C1 crash de render**: el lookup de plantilla del wizard tiraba si el id
+  seleccionado desaparecía de la lista del taller (modal siempre montado) →
+  lookup seguro con fallback a la embebida + efecto que re-clampa la
+  selección.
+- **C2 edición/baja inalcanzables**: sólo existía el alta — ahora la
+  plantilla del taller seleccionada muestra «Editar …» que abre el editor
+  precargado (PUT con If-Match por camino del store). E2E nuevo lo prueba
+  end-to-end con readback.
+- **W**: 404-only degrada la carga (errores reales → aviso visible, lista
+  stale se conserva); métodos muertos del repository eliminados (la capa del
+  store es la única); guard UUID (422 field=id; path no-UUID → 404, nunca
+  500 de PostgreSQL); gemelo TS sin coerción "undefined" (typeof guards,
+  espejo del zero-value Go); mensaje de error del editor en español (el
+  texto del gemelo ya no llega a la UI); newline pegado en saveCatalog.
+- Revalidación V1: typecheck raíz 0, dominio 24/24 (+1 coerción), api Go
+  (+2 UUID), web 610/610, builds+vet limpios. Nuevo HEAD → CI + 
+  re-juzgamiento scoped (ledger congelado + delta).
+
 ## Fuera de alcance (partial)
 
 - Apertura de puerta en host SketchUp (aceptación de la issue) → verificación

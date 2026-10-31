@@ -14,6 +14,8 @@ import type { CatalogState, CatalogStoreCtx } from './shared';
 export type KitTemplatesSlice = {
   readonly kitTemplates: readonly WorkshopKitTemplateRow[];
   readonly kitTemplatesLoading: boolean;
+  /** Aviso visible en el asistente cuando la carga falló (no es 404). */
+  readonly kitTemplatesError: string | null;
   readonly loadKitTemplates: () => Promise<void>;
   /** Crea o actualiza según si el id ya existe en el estado (versión incluida). */
   readonly saveKitTemplate: (
@@ -51,21 +53,38 @@ export function createKitTemplatesActions(ctx: CatalogStoreCtx): KitTemplatesSli
   return {
     kitTemplates: [],
     kitTemplatesLoading: false,
+    kitTemplatesError: null,
 
     loadKitTemplates: async () => {
-      ctx.set({ kitTemplatesLoading: true });
+      ctx.set({ kitTemplatesLoading: true, kitTemplatesError: null });
       try {
         const res = await fetchImpl(`${baseUrl}/catalog/kit-templates`, {
           headers: authedHeaders(),
         });
-        const rows = res.ok ? ((await res.json()) as WorkshopKitTemplateRow[]) : [];
+        if (res.status === 404) {
+          // Backend viejo sin el endpoint: se degrada a las embebidas, sin
+          // aviso — es el estado legítimo «este backend no tiene la familia».
+          ctx.set({ kitTemplates: [], kitTemplatesLoading: false, kitTemplatesError: null });
+          return;
+        }
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const rows = (await res.json()) as WorkshopKitTemplateRow[];
         ctx.set({
           kitTemplates: Array.isArray(rows) ? rows : [],
           kitTemplatesLoading: false,
+          kitTemplatesError: null,
         });
       } catch {
-        // Backend viejo o red caída: el asistente sigue con las embebidas.
-        ctx.set({ kitTemplates: [], kitTemplatesLoading: false });
+        // Red caída o error real: la lista previa queda STALE (no se borra —
+        // borrarla escondería plantillas que siguen existiendo) y el asistente
+        // muestra el aviso; los estados nunca se disfrazan de «sin datos».
+        ctx.set({
+          kitTemplatesLoading: false,
+          kitTemplatesError:
+            'No se pudieron cargar las plantillas del taller; se muestran las últimas conocidas.',
+        });
       }
     },
 

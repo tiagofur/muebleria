@@ -281,6 +281,21 @@ describe('plantillas del taller editables (#1422 slice 2 — fixture compartido 
     ).toThrow(/membership/);
   });
 
+  it('campos ausentes del wire quedan inválidos (sin coerción a "undefined" — espejo del gemelo Go)', () => {
+    const wire = {
+      id: 't-wire',
+      labelEs: 'X',
+      agregadoLabelEs: 'Puerta',
+      motion: 'none',
+      slots: [{ suffix: '-A', membership: 'body', anchorXRef: 'min', offsetSign: 1, defaultOffsetMm: 0 }],
+    } as unknown as HardwareKitTemplate;
+    const issues = validateHardwareKitTemplate(wire);
+    const paths = issues.map((i) => i.path);
+    expect(paths).toContain('slots[0].slot');
+    expect(paths).toContain('slots[0].memberId');
+    expect(paths).toContain('slots[0].role');
+  });
+
   it('un id de plantilla del taller sin lista custom sigue fallando cerrado', () => {
     const custom = fixture.validTemplates[0]!.template;
     expect(() =>

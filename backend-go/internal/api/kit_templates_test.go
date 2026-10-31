@@ -54,8 +54,8 @@ func kitTemplateByIDRequest(t *testing.T, server *Server, method, body, ifMatch 
 	if body != "" {
 		reader = strings.NewReader(body)
 	}
-	req := withClaims(httptest.NewRequest(method, "/api/catalog/kit-templates/t-1", reader), "user-1", string(domain.RoleAdmin))
-	req.SetPathValue("id", "t-1")
+	req := withClaims(httptest.NewRequest(method, "/api/catalog/kit-templates/11111111-1111-4111-8111-000000000001", reader), "user-1", string(domain.RoleAdmin))
+	req.SetPathValue("id", "11111111-1111-4111-8111-000000000001")
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -124,7 +124,7 @@ func TestKitTemplatePutRequiresIfMatchAndGuardsVersion(t *testing.T) {
 
 func TestKitTemplatePutVersionConflictReads412(t *testing.T) {
 	store := &stubStore{listKitTemplates: []domain.KitTemplate{{
-		ID: "t-1", LabelEs: "Vieja", Motion: "none", Active: true, Version: 7,
+		ID: "11111111-1111-4111-8111-000000000001", LabelEs: "Vieja", Motion: "none", Active: true, Version: 7,
 		Slots: []domain.KitTemplateSlot{{
 			Slot: "a", MemberID: "m_a", Suffix: "-A", LabelEs: "A", Role: "r_a",
 			Membership: "body", AnchorXRef: "min", OffsetSign: 1,
@@ -139,7 +139,7 @@ func TestKitTemplatePutVersionConflictReads412(t *testing.T) {
 
 func TestKitTemplatePutSuccessBumpsVersion(t *testing.T) {
 	store := &stubStore{listKitTemplates: []domain.KitTemplate{{
-		ID: "t-1", LabelEs: "Vieja", Motion: "none", Active: true, Version: 7,
+		ID: "11111111-1111-4111-8111-000000000001", LabelEs: "Vieja", Motion: "none", Active: true, Version: 7,
 		AgregadoLabelEs: "Puerta",
 		Slots: []domain.KitTemplateSlot{{
 			Slot: "a", MemberID: "m_a", Suffix: "-A", LabelEs: "A", Role: "r_a",
@@ -170,7 +170,7 @@ func TestKitTemplateDeleteDeactivates(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if store.lastID != "t-1" || store.lastVersion != 2 {
+	if store.lastID != "11111111-1111-4111-8111-000000000001" || store.lastVersion != 2 {
 		t.Fatalf("deactivate called with id=%s version=%d", store.lastID, store.lastVersion)
 	}
 }
@@ -180,6 +180,36 @@ func TestKitTemplateGetNotFoundReads404(t *testing.T) {
 	rec := kitTemplateByIDRequest(t, server, http.MethodGet, "", "")
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestKitTemplatesCreateRejectsNonUUIDId(t *testing.T) {
+	server := &Server{Store: &stubStore{}}
+	body := strings.Replace(kitTemplateRequestBody(),
+		`"id": "b1a2c3d4-0000-4000-8000-000000000001"`, `"id": "levantadza-taller-1"`, 1)
+	rec := kitTemplatesRequest(t, server, http.MethodPost, body, "")
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("non-UUID id: expected 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		Field string `json:"field"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode 422: %v", err)
+	}
+	if payload.Field != "id" {
+		t.Fatalf("expected field id, got %q", payload.Field)
+	}
+}
+
+func TestKitTemplateByIDNonUUIDReads404(t *testing.T) {
+	server := &Server{Store: &stubStore{}}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/kit-templates/levantadza-taller-1", nil), "user-1", string(domain.RoleAdmin))
+	req.SetPathValue("id", "levantadza-taller-1")
+	rec := httptest.NewRecorder()
+	server.HandleKitTemplateByID(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("non-UUID path id: expected 404, got %d", rec.Code)
 	}
 }
 

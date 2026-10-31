@@ -10,7 +10,7 @@
  * re-running the wizard over an existing kit never duplicates records.
  */
 
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 
 import type {
   Hardware,
@@ -21,6 +21,7 @@ import type {
 import {
   DEFAULT_FIXED_OFFSET_MM,
   DEFAULT_MOVING_OFFSET_MM,
+  DEFAULT_KIT_TEMPLATE_ID,
   HARDWARE_KIT_TEMPLATES,
   hardwareKitTemplateById,
   planHardwareKit,
@@ -39,6 +40,10 @@ export interface HardwareKitWizardModalProps {
   readonly customTemplates?: readonly WorkshopKitTemplateRow[];
   /** Abre el editor de plantillas del taller (cuando la sesión puede guardar). */
   readonly onEditTemplates?: () => void;
+  /** Edita una plantilla del taller existente (#1422 review: baja/edición alcanzables). */
+  readonly onEditTemplate?: (row: WorkshopKitTemplateRow) => void;
+  /** Carga/estado de las plantillas del taller (loading + aviso de error). */
+  readonly templatesStatus?: { readonly loading: boolean; readonly notice: string | null };
 }
 
 type WizardPhase = 'form' | 'running' | 'done';
@@ -57,6 +62,8 @@ export function HardwareKitWizardModal({
   assetService,
   customTemplates = [],
   onEditTemplates,
+  onEditTemplate,
+  templatesStatus,
 }: HardwareKitWizardModalProps): ReactNode {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -68,10 +75,27 @@ export function HardwareKitWizardModal({
   const [movingOffset, setMovingOffset] = useState(String(DEFAULT_MOVING_OFFSET_MM));
   const [agregadoCode, setAgregadoCode] = useState('');
   const [templateId, setTemplateId] = useState('drawer-slides');
-  const template = useMemo(
-    () => hardwareKitTemplateById(templateId, customTemplates),
-    [templateId, customTemplates],
-  );
+  // Safe lookup: si la plantilla seleccionada desaparece de la lista del
+  // taller (carga fallida, otra pestaña la borró), el modal —siempre montado—
+  // NO puede tirar durante el render (#1422 review C1): cae a la embebida por
+  // defecto y el efecto de abajo corrige la selección.
+  const template = useMemo(() => {
+    try {
+      return hardwareKitTemplateById(templateId, customTemplates);
+    } catch {
+      return hardwareKitTemplateById(DEFAULT_KIT_TEMPLATE_ID);
+    }
+  }, [templateId, customTemplates]);
+
+  useEffect(() => {
+    if (templateId === DEFAULT_KIT_TEMPLATE_ID) return;
+    const known =
+      HARDWARE_KIT_TEMPLATES.some((t) => t.id === templateId) ||
+      customTemplates.some((t) => t.id === templateId);
+    if (!known) setTemplateId(DEFAULT_KIT_TEMPLATE_ID);
+  }, [templateId, customTemplates]);
+
+  const selectedWorkshopTemplate = customTemplates.find((t) => t.id === templateId) ?? null;
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [phase, setPhase] = useState<WizardPhase>('form');
   const [progress, setProgress] = useState<string | null>(null);
@@ -380,7 +404,11 @@ export function HardwareKitWizardModal({
                   </optgroup>
                 ) : null}
               </select>
-              {onEditTemplates ? (
+              <div className="catalog-form__hint" data-testid="hardware-kit-wizard-templates-status">
+                {templatesStatus?.loading ? 'Cargando plantillas del taller…' : null}
+                {templatesStatus?.notice ?? null}
+              </div>
+              {onEditTemplates || onEditTemplate ? (
                 <button
                   type="button"
                   className="btn btn--sm"
@@ -388,6 +416,16 @@ export function HardwareKitWizardModal({
                   data-testid="hardware-kit-wizard-manage-templates"
                 >
                   Plantillas del taller…
+                </button>
+              ) : null}
+              {onEditTemplate && selectedWorkshopTemplate ? (
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  onClick={() => onEditTemplate(selectedWorkshopTemplate)}
+                  data-testid="hardware-kit-wizard-edit-template"
+                >
+                  Editar «{selectedWorkshopTemplate.labelEs}»
                 </button>
               ) : null}
             </div>

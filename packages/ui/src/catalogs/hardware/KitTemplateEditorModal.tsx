@@ -21,7 +21,6 @@ export interface KitTemplateEditorModalProps {
   readonly onClose: () => void;
   /** Plantilla en edición, o null para una nueva. */
   readonly editing: WorkshopKitTemplateRow | null;
-  readonly templates: readonly WorkshopKitTemplateRow[];
   readonly onSave: (row: WorkshopKitTemplateRow) => Promise<WorkshopKitTemplateRow>;
   readonly onDelete?: (id: string, expectedVersion: number) => Promise<void>;
 }
@@ -59,7 +58,6 @@ export function KitTemplateEditorModal({
   open,
   onClose,
   editing,
-  templates,
   onSave,
   onDelete,
 }: KitTemplateEditorModalProps): ReactNode {
@@ -133,7 +131,9 @@ export function KitTemplateEditorModal({
     };
     const issues = validateHardwareKitTemplate(row);
     if (issues.length > 0) {
-      setError(`Revisá los datos de la plantilla (${issues[0]!.path}): ${issues[0]!.message}`);
+      // Mensaje en español (copy): el texto del gemelo es inglés de dominio;
+      // el campo basta para ubicar el problema en el formulario.
+      setError(`Revisá los datos de la plantilla — campo «${issues[0]!.path}».`);
       return null;
     }
     return row;

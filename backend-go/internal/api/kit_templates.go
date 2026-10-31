@@ -22,6 +22,12 @@ import (
 // shared structural validation: a persisted template always carries a code
 // (unique per organization) and a non-empty slot list.
 func validateKitTemplateForWrite(t *domain.KitTemplate) (field string, message string) {
+	// Los ids de la tabla son UUID (#1398): el gemelo acepta slugs para las
+	// embebidas, pero una FILA del taller sin UUID válido sería un 500 de
+	// PostgreSQL, nunca un 4x2x (#1422 review W3).
+	if !isValidUUID(t.ID) {
+		return "id", "la plantilla del taller necesita un id UUID"
+	}
 	if t.Code == nil || strings.TrimSpace(*t.Code) == "" {
 		return "code", "la plantilla del taller necesita un código"
 	}
@@ -82,8 +88,9 @@ func (s *Server) HandleKitTemplates(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) HandleKitTemplateByID(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if id == "" {
-		respondWithError(w, http.StatusBadRequest, "missing kit template id")
+	if id == "" || !isValidUUID(id) {
+		// Identidad inexistente, nunca un 500 de parseo de PostgreSQL.
+		respondWithError(w, http.StatusNotFound, "kit template not found")
 		return
 	}
 

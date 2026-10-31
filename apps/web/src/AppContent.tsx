@@ -1843,6 +1843,7 @@ export function AppContent({
     createHardwareKit: catalogActions.createHardwareKit,
     kitTemplates: catalogActions.kitTemplates,
     kitTemplatesLoading: catalogActions.kitTemplatesLoading,
+    kitTemplatesError: catalogActions.kitTemplatesError,
     loadKitTemplates: catalogActions.loadKitTemplates,
     saveKitTemplate: catalogActions.saveKitTemplate,
     deleteKitTemplate: catalogActions.deleteKitTemplate,

@@ -206,14 +206,19 @@ export function validateHardwareKitTemplate(
   const add = (message: string, path: string) =>
     issues.push({ code: 'KIT_TEMPLATE_INVALID', message, severity: 'error', entityId: template.id, path });
 
-  if (template.id === '' || !KIT_TEMPLATE_ID_PATTERN.test(template.id)) {
+  //typeof guards: from the wire a missing key is `undefined` — String
+  // coercion would make "undefined" MATCH the key patterns, diverging from
+  // the Go twin (zero value "" fails). Mirror Go: absent/mistyped = invalid.
+  if (typeof template.id !== 'string' || !KIT_TEMPLATE_ID_PATTERN.test(template.id)) {
     add('kit template id must match ^[A-Za-z0-9_-]{1,64}$', 'id');
   }
   if (template.code !== undefined && !KIT_TEMPLATE_CODE_PATTERN.test(template.code)) {
     add('kit template code must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$', 'code');
   }
-  if (template.labelEs === '') add('kit template needs a non-blank labelEs', 'labelEs');
-  if (template.agregadoLabelEs === '') {
+  if (typeof template.labelEs !== 'string' || template.labelEs === '') {
+    add('kit template needs a non-blank labelEs', 'labelEs');
+  }
+  if (typeof template.agregadoLabelEs !== 'string' || template.agregadoLabelEs === '') {
     add('kit template needs a non-blank agregadoLabelEs', 'agregadoLabelEs');
   }
   if (!KIT_TEMPLATE_MOTIONS.includes(template.motion)) {
@@ -236,29 +241,32 @@ export function validateHardwareKitTemplate(
   const seenSuffixes = new Set<string>();
   template.slots.forEach((slot, index) => {
     const path = `slots[${index}]`;
-    if (slot.slot === '' || !KIT_TEMPLATE_KEY_PATTERN.test(slot.slot)) {
+    // typeof guards mirror the Go zero-value semantics (see note above).
+    if (typeof slot.slot !== 'string' || !KIT_TEMPLATE_KEY_PATTERN.test(slot.slot)) {
       add('kit template slot key must match ^[a-z0-9_]{1,40}$', `${path}.slot`);
     } else if (seenSlots.has(slot.slot)) {
       add(`slot ${slot.slot} appears more than once`, `${path}.slot`);
     }
-    seenSlots.add(slot.slot);
-    if (slot.memberId === '' || !KIT_TEMPLATE_KEY_PATTERN.test(slot.memberId)) {
+    seenSlots.add(slot.slot as string);
+    if (typeof slot.memberId !== 'string' || !KIT_TEMPLATE_KEY_PATTERN.test(slot.memberId)) {
       add('kit template member id must match ^[a-z0-9_]{1,40}$', `${path}.memberId`);
     } else if (seenMembers.has(slot.memberId)) {
       add(`member ${slot.memberId} appears more than once: recipe identity would collide`, `${path}.memberId`);
     }
-    seenMembers.add(slot.memberId);
-    if (slot.suffix === '' || !KIT_TEMPLATE_SUFFIX_PATTERN.test(slot.suffix)) {
+    seenMembers.add(slot.memberId as string);
+    if (typeof slot.suffix !== 'string' || !KIT_TEMPLATE_SUFFIX_PATTERN.test(slot.suffix)) {
       add('kit template slot suffix must match ^-[A-Za-z0-9._-]{1,15}$', `${path}.suffix`);
     } else if (seenSuffixes.has(slot.suffix)) {
       add(`suffix ${slot.suffix} appears more than once: part codes would collide`, `${path}.suffix`);
     }
-    seenSuffixes.add(slot.suffix);
-    if (slot.labelEs === '') add('kit template slot needs a non-blank labelEs', `${path}.labelEs`);
-    if (slot.role === '' || !KIT_TEMPLATE_ROLE_PATTERN.test(slot.role)) {
+    seenSuffixes.add(slot.suffix as string);
+    if (typeof slot.labelEs !== 'string' || slot.labelEs === '') {
+      add('kit template slot needs a non-blank labelEs', `${path}.labelEs`);
+    }
+    if (typeof slot.role !== 'string' || !KIT_TEMPLATE_ROLE_PATTERN.test(slot.role)) {
       add('kit template slot role must match ^[a-z0-9_]{1,40}$', `${path}.role`);
     }
-    if (slot.membership !== 'body' && !KIT_TEMPLATE_ACTOR_MEMBERSHIP_PATTERN.test(slot.membership)) {
+    if (typeof slot.membership !== 'string' || (slot.membership !== 'body' && !KIT_TEMPLATE_ACTOR_MEMBERSHIP_PATTERN.test(slot.membership))) {
       add('kit template slot membership must be body or actor:<identifier>', `${path}.membership`);
     }
     if (slot.anchorXRef !== 'min' && slot.anchorXRef !== 'max' && slot.anchorXRef !== 'center') {

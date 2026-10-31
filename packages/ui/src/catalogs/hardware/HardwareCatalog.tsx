@@ -76,6 +76,7 @@ export interface HardwareCatalogProps {
   readonly agregadoCodes?: readonly string[];
   /** #1422 slice 2: plantillas de juego del taller para el asistente. */
   readonly kitTemplates?: readonly WorkshopKitTemplateRow[];
+  readonly kitTemplatesStatus?: { readonly loading: boolean; readonly notice: string | null };
   readonly onSaveKitTemplate?: (row: WorkshopKitTemplateRow) => Promise<WorkshopKitTemplateRow>;
   readonly onDeleteKitTemplate?: (id: string, expectedVersion: number) => Promise<void>;
   readonly onReloadKitTemplates?: () => Promise<void>;
@@ -113,6 +114,7 @@ export function HardwareCatalog({
   agregadoCodes = [],
   agregados = [],
   kitTemplates = [],
+  kitTemplatesStatus,
   onSaveKitTemplate,
   onDeleteKitTemplate,
   onReloadKitTemplates,
@@ -645,10 +647,20 @@ export function HardwareCatalog({
           onCreateKit={onCreateKit}
           assetService={assetService}
           customTemplates={kitTemplates}
+          templatesStatus={kitTemplatesStatus}
           onEditTemplates={
             onSaveKitTemplate
               ? () => {
                   setEditingTemplate(null);
+                  setKitWizardOpen(false);
+                  setTemplateEditorOpen(true);
+                }
+              : undefined
+          }
+          onEditTemplate={
+            onSaveKitTemplate && onDeleteKitTemplate
+              ? (row) => {
+                  setEditingTemplate(row);
                   setKitWizardOpen(false);
                   setTemplateEditorOpen(true);
                 }
@@ -662,7 +674,6 @@ export function HardwareCatalog({
           open={templateEditorOpen}
           onClose={() => setTemplateEditorOpen(false)}
           editing={editingTemplate}
-          templates={kitTemplates}
           onSave={onSaveKitTemplate}
           onDelete={onDeleteKitTemplate}
         />

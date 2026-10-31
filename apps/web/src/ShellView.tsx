@@ -290,6 +290,7 @@ export interface ShellViewCtx {
   readonly createHardwareKit: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
   readonly kitTemplates: readonly WorkshopKitTemplateRow[];
   readonly kitTemplatesLoading: boolean;
+  readonly kitTemplatesError: string | null;
   readonly loadKitTemplates: () => Promise<void>;
   readonly saveKitTemplate: (row: WorkshopKitTemplateRow) => Promise<WorkshopKitTemplateRow>;
   readonly deleteKitTemplate: (id: string, expectedVersion: number) => Promise<void>;
@@ -603,6 +604,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     canMutateCatalog,
     canMutateCustomers,
     kitTemplates,
+    kitTemplatesError,
+    kitTemplatesLoading,
     loadKitTemplates,
     saveKitTemplate,
     deleteKitTemplate,
@@ -2018,6 +2021,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onCreate={createHardware}
           onCreateKit={createHardwareKit}
           kitTemplates={kitTemplates}
+          kitTemplatesStatus={{ loading: kitTemplatesLoading, notice: kitTemplatesError }}
           onSaveKitTemplate={canMutateCatalog ? saveKitTemplate : undefined}
           onDeleteKitTemplate={canMutateCatalog ? deleteKitTemplate : undefined}
           onReloadKitTemplates={loadKitTemplates}

@@ -156,6 +156,20 @@ test.describe.serial('Herrajes — plantillas del taller editables (#1422 slice 
     expect(members.map((m) => m.memberId)).toEqual(['lift_arm', 'lift_spring']);
     expect(members[0]).toMatchObject({ actorMembership: 'body' });
     expect(members[1]).toMatchObject({ actorMembership: 'actor:door' });
+
+    // Edición alcanzable desde el asistente (#1422 review C2): seleccionada
+    // la plantilla del taller, «Editar» abre el editor precargado y el
+    // rename persiste (PUT con If-Match) — readback por API.
+    await page.getByTestId('hardware-kit-wizard-open').click();
+    await select.selectOption({ label: 'Levantadza del taller' });
+    await page.getByTestId('hardware-kit-wizard-edit-template').click();
+    await expect(page.getByTestId('kit-template-editor-code')).toHaveValue(templateCode);
+    await page.getByTestId('kit-template-editor-label').fill('Levantadza del taller v2');
+    await page.getByTestId('kit-template-editor-save').click();
+    await expect(page.getByTestId('kit-template-editor')).not.toBeVisible({ timeout: 15_000 });
+    const tpl2 = await api(token, 'GET', '/catalog/kit-templates');
+    const saved2 = (tpl2.body as readonly Json[]).find((t) => t.code === templateCode);
+    expect(saved2?.labelEs).toBe('Levantadza del taller v2');
   });
 
   test('editor: validación inválida no persiste (membership inventada)', async ({ page }) => {
