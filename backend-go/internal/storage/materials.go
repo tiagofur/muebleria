@@ -709,6 +709,22 @@ func (s *PostgresStore) countHardwareUsage(ctx context.Context, id string) (line
 // it would leave the parts' kit_hardware_id dangling.
 var ErrHardwareKitHasParts = errors.New("el juego tiene partes de diseño vinculadas")
 
+// ApplyHardwareKitLink links one design part to its kit (#1437 backfill for
+// kits created before migration 00171). It only writes when the part is
+// still unlinked — a concurrent link resolves to false — and touches nothing
+// else on the row beyond the version/updated_at bookkeeping.
+func (s *PostgresStore) ApplyHardwareKitLink(ctx context.Context, partID, kitID string) (bool, error) {
+	tag, err := s.db(ctx).Exec(ctx, `
+		UPDATE hardwares
+		SET kit_hardware_id = $1, updated_at = CURRENT_TIMESTAMP, version = version + 1
+		WHERE id = $2 AND organization_id = $3 AND kit_hardware_id IS NULL
+	`, kitID, partID, OrgFromCtx(ctx))
+	if err != nil {
+		return false, fmt.Errorf("error applying hardware kit link: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
 // ensureHardwareNotReferencedAsKit rejects an active→false transition when
 // OTHER hardware rows still point at this one as their kit.
 func (s *PostgresStore) ensureHardwareNotReferencedAsKit(ctx context.Context, id string) error {

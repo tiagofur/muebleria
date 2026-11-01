@@ -137,3 +137,50 @@ func TestUpdateHardware_KitWithLinkedPartsBlocked(t *testing.T) {
 		t.Fatalf("desvinculada la parte, el PUT debe desactivar: %v", err)
 	}
 }
+
+// #1437 backfill: ApplyHardwareKitLink links an unlinked part exactly once —
+// the second call (raced or repeated) is a no-op reporting false.
+func TestApplyHardwareKitLink(t *testing.T) {
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	t.Cleanup(func() {
+		cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code LIKE $1`, "KIT-BF-%")
+		cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE code LIKE $1`, "PART-BF-%")
+	})
+
+	kit := &domain.Hardware{Code: "KIT-BF-" + suffix, Name: "Kit backfill", Unit: "set", CostPerUnit: 100, Active: true}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateHardware(txCtx, kit)
+	})
+	part := &domain.Hardware{Code: "PART-BF-" + suffix, Name: "Parte backfill", Unit: "piece", CostPerUnit: 0, Active: true}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateHardware(txCtx, part)
+	})
+
+	var applied bool
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		var err error
+		applied, err = store.ApplyHardwareKitLink(txCtx, part.ID, kit.ID)
+		return err
+	})
+	if !applied {
+		t.Fatal("first link of an unlinked part must apply")
+	}
+	got := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
+		return store.GetHardwareByID(txCtx, part.ID)
+	})
+	if got.KitHardwareID == nil || *got.KitHardwareID != kit.ID {
+		t.Fatalf("link not read back: %+v", got.KitHardwareID)
+	}
+
+	var again bool
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		var err error
+		again, err = store.ApplyHardwareKitLink(txCtx, part.ID, kit.ID)
+		return err
+	})
+	if again {
+		t.Fatal("re-linking an already-linked part must be a no-op (false)")
+	}
+}
