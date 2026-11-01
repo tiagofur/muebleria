@@ -13,7 +13,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { HardwareUnit } from '@granete/domain';
+import type { HardwareUnit , Hardware } from '@granete/domain';
 import type { HardwareAssetService } from '@granete/storage';
 import { CatalogImage, Modal } from '../../common';
 import { Hardware3DSection } from './Hardware3DSection';
@@ -37,6 +37,14 @@ export interface HardwareFormModalProps {
   readonly resolveImageUrl: (url: string | undefined) => string | undefined;
   readonly onSubmit: (e: FormEvent) => void;
   readonly onClose: () => void;
+  /** #1422 owner: partes de diseño del kit en edición — indentadas dentro del formulario. */
+  readonly kitParts?: readonly Hardware[];
+  /** Abre la edición de una parte (el padre cierra este modal y abre la de la parte). */
+  readonly onEditKitPart?: (part: Hardware) => void;
+  /** Quita la parte del juego (borra el link kit↔parte; la parte sigue existiendo). */
+  readonly onRemoveKitPart?: (part: Hardware) => void;
+  /** Agrega una parte nueva precargada con este kit. */
+  readonly onAddKitPart?: () => void;
 }
 
 export function HardwareFormModal({
@@ -54,6 +62,10 @@ export function HardwareFormModal({
   onSubmit,
   onClose,
   identity,
+  kitParts,
+  onEditKitPart,
+  onRemoveKitPart,
+  onAddKitPart,
 }: HardwareFormModalProps): ReactNode {
   return (
     <Modal
@@ -145,6 +157,52 @@ export function HardwareFormModal({
             </div>
           </div>
         </fieldset>
+
+        {kitParts && kitParts.length > 0 && onEditKitPart ? (
+          <fieldset className="catalog-form__section" data-testid="hardware-form-kit-parts">
+            <legend className="catalog-form__section-title">
+              Partes de este juego ({kitParts.length})
+            </legend>
+            {kitParts.map((part) => (
+              <div
+                key={part.id}
+                className="catalog-kit-part-row"
+                data-testid={`hardware-form-kit-part-${part.code}`}
+              >
+                <span className="catalog-kit-part-row__code">{part.code}</span>
+                <span className="catalog-kit-part-row__name">{part.name}</span>
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  onClick={() => onEditKitPart(part)}
+                  data-testid={`hardware-form-kit-part-edit-${part.code}`}
+                >
+                  Editar
+                </button>
+                {onRemoveKitPart ? (
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--danger"
+                    onClick={() => onRemoveKitPart(part)}
+                    data-testid={`hardware-form-kit-part-remove-${part.code}`}
+                  >
+                    Quitar del juego
+                  </button>
+                ) : null}
+              </div>
+            ))}
+            {onAddKitPart ? (
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={onAddKitPart}
+                data-testid="hardware-form-kit-part-add"
+              >
+                Agregar parte al juego
+              </button>
+            ) : null}
+          </fieldset>
+        ) : null}
 
         <fieldset
           className="catalog-form__section"

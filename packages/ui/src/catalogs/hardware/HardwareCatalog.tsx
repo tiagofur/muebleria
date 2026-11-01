@@ -148,11 +148,10 @@ export function HardwareCatalog({
   // #1422 slice 2: editor de plantillas del taller (desde el asistente).
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WorkshopKitTemplateRow | null>(null);
-  // #1422 slice 1: las partes de diseño viven «dentro» de su kit — ocultas
-  // por defecto; el chip del toolbar las muestra. Con búsqueda activa se
-  // muestran siempre (el search debe encontrarlas).
-  const [showDesignParts, setShowDesignParts] = useState(false);
-
+  // #1422 slice 1 revisión owner: las partes de diseño NUNCA son filas sueltas
+  // — viven anidadas dentro del card expandido de su kit (como un XML:
+  // <kit><parte/><parte/></kit>). Sólo la búsqueda las lista planas para poder
+  // encontrarlas; el chip anterior se elimina.
   const partsByKit = useMemo(() => {
     const map = new Map<string, Hardware[]>();
     for (const h of hardware) {
@@ -175,18 +174,25 @@ export function HardwareCatalog({
     return map;
   }, [agregados]);
 
+  /** #1422 owner: badge fija/móvil de una parte, leído de la receta del kit. */
+  const membershipBadgeOf = (part: Hardware): string | null => {
+    const recipe = part.kitHardwareId ? designByKit.get(part.kitHardwareId) : undefined;
+    const member = recipe?.rigidMembers?.find(
+      (m) => m.source.fixed?.hardwareId === part.id,
+    );
+    if (!member?.actorMembership) return null;
+    return member.actorMembership === 'body'
+      ? 'Fija al mueble'
+      : 'Móvil — abre con la puerta';
+  };
+
   const rows = useMemo(
     () =>
       filterCatalogItems(hardware, {
         status,
         query: debouncedSearch,
-      }).filter(
-        (h) =>
-          showDesignParts ||
-          debouncedSearch.trim() !== '' ||
-          !h.kitHardwareId,
-      ),
-    [hardware, status, debouncedSearch, showDesignParts],
+      }).filter((h) => !h.kitHardwareId || debouncedSearch.trim() !== ''),
+    [hardware, status, debouncedSearch],
   );
 
   const closeModal = () => {
@@ -215,6 +221,33 @@ export function HardwareCatalog({
     const next = toDraft(item);
     next.code = suggestDuplicateCode(item.code, hardware.map((h) => h.code));
     next.name = `${item.name} (copia)`;
+    setEditingId(null);
+    setDraft(next);
+    setError(null);
+    setModalOpen(true);
+  };
+
+  // #1422 owner: edición del kit → partes indentadas dentro del formulario.
+  const openKitPart = (part: Hardware) => {
+    closeModal();
+    startEdit(part);
+  };
+  const removeKitPart = (part: Hardware) => {
+    const draft = toDraft(part);
+    delete draft.kitHardwareId;
+    void onUpdate(part.id, draft);
+  };
+  const addKitPart = (kit: Hardware) => {
+    const existing = new Set(hardware.map((h) => h.code));
+    let n = (partsByKit.get(kit.id)?.length ?? 0) + 1;
+    while (existing.has(`${kit.code}-P${n}`)) n += 1;
+    const next = emptyDraft();
+    next.code = `${kit.code}-P${n}`;
+    next.name = `${kit.name} — Parte ${n}`;
+    next.unit = 'piece';
+    next.costPerUnit = 0;
+    next.kitHardwareId = kit.id;
+    closeModal();
     setEditingId(null);
     setDraft(next);
     setError(null);
@@ -397,18 +430,6 @@ export function HardwareCatalog({
           filters={
             <>
               <StatusChips value={status} onChange={setStatus} />
-              <button
-                type="button"
-                className={
-                  showDesignParts
-                    ? 'ui-status-chips__chip is-selected'
-                    : 'ui-status-chips__chip'
-                }
-                onClick={() => setShowDesignParts((v) => !v)}
-                data-testid="hardware-toggle-design-parts"
-              >
-                Partes de diseño: {showDesignParts ? 'visibles' : 'ocultas'}
-              </button>
             </>
           }
         />
@@ -455,16 +476,109 @@ export function HardwareCatalog({
                     <span className="catalog-row-detail__label">
                       Partes de este juego
                     </span>
-                    <ul className="catalog-kit-parts">
-                      {partsByKit.get(row.id)!.map((part) => (
-                        <li key={part.id}>
-                          <span className="catalog-row-detail__value catalog-row-detail__value--mono">
-                            {part.code}
-                          </span>{' '}
-                          — {part.name}
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="catalog-kit-parts">
+                      {partsByKit.get(row.id)!.map((part) => {
+                        const badge = membershipBadgeOf(part);
+                        return (
+                          <div
+                            key={part.id}
+                            className="catalog-kit-part-card"
+                            data-testid={`hardware-kit-part-card-${part.code}`}
+                          >
+                            <div className="catalog-kit-part-card__photo">
+                              <CatalogImage
+                                src={resolveImageUrl(part.imageUrl)}
+                                alt={part.name}
+                                size="md"
+                              />
+                            </div>
+                            <div className="catalog-kit-part-card__fields">
+                              <div className="catalog-row-detail__field">
+                                <span className="catalog-row-detail__label">Código</span>
+                                <span className="catalog-row-detail__value catalog-row-detail__value--mono">
+                                  {part.code}
+                                </span>
+                              </div>
+                              <div className="catalog-row-detail__field">
+                                <span className="catalog-row-detail__label">Nombre</span>
+                                <span className="catalog-row-detail__value">
+                                  {part.name}
+                                  {badge ? (
+                                    <span
+                                      className="status-badge status-badge--info"
+                                      style={{ marginLeft: '0.4rem' }}
+                                      data-testid={`hardware-kit-part-membership-${part.code}`}
+                                    >
+                                      {badge}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </div>
+                              <div className="catalog-row-detail__field">
+                                <span className="catalog-row-detail__label">Unidad</span>
+                                <span className="catalog-row-detail__value">
+                                  {UNIT_LABELS[part.unit]}
+                                </span>
+                              </div>
+                              <div className="catalog-row-detail__field">
+                                <span className="catalog-row-detail__label">Costo unitario</span>
+                                <span className="catalog-row-detail__value">
+                                  {formatMoneyDisplay(part.costPerUnit)}
+                                </span>
+                              </div>
+                              <div className="catalog-row-detail__field">
+                                <span className="catalog-row-detail__label">Estado</span>
+                                <span className="catalog-row-detail__value">
+                                  <ActiveBadge active={part.active} />
+                                </span>
+                              </div>
+                            </div>
+                            {canMutate ? (
+                              <div className="catalog-kit-part-card__actions">
+                                <button
+                                  type="button"
+                                  className="btn btn--small btn--ghost"
+                                  aria-label={`Editar ${part.code}`}
+                                  onClick={() => startEdit(part)}
+                                >
+                                  <Pencil size={14} strokeWidth={1.5} aria-hidden />
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn--small btn--ghost"
+                                  aria-label={`Duplicar ${part.code}`}
+                                  onClick={() => startDuplicate(part)}
+                                >
+                                  <Copy size={14} strokeWidth={1.5} aria-hidden />
+                                  Duplicar
+                                </button>
+                                {part.active ? (
+                                  <button
+                                    type="button"
+                                    className="btn btn--small btn--ghost btn--danger"
+                                    aria-label={`Desactivar ${part.code}`}
+                                    onClick={() => setConfirmDeactivate(part)}
+                                  >
+                                    <EyeOff size={14} strokeWidth={1.5} aria-hidden />
+                                    Desactivar
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="btn btn--small btn--ghost"
+                                    aria-label={`Reactivar ${part.code}`}
+                                    onClick={() => onReactivate(part.id)}
+                                  >
+                                    Reactivar
+                                  </button>
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : null}
                 {designByKit.get(row.id) ? (
@@ -636,6 +750,10 @@ export function HardwareCatalog({
         resolveImageUrl={resolveImageUrl}
         onSubmit={handleSubmit}
         onClose={closeModal}
+        kitParts={editingHardware ? partsByKit.get(editingHardware.id) : undefined}
+        onEditKitPart={canMutate ? openKitPart : undefined}
+        onRemoveKitPart={canMutate ? removeKitPart : undefined}
+        onAddKitPart={canMutate && editingHardware ? () => addKitPart(editingHardware) : undefined}
       />
 
       {onCreateKit ? (

@@ -353,3 +353,94 @@ describe('HardwareCatalog — Vista 3D (F069/F080)', () => {
     );
   });
 });
+
+describe('HardwareCatalog — kit con partes anidadas (#1422 owner)', () => {
+  const kit: Hardware = {
+    id: 'kit-1',
+    code: 'HER-BIS-QA',
+    name: 'Bisagra QA',
+    unit: 'set',
+    costPerUnit: 89,
+    active: true,
+  };
+  const copa: Hardware = {
+    id: 'copa-1',
+    code: 'HER-BIS-QA-COPA',
+    name: 'Bisagra QA — Copa (fija al mueble)',
+    unit: 'piece',
+    costPerUnit: 0,
+    active: true,
+    kitHardwareId: 'kit-1',
+  };
+  const brazo: Hardware = {
+    id: 'brazo-1',
+    code: 'HER-BIS-QA-BRAZO',
+    name: 'Bisagra QA — Brazo (móvil de la puerta)',
+    unit: 'piece',
+    costPerUnit: 0,
+    active: true,
+    kitHardwareId: 'kit-1',
+  };
+  const agregado = {
+    id: 'agr-1',
+    code: 'AGR-PUE-QA',
+    name: 'Puerta QA',
+    commercialKitHardwareId: 'kit-1',
+    rigidMembers: [
+      { memberId: 'hinge_cup', role: 'hinge_cup', source: { kind: 'fixed', fixed: { hardwareId: 'copa-1' } }, placement: {}, bomRole: 'included_in_kit', actorMembership: 'body' },
+      { memberId: 'hinge_arm', role: 'hinge_arm', source: { kind: 'fixed', fixed: { hardwareId: 'brazo-1' } }, placement: {}, bomRole: 'included_in_kit', actorMembership: 'actor:door' },
+    ],
+  } as never;
+
+  function kitSetup(extra: Record<string, unknown> = {}) {
+    const onUpdate = vi.fn();
+    render(
+      <HardwareCatalog
+        hardware={[kit, copa, brazo]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        agregados={[agregado]}
+        {...extra}
+      />,
+    );
+    return { onUpdate };
+  }
+
+  it('las partes NO aparecen como filas planas; el kit es una sola fila', () => {
+    kitSetup();
+    expect(screen.getByRole('row', { name: /HER-BIS-QA/ })).toBeDefined();
+    expect(screen.queryByRole('row', { name: /HER-BIS-QA-COPA/ })).toBeNull();
+    expect(screen.queryByRole('row', { name: /HER-BIS-QA-BRAZO/ })).toBeNull();
+    expect(screen.queryByTestId('hardware-toggle-design-parts')).toBeNull();
+  });
+
+  it('expandir el kit muestra los cards de las partes con Editar y badge fija/móvil de la receta', async () => {
+    const user = userEvent.setup();
+    kitSetup();
+    await user.click(screen.getByRole('row', { name: /HER-BIS-QA/ }));
+    const copaCard = screen.getByTestId('hardware-kit-part-card-HER-BIS-QA-COPA');
+    const brazoCard = screen.getByTestId('hardware-kit-part-card-HER-BIS-QA-BRAZO');
+    expect(copaCard.textContent).toContain('Fija al mueble');
+    expect(brazoCard.textContent).toContain('Móvil — abre con la puerta');
+    expect(screen.getByRole('button', { name: /Editar HER-BIS-QA-COPA/ })).toBeDefined();
+  });
+
+  it('editar una parte anidada abre el formulario y preserva el link del kit', async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = kitSetup();
+    await user.click(screen.getByRole('row', { name: /HER-BIS-QA/ }));
+    await user.click(screen.getByRole('button', { name: /Editar HER-BIS-QA-COPA/ }));
+    // el form de la COPA está abierto: cambiar el nombre y guardar
+    const nameInput = screen.getByLabelText('Nombre');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Copa renombrada');
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+    await vi.waitFor(() => {
+      expect(onUpdate).toHaveBeenCalled();
+    });
+    const [, draft] = onUpdate.mock.calls[0] as [string, { kitHardwareId?: string }];
+    expect(draft.kitHardwareId).toBe('kit-1');
+  });
+});
