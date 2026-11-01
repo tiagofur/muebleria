@@ -51,6 +51,46 @@ module Granete
             )
           end
         end
+
+        # #1448: entry-point data for «Preparar montaje 3D». The pinned
+        # catalog contract carries no visual asset fields, so the dialog asks
+        # the server directly for which hardware have an asset binding. The
+        # card is the ONLY reachable trigger of the preparation flow — without
+        # it the bridge command was orphaned and no asset could ever become
+        # prepared.
+        def handle_list_hardware_assets(dialog)
+          transport = @session.respond_to?(:transport) ? @session.transport : nil
+          unless transport.respond_to?(:configured?) && transport.configured? &&
+                 @session.respond_to?(:configured?) && @session.configured?
+            execute_bridge(dialog, 'setHardwareAssets',
+                           { 'source' => 'unauthenticated', 'hardware' => [] })
+            return
+          end
+          @session.refresh_if_needed if @session.respond_to?(:refresh_if_needed)
+          response = transport.request(
+            { 'method' => 'GET', 'path' => '/catalog/hardware' },
+            authorization_header: @session.authorization_header
+          )
+          hardware = response && response['status'] == 200 ? Array(response['body']) : []
+          rows = hardware.filter_map do |hw|
+            asset = hw['visual_asset']
+            next unless asset.is_a?(Hash) && asset['assetId']
+
+            {
+              'id' => hw['id'],
+              'code' => hw['code'],
+              'name' => hw['name'],
+              'assetId' => asset['assetId'],
+              'assetRevisionId' => asset['assetRevisionId']
+            }
+          end
+          execute_bridge(dialog, 'setHardwareAssets',
+                         { 'source' => 'server', 'hardware' => rows })
+        rescue StandardError => e
+          @logger.error('hardware_assets_list_failed', error: e)
+          execute_bridge(dialog, 'setHardwareAssets',
+                         { 'source' => 'error', 'hardware' => [] })
+        end
       end
     end
   end
