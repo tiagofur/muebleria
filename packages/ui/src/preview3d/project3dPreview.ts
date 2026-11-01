@@ -601,16 +601,22 @@ export function resolveModuleHardwarePlacements(
           const targetsToResolve = kitChildren.length > 0 ? kitChildren : [hardware];
           const sidePart = boardParts.find(
             (bp) =>
-              bp.placement === 'lateral_izquierdo' ||
-              bp.placement === 'lateral_derecho',
+              bp.componentPlacement === 'lateral_izquierdo' ||
+              bp.componentPlacement === 'lateral_derecho',
           );
           const sideThicknessMm =
             sidePart && sidePart.thicknessMm > 0
               ? sidePart.thicknessMm
               : part.thicknessMm;
+          const effectiveBoardPlacement =
+            inst.placementOverride ?? part.componentPlacement;
+          const isDoorPart =
+            effectiveBoardPlacement === 'puerta' ||
+            part.optionRole.toUpperCase() === 'FRENTE' ||
+            part.optionRole.toUpperCase() === 'FRENTES';
           for (const targetHw of targetsToResolve) {
             let effectivePlacement = placement;
-            if (kitChildren.length > 0 && part.placement === 'puerta') {
+            if (kitChildren.length > 0 && isDoorPart) {
               const explicitActor = targetHw.designParts?.[0]?.actorMembership?.trim();
               const lowerText = `${targetHw.code} ${targetHw.name}`.toLowerCase();
               const isBodyActor =
