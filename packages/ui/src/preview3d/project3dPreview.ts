@@ -610,8 +610,8 @@ export function resolveModuleHardwarePlacements(
             inst.placementOverride ?? part.componentPlacement;
           const isDoorPart =
             effectiveBoardPlacement === 'puerta' ||
-            part.optionRole.toUpperCase() === 'FRENTE' ||
-            part.optionRole.toUpperCase() === 'FRENTES';
+            part.optionRole?.toUpperCase() === 'FRENTE' ||
+            part.optionRole?.toUpperCase() === 'FRENTES';
           for (const targetHw of targetsToResolve) {
             let effectivePlacement = placement;
             if (kitChildren.length > 0 && isDoorPart) {
