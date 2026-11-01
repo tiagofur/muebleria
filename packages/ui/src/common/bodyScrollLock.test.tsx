@@ -5,13 +5,18 @@
  * @vitest-environment jsdom
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { useState } from 'react';
 import { Modal, MODAL_CLOSE_MS } from './Modal';
 import { FullscreenDialog } from './FullscreenDialog';
 import { CommandPalette, type CommandPaletteItem } from '../shell/CommandPalette';
 import { acquireBodyScrollLock } from './bodyScrollLock';
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 beforeEach(() => {
   document.body.innerHTML = '';
@@ -80,7 +85,12 @@ describe('solapes entre superficies (#1445)', () => {
     expect(document.body.style.overflow).toBe('auto');
   });
 
-  it('Modal closing inside its exit window over FullscreenDialog does not drop or stick the lock', async () => {
+  // Discriminating order (review B1): the surface that opened FIRST releases
+  // FIRST, while the modal's lock is still held. With the old per-surface
+  // pattern the FS release would restore '' too early (assert fails), and an
+  // old Modal would restore 'hidden' at the end (final assert fails).
+  it('FullscreenDialog releasing first over a closing Modal neither drops nor sticks the lock', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     document.body.style.overflow = '';
     function FSHarness() {
       const [open, setOpen] = useState(true);
@@ -98,14 +108,29 @@ describe('solapes entre superficies (#1445)', () => {
       modal.rerender(<ModalHarness open={false} />);
     });
 
-    // Modal finishes its closing animation; FS lock must survive it.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, MODAL_CLOSE_MS + 50));
-    });
-    expect(screen.queryByRole('dialog', { name: 'Modal' })).toBeNull();
+    // FS (first holder) releases while the modal is still inside its exit
+    // window: the modal's lock must keep the body locked.
+    fs.unmount();
     expect(document.body.style.overflow).toBe('hidden');
 
-    fs.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MODAL_CLOSE_MS);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Modal' })).toBeNull();
+    });
+    // The modal was the LAST holder: its release must restore the original.
     expect(document.body.style.overflow).toBe('');
+  });
+
+  it('every consumer takes the lock through the shared helper (source contract)', () => {
+    for (const file of ['Modal.tsx', 'FullscreenDialog.tsx']) {
+      expect(readFileSync(join(here, file), 'utf8')).toContain(
+        'acquireBodyScrollLock',
+      );
+    }
+    expect(
+      readFileSync(join(here, '../shell/CommandPalette.tsx'), 'utf8'),
+    ).toContain('acquireBodyScrollLock');
   });
 });
