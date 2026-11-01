@@ -347,6 +347,9 @@ describe('Modal CSS contract (F018)', () => {
     expect(src).toContain('aria-labelledby');
     expect(src).toContain('Escape');
     expect(src).toContain("from 'lucide-react'");
-    expect(src).toContain('overflow = \'hidden\'');
+    // #1445: the scroll lock lives in the shared ref-counted helper so
+    // FullscreenDialog and CommandPalette cannot reintroduce the #1432 bug.
+    expect(src).toContain('acquireBodyScrollLock');
+    expect(read('bodyScrollLock.ts')).toContain('hidden');
   });
 });

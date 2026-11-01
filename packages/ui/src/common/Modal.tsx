@@ -14,6 +14,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { acquireBodyScrollLock } from './bodyScrollLock';
 import './modal.css';
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'fullscreen';
@@ -42,14 +43,6 @@ const FOCUSABLE_SELECTOR = [
 
 /** Matches `--duration-slow` (350ms) for exit unmount. */
 export const MODAL_CLOSE_MS = 350;
-
-// #1432: nested/overlapping modals share ONE body scroll lock. The original
-// overflow is captured when the first lock is taken and restored only when
-// the last one is released — a modal opening during another's closing window
-// used to capture the other's 'hidden' as the "previous" value and restore
-// it after both closed, leaving the page without scroll.
-let bodyScrollLockCount = 0;
-let bodyScrollLockPrevious = '';
 
 function getFocusable(container: HTMLElement): HTMLElement[] {
   return Array.from(
@@ -108,20 +101,11 @@ export function Modal({
   }, [open, rendered]);
 
   // Body scroll lock while mounted (open or closing); ref-counted across
-  // overlapping modals so only the LAST release restores the original value.
+  // overlapping surfaces so only the LAST release restores the original
+  // value (#1432/#1445, shared helper).
   useEffect(() => {
     if (!rendered) return;
-    if (bodyScrollLockCount === 0) {
-      bodyScrollLockPrevious = document.body.style.overflow;
-    }
-    bodyScrollLockCount += 1;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      bodyScrollLockCount -= 1;
-      if (bodyScrollLockCount === 0) {
-        document.body.style.overflow = bodyScrollLockPrevious;
-      }
-    };
+    return acquireBodyScrollLock();
   }, [rendered]);
 
   // Focus management: store previous, focus panel, restore on unmount
