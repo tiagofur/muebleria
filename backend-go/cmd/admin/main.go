@@ -60,6 +60,8 @@ func main() {
 		runCreateOrg(os.Args[2:])
 	case "migrate-opening-grips":
 		runMigrateOpeningGrips(os.Args[2:])
+	case "migrate-hardware-kit-links":
+		runMigrateHardwareKitLinks(os.Args[2:])
 	case "seed":
 		runSeed(os.Args[2:])
 	case "clean-media":
@@ -89,6 +91,8 @@ func usage() {
   admin clean-demo-data [--apply] [--org <slug>]   (borra el catálogo demo del seed)
   admin migrate-opening-grips --org <uuid> [--mapping <archivo>] [--apply] [--report <archivo>]
                    (migra jaladera-gola-* al modelo de grip; dry-run por defecto)
+  admin migrate-hardware-kit-links --org <uuid> [--apply] [--report <archivo>]
+                   (vincula partes de kits previos a 00171 por sufijo del asistente; dry-run por defecto)
 
 Environment:
   MIGRATION_DATABASE_URL  Required explicit Postgres URL for every admin command.
