@@ -38,7 +38,7 @@ module Granete
           doors = []
           hardware_by_host = Hash.new { |h, k| h[k] = [] }
           drawer_fronts = []
-          drawer_boxes = Hash.new { |h, k| h[k] = { parts: [], hardware: [], min_z: Float::INFINITY } }
+          drawer_boxes = Hash.new { |h, k| h[k] = { components: [], hardware: [], min_z: Float::INFINITY } }
 
           has_children = furniture_entity.respond_to?(:definition) &&
                          furniture_entity.definition.respond_to?(:entities)
@@ -113,7 +113,7 @@ module Granete
 
         def record_drawer_box_part(drawer_boxes, assembly_id, child)
           box = drawer_boxes[assembly_id]
-          box[:parts] << child
+          box[:components] << child
           z = entity_min_z(child)
           box[:min_z] = [box[:min_z], z].min
         end
@@ -145,7 +145,7 @@ module Granete
         def build_single_drawer(idx, total, front_info, box_info, hardware_by_host)
           components = []
           components << front_info[:entity] if front_info
-          components.concat(box_info[:parts]) if box_info
+          components.concat(box_info[:components]) if box_info
 
           hardware = []
           hardware.concat(hardware_by_host[front_info[:id]]) if front_info && front_info[:id]
