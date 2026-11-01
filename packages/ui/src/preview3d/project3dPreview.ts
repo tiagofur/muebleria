@@ -599,10 +599,74 @@ export function resolveModuleHardwarePlacements(
             .filter((h) => h.active && h.kitHardwareId === hardware.id)
             .sort((a, b) => a.code.localeCompare(b.code) || a.id.localeCompare(b.id));
           const targetsToResolve = kitChildren.length > 0 ? kitChildren : [hardware];
+          const sidePart = boardParts.find(
+            (bp) =>
+              bp.placement === 'lateral_izquierdo' ||
+              bp.placement === 'lateral_derecho',
+          );
+          const sideThicknessMm =
+            sidePart && sidePart.thicknessMm > 0
+              ? sidePart.thicknessMm
+              : part.thicknessMm;
           for (const targetHw of targetsToResolve) {
+            let effectivePlacement = placement;
+            if (kitChildren.length > 0 && part.placement === 'puerta') {
+              const explicitActor = targetHw.designParts?.[0]?.actorMembership?.trim();
+              const lowerText = `${targetHw.code} ${targetHw.name}`.toLowerCase();
+              const isBodyActor =
+                explicitActor === 'body' ||
+                (!explicitActor &&
+                  (lowerText.includes('fija al mueble') ||
+                    lowerText.includes('fijo al mueble') ||
+                    lowerText.includes('copa') ||
+                    lowerText.includes('placa') ||
+                    lowerText.includes('base')));
+              if (isBodyActor) {
+                const w = Math.max(part.widthMm, 0);
+                const l = Math.max(part.lengthMm, 0);
+                const t = Math.max(part.thicknessMm, 0);
+                const hwSize = targetHw.previewSizeMm ?? 96;
+                const boardEnv = {
+                  W: Math.round(w),
+                  H: Math.round(l),
+                  D: Math.round(l),
+                  PW: Math.round(w),
+                  PH: Math.round(l),
+                  PD: Math.round(l),
+                  T: Math.round(t),
+                  HW: Math.round(hwSize),
+                };
+                let xMm = placement.relativePosition.xMm;
+                if (placement.relativePosition.xFormula) {
+                  try {
+                    xMm = evaluatePartFormula(
+                      placement.relativePosition.xFormula,
+                      boardEnv,
+                      {
+                        structureCode: targetHw.code,
+                        partDescription: targetHw.name,
+                        field: 'x',
+                      },
+                    );
+                  } catch {
+                    // keep fallback xMm
+                  }
+                }
+                const shiftedX =
+                  xMm <= w / 2 ? xMm + sideThicknessMm : xMm - sideThicknessMm;
+                const { xFormula: _omit, ...restPos } = placement.relativePosition;
+                effectivePlacement = {
+                  ...placement,
+                  relativePosition: {
+                    ...restPos,
+                    xMm: shiftedX,
+                  },
+                };
+              }
+            }
             const resolved = resolveHardwarePlacement({
               componentInstanceId,
-              placement,
+              placement: effectivePlacement,
               board: {
                 widthMm: part.widthMm,
                 thicknessMm: part.thicknessMm,

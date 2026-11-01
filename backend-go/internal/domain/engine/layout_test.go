@@ -947,6 +947,25 @@ func TestResolveFurnitureLayout_ExpandsKitHardwarePlacementsOnDoor(t *testing.T)
 		},
 	}
 
+	costOnlyPlaca := domain.Hardware{
+		ID:       "hw-placa-bis",
+		Code:     "HER-PLACA-BIS",
+		Name:     "Placa Base Bisagra Blum Clip",
+		Category: "hinge",
+		Active:   true,
+	}
+	sideComp := domain.Component{
+		ID:            "comp-side-izq",
+		Code:          "COM-COS-BAJ-IZQ",
+		Name:          "Costado Gabinete Bajo Izq.",
+		GeometryKind:  "rectangular_board",
+		ThicknessMm:   18,
+		Placement:     domain.PlacementLateralIzquierdo,
+		OptionRoles:   []string{"FRENTES"},
+		WidthFormula:  "PD",
+		LengthFormula: "PH",
+		Active:        true,
+	}
 	doorComp := domain.Component{
 		ID:            "comp-door",
 		Code:          "PUERTA",
@@ -991,10 +1010,30 @@ func TestResolveFurnitureLayout_ExpandsKitHardwarePlacementsOnDoor(t *testing.T)
 			{ID: "mat-frente", Code: "MEL-BL", Name: "Blanco", ThicknessMm: 18, Active: true},
 		},
 		Structures: []domain.Structure{
-			{ID: "st-1", Code: "CUERPO", Name: "Cuerpo", Active: true},
+			{
+				ID:     "st-1",
+				Code:   "CUERPO",
+				Name:   "Cuerpo",
+				Active: true,
+				Components: []domain.ComponentInstance{
+					{
+						ComponentID: "comp-side-izq",
+						Quantity:    1,
+						Overrides: &domain.ComponentInstanceOverrides{
+							HardwarePlacements: []domain.HardwarePlacement{
+								{
+									HardwareID:       "hw-placa-bis",
+									AnchorFace:       "front",
+									RelativePosition: domain.HardwareRelPosition{XMm: 37, YMm: 74},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
-		Hardware:   []domain.Hardware{kitHw, partBrazo, partCopa},
-		Components: []domain.Component{doorComp},
+		Hardware:   []domain.Hardware{kitHw, partBrazo, partCopa, costOnlyPlaca},
+		Components: []domain.Component{sideComp, doorComp},
 		Agregados:  []domain.Agregado{agrDoor},
 		OptionGroups: []domain.OptionGroup{
 			{ID: "og-frentes", Code: "FRENTES", Kind: "board", Required: true, OptionIDs: []string{"mat-frente"}},
@@ -1028,7 +1067,7 @@ func TestResolveFurnitureLayout_ExpandsKitHardwarePlacementsOnDoor(t *testing.T)
 		t.Fatalf("unexpected authoring resolve error: %v", err)
 	}
 	if len(res.Layout.Hardware) != 4 {
-		t.Fatalf("expected 4 resolved hardware items (2 hinge placements x 2 kit parts), got %d", len(res.Layout.Hardware))
+		t.Fatalf("expected 4 resolved hardware items (2 hinge placements x 2 kit parts, 0 for cost-only HER-PLACA-BIS), got %d", len(res.Layout.Hardware))
 	}
 
 	// Primary manual placement 0 (moving arm on door)
@@ -1040,13 +1079,16 @@ func TestResolveFurnitureLayout_ExpandsKitHardwarePlacementsOnDoor(t *testing.T)
 		t.Errorf("hw0 missing skp assetId: %q", hw0.AssetID)
 	}
 
-	// Derived kit part 0 (fixed cup on cabinet body)
+	// Derived kit part 0 (fixed cup on cabinet body, shifted inward by 1 side thickness = 18mm)
 	hw1 := res.Layout.Hardware[1]
 	if hw1.PlacementKind != "derived" || hw1.HardwareID != partCopa.ID || hw1.ActorMembership != "body" {
 		t.Errorf("unexpected hw1: %+v", hw1)
 	}
 	if hw1.AssetID != "8a0abb40-ce4e-4a40-9060-5f82d4765d4e" {
 		t.Errorf("hw1 missing skp assetId: %q", hw1.AssetID)
+	}
+	if math.Abs((hw0.LocalTransform.TranslationMm[0]-hw1.LocalTransform.TranslationMm[0])-18.0) > 1e-6 {
+		t.Errorf("expected body part hw1 to be shifted 18mm inward along X from door part hw0, got hw0.X=%v hw1.X=%v", hw0.LocalTransform.TranslationMm[0], hw1.LocalTransform.TranslationMm[0])
 	}
 }
 

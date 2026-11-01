@@ -408,6 +408,14 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 		}
 	}
 
+	sideThicknessMm := 0.0
+	for i := range boards {
+		if boardIsOpeningSide(&boards[i]) {
+			sideThicknessMm = boards[i].thicknessMm
+			break
+		}
+	}
+
 	for i := range boards {
 		board := &boards[i]
 		// #414: the authoritative local→furniture transform is computed from
@@ -472,7 +480,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			continue
 		}
 		for hi, hp := range board.hardware {
-			resolvedList := resolveHardwareOrKitToWorld(board, hp, catalog, fmt.Sprintf("%s-hw-%d", board.id, hi))
+			resolvedList := resolveHardwareOrKitToWorld(board, hp, catalog, sideThicknessMm, fmt.Sprintf("%s-hw-%d", board.id, hi))
 			layout.Hardware = append(layout.Hardware, resolvedList...)
 		}
 	}
@@ -511,13 +519,6 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 		// #1296: the supports mount on the sides' INNER faces — the inset is
 		// the same cabinet's real side thickness (material-resolved board),
 		// never a fixed constant.
-		sideThicknessMm := 0.0
-		for i := range boards {
-			if boardIsOpeningSide(&boards[i]) {
-				sideThicknessMm = boards[i].thicknessMm
-				break
-			}
-		}
 		appendOpeningMemberLayoutHardware(&layout, catalog, *opts.openingMembers, dims, openingFrontsBottomBoundary(opts.fronts), hostBoardID, sideThicknessMm)
 	}
 
@@ -539,7 +540,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 				RelativePosition: domain.HardwareRelPosition{XMm: intent.OffsetMm[0], YMm: intent.OffsetMm[1]},
 				RotationDeg:      intent.RotationDeg,
 			}
-			resolvedList := resolveHardwareOrKitToWorld(host, hp, catalog, intent.HardwarePlacementID)
+			resolvedList := resolveHardwareOrKitToWorld(host, hp, catalog, sideThicknessMm, intent.HardwarePlacementID)
 			layout.Hardware = append(layout.Hardware, resolvedList...)
 		}
 	}
@@ -1639,7 +1640,7 @@ func resolveKitPartActorMembership(child domain.Hardware, kitHw domain.Hardware,
 	if board != nil && board.placement == string(domain.PlacementFrenteCajon) {
 		return "actor:drawer"
 	}
-	if board != nil && isDoorBoard(board) {
+	if board != nil && (board.placement == string(domain.PlacementPuerta) || isDoorBoard(board)) {
 		return "actor:door"
 	}
 	return ""
@@ -1652,7 +1653,7 @@ func resolveKitPartActorMembership(child domain.Hardware, kitHw domain.Hardware,
 // finish color, and actorMembership ("body" vs "actor:door"). The primary entry keeps
 // placementID and hw.ID with placementKind="manual" so normalized authoring snapshots
 // and coherence checks remain 1:1, while additional kit parts are emitted as "derived".
-func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement, catalog domain.Catalog, placementID string,
+func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement, catalog domain.Catalog, sideThicknessMm float64, placementID string,
 	placementKind ...string,
 ) []LayoutHardware {
 	hw, ok := findHardware(catalog, hp.HardwareID)
@@ -1697,6 +1698,34 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 		for _, item := range items {
 			childHp := hp
 			childHp.HardwareID = item.hw.ID
+			if item.actor == "body" && board != nil && (board.placement == string(domain.PlacementPuerta) || isDoorBoard(board)) {
+				inwardShift := sideThicknessMm
+				if inwardShift <= 0 {
+					inwardShift = math.Max(board.thicknessMm, 0)
+				}
+				w := math.Max(board.widthMm, 0)
+				t := math.Max(board.thicknessMm, 0)
+				l := math.Max(board.lengthMm, 0)
+				size := positivePtrOr(item.hw.PreviewSizeMm, defaultHardwareSizeMm)
+				boardEnv := formulaDims{
+					W: int(math.Round(w)), H: int(math.Round(l)), D: int(math.Round(l)),
+					PW: int(math.Round(w)), PH: int(math.Round(l)), PD: int(math.Round(l)),
+					T: int(math.Round(t)), HW: int(math.Round(size)),
+				}
+				xMm := childHp.RelativePosition.XMm
+				if childHp.RelativePosition.XFormula != "" {
+					if v, err := evaluatePartFormula(childHp.RelativePosition.XFormula, boardEnv); err == nil {
+						xMm = float64(v)
+					}
+				}
+				if xMm <= w/2 {
+					xMm += inwardShift
+				} else {
+					xMm -= inwardShift
+				}
+				childHp.RelativePosition.XMm = xMm
+				childHp.RelativePosition.XFormula = ""
+			}
 			if len(out) == 0 {
 				resolved, ok := resolveHardwareToWorld(board, childHp, catalog, placementID, placementKind...)
 				if !ok {
@@ -1746,13 +1775,7 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 	}
 	hasVisualAsset := hw.VisualAsset != nil && hw.VisualAsset.AssetID != ""
 	if shape == "" && !hasVisualAsset {
-		// Fallback for hinge kits/items without explicit previewShape so doors never
-		// lose their hinges visually when a kit has no child visual assets yet.
-		if strings.EqualFold(hp.OptionRole, "BISAGRA") || strings.EqualFold(hw.Category, "hinge") || strings.Contains(strings.ToUpper(hw.Code), "BIS") {
-			shape = "hinge"
-		} else {
-			return LayoutHardware{}, false
-		}
+		return LayoutHardware{}, false
 	}
 	if shape == "" && hasVisualAsset {
 		shape = "custom"
