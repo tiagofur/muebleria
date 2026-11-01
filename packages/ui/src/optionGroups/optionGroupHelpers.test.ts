@@ -73,6 +73,15 @@ const hardware: Hardware[] = [
     costPerUnit: 1,
     active: false,
   },
+  {
+    id: 'h3',
+    code: '49402645-FIJ-I',
+    name: 'Guía fija izquierda',
+    unit: 'piece',
+    costPerUnit: 0,
+    active: true,
+    kitHardwareId: 'kit-494',
+  },
 ];
 
 const groups: OptionGroup[] = [
@@ -111,6 +120,11 @@ describe('membersForKind (OPT-02)', () => {
   it('returns only hardware for hardware kind', () => {
     const members = membersForKind('hardware', { materials, edges, hardware });
     expect(members.map((m) => m.id)).toEqual(['h1']);
+  });
+
+  it('#1436: kit design parts never list as hardware options', () => {
+    const members = membersForKind('hardware', { materials, edges, hardware });
+    expect(members.some((m) => m.id === 'h3')).toBe(false);
   });
 
   it('returns only edges for edge kind', () => {

@@ -479,6 +479,9 @@ type stubStore struct {
 	updateModuleExpectedVersion int64
 	updateModuleErr             error
 	createModuleArmed           bool
+	// #1436: option-group writes armed by the kit-part guard tests.
+	createOptionGroupArmed      bool
+	updateOptionGroupArmed      bool
 	createModuleReceived        *domain.Module
 	createModuleErr             error
 	deleteModuleCalled          bool

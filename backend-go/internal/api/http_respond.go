@@ -86,6 +86,39 @@ func decodeJSONBodyWithPolicy(w http.ResponseWriter, r *http.Request, dst any, r
 	return true
 }
 
+// decodeJSONBodyKeys decodes exactly one JSON object into dst like
+// decodeJSONBody and additionally reports which top-level keys the body
+// carried. It exists for guards that must distinguish an ABSENT field from an
+// explicit null (#1436: a PUT omitting kit_hardware_id must not silently
+// unlink a part) — encoding/json maps both to the zero value of *string.
+func decodeJSONBodyKeys(w http.ResponseWriter, r *http.Request, dst any) (map[string]bool, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
+	raw, readErr := io.ReadAll(r.Body)
+	if readErr != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(readErr, &maxErr) {
+			respondWithError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return nil, false
+		}
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
+		return nil, false
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &keys); err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
+		return nil, false
+	}
+	if err := json.Unmarshal(raw, dst); err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
+		return nil, false
+	}
+	present := make(map[string]bool, len(keys))
+	for key := range keys {
+		present[key] = true
+	}
+	return present, true
+}
+
 // respondWithProjectCreateError maps project creation failures: duplicate
 // customer → the neutral 404 also used for missing rows (never a cross-org
 // oracle, #712 §8), anything else → 500.

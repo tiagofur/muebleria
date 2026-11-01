@@ -23,13 +23,19 @@ func (s *stubStore) GetOptionGroupByID(context.Context, string) (*domain.OptionG
 	return nil, nil
 }
 
-func (s *stubStore) CreateOptionGroup(context.Context, *domain.OptionGroup) error {
-	s.stubNotUsed("CreateOptionGroup")
+func (s *stubStore) CreateOptionGroup(_ context.Context, og *domain.OptionGroup) error {
+	if !s.createOptionGroupArmed {
+		s.stubNotUsed("CreateOptionGroup")
+	}
+	og.Version = 1
 	return nil
 }
 
-func (s *stubStore) UpdateOptionGroup(_ context.Context, _ string, _ int64, _ *domain.OptionGroup) error {
-	s.stubNotUsed("UpdateOptionGroup")
+func (s *stubStore) UpdateOptionGroup(_ context.Context, _ string, expectedVersion int64, og *domain.OptionGroup) error {
+	if !s.updateOptionGroupArmed {
+		s.stubNotUsed("UpdateOptionGroup")
+	}
+	og.Version = expectedVersion + 1
 	return nil
 }
 
