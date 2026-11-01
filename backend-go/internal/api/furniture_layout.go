@@ -89,7 +89,7 @@ func (s *Server) HandleFurnitureDefinitionLayout(w http.ResponseWriter, r *http.
 		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
 		return
 	}
-	agregados, err := s.Store.ListAgregados(r.Context())
+	agregados, err := s.Store.ListAgregadosWithRecipes(r.Context())
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
 		return
