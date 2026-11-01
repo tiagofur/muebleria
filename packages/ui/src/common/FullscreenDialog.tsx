@@ -15,6 +15,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { acquireBodyScrollLock } from './bodyScrollLock';
 import './fullscreenDialog.css';
 
 export type FullscreenDialogProps = {
@@ -63,15 +64,11 @@ export function FullscreenDialog({
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
-  // Body scroll lock while open
+  // Body scroll lock while open; shared ref-counted helper (#1445) so an
+  // overlap with Modal/CommandPalette cannot drop or stick the lock.
   useEffect(() => {
     if (!open) return;
-    const body = document.body;
-    const previous = body.style.overflow;
-    body.style.overflow = 'hidden';
-    return () => {
-      body.style.overflow = previous;
-    };
+    return acquireBodyScrollLock();
   }, [open]);
 
   // Focus management: store previous, focus panel, restore on close

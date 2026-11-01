@@ -16,6 +16,7 @@ import {
 import { createPortal } from 'react-dom';
 import { Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { acquireBodyScrollLock } from '../common/bodyScrollLock';
 import './commandPalette.css';
 
 export type CommandPaletteItem = {
@@ -81,14 +82,11 @@ export function CommandPalette({
     }
   }, [filtered.length, activeIndex]);
 
-  // Body scroll lock while open
+  // Body scroll lock while open; shared ref-counted helper (#1445) so an
+  // overlap with Modal/FullscreenDialog cannot drop or stick the lock.
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    return acquireBodyScrollLock();
   }, [open]);
 
   const selectIndex = useCallback(
