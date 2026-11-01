@@ -195,7 +195,7 @@ class ApplicationTest < Minitest::Test
       get_hardware_groups
       get_model_binding
       get_project_furniture insert_furniture
-      list_binding_designs list_binding_projects list_bootstrap_customers logout
+      list_binding_designs list_binding_projects list_bootstrap_customers list_hardware_assets logout
       manufacturing_inspection open_external_url open_hardware_selector open_material_selector
       place_furniture_instance poll_enrollment preflight_review prepare_hardware_mount publish_design_revision
       refresh_media_url refresh_model_binding

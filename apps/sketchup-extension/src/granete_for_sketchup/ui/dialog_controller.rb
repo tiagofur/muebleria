@@ -245,6 +245,7 @@ module Granete
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
           dialog.add_action_callback('open_hardware_selector') { |_c, p| handle_open_hardware_selector(dialog, p) }
           dialog.add_action_callback('prepare_hardware_mount') { |_c, p| handle_prepare_hardware_mount(dialog, p) }
+          dialog.add_action_callback('list_hardware_assets') { |_c| handle_list_hardware_assets(dialog) }
           register_inspector_bridge_callbacks(dialog)
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }
           dialog.add_action_callback('close_dialog') { dialog.close }

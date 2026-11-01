@@ -264,16 +264,43 @@ module Granete
         end
 
         def process_derive_response(dialog, resp)
-          unless resp && (resp['id'] || resp['revision_number'])
-            err_msg = resp&.dig('error', 'message') || 'Error al guardar la revisión derivada en el servidor.'
-            execute_bridge(dialog, 'showSaveError', { 'error' => err_msg })
+          # HttpAdapter returns the envelope {status, headers, body} — reading
+          # the envelope directly reported a successful derive as an error and
+          # never invoked on_saved (#1448 review).
+          status, body = unwrap_transport_response(resp)
+
+          unless derive_response_ok?(status, body)
+            execute_bridge(dialog, 'showSaveError', { 'error' => derive_error_message(body, resp) })
             execute_bridge(dialog, 'setSaving', { 'saving' => false })
             return
           end
 
-          @on_saved&.call(resp)
-          execute_bridge(dialog, 'onSaveSuccess', resp)
+          @on_saved&.call(body)
+          execute_bridge(dialog, 'onSaveSuccess', body)
           close
+        end
+
+        # Normalizes raw-body and HttpAdapter-envelope transports to
+        # [status, body]: status nil when the caller already unwrapped.
+        def unwrap_transport_response(resp)
+          return [nil, resp] unless resp.is_a?(Hash) && resp.key?('status') && resp.key?('body')
+
+          [resp['status'], resp['body']]
+        end
+
+        def derive_response_ok?(status, body)
+          (status.nil? || status.to_i.between?(200, 299)) &&
+            body.is_a?(Hash) && (body['id'] || body['revision_number'])
+        end
+
+        # The derive API rejects with the FLAT openapi ApiError {code, message};
+        # the nested {error: {message}} shape is tolerated but never expected.
+        def derive_error_message(body, resp)
+          return body['message'] if body.is_a?(Hash) && body['message'].is_a?(String)
+          return body['error']['message'] if body.is_a?(Hash) && body['error'].is_a?(Hash)
+          return resp['message'] if resp.is_a?(Hash) && resp['message'].is_a?(String)
+
+          'Error al guardar la revisión derivada en el servidor.'
         end
 
         def build_derive_request
@@ -318,10 +345,16 @@ module Granete
           return nil unless @transport && @auth_provider
 
           path = "/hardware-assets/#{asset_id}"
-          @transport.request(
+          response = @transport.request(
             { 'method' => 'GET', 'path' => path },
             authorization_header: @auth_provider.authorization_header
           )
+          # HttpAdapter returns the envelope {status, headers, body} — the raw
+          # envelope has no 'revisions', and the preparer must never guess
+          # from a non-200 (#1448 review).
+          return nil unless response.is_a?(Hash) && response['status'] == 200
+
+          response['body']
         rescue StandardError => e
           @logger&.error('mount_frame_fetch_asset_failed', error: e, asset_id: asset_id)
           nil

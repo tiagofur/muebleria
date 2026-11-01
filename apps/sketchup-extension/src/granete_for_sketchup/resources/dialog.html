@@ -275,6 +275,19 @@
               <div id="library-hardware-container" style="margin-top: var(--space-2);"></div>
             </div>
 
+            <!-- #1448: the ONLY reachable trigger of «Preparar montaje de
+                 herraje» — the flow existed (controller + tool + bridge) but
+                 had no UI entry point, so no asset could ever become
+                 prepared and unprepared assets render as placeholders. -->
+            <div class="card" id="library-asset-prep-card" style="display: none;">
+              <div class="card-title">Preparación de herrajes 3D</div>
+              <p class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 var(--space-2) 0;">
+                Marcá el marco de montaje de cada herraje con asset para que el
+                modelo lo dibuje a escala real en su ancla.
+              </p>
+              <div id="library-asset-prep-body"></div>
+            </div>
+
             <div id="configurator-actionbar" class="action-dock">
               <div class="actionbar-summary">
                 <span id="library-summary-dims" class="actionbar-dims">-- × -- × --</span>
@@ -1599,6 +1612,68 @@
           onSynchronizeDesignResult: function (result) { window.GraneteUI.projectFurniture.handleSynchronizeDesignResult(result); },
           onHostSaveAwareness: function (payload) { window.GraneteUI.projectFurniture.renderHostSaveAwareness(payload); },
 
+          // #1448 «Preparación de herrajes 3D»: the server-backed list of
+          // hardware with a visual asset binding — the only reachable trigger
+          // of the mount-frame preparation flow.
+          setHardwareAssets: function (payload) {
+            var body = document.getElementById("library-asset-prep-body");
+            var card = document.getElementById("library-asset-prep-card");
+            if (!body || !card) return;
+            var rows = (payload && payload.hardware) || [];
+            if (!payload || payload.source !== "server" || rows.length === 0) {
+              card.style.display = "none";
+              body.innerHTML = "";
+              window.GraneteUI.hardwareAssetPrepPendingNote = null;
+              return;
+            }
+            card.style.display = "block";
+            body.innerHTML = "";
+            // #1448 review: the ack must survive the refresh — render it after
+            // the re-render, not before (it used to delete itself).
+            if (window.GraneteUI.hardwareAssetPrepPendingNote) {
+              var note = document.createElement("p");
+              note.className = "design-insp-note";
+              note.textContent = window.GraneteUI.hardwareAssetPrepPendingNote;
+              body.appendChild(note);
+              window.GraneteUI.hardwareAssetPrepPendingNote = null;
+            }
+            rows.forEach(function (hw) {
+              var row = document.createElement("div");
+              row.style.cssText = "display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2);";
+              var label = document.createElement("span");
+              label.style.cssText = "flex:1;font-size:var(--text-xs);";
+              label.textContent = hw.code + " — " + (hw.name || "");
+              var btn = document.createElement("button");
+              btn.type = "button";
+              btn.className = "btn btn-secondary";
+              btn.style.fontSize = "var(--text-xs)";
+              btn.textContent = "Preparar montaje";
+              btn.addEventListener("click", function () {
+                if (window.sketchup && window.sketchup.prepare_hardware_mount) {
+                  window.sketchup.prepare_hardware_mount(JSON.stringify({
+                    assetId: hw.assetId,
+                    sourceRevisionId: hw.assetRevisionId
+                  }));
+                }
+              });
+              row.appendChild(label);
+              row.appendChild(btn);
+              body.appendChild(row);
+            });
+          },
+
+          onHardwareMountPrepared: function (rev) {
+            // The preparer saved a new revision: stash the ack, refresh the
+            // binding data — setHardwareAssets renders the note after the
+            // re-render (review #1448: it used to delete itself).
+            window.GraneteUI.hardwareAssetPrepPendingNote = rev && rev.revision_number
+              ? "Preparación guardada (revisión " + rev.revision_number + "). Re-sincronizá el diseño para verlo a escala real."
+              : null;
+            if (window.sketchup && window.sketchup.list_hardware_assets) {
+              window.sketchup.list_hardware_assets();
+            }
+          },
+
           setCatalog: function (payload) {
             var isArray = Object.prototype.toString.call(payload) === "[object Array]";
 
@@ -1637,6 +1712,13 @@
             // the configurator view, otherwise show the library browser —
             // owned by js/granete-configurator.js (#848 C4.4).
             window.GraneteUI.configurator.refreshAfterCatalog();
+
+            // #1448: catalog arrival is the trigger to ask Ruby for the
+            // hardware asset bindings behind «Preparar montaje» — the list
+            // itself fails closed without an authenticated session.
+            if (window.sketchup && window.sketchup.list_hardware_assets) {
+              window.sketchup.list_hardware_assets();
+            }
           },
 
           // #848 C4.4: the catalog insertion result (button re-arm,
