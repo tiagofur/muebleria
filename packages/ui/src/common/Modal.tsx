@@ -43,6 +43,14 @@ const FOCUSABLE_SELECTOR = [
 /** Matches `--duration-slow` (350ms) for exit unmount. */
 export const MODAL_CLOSE_MS = 350;
 
+// #1432: nested/overlapping modals share ONE body scroll lock. The original
+// overflow is captured when the first lock is taken and restored only when
+// the last one is released — a modal opening during another's closing window
+// used to capture the other's 'hidden' as the "previous" value and restore
+// it after both closed, leaving the page without scroll.
+let bodyScrollLockCount = 0;
+let bodyScrollLockPrevious = '';
+
 function getFocusable(container: HTMLElement): HTMLElement[] {
   return Array.from(
     container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
@@ -99,14 +107,20 @@ export function Modal({
     return () => window.clearTimeout(timer);
   }, [open, rendered]);
 
-  // Body scroll lock while mounted (open or closing)
+  // Body scroll lock while mounted (open or closing); ref-counted across
+  // overlapping modals so only the LAST release restores the original value.
   useEffect(() => {
     if (!rendered) return;
-    const body = document.body;
-    const previous = body.style.overflow;
-    body.style.overflow = 'hidden';
+    if (bodyScrollLockCount === 0) {
+      bodyScrollLockPrevious = document.body.style.overflow;
+    }
+    bodyScrollLockCount += 1;
+    document.body.style.overflow = 'hidden';
     return () => {
-      body.style.overflow = previous;
+      bodyScrollLockCount -= 1;
+      if (bodyScrollLockCount === 0) {
+        document.body.style.overflow = bodyScrollLockPrevious;
+      }
     };
   }, [rendered]);
 

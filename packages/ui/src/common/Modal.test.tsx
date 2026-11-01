@@ -239,6 +239,41 @@ describe('Modal body scroll lock (F018)', () => {
     });
     expect(document.body.style.overflow).toBe('auto');
   });
+
+  // #1432: the wizard→editor flow — the second modal opens while the first is
+  // still inside its 350ms closing window. With per-modal capture/restore the
+  // second one captured the first's 'hidden' as "previous" and restored it
+  // after both closed, leaving the page without scroll.
+  it('restores the original overflow when overlapping modals close (#1432)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    document.body.style.overflow = '';
+    const wizardView = (open: boolean) => (
+      <Modal open={open} onClose={() => {}} title="Wizard">
+        asistente
+      </Modal>
+    );
+    const wizard = render(wizardView(true));
+    expect(document.body.style.overflow).toBe('hidden');
+
+    // The wizard starts closing but is still mounted (lock held)…
+    act(() => {
+      wizard.rerender(wizardView(false));
+    });
+    // …and the editor opens inside that closing window.
+    const editor = render(
+      <Modal open onClose={() => {}} title="Editor">
+        editor
+      </Modal>,
+    );
+    expect(document.body.style.overflow).toBe('hidden');
+
+    // Wizard finishes its exit; the editor's lock must survive it.
+    await act(() => vi.advanceTimersByTimeAsync(MODAL_CLOSE_MS));
+    expect(document.body.style.overflow).toBe('hidden');
+
+    editor.unmount();
+    expect(document.body.style.overflow).toBe('');
+  });
 });
 
 describe('Modal sizes (F018)', () => {
