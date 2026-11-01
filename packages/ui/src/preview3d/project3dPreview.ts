@@ -595,17 +595,23 @@ export function resolveModuleHardwarePlacements(
           const hardware = hardwareCatalog.find((h) => h.id === targetId);
           // VH-09: swapped-to-cost-only or removed hardware renders nothing.
           if (!hardware) continue;
-          const resolved = resolveHardwarePlacement({
-            componentInstanceId,
-            placement,
-            board: {
-              widthMm: part.widthMm,
-              thicknessMm: part.thicknessMm,
-              lengthMm: part.lengthMm,
-            },
-            hardware,
-          });
-          if (resolved) out.push(resolved);
+          const kitChildren = hardwareCatalog
+            .filter((h) => h.active && h.kitHardwareId === hardware.id)
+            .sort((a, b) => a.code.localeCompare(b.code) || a.id.localeCompare(b.id));
+          const targetsToResolve = kitChildren.length > 0 ? kitChildren : [hardware];
+          for (const targetHw of targetsToResolve) {
+            const resolved = resolveHardwarePlacement({
+              componentInstanceId,
+              placement,
+              board: {
+                widthMm: part.widthMm,
+                thicknessMm: part.thicknessMm,
+                lengthMm: part.lengthMm,
+              },
+              hardware: targetHw,
+            });
+            if (resolved) out.push(resolved);
+          }
         }
       }
     }

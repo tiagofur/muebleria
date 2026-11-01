@@ -151,17 +151,21 @@ type AssemblyMemberTransform struct {
 // It resolves memberId, role, exact hardwareId, local rigid transform (det=+1), and bomRole.
 // Visual pins (AssetID, AssetRevisionID, SHA256, MountFrame) are populated via visual binding authority (#668).
 type ResolvedRigidMember struct {
-	MemberID        string                  `json:"memberId"`
-	Role            string                  `json:"role"`
-	HardwareID      string                  `json:"hardwareId"`
-	LocalTransform  AssemblyMemberTransform `json:"localTransform"` // Rigid placement in Assembly Space (det = +1.0)
-	BOMRole         RigidMemberBOMRole      `json:"bomRole"`
-	AssetID         *string                 `json:"assetId,omitempty"`
-	AssetRevisionID *string                 `json:"assetRevisionId,omitempty"`
-	SHA256          *string                 `json:"sha256,omitempty"`
-	MountFrame      *HardwareMountFrame     `json:"mountFrame,omitempty"`
-	ActorMembership string                  `json:"actorMembership,omitempty"` // #1376: "body" | "actor:<id>" | ""
-	DesignParts     []HardwareDesignPart    `json:"designParts,omitempty"`     // #1417: parts of the member's hardware (by SKP component name).
+	MemberID         string                  `json:"memberId"`
+	Name             string                  `json:"name,omitempty"`
+	Role             string                  `json:"role"`
+	HardwareID       string                  `json:"hardwareId"`
+	LocalTransform   AssemblyMemberTransform `json:"localTransform"` // Rigid placement in Assembly Space (det = +1.0)
+	BOMRole          RigidMemberBOMRole      `json:"bomRole"`
+	AssetID          *string                 `json:"assetId,omitempty"`
+	AssetRevisionID  *string                 `json:"assetRevisionId,omitempty"`
+	SHA256           *string                 `json:"sha256,omitempty"`
+	ExpectedBytes    *int64                  `json:"expectedBytes,omitempty"`
+	Representation   *string                 `json:"representation,omitempty"`
+	PreparationState *string                 `json:"preparationState,omitempty"`
+	MountFrame       *HardwareMountFrame     `json:"mountFrame,omitempty"`
+	ActorMembership  string                  `json:"actorMembership,omitempty"` // #1376: "body" | "actor:<id>" | ""
+	DesignParts      []HardwareDesignPart    `json:"designParts,omitempty"`     // #1417: parts of the member's hardware (by SKP component name).
 }
 
 // AssemblyBOMItem is one purchasing row produced by the assembly.

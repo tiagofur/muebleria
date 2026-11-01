@@ -104,13 +104,19 @@ func (s *Server) HandleFurnitureDefinitionLayout(w http.ResponseWriter, r *http.
 		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
 		return
 	}
+	optionGroups, err := s.Store.ListOptionGroups(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
 
 	catalog := domain.Catalog{
-		Structures: structures,
-		Components: components,
-		Agregados:  agregados,
-		Hardware:   hardware,
-		Materials:  materials,
+		Structures:   structures,
+		Components:   components,
+		Agregados:    agregados,
+		Hardware:     hardware,
+		Materials:    materials,
+		OptionGroups: optionGroups,
 	}
 
 	layout, err := engine.ResolveFurnitureLayout(*module, catalog, dims, choices)

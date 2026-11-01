@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -203,6 +204,10 @@ type LayoutHardware struct {
 	// effective option choices). Empty = concrete placement. Clients use it to
 	// offer group-level model changes instead of pinning one occurrence.
 	OptionRole string `json:"optionRole,omitempty"`
+	// ActorMembership (#1376 / #1435) specifies whether this hardware moves
+	// with a door/drawer actor ("actor:door", "actor:drawer") or remains fixed
+	// to the cabinet carcass ("body").
+	ActorMembership string `json:"actorMembership,omitempty"`
 	// OffsetMm is the placement's face-plane offset [xMm, yMm] on the host
 	// board — the SAME numbers the authoring resolve consumes as the manual
 	// placement's drilling origin (#1322). Absent in rows authored before
@@ -467,11 +472,8 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			continue
 		}
 		for hi, hp := range board.hardware {
-			resolved, ok := resolveHardwareToWorld(board, hp, catalog, fmt.Sprintf("%s-hw-%d", board.id, hi))
-			if !ok {
-				continue // cost-only hardware (no valid preview shape) renders nothing
-			}
-			layout.Hardware = append(layout.Hardware, resolved)
+			resolvedList := resolveHardwareOrKitToWorld(board, hp, catalog, fmt.Sprintf("%s-hw-%d", board.id, hi))
+			layout.Hardware = append(layout.Hardware, resolvedList...)
 		}
 	}
 
@@ -537,11 +539,8 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 				RelativePosition: domain.HardwareRelPosition{XMm: intent.OffsetMm[0], YMm: intent.OffsetMm[1]},
 				RotationDeg:      intent.RotationDeg,
 			}
-			resolved, ok := resolveHardwareToWorld(host, hp, catalog, intent.HardwarePlacementID)
-			if !ok {
-				continue // cost-only hardware (no valid preview shape) renders nothing
-			}
-			layout.Hardware = append(layout.Hardware, resolved)
+			resolvedList := resolveHardwareOrKitToWorld(host, hp, catalog, intent.HardwarePlacementID)
+			layout.Hardware = append(layout.Hardware, resolvedList...)
 		}
 	}
 
@@ -624,13 +623,19 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 		units := agregadoSubspaceUnits(qty, spaceW, spaceH, spaceD, spaceX, spaceY, spaceZ, agrInst.LayoutDirection, agrInst.GapMm)
 
 		for _, unit := range units {
+			// Skip assembly emission if the agregado's board components already place
+			// the commercial kit hardware on the board face (avoids duplicate hinges at 0,0,0).
+			if agr.CommercialKitHardwareID != nil && *agr.CommercialKitHardwareID != "" && agregadoBoardsHaveHardwarePlacements(agr) {
+				continue
+			}
+
 			params := AssemblyResolutionParams{
 				WidthMm:  unit.w,
 				HeightMm: unit.h,
 				DepthMm:  unit.d,
 			}
 			resolvedAssembly, err := ResolveAgregadoAssembly(agr, params)
-			if err != nil {
+			if err != nil || len(resolvedAssembly.RigidMembers) == 0 {
 				continue
 			}
 
@@ -638,6 +643,7 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 			for rIdx := range resolvedAssembly.RigidMembers {
 				rm := &resolvedAssembly.RigidMembers[rIdx]
 				if hw, ok := findHardware(catalog, rm.HardwareID); ok {
+					rm.Name = hw.Name
 					if hw.VisualAsset != nil {
 						assetID := hw.VisualAsset.AssetID
 						revID := hw.VisualAsset.AssetRevisionID
@@ -646,6 +652,18 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 						if hw.VisualAsset.SHA256 != "" {
 							sha := hw.VisualAsset.SHA256
 							rm.SHA256 = &sha
+						}
+						if hw.VisualAsset.SizeBytes > 0 {
+							sizeBytes := hw.VisualAsset.SizeBytes
+							rm.ExpectedBytes = &sizeBytes
+						}
+						if hw.VisualAsset.Representation != "" {
+							rep := string(hw.VisualAsset.Representation)
+							rm.Representation = &rep
+						}
+						if hw.VisualAsset.PreparationState != "" {
+							prep := string(hw.VisualAsset.PreparationState)
+							rm.PreparationState = &prep
 						}
 						if hw.VisualAsset.MountFrame != nil {
 							rm.MountFrame = hw.VisualAsset.MountFrame
@@ -672,9 +690,8 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 						"z": []float64{0, 0, 1},
 					},
 				},
-				DimensionsMm:         [3]float64{unit.w, unit.h, unit.d},
-				RigidMembers:         resolvedAssembly.RigidMembers,
-				FabricatedComponents: resolvedAssembly.FabricatedComponents,
+				DimensionsMm: [3]float64{unit.w, unit.h, unit.d},
+				RigidMembers: resolvedAssembly.RigidMembers,
 			})
 		}
 	}
@@ -1554,6 +1571,165 @@ var validHardwarePreviewShapes = map[string]bool{
 	"slide": true, "rail": true, "leg": true,
 }
 
+var hardwareFinishPresetColors = map[string]string{
+	"chrome":       "#d8dde6",
+	"cromo":        "#d8dde6",
+	"black-matte":  "#22252a",
+	"negro-mate":   "#22252a",
+	"bronze":       "#8c6239",
+	"bronce":       "#8c6239",
+	"brushed":      "#b5bac2",
+	"acero-inox":   "#b5bac2",
+	"gold":         "#d4af37",
+	"laton-cepillado": "#c5a059",
+	"blanco-mate":  "#f0f2f5",
+}
+
+func agregadoBoardsHaveHardwarePlacements(agr domain.Agregado) bool {
+	for _, ci := range agr.Components {
+		if ci.Overrides != nil && len(ci.Overrides.HardwarePlacements) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveKitPartActorMembership resolves the actorMembership ("body", "actor:door", "actor:drawer")
+// for a child hardware part belonging to a commercial kit (#1435).
+func resolveKitPartActorMembership(child domain.Hardware, kitHw domain.Hardware, board *layoutBoard, catalog domain.Catalog) string {
+	// 1. Check agregados linked to this kit first
+	for _, agr := range catalog.Agregados {
+		if agr.CommercialKitHardwareID != nil && *agr.CommercialKitHardwareID == kitHw.ID {
+			for _, rm := range agr.RigidMembers {
+				if rm.Source.Fixed != nil && rm.Source.Fixed.HardwareID == child.ID && strings.TrimSpace(rm.ActorMembership) != "" {
+					return strings.TrimSpace(rm.ActorMembership)
+				}
+			}
+		}
+	}
+	// 2. Check any agregado in the catalog referencing this child hardware in its recipe
+	for _, agr := range catalog.Agregados {
+		for _, rm := range agr.RigidMembers {
+			if rm.Source.Fixed != nil && rm.Source.Fixed.HardwareID == child.ID && strings.TrimSpace(rm.ActorMembership) != "" {
+				return strings.TrimSpace(rm.ActorMembership)
+			}
+		}
+	}
+	// 3. Check child.DesignParts
+	for _, dp := range child.DesignParts {
+		if strings.TrimSpace(dp.ActorMembership) != "" {
+			return strings.TrimSpace(dp.ActorMembership)
+		}
+	}
+	// 4. Infer from code/name conventions for wizard-generated kit parts
+	upperCode := strings.ToUpper(child.Code)
+	lowerName := strings.ToLower(child.Name)
+	if strings.Contains(upperCode, "-COPA") || strings.Contains(upperCode, "-FIJ") ||
+		strings.Contains(lowerName, "fija") || strings.Contains(lowerName, "mueble") {
+		return "body"
+	}
+	if strings.Contains(upperCode, "-BRAZO") || strings.Contains(upperCode, "-MOV") ||
+		strings.Contains(lowerName, "móvil") || strings.Contains(lowerName, "movil") ||
+		strings.Contains(lowerName, "puerta") || strings.Contains(lowerName, "cajón") || strings.Contains(lowerName, "cajon") {
+		if board != nil && board.placement == string(domain.PlacementFrenteCajon) {
+			return "actor:drawer"
+		}
+		return "actor:door"
+	}
+	if board != nil && board.placement == string(domain.PlacementFrenteCajon) {
+		return "actor:drawer"
+	}
+	if board != nil && isDoorBoard(board) {
+		return "actor:door"
+	}
+	return ""
+}
+
+// resolveHardwareOrKitToWorld resolves a board HardwarePlacement into one or more
+// LayoutHardware entries. When the referenced hardware is a commercial Kit that has
+// active child hardware parts (child.KitHardwareID == hw.ID), each child part is
+// materialized at the placement anchor with its own 3D visual asset, preview geometry,
+// finish color, and actorMembership ("body" vs "actor:door"). The primary entry keeps
+// placementID and hw.ID with placementKind="manual" so normalized authoring snapshots
+// and coherence checks remain 1:1, while additional kit parts are emitted as "derived".
+func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement, catalog domain.Catalog, placementID string,
+	placementKind ...string,
+) []LayoutHardware {
+	hw, ok := findHardware(catalog, hp.HardwareID)
+	if !ok || !hw.Active {
+		return nil
+	}
+
+	var children []domain.Hardware
+	for _, candidate := range catalog.Hardware {
+		if candidate.Active && candidate.KitHardwareID != nil && *candidate.KitHardwareID == hw.ID {
+			children = append(children, candidate)
+		}
+	}
+
+	if len(children) > 0 {
+		type childWithActor struct {
+			hw    domain.Hardware
+			actor string
+		}
+		items := make([]childWithActor, 0, len(children))
+		for _, c := range children {
+			items = append(items, childWithActor{
+				hw:    c,
+				actor: resolveKitPartActorMembership(c, hw, board, catalog),
+			})
+		}
+		// Sort moving actor parts first so the primary manual placement moves with
+		// the host door/drawer, and fixed ("body") parts follow as derived placements.
+		sort.SliceStable(items, func(i, j int) bool {
+			iBody := items[i].actor == "body"
+			jBody := items[j].actor == "body"
+			if iBody != jBody {
+				return !iBody
+			}
+			if items[i].hw.Code != items[j].hw.Code {
+				return items[i].hw.Code < items[j].hw.Code
+			}
+			return items[i].hw.ID < items[j].hw.ID
+		})
+
+		var out []LayoutHardware
+		for _, item := range items {
+			childHp := hp
+			childHp.HardwareID = item.hw.ID
+			if len(out) == 0 {
+				resolved, ok := resolveHardwareToWorld(board, childHp, catalog, placementID, placementKind...)
+				if !ok {
+					continue
+				}
+				// Preserve the kit's catalog HardwareID on the primary manual placement
+				// so AuthoringResolvedCoherence and round-trip mutation requests match
+				// the normalized snapshot's catalogHardwareId.
+				resolved.HardwareID = hw.ID
+				resolved.ActorMembership = item.actor
+				out = append(out, resolved)
+			} else {
+				partPlacementID := fmt.Sprintf("%s-part-%d", placementID, len(out))
+				resolved, ok := resolveHardwareToWorld(board, childHp, catalog, partPlacementID, HardwarePlacementKindDerived)
+				if !ok {
+					continue
+				}
+				resolved.ActorMembership = item.actor
+				out = append(out, resolved)
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+
+	resolved, ok := resolveHardwareToWorld(board, hp, catalog, placementID, placementKind...)
+	if !ok {
+		return nil
+	}
+	return []LayoutHardware{resolved}
+}
+
 // resolveHardwareToWorld resolves one hardware placement from board-local face
 // coordinates to a world-space box. Returns ok=false for cost-only hardware
 // (no valid preview shape) — mirrors TS resolveHardwarePlacement.
@@ -1570,7 +1746,13 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 	}
 	hasVisualAsset := hw.VisualAsset != nil && hw.VisualAsset.AssetID != ""
 	if shape == "" && !hasVisualAsset {
-		return LayoutHardware{}, false
+		// Fallback for hinge kits/items without explicit previewShape so doors never
+		// lose their hinges visually when a kit has no child visual assets yet.
+		if strings.EqualFold(hp.OptionRole, "BISAGRA") || strings.EqualFold(hw.Category, "hinge") || strings.Contains(strings.ToUpper(hw.Code), "BIS") {
+			shape = "hinge"
+		} else {
+			return LayoutHardware{}, false
+		}
 	}
 	if shape == "" && hasVisualAsset {
 		shape = "custom"
@@ -1716,6 +1898,27 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 	color := "#9aa0a6"
 	if hw.PreviewColor != nil && *hw.PreviewColor != "" {
 		color = normalizeHexColor(*hw.PreviewColor)
+	} else if len(hw.PartFinishes) > 0 {
+		for _, roleKey := range []string{"body", "base", "grip"} {
+			if presetID, ok := hw.PartFinishes[roleKey]; ok {
+				if hex, found := hardwareFinishPresetColors[strings.ToLower(strings.TrimSpace(presetID))]; found {
+					color = hex
+					break
+				}
+			}
+		}
+	} else if len(hw.DesignParts) > 0 {
+		for _, dp := range hw.DesignParts {
+			if hex, found := hardwareFinishPresetColors[strings.ToLower(strings.TrimSpace(dp.FinishKey))]; found {
+				color = hex
+				break
+			}
+		}
+	}
+
+	actorMembership := ""
+	if len(hw.DesignParts) == 1 && strings.TrimSpace(hw.DesignParts[0].ActorMembership) != "" {
+		actorMembership = strings.TrimSpace(hw.DesignParts[0].ActorMembership)
 	}
 
 	// Authoritative hardware mounting frame in furniture space:
@@ -1771,6 +1974,7 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		AnchorFace:              hp.AnchorFace,
 		PlacementKind:           kind,
 		OptionRole:              strings.TrimSpace(hp.OptionRole),
+		ActorMembership:         actorMembership,
 		Transform:               LayoutTransform{TranslationMm: boxMin},
 		DimensionsMm:            dims,
 		LocalTransform:          hwLocalTransform,

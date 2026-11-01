@@ -196,7 +196,7 @@ func (s *PostgresStore) publishResolutionCatalog(ctx context.Context) (domain.Ca
 		return cat, err
 	}
 	cat.Components = components
-	agregados, err := s.ListAgregados(ctx)
+	agregados, err := s.ListAgregadosWithRecipes(ctx)
 	if err != nil {
 		return cat, err
 	}

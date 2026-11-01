@@ -900,3 +900,154 @@ func TestFurnitureLayout_EmitsAssembliesFromAgregadoRigidMembers(t *testing.T) {
 	}
 }
 
+func TestResolveFurnitureLayout_ExpandsKitHardwarePlacementsOnDoor(t *testing.T) {
+	kitID := "cce8efa2-cc7d-4aa6-bfcd-3d31b3ff742a"
+	slideShape := "slide"
+	kitHw := domain.Hardware{
+		ID:     kitID,
+		Code:   "HER-BIS-QA1031",
+		Name:   "Bisagra QA Verificación",
+		Unit:   domain.UnitSet,
+		Active: true,
+	}
+	partBrazo := domain.Hardware{
+		ID:            "918aa0fb-3baa-47df-a636-1d233f763565",
+		Code:          "HER-BIS-QA1031-BRAZO",
+		Name:          "Bisagra QA Verificación — Brazo (móvil de la puerta)",
+		Unit:          domain.UnitPiece,
+		KitHardwareID: &kitID,
+		PreviewShape:  &slideShape,
+		Active:        true,
+		VisualAsset: &domain.HardwareVisualAssetBinding{
+			AssetID:          "8a0abb40-ce4e-4a40-9060-5f82d4765d4e",
+			AssetRevisionID:  "5965d2ae-5bc4-465f-9c11-b356a058b269",
+			SHA256:           "sha256-af5b19fc84711926d49f689a319c9022b73f72291b8ce728793ec8a68f2dd6af",
+			SizeBytes:        462555,
+			Representation:   "skp",
+			ValidationState:  "valid",
+			PreparationState: "unprepared",
+		},
+	}
+	partCopa := domain.Hardware{
+		ID:            "499c8626-dc7d-4ba8-8c6e-7c8e10635e0c",
+		Code:          "HER-BIS-QA1031-COPA",
+		Name:          "Bisagra QA Verificación — Copa (fija al mueble)",
+		Unit:          domain.UnitPiece,
+		KitHardwareID: &kitID,
+		PreviewShape:  &slideShape,
+		Active:        true,
+		VisualAsset: &domain.HardwareVisualAssetBinding{
+			AssetID:          "8a0abb40-ce4e-4a40-9060-5f82d4765d4e",
+			AssetRevisionID:  "5965d2ae-5bc4-465f-9c11-b356a058b269",
+			SHA256:           "sha256-af5b19fc84711926d49f689a319c9022b73f72291b8ce728793ec8a68f2dd6af",
+			SizeBytes:        462555,
+			Representation:   "skp",
+			ValidationState:  "valid",
+			PreparationState: "unprepared",
+		},
+	}
+
+	doorComp := domain.Component{
+		ID:            "comp-door",
+		Code:          "PUERTA",
+		Name:          "Puerta",
+		GeometryKind:  "rectangular_board",
+		ThicknessMm:   18,
+		Placement:     domain.PlacementPuerta,
+		OptionRoles:   []string{"FRENTES"},
+		WidthFormula:  "PW",
+		LengthFormula: "PH",
+		Active:        true,
+	}
+	agrDoor := domain.Agregado{
+		ID:     "agr-pue-izq",
+		Code:   "AGR-PUE-IZQ",
+		Name:   "Puerta Izquierda",
+		Active: true,
+		Components: []domain.ComponentInstance{
+			{
+				ComponentID: "comp-door",
+				Quantity:    1,
+				Overrides: &domain.ComponentInstanceOverrides{
+					HardwarePlacements: []domain.HardwarePlacement{
+						{
+							OptionRole:       "BISAGRA",
+							AnchorFace:       "back",
+							RelativePosition: domain.HardwareRelPosition{XMm: 20.5, YMm: 90},
+						},
+						{
+							OptionRole:       "BISAGRA",
+							AnchorFace:       "back",
+							RelativePosition: domain.HardwareRelPosition{XMm: 20.5, YMm: 50, YFormula: "PH-90"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	catalog := domain.Catalog{
+		Materials: []domain.MaterialBoard{
+			{ID: "mat-frente", Code: "MEL-BL", Name: "Blanco", ThicknessMm: 18, Active: true},
+		},
+		Structures: []domain.Structure{
+			{ID: "st-1", Code: "CUERPO", Name: "Cuerpo", Active: true},
+		},
+		Hardware:   []domain.Hardware{kitHw, partBrazo, partCopa},
+		Components: []domain.Component{doorComp},
+		Agregados:  []domain.Agregado{agrDoor},
+		OptionGroups: []domain.OptionGroup{
+			{ID: "og-frentes", Code: "FRENTES", Kind: "board", Required: true, OptionIDs: []string{"mat-frente"}},
+			{ID: "og-bisagra", Code: "BISAGRA", Kind: "hardware", Required: true, OptionIDs: []string{kitID}},
+		},
+	}
+	module := domain.Module{
+		ID:          "mod-baj-1p-izq",
+		Code:        "MOD-BAJ-1P-IZQ",
+		Name:        "Módulo Bajo 1P Izq",
+		StructureID: "st-1",
+		WidthMm:     450,
+		HeightMm:    720,
+		DepthMm:     580,
+		Agregados: []domain.ModuleAgregadoInstance{
+			{ID: "inst-door", AgregadoID: "agr-pue-izq", Quantity: 1},
+		},
+	}
+	choices := map[string]string{
+		"FRENTES": "mat-frente",
+		"BISAGRA": kitID,
+	}
+
+	res, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module:        module,
+		Catalog:       catalog,
+		Dims:          &LayoutDims{WidthMm: 450, HeightMm: 720, DepthMm: 580},
+		OptionChoices: choices,
+	})
+	if err != nil {
+		t.Fatalf("unexpected authoring resolve error: %v", err)
+	}
+	if len(res.Layout.Hardware) != 4 {
+		t.Fatalf("expected 4 resolved hardware items (2 hinge placements x 2 kit parts), got %d", len(res.Layout.Hardware))
+	}
+
+	// Primary manual placement 0 (moving arm on door)
+	hw0 := res.Layout.Hardware[0]
+	if hw0.PlacementKind != "manual" || hw0.HardwareID != kitID || hw0.ActorMembership != "actor:door" {
+		t.Errorf("unexpected hw0: %+v", hw0)
+	}
+	if hw0.AssetID != "8a0abb40-ce4e-4a40-9060-5f82d4765d4e" {
+		t.Errorf("hw0 missing skp assetId: %q", hw0.AssetID)
+	}
+
+	// Derived kit part 0 (fixed cup on cabinet body)
+	hw1 := res.Layout.Hardware[1]
+	if hw1.PlacementKind != "derived" || hw1.HardwareID != partCopa.ID || hw1.ActorMembership != "body" {
+		t.Errorf("unexpected hw1: %+v", hw1)
+	}
+	if hw1.AssetID != "8a0abb40-ce4e-4a40-9060-5f82d4765d4e" {
+		t.Errorf("hw1 missing skp assetId: %q", hw1.AssetID)
+	}
+}
+
+
