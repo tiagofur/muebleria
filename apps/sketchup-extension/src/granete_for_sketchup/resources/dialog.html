@@ -1627,6 +1627,15 @@
             }
             card.style.display = "block";
             body.innerHTML = "";
+            // #1448 review: the ack must survive the refresh — render it after
+            // the re-render, not before (it used to delete itself).
+            if (window.GraneteUI.hardwareAssetPrepPendingNote) {
+              var note = document.createElement("p");
+              note.className = "design-insp-note";
+              note.textContent = window.GraneteUI.hardwareAssetPrepPendingNote;
+              body.appendChild(note);
+              window.GraneteUI.hardwareAssetPrepPendingNote = null;
+            }
             rows.forEach(function (hw) {
               var row = document.createElement("div");
               row.style.cssText = "display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2);";
@@ -1653,15 +1662,12 @@
           },
 
           onHardwareMountPrepared: function (rev) {
-            // The preparer saved a new revision: refresh the binding data and
-            // acknowledge inside the card.
-            var body = document.getElementById("library-asset-prep-body");
-            if (body && rev && rev.revision_number) {
-              var note = document.createElement("p");
-              note.className = "design-insp-note";
-              note.textContent = "Preparación guardada (revisión " + rev.revision_number + "). Re-sincronizá el diseño para verlo a escala real.";
-              body.insertBefore(note, body.firstChild);
-            }
+            // The preparer saved a new revision: stash the ack, refresh the
+            // binding data — setHardwareAssets renders the note after the
+            // re-render (review #1448: it used to delete itself).
+            window.GraneteUI.hardwareAssetPrepPendingNote = rev && rev.revision_number
+              ? "Preparación guardada (revisión " + rev.revision_number + "). Re-sincronizá el diseño para verlo a escala real."
+              : null;
             if (window.sketchup && window.sketchup.list_hardware_assets) {
               window.sketchup.list_hardware_assets();
             }
@@ -1706,8 +1712,9 @@
             // owned by js/granete-configurator.js (#848 C4.4).
             window.GraneteUI.configurator.refreshAfterCatalog();
 
-            // #1448: catalog arrival implies an authenticated session — ask
-            // Ruby for the hardware asset bindings behind «Preparar montaje».
+            // #1448: catalog arrival is the trigger to ask Ruby for the
+            // hardware asset bindings behind «Preparar montaje» — the list
+            // itself fails closed without an authenticated session.
             if (window.sketchup && window.sketchup.list_hardware_assets) {
               window.sketchup.list_hardware_assets();
             }

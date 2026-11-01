@@ -47,7 +47,11 @@ class MountFramePreparerTest < Minitest::Test
       path = req['path']
       method = req['method'] || 'GET'
       key = "#{method} #{path}"
-      @responses[key] || @responses[path] || { 'id' => 'default-resp' }
+      body = @responses[key] || @responses[path] || { 'id' => 'default-resp' }
+      # The REAL HttpAdapter contract (http_adapter.rb): the envelope wraps the
+      # parsed body. The old fake returned the raw body and masked that the
+      # controller read the envelope directly (#1448 review).
+      { 'status' => 200, 'headers' => {}, 'body' => body }
     end
   end
 
@@ -610,5 +614,84 @@ class MountFramePreparerTest < Minitest::Test
     assert_equal [-48.0, 0.0, 0.0], origin['asset_normalization']['translation_mm']
 
     FileUtils.rm_f(temp_skp)
+  end
+
+  # #1448 review: the derive response arrives as the HttpAdapter envelope —
+  # a 201 body {id, revision_number} must reach on_saved, never showSaveError.
+  def test_process_derive_response_unwraps_envelope_and_calls_on_saved
+    logger = FakeLogger.new
+    controller = MountFramePreparerController.new(
+      downloader: FakeDownloader.new('unused'),
+      validator: FakeValidator.new,
+      transport: FakeTransport.new,
+      auth_provider: FakeAuthProvider.new,
+      logger: logger
+    )
+    saved = []
+    controller.instance_variable_set(:@on_saved, ->(rev) { saved << rev })
+    closed = false
+    controller.define_singleton_method(:close) do
+      @closed = true
+      closed = true
+    end
+    controller.define_singleton_method(:closed?) { @closed }
+
+    controller.send(:process_derive_response, nil, {
+                      'status' => 201,
+                      'headers' => {},
+                      'body' => { 'id' => 'rev-002', 'revision_number' => 2, 'preparation_state' => 'prepared' }
+                    })
+
+    assert_equal 1, saved.length
+    assert_equal 2, saved.first['revision_number']
+    assert closed
+  end
+
+  def test_process_derive_response_non_2xx_envelope_reports_error
+    logger = FakeLogger.new
+    controller = MountFramePreparerController.new(
+      downloader: FakeDownloader.new('unused'),
+      validator: FakeValidator.new,
+      transport: FakeTransport.new,
+      auth_provider: FakeAuthProvider.new,
+      logger: logger
+    )
+    saved = []
+    controller.instance_variable_set(:@on_saved, ->(rev) { saved << rev })
+
+    dialogs = []
+    controller.define_singleton_method(:execute_bridge) do |_dialog, method, payload|
+      dialogs << [method, payload]
+    end
+
+    controller.send(:process_derive_response, nil, {
+                      'status' => 422,
+                      'headers' => {},
+                      'body' => { 'error' => { 'message' => 'marco inválido' } }
+                    })
+
+    assert_empty saved
+    shown = dialogs.find { |m, _p| m == 'showSaveError' }
+    assert_equal 'marco inválido', shown[1]['error']
+    saving = dialogs.find { |m, _p| m == 'setSaving' }
+    assert_equal false, saving[1]['saving']
+  end
+
+  def test_fetch_asset_returns_nil_on_non_200_envelope
+    logger = FakeLogger.new
+    transport = FakeTransport.new
+    controller = MountFramePreparerController.new(
+      downloader: FakeDownloader.new('unused'),
+      validator: FakeValidator.new,
+      transport: transport,
+      auth_provider: FakeAuthProvider.new,
+      logger: logger
+    )
+    def transport.request(req, _authorization_header: nil)
+      @requests << req
+      { 'status' => 404, 'headers' => {}, 'body' => nil }
+    end
+
+    assert_nil controller.send(:fetch_asset, 'asset-missing')
   end
 end
