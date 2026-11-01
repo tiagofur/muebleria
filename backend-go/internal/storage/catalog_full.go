@@ -203,7 +203,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	}
 	cat.Categories = cats
 
-	agrs, err := s.ListAgregados(ctx)
+	agrs, err := s.ListAgregadosWithRecipes(ctx)
 	if err != nil {
 		return cat, fmt.Errorf("error loading agregados: %w", err)
 	}

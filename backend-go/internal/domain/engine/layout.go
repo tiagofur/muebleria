@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -203,6 +204,10 @@ type LayoutHardware struct {
 	// effective option choices). Empty = concrete placement. Clients use it to
 	// offer group-level model changes instead of pinning one occurrence.
 	OptionRole string `json:"optionRole,omitempty"`
+	// ActorMembership (#1376 / #1435) specifies whether this hardware moves
+	// with a door/drawer actor ("actor:door", "actor:drawer") or remains fixed
+	// to the cabinet carcass ("body").
+	ActorMembership string `json:"actorMembership,omitempty"`
 	// OffsetMm is the placement's face-plane offset [xMm, yMm] on the host
 	// board — the SAME numbers the authoring resolve consumes as the manual
 	// placement's drilling origin (#1322). Absent in rows authored before
@@ -241,6 +246,17 @@ type FurnitureLayout struct {
 	DimensionsMm          [3]int            `json:"dimensionsMm"`
 	Components            []LayoutComponent `json:"components"`
 	Hardware              []LayoutHardware  `json:"hardware"`
+	Assemblies            []LayoutAssembly  `json:"assemblies,omitempty"`
+}
+
+// LayoutAssembly describes a resolved Agregado sub-assembly in furniture space (#670 / #1435).
+type LayoutAssembly struct {
+	AssemblyInstanceID   string                              `json:"assemblyInstanceId"`
+	AgregadoID           string                              `json:"agregadoId"`
+	Placement            map[string]any                      `json:"placement"`
+	DimensionsMm         [3]float64                          `json:"dimensionsMm,omitempty"`
+	RigidMembers         []domain.ResolvedRigidMember        `json:"rigidMembers,omitempty"`
+	FabricatedComponents []domain.ResolvedFabricatedComponent `json:"fabricatedComponents,omitempty"`
 }
 
 // layoutBoard is the intermediate resolved board before AABB projection.
@@ -392,6 +408,14 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 		}
 	}
 
+	sideThicknessMm := 0.0
+	for i := range boards {
+		if boardIsOpeningSide(&boards[i]) {
+			sideThicknessMm = boards[i].thicknessMm
+			break
+		}
+	}
+
 	for i := range boards {
 		board := &boards[i]
 		// #414: the authoritative local→furniture transform is computed from
@@ -456,11 +480,8 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			continue
 		}
 		for hi, hp := range board.hardware {
-			resolved, ok := resolveHardwareToWorld(board, hp, catalog, fmt.Sprintf("%s-hw-%d", board.id, hi))
-			if !ok {
-				continue // cost-only hardware (no valid preview shape) renders nothing
-			}
-			layout.Hardware = append(layout.Hardware, resolved)
+			resolvedList := resolveHardwareOrKitToWorld(board, hp, catalog, sideThicknessMm, fmt.Sprintf("%s-hw-%d", board.id, hi))
+			layout.Hardware = append(layout.Hardware, resolvedList...)
 		}
 	}
 
@@ -498,13 +519,6 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 		// #1296: the supports mount on the sides' INNER faces — the inset is
 		// the same cabinet's real side thickness (material-resolved board),
 		// never a fixed constant.
-		sideThicknessMm := 0.0
-		for i := range boards {
-			if boardIsOpeningSide(&boards[i]) {
-				sideThicknessMm = boards[i].thicknessMm
-				break
-			}
-		}
 		appendOpeningMemberLayoutHardware(&layout, catalog, *opts.openingMembers, dims, openingFrontsBottomBoundary(opts.fronts), hostBoardID, sideThicknessMm)
 	}
 
@@ -526,14 +540,163 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 				RelativePosition: domain.HardwareRelPosition{XMm: intent.OffsetMm[0], YMm: intent.OffsetMm[1]},
 				RotationDeg:      intent.RotationDeg,
 			}
-			resolved, ok := resolveHardwareToWorld(host, hp, catalog, intent.HardwarePlacementID)
-			if !ok {
-				continue // cost-only hardware (no valid preview shape) renders nothing
-			}
-			layout.Hardware = append(layout.Hardware, resolved)
+			resolvedList := resolveHardwareOrKitToWorld(host, hp, catalog, sideThicknessMm, intent.HardwarePlacementID)
+			layout.Hardware = append(layout.Hardware, resolvedList...)
 		}
 	}
+
+	// #670 / #1435: Emit resolved assemblies and their rigid members for SketchUp layout consumption.
+	layout.Assemblies = resolveLayoutAssemblies(module, catalog, dims, baseClearanceForLayout(module, module.BaseMode))
+
 	return layout, boards, nil
+}
+
+// resolveLayoutAssemblies traverses module & structure agregados, resolves their recipe
+// into rigid members with authoritative poses, and packages them into LayoutAssembly entries.
+func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims LayoutDims, baseClearance int) []LayoutAssembly {
+	structure, _ := findStructure(catalog, module.StructureID)
+	agregadoInstances := append(append([]domain.ModuleAgregadoInstance{}, structure.Agregados...), module.Agregados...)
+	if len(agregadoInstances) == 0 {
+		return nil
+	}
+
+	var assemblies []LayoutAssembly
+	parentDims := formulaDims{
+		W: dims.WidthMm, H: dims.HeightMm, D: dims.DepthMm,
+		PW: dims.WidthMm, PH: dims.HeightMm, PD: dims.DepthMm,
+		T: 18, B: baseClearance,
+	}
+
+	for _, agrInst := range agregadoInstances {
+		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
+		if !ok || len(agr.RigidMembers) == 0 {
+			continue
+		}
+
+		spaceW, spaceH, spaceD := float64(dims.WidthMm), float64(dims.HeightMm), float64(dims.DepthMm)
+		if agrInst.Dimensions != nil {
+			if agrInst.Dimensions.WidthFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Dimensions.WidthFormula, parentDims); err == nil {
+					spaceW = float64(v)
+				}
+			} else if agr.WidthMm > 0 {
+				spaceW = float64(agr.WidthMm)
+			}
+			if agrInst.Dimensions.HeightFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Dimensions.HeightFormula, parentDims); err == nil {
+					spaceH = float64(v)
+				}
+			} else if agr.HeightMm > 0 {
+				spaceH = float64(agr.HeightMm)
+			}
+			if agrInst.Dimensions.DepthFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Dimensions.DepthFormula, parentDims); err == nil {
+					spaceD = float64(v)
+				}
+			} else if agr.DepthMm > 0 {
+				spaceD = float64(agr.DepthMm)
+			}
+		}
+
+		spaceX, spaceY, spaceZ := 0.0, 0.0, 0.0
+		if agrInst.Position != nil {
+			if agrInst.Position.XFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Position.XFormula, parentDims); err == nil {
+					spaceX = float64(v)
+				}
+			}
+			if agrInst.Position.YFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Position.YFormula, parentDims); err == nil {
+					spaceY = float64(v)
+				}
+			}
+			if agrInst.Position.ZFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Position.ZFormula, parentDims); err == nil {
+					spaceZ = float64(v)
+				}
+			}
+		}
+
+		qty := agrInst.Quantity
+		if qty <= 0 {
+			qty = 1
+		}
+		units := agregadoSubspaceUnits(qty, spaceW, spaceH, spaceD, spaceX, spaceY, spaceZ, agrInst.LayoutDirection, agrInst.GapMm)
+
+		for _, unit := range units {
+			// Skip assembly emission if the agregado's board components already place
+			// the commercial kit hardware on the board face (avoids duplicate hinges at 0,0,0).
+			if agr.CommercialKitHardwareID != nil && *agr.CommercialKitHardwareID != "" && agregadoBoardsHaveHardwarePlacements(agr) {
+				continue
+			}
+
+			params := AssemblyResolutionParams{
+				WidthMm:  unit.w,
+				HeightMm: unit.h,
+				DepthMm:  unit.d,
+			}
+			resolvedAssembly, err := ResolveAgregadoAssembly(agr, params)
+			if err != nil || len(resolvedAssembly.RigidMembers) == 0 {
+				continue
+			}
+
+			// Attach visual assets and mount frames from catalog hardware to rigid members
+			for rIdx := range resolvedAssembly.RigidMembers {
+				rm := &resolvedAssembly.RigidMembers[rIdx]
+				if hw, ok := findHardware(catalog, rm.HardwareID); ok {
+					rm.Name = hw.Name
+					if hw.VisualAsset != nil {
+						assetID := hw.VisualAsset.AssetID
+						revID := hw.VisualAsset.AssetRevisionID
+						rm.AssetID = &assetID
+						rm.AssetRevisionID = &revID
+						if hw.VisualAsset.SHA256 != "" {
+							sha := hw.VisualAsset.SHA256
+							rm.SHA256 = &sha
+						}
+						if hw.VisualAsset.SizeBytes > 0 {
+							sizeBytes := hw.VisualAsset.SizeBytes
+							rm.ExpectedBytes = &sizeBytes
+						}
+						if hw.VisualAsset.Representation != "" {
+							rep := string(hw.VisualAsset.Representation)
+							rm.Representation = &rep
+						}
+						if hw.VisualAsset.PreparationState != "" {
+							prep := string(hw.VisualAsset.PreparationState)
+							rm.PreparationState = &prep
+						}
+						if hw.VisualAsset.MountFrame != nil {
+							rm.MountFrame = hw.VisualAsset.MountFrame
+						}
+					}
+				}
+			}
+
+			instID := agrInst.ID
+			if instID == "" {
+				instID = fmt.Sprintf("asm-%s-%d", agrInst.AgregadoID, unit.index)
+			} else if qty > 1 {
+				instID = fmt.Sprintf("asm-%s-u%d", instID, unit.index)
+			}
+
+			assemblies = append(assemblies, LayoutAssembly{
+				AssemblyInstanceID: instID,
+				AgregadoID:         agr.ID,
+				Placement: map[string]any{
+					"translation": []float64{unit.x, unit.y, unit.z},
+					"basis": map[string]any{
+						"x": []float64{1, 0, 0},
+						"y": []float64{0, 1, 0},
+						"z": []float64{0, 0, 1},
+					},
+				},
+				DimensionsMm: [3]float64{unit.w, unit.h, unit.d},
+				RigidMembers: resolvedAssembly.RigidMembers,
+			})
+		}
+	}
+	return assemblies
 }
 
 // boardPlacementLabel resolves the managed placement vocabulary a board or
@@ -1409,6 +1572,193 @@ var validHardwarePreviewShapes = map[string]bool{
 	"slide": true, "rail": true, "leg": true,
 }
 
+var hardwareFinishPresetColors = map[string]string{
+	"chrome":       "#d8dde6",
+	"cromo":        "#d8dde6",
+	"black-matte":  "#22252a",
+	"negro-mate":   "#22252a",
+	"bronze":       "#8c6239",
+	"bronce":       "#8c6239",
+	"brushed":      "#b5bac2",
+	"acero-inox":   "#b5bac2",
+	"gold":         "#d4af37",
+	"laton-cepillado": "#c5a059",
+	"blanco-mate":  "#f0f2f5",
+}
+
+func agregadoBoardsHaveHardwarePlacements(agr domain.Agregado) bool {
+	for _, ci := range agr.Components {
+		if ci.Overrides != nil && len(ci.Overrides.HardwarePlacements) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveKitPartActorMembership resolves the actorMembership ("body", "actor:door", "actor:drawer")
+// for a child hardware part belonging to a commercial kit (#1435).
+func resolveKitPartActorMembership(child domain.Hardware, kitHw domain.Hardware, board *layoutBoard, catalog domain.Catalog) string {
+	// 1. Check agregados linked to this kit first
+	for _, agr := range catalog.Agregados {
+		if agr.CommercialKitHardwareID != nil && *agr.CommercialKitHardwareID == kitHw.ID {
+			for _, rm := range agr.RigidMembers {
+				if rm.Source.Fixed != nil && rm.Source.Fixed.HardwareID == child.ID && strings.TrimSpace(rm.ActorMembership) != "" {
+					return strings.TrimSpace(rm.ActorMembership)
+				}
+			}
+		}
+	}
+	// 2. Check any agregado in the catalog referencing this child hardware in its recipe
+	for _, agr := range catalog.Agregados {
+		for _, rm := range agr.RigidMembers {
+			if rm.Source.Fixed != nil && rm.Source.Fixed.HardwareID == child.ID && strings.TrimSpace(rm.ActorMembership) != "" {
+				return strings.TrimSpace(rm.ActorMembership)
+			}
+		}
+	}
+	// 3. Check child.DesignParts
+	for _, dp := range child.DesignParts {
+		if strings.TrimSpace(dp.ActorMembership) != "" {
+			return strings.TrimSpace(dp.ActorMembership)
+		}
+	}
+	// 4. Infer from code/name conventions for wizard-generated kit parts
+	upperCode := strings.ToUpper(child.Code)
+	lowerName := strings.ToLower(child.Name)
+	if strings.Contains(upperCode, "-COPA") || strings.Contains(upperCode, "-FIJ") ||
+		strings.Contains(lowerName, "fija") || strings.Contains(lowerName, "mueble") {
+		return "body"
+	}
+	if strings.Contains(upperCode, "-BRAZO") || strings.Contains(upperCode, "-MOV") ||
+		strings.Contains(lowerName, "móvil") || strings.Contains(lowerName, "movil") ||
+		strings.Contains(lowerName, "puerta") || strings.Contains(lowerName, "cajón") || strings.Contains(lowerName, "cajon") {
+		if board != nil && board.placement == string(domain.PlacementFrenteCajon) {
+			return "actor:drawer"
+		}
+		return "actor:door"
+	}
+	if board != nil && board.placement == string(domain.PlacementFrenteCajon) {
+		return "actor:drawer"
+	}
+	if board != nil && (board.placement == string(domain.PlacementPuerta) || isDoorBoard(board)) {
+		return "actor:door"
+	}
+	return ""
+}
+
+// resolveHardwareOrKitToWorld resolves a board HardwarePlacement into one or more
+// LayoutHardware entries. When the referenced hardware is a commercial Kit that has
+// active child hardware parts (child.KitHardwareID == hw.ID), each child part is
+// materialized at the placement anchor with its own 3D visual asset, preview geometry,
+// finish color, and actorMembership ("body" vs "actor:door"). The primary entry keeps
+// placementID and hw.ID with placementKind="manual" so normalized authoring snapshots
+// and coherence checks remain 1:1, while additional kit parts are emitted as "derived".
+func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement, catalog domain.Catalog, sideThicknessMm float64, placementID string,
+	placementKind ...string,
+) []LayoutHardware {
+	hw, ok := findHardware(catalog, hp.HardwareID)
+	if !ok || !hw.Active {
+		return nil
+	}
+
+	var children []domain.Hardware
+	for _, candidate := range catalog.Hardware {
+		if candidate.Active && candidate.KitHardwareID != nil && *candidate.KitHardwareID == hw.ID {
+			children = append(children, candidate)
+		}
+	}
+
+	if len(children) > 0 {
+		type childWithActor struct {
+			hw    domain.Hardware
+			actor string
+		}
+		items := make([]childWithActor, 0, len(children))
+		for _, c := range children {
+			items = append(items, childWithActor{
+				hw:    c,
+				actor: resolveKitPartActorMembership(c, hw, board, catalog),
+			})
+		}
+		// Sort moving actor parts first so the primary manual placement moves with
+		// the host door/drawer, and fixed ("body") parts follow as derived placements.
+		sort.SliceStable(items, func(i, j int) bool {
+			iBody := items[i].actor == "body"
+			jBody := items[j].actor == "body"
+			if iBody != jBody {
+				return !iBody
+			}
+			if items[i].hw.Code != items[j].hw.Code {
+				return items[i].hw.Code < items[j].hw.Code
+			}
+			return items[i].hw.ID < items[j].hw.ID
+		})
+
+		var out []LayoutHardware
+		for _, item := range items {
+			childHp := hp
+			childHp.HardwareID = item.hw.ID
+			if item.actor == "body" && board != nil && (board.placement == string(domain.PlacementPuerta) || isDoorBoard(board)) {
+				inwardShift := sideThicknessMm
+				if inwardShift <= 0 {
+					inwardShift = math.Max(board.thicknessMm, 0)
+				}
+				w := math.Max(board.widthMm, 0)
+				t := math.Max(board.thicknessMm, 0)
+				l := math.Max(board.lengthMm, 0)
+				size := positivePtrOr(item.hw.PreviewSizeMm, defaultHardwareSizeMm)
+				boardEnv := formulaDims{
+					W: int(math.Round(w)), H: int(math.Round(l)), D: int(math.Round(l)),
+					PW: int(math.Round(w)), PH: int(math.Round(l)), PD: int(math.Round(l)),
+					T: int(math.Round(t)), HW: int(math.Round(size)),
+				}
+				xMm := childHp.RelativePosition.XMm
+				if childHp.RelativePosition.XFormula != "" {
+					if v, err := evaluatePartFormula(childHp.RelativePosition.XFormula, boardEnv); err == nil {
+						xMm = float64(v)
+					}
+				}
+				if xMm <= w/2 {
+					xMm += inwardShift
+				} else {
+					xMm -= inwardShift
+				}
+				childHp.RelativePosition.XMm = xMm
+				childHp.RelativePosition.XFormula = ""
+			}
+			if len(out) == 0 {
+				resolved, ok := resolveHardwareToWorld(board, childHp, catalog, placementID, placementKind...)
+				if !ok {
+					continue
+				}
+				// Preserve the kit's catalog HardwareID on the primary manual placement
+				// so AuthoringResolvedCoherence and round-trip mutation requests match
+				// the normalized snapshot's catalogHardwareId.
+				resolved.HardwareID = hw.ID
+				resolved.ActorMembership = item.actor
+				out = append(out, resolved)
+			} else {
+				partPlacementID := fmt.Sprintf("%s-part-%d", placementID, len(out))
+				resolved, ok := resolveHardwareToWorld(board, childHp, catalog, partPlacementID, HardwarePlacementKindDerived)
+				if !ok {
+					continue
+				}
+				resolved.ActorMembership = item.actor
+				out = append(out, resolved)
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+
+	resolved, ok := resolveHardwareToWorld(board, hp, catalog, placementID, placementKind...)
+	if !ok {
+		return nil
+	}
+	return []LayoutHardware{resolved}
+}
+
 // resolveHardwareToWorld resolves one hardware placement from board-local face
 // coordinates to a world-space box. Returns ok=false for cost-only hardware
 // (no valid preview shape) — mirrors TS resolveHardwarePlacement.
@@ -1571,6 +1921,27 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 	color := "#9aa0a6"
 	if hw.PreviewColor != nil && *hw.PreviewColor != "" {
 		color = normalizeHexColor(*hw.PreviewColor)
+	} else if len(hw.PartFinishes) > 0 {
+		for _, roleKey := range []string{"body", "base", "grip"} {
+			if presetID, ok := hw.PartFinishes[roleKey]; ok {
+				if hex, found := hardwareFinishPresetColors[strings.ToLower(strings.TrimSpace(presetID))]; found {
+					color = hex
+					break
+				}
+			}
+		}
+	} else if len(hw.DesignParts) > 0 {
+		for _, dp := range hw.DesignParts {
+			if hex, found := hardwareFinishPresetColors[strings.ToLower(strings.TrimSpace(dp.FinishKey))]; found {
+				color = hex
+				break
+			}
+		}
+	}
+
+	actorMembership := ""
+	if len(hw.DesignParts) == 1 && strings.TrimSpace(hw.DesignParts[0].ActorMembership) != "" {
+		actorMembership = strings.TrimSpace(hw.DesignParts[0].ActorMembership)
 	}
 
 	// Authoritative hardware mounting frame in furniture space:
@@ -1626,6 +1997,7 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		AnchorFace:              hp.AnchorFace,
 		PlacementKind:           kind,
 		OptionRole:              strings.TrimSpace(hp.OptionRole),
+		ActorMembership:         actorMembership,
 		Transform:               LayoutTransform{TranslationMm: boxMin},
 		DimensionsMm:            dims,
 		LocalTransform:          hwLocalTransform,

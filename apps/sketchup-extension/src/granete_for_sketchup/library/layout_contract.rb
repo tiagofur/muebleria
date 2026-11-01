@@ -188,7 +188,8 @@ module Granete
                     :anchor_face, :offset_mm,
                     :asset_revision_id, :sha256, :expected_bytes, :representation,
                     :validation_state, :local_transform,
-                    :preparation_state, :mount_frame, :is_historical, :option_role
+                    :preparation_state, :mount_frame, :is_historical, :option_role,
+                    :actor_membership
 
         # rubocop:disable-next Metrics/ParameterLists
         def initialize(placement_id:, hardware_id: nil, asset_id: nil, name: nil,
@@ -197,7 +198,7 @@ module Granete
                        asset_revision_id: nil, sha256: nil, expected_bytes: nil,
                        representation: nil, validation_state: nil, local_transform: nil,
                        preparation_state: nil, mount_frame: nil, is_historical: false,
-                       option_role: nil)
+                       option_role: nil, actor_membership: nil)
           @placement_id = placement_id
           @hardware_id = hardware_id
           @asset_id = asset_id
@@ -220,6 +221,7 @@ module Granete
           # #1046 S3: código del grupo cuando el placement resolvió por elección
           # (hardware_id es el concreto elegido). nil = placement concreto.
           @option_role = option_role
+          @actor_membership = actor_membership
           @is_historical = is_historical
         end
 
@@ -705,6 +707,8 @@ module Granete
             placement_kind: placement_kind,
             option_role: ContractCoercions.optional_opaque_string(raw['optionRole'],
                                                                   "optionRole de #{placement_id}"),
+            actor_membership: ContractCoercions.optional_opaque_string(raw['actorMembership'],
+                                                                       "actorMembership de #{placement_id}"),
             host_component_instance_id: if raw['hostComponentInstanceId'].to_s.strip.empty?
                                           nil
                                         else

@@ -39,12 +39,16 @@ export interface HardwareFormModalProps {
   readonly onClose: () => void;
   /** #1422 owner: partes de diseño del kit en edición — indentadas dentro del formulario. */
   readonly kitParts?: readonly Hardware[];
+  /** Catálogo completo disponible para vincular partes existentes (#1435 / #1437). */
+  readonly availableHardware?: readonly Hardware[];
   /** Abre la edición de una parte (el padre cierra este modal y abre la de la parte). */
   readonly onEditKitPart?: (part: Hardware) => void;
   /** Quita la parte del juego (borra el link kit↔parte; la parte sigue existiendo). */
   readonly onRemoveKitPart?: (part: Hardware) => void;
   /** Agrega una parte nueva precargada con este kit. */
   readonly onAddKitPart?: () => void;
+  /** Vincula un herraje existente del catálogo como parte de este juego (#1435 / #1437). */
+  readonly onLinkExistingPart?: (hardwareId: string) => void;
 }
 
 export function HardwareFormModal({
@@ -63,9 +67,11 @@ export function HardwareFormModal({
   onClose,
   identity,
   kitParts,
+  availableHardware,
   onEditKitPart,
   onRemoveKitPart,
   onAddKitPart,
+  onLinkExistingPart,
 }: HardwareFormModalProps): ReactNode {
   return (
     <Modal
@@ -158,12 +164,17 @@ export function HardwareFormModal({
           </div>
         </fieldset>
 
-        {kitParts && kitParts.length > 0 && onEditKitPart ? (
+        {editingId && (draft.unit === 'set' || (kitParts && kitParts.length > 0)) && onEditKitPart ? (
           <fieldset className="catalog-form__section" data-testid="hardware-form-kit-parts">
             <legend className="catalog-form__section-title">
-              Partes de este juego ({kitParts.length})
+              Partes de este juego ({(kitParts ?? []).length})
             </legend>
-            {kitParts.map((part) => (
+            {(kitParts ?? []).length === 0 ? (
+              <p className="catalog-form__hint" data-testid="hardware-form-kit-parts-empty">
+                Este juego todavía no tiene partes vinculadas. Podés agregar una parte nueva o vincular una existente.
+              </p>
+            ) : null}
+            {(kitParts ?? []).map((part) => (
               <div
                 key={part.id}
                 className="catalog-kit-part-row"
@@ -191,16 +202,48 @@ export function HardwareFormModal({
                 ) : null}
               </div>
             ))}
-            {onAddKitPart ? (
-              <button
-                type="button"
-                className="btn btn--sm"
-                onClick={onAddKitPart}
-                data-testid="hardware-form-kit-part-add"
-              >
-                Agregar parte al juego
-              </button>
-            ) : null}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+              {onAddKitPart ? (
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  onClick={onAddKitPart}
+                  data-testid="hardware-form-kit-part-add"
+                >
+                  Crear parte nueva
+                </button>
+              ) : null}
+              {onLinkExistingPart && availableHardware && availableHardware.length > 0 ? (
+                <div style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
+                  <label htmlFor="link-existing-part-select" className="visually-hidden">
+                    Vincular parte existente
+                  </label>
+                  <select
+                    id="link-existing-part-select"
+                    className="select select--sm"
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        onLinkExistingPart(e.target.value);
+                        e.target.value = '';
+                      }
+                    }}
+                    data-testid="hardware-form-link-existing-part"
+                  >
+                    <option value="" disabled>
+                      + Vincular herraje existente…
+                    </option>
+                    {availableHardware
+                      .filter((h) => h.id !== editingId && !h.kitHardwareId && h.unit !== 'set')
+                      .map((h) => (
+                        <option key={h.id} value={h.id}>
+                          {h.code} — {h.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              ) : null}
+            </div>
           </fieldset>
         ) : null}
 

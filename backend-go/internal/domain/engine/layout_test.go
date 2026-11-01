@@ -771,3 +771,325 @@ func TestAgregadoCopyPoseFormula(t *testing.T) {
 		}
 	})
 }
+
+func TestFurnitureLayout_EmitsAssembliesFromAgregadoRigidMembers(t *testing.T) {
+	hwLeft := domain.Hardware{
+		ID: "hw-slide-l", Code: "SLIDE-L", Name: "Guía Izquierda", Unit: domain.UnitPiece, Active: true,
+		VisualAsset: &domain.HardwareVisualAssetBinding{
+			AssetID:         "asset-slide-l",
+			AssetRevisionID: "rev-1",
+			SHA256:          "hash-l",
+			MountFrame: &domain.HardwareMountFrame{
+				OriginMm: [3]float64{0, 0, 0},
+				Basis: domain.HardwareBasis{
+					X: [3]float64{1, 0, 0},
+					Y: [3]float64{0, 1, 0},
+					Z: [3]float64{0, 0, 1},
+				},
+			},
+		},
+	}
+	hwRight := domain.Hardware{
+		ID: "hw-slide-r", Code: "SLIDE-R", Name: "Guía Derecha", Unit: domain.UnitPiece, Active: true,
+		VisualAsset: &domain.HardwareVisualAssetBinding{
+			AssetID:         "asset-slide-r",
+			AssetRevisionID: "rev-2",
+			SHA256:          "hash-r",
+			MountFrame: &domain.HardwareMountFrame{
+				OriginMm: [3]float64{0, 0, 0},
+				Basis: domain.HardwareBasis{
+					X: [3]float64{1, 0, 0},
+					Y: [3]float64{0, 1, 0},
+					Z: [3]float64{0, 0, 1},
+				},
+			},
+		},
+	}
+
+	kitID := "hw-kit-slides"
+	agr := domain.Agregado{
+		ID:                      "agr-drawer-slides",
+		Code:                    "KIT-SLIDES",
+		Name:                    "Juego de Correderas",
+		CommercialKitHardwareID: &kitID,
+		RigidMembers: []domain.AgregadoRigidMember{
+			{
+				MemberID: "rm-left",
+				Role:     "slide-left",
+				Source: domain.RigidMemberSource{
+					Kind:  domain.RigidMemberSourceFixed,
+					Fixed: &domain.FixedHardwareSource{HardwareID: "hw-slide-l"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 30},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 50},
+				},
+				BOMRole:         domain.BOMRoleIncludedInKit,
+				ActorMembership: "body",
+			},
+			{
+				MemberID: "rm-right",
+				Role:     "slide-right",
+				Source: domain.RigidMemberSource{
+					Kind:  domain.RigidMemberSourceFixed,
+					Fixed: &domain.FixedHardwareSource{HardwareID: "hw-slide-r"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: -10},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 30},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 50},
+				},
+				BOMRole:         domain.BOMRoleIncludedInKit,
+				ActorMembership: "body",
+			},
+		},
+	}
+
+	catalog := domain.Catalog{
+		Hardware:  []domain.Hardware{hwLeft, hwRight},
+		Agregados: []domain.Agregado{agr},
+	}
+
+	module := domain.Module{
+		ID: "mod-slides", Code: "MOD-SLIDES", Name: "Módulo con Correderas",
+		Agregados: []domain.ModuleAgregadoInstance{
+			{
+				ID: "inst-slides-1", AgregadoID: "agr-drawer-slides", Quantity: 1,
+			},
+		},
+	}
+
+	dims := &LayoutDims{WidthMm: 600, HeightMm: 720, DepthMm: 500}
+	layout, err := ResolveFurnitureLayout(module, catalog, dims, nil)
+	if err != nil {
+		t.Fatalf("unexpected layout error: %v", err)
+	}
+
+	if len(layout.Assemblies) != 1 {
+		t.Fatalf("expected 1 assembly, got %d", len(layout.Assemblies))
+	}
+
+	asm := layout.Assemblies[0]
+	if asm.AgregadoID != "agr-drawer-slides" {
+		t.Errorf("assembly AgregadoID = %q, want agr-drawer-slides", asm.AgregadoID)
+	}
+
+	if len(asm.RigidMembers) != 2 {
+		t.Fatalf("expected 2 rigid members in assembly, got %d", len(asm.RigidMembers))
+	}
+
+	leftMember := asm.RigidMembers[0]
+	if leftMember.HardwareID != "hw-slide-l" || leftMember.Role != "slide-left" {
+		t.Errorf("unexpected left member: %+v", leftMember)
+	}
+	if leftMember.AssetID == nil || *leftMember.AssetID != "asset-slide-l" {
+		t.Errorf("left member missing expected visual asset pin: %+v", leftMember.AssetID)
+	}
+
+	rightMember := asm.RigidMembers[1]
+	if rightMember.HardwareID != "hw-slide-r" || rightMember.Role != "slide-right" {
+		t.Errorf("unexpected right member: %+v", rightMember)
+	}
+	// Right member anchorX is "max" with offset -10mm. On 600mm width, x translation should be 590mm
+	if rightMember.LocalTransform.TranslationMm[0] != 590 {
+		t.Errorf("right member X translation = %f, want 590", rightMember.LocalTransform.TranslationMm[0])
+	}
+	if rightMember.AssetID == nil || *rightMember.AssetID != "asset-slide-r" {
+		t.Errorf("right member missing expected visual asset pin: %+v", rightMember.AssetID)
+	}
+}
+
+func TestResolveFurnitureLayout_ExpandsKitHardwarePlacementsOnDoor(t *testing.T) {
+	kitID := "cce8efa2-cc7d-4aa6-bfcd-3d31b3ff742a"
+	slideShape := "slide"
+	kitHw := domain.Hardware{
+		ID:     kitID,
+		Code:   "HER-BIS-QA1031",
+		Name:   "Bisagra QA Verificación",
+		Unit:   domain.UnitSet,
+		Active: true,
+	}
+	partBrazo := domain.Hardware{
+		ID:            "918aa0fb-3baa-47df-a636-1d233f763565",
+		Code:          "HER-BIS-QA1031-BRAZO",
+		Name:          "Bisagra QA Verificación — Brazo (móvil de la puerta)",
+		Unit:          domain.UnitPiece,
+		KitHardwareID: &kitID,
+		PreviewShape:  &slideShape,
+		Active:        true,
+		VisualAsset: &domain.HardwareVisualAssetBinding{
+			AssetID:          "8a0abb40-ce4e-4a40-9060-5f82d4765d4e",
+			AssetRevisionID:  "5965d2ae-5bc4-465f-9c11-b356a058b269",
+			SHA256:           "sha256-af5b19fc84711926d49f689a319c9022b73f72291b8ce728793ec8a68f2dd6af",
+			SizeBytes:        462555,
+			Representation:   "skp",
+			ValidationState:  "valid",
+			PreparationState: "unprepared",
+		},
+	}
+	partCopa := domain.Hardware{
+		ID:            "499c8626-dc7d-4ba8-8c6e-7c8e10635e0c",
+		Code:          "HER-BIS-QA1031-COPA",
+		Name:          "Bisagra QA Verificación — Copa (fija al mueble)",
+		Unit:          domain.UnitPiece,
+		KitHardwareID: &kitID,
+		PreviewShape:  &slideShape,
+		Active:        true,
+		VisualAsset: &domain.HardwareVisualAssetBinding{
+			AssetID:          "8a0abb40-ce4e-4a40-9060-5f82d4765d4e",
+			AssetRevisionID:  "5965d2ae-5bc4-465f-9c11-b356a058b269",
+			SHA256:           "sha256-af5b19fc84711926d49f689a319c9022b73f72291b8ce728793ec8a68f2dd6af",
+			SizeBytes:        462555,
+			Representation:   "skp",
+			ValidationState:  "valid",
+			PreparationState: "unprepared",
+		},
+	}
+
+	costOnlyPlaca := domain.Hardware{
+		ID:       "hw-placa-bis",
+		Code:     "HER-PLACA-BIS",
+		Name:     "Placa Base Bisagra Blum Clip",
+		Category: "hinge",
+		Active:   true,
+	}
+	sideComp := domain.Component{
+		ID:            "comp-side-izq",
+		Code:          "COM-COS-BAJ-IZQ",
+		Name:          "Costado Gabinete Bajo Izq.",
+		GeometryKind:  "rectangular_board",
+		ThicknessMm:   18,
+		Placement:     domain.PlacementLateralIzquierdo,
+		OptionRoles:   []string{"FRENTES"},
+		WidthFormula:  "PD",
+		LengthFormula: "PH",
+		Active:        true,
+	}
+	doorComp := domain.Component{
+		ID:            "comp-door",
+		Code:          "PUERTA",
+		Name:          "Puerta",
+		GeometryKind:  "rectangular_board",
+		ThicknessMm:   18,
+		Placement:     domain.PlacementPuerta,
+		OptionRoles:   []string{"FRENTES"},
+		WidthFormula:  "PW",
+		LengthFormula: "PH",
+		Active:        true,
+	}
+	agrDoor := domain.Agregado{
+		ID:     "agr-pue-izq",
+		Code:   "AGR-PUE-IZQ",
+		Name:   "Puerta Izquierda",
+		Active: true,
+		Components: []domain.ComponentInstance{
+			{
+				ComponentID: "comp-door",
+				Quantity:    1,
+				Overrides: &domain.ComponentInstanceOverrides{
+					HardwarePlacements: []domain.HardwarePlacement{
+						{
+							OptionRole:       "BISAGRA",
+							AnchorFace:       "back",
+							RelativePosition: domain.HardwareRelPosition{XMm: 20.5, YMm: 90},
+						},
+						{
+							OptionRole:       "BISAGRA",
+							AnchorFace:       "back",
+							RelativePosition: domain.HardwareRelPosition{XMm: 20.5, YMm: 50, YFormula: "PH-90"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	catalog := domain.Catalog{
+		Materials: []domain.MaterialBoard{
+			{ID: "mat-frente", Code: "MEL-BL", Name: "Blanco", ThicknessMm: 18, Active: true},
+		},
+		Structures: []domain.Structure{
+			{
+				ID:     "st-1",
+				Code:   "CUERPO",
+				Name:   "Cuerpo",
+				Active: true,
+				Components: []domain.ComponentInstance{
+					{
+						ComponentID: "comp-side-izq",
+						Quantity:    1,
+						Overrides: &domain.ComponentInstanceOverrides{
+							HardwarePlacements: []domain.HardwarePlacement{
+								{
+									HardwareID:       "hw-placa-bis",
+									AnchorFace:       "front",
+									RelativePosition: domain.HardwareRelPosition{XMm: 37, YMm: 74},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Hardware:   []domain.Hardware{kitHw, partBrazo, partCopa, costOnlyPlaca},
+		Components: []domain.Component{sideComp, doorComp},
+		Agregados:  []domain.Agregado{agrDoor},
+		OptionGroups: []domain.OptionGroup{
+			{ID: "og-frentes", Code: "FRENTES", Kind: "board", Required: true, OptionIDs: []string{"mat-frente"}},
+			{ID: "og-bisagra", Code: "BISAGRA", Kind: "hardware", Required: true, OptionIDs: []string{kitID}},
+		},
+	}
+	module := domain.Module{
+		ID:          "mod-baj-1p-izq",
+		Code:        "MOD-BAJ-1P-IZQ",
+		Name:        "Módulo Bajo 1P Izq",
+		StructureID: "st-1",
+		WidthMm:     450,
+		HeightMm:    720,
+		DepthMm:     580,
+		Agregados: []domain.ModuleAgregadoInstance{
+			{ID: "inst-door", AgregadoID: "agr-pue-izq", Quantity: 1},
+		},
+	}
+	choices := map[string]string{
+		"FRENTES": "mat-frente",
+		"BISAGRA": kitID,
+	}
+
+	res, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module:        module,
+		Catalog:       catalog,
+		Dims:          &LayoutDims{WidthMm: 450, HeightMm: 720, DepthMm: 580},
+		OptionChoices: choices,
+	})
+	if err != nil {
+		t.Fatalf("unexpected authoring resolve error: %v", err)
+	}
+	if len(res.Layout.Hardware) != 4 {
+		t.Fatalf("expected 4 resolved hardware items (2 hinge placements x 2 kit parts, 0 for cost-only HER-PLACA-BIS), got %d", len(res.Layout.Hardware))
+	}
+
+	// Primary manual placement 0 (moving arm on door)
+	hw0 := res.Layout.Hardware[0]
+	if hw0.PlacementKind != "manual" || hw0.HardwareID != kitID || hw0.ActorMembership != "actor:door" {
+		t.Errorf("unexpected hw0: %+v", hw0)
+	}
+	if hw0.AssetID != "8a0abb40-ce4e-4a40-9060-5f82d4765d4e" {
+		t.Errorf("hw0 missing skp assetId: %q", hw0.AssetID)
+	}
+
+	// Derived kit part 0 (fixed cup on cabinet body, shifted inward by 1 side thickness = 18mm)
+	hw1 := res.Layout.Hardware[1]
+	if hw1.PlacementKind != "derived" || hw1.HardwareID != partCopa.ID || hw1.ActorMembership != "body" {
+		t.Errorf("unexpected hw1: %+v", hw1)
+	}
+	if hw1.AssetID != "8a0abb40-ce4e-4a40-9060-5f82d4765d4e" {
+		t.Errorf("hw1 missing skp assetId: %q", hw1.AssetID)
+	}
+	if math.Abs((hw0.LocalTransform.TranslationMm[0]-hw1.LocalTransform.TranslationMm[0])-18.0) > 1e-6 {
+		t.Errorf("expected body part hw1 to be shifted 18mm inward along X from door part hw0, got hw0.X=%v hw1.X=%v", hw0.LocalTransform.TranslationMm[0], hw1.LocalTransform.TranslationMm[0])
+	}
+}
+
+

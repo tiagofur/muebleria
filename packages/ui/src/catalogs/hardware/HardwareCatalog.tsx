@@ -16,6 +16,7 @@ import {
   countMachiningOperations,
   validateMachiningProfile,
   suggestDuplicateCode,
+  syncAgregadoWithKitParts,
 } from '@granete/domain';
 import type { HardwareAssetService, WorkshopKitTemplateRow } from '@granete/storage';
 import { Copy, Eye, EyeOff, PackagePlus, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
@@ -82,6 +83,8 @@ export interface HardwareCatalogProps {
   readonly onReloadKitTemplates?: () => Promise<void>;
   /** #1418 restante (perfección): catálogo de agregados para el link kit→diseño. */
   readonly agregados?: readonly Agregado[];
+  /** Actualiza la receta del agregado asociado al kit cuando cambian sus partes (#1422 / #1435). */
+  readonly onUpdateAgregado?: (agregado: Agregado) => void | Promise<void>;
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 }
 
@@ -113,6 +116,7 @@ export function HardwareCatalog({
   onCreateKit,
   agregadoCodes = [],
   agregados = [],
+  onUpdateAgregado,
   kitTemplates = [],
   kitTemplatesStatus,
   onSaveKitTemplate,
@@ -227,6 +231,14 @@ export function HardwareCatalog({
     setModalOpen(true);
   };
 
+  const syncKitAgregado = (kitId: string, updatedParts: readonly Hardware[]) => {
+    if (!onUpdateAgregado) return;
+    const recipe = designByKit.get(kitId);
+    if (!recipe) return;
+    const synced = syncAgregadoWithKitParts(recipe, updatedParts);
+    void onUpdateAgregado(synced);
+  };
+
   // #1422 owner: edición del kit → partes indentadas dentro del formulario.
   const openKitPart = (part: Hardware) => {
     closeModal();
@@ -236,6 +248,21 @@ export function HardwareCatalog({
     const draft = toDraft(part);
     delete draft.kitHardwareId;
     void onUpdate(part.id, draft);
+    if (part.kitHardwareId) {
+      const remaining = (partsByKit.get(part.kitHardwareId) ?? []).filter((p) => p.id !== part.id);
+      syncKitAgregado(part.kitHardwareId, remaining);
+    }
+  };
+  const linkExistingPartToKit = (kit: Hardware, partId: string) => {
+    const targetPart = hardware.find((h) => h.id === partId);
+    if (!targetPart) return;
+    const draft = toDraft(targetPart);
+    draft.kitHardwareId = kit.id;
+    void onUpdate(targetPart.id, draft);
+    const currentParts = partsByKit.get(kit.id) ?? [];
+    if (!currentParts.some((p) => p.id === targetPart.id)) {
+      syncKitAgregado(kit.id, [...currentParts, { ...targetPart, kitHardwareId: kit.id }]);
+    }
   };
   const addKitPart = (kit: Hardware) => {
     const existing = new Set(hardware.map((h) => h.code));
@@ -751,9 +778,15 @@ export function HardwareCatalog({
         onSubmit={handleSubmit}
         onClose={closeModal}
         kitParts={editingHardware ? partsByKit.get(editingHardware.id) : undefined}
+        availableHardware={hardware}
         onEditKitPart={canMutate ? openKitPart : undefined}
         onRemoveKitPart={canMutate ? removeKitPart : undefined}
         onAddKitPart={canMutate && editingHardware ? () => addKitPart(editingHardware) : undefined}
+        onLinkExistingPart={
+          canMutate && editingHardware
+            ? (partId) => linkExistingPartToKit(editingHardware, partId)
+            : undefined
+        }
       />
 
       {onCreateKit ? (

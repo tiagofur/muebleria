@@ -845,6 +845,9 @@ module Granete
           instance = try_load_hardware_asset(model, parent_definition, placement, pos)
           if instance
             scale_linear_hardware(instance, placement)
+            if placement.respond_to?(:color_hex) && placement.color_hex
+              MaterialApplier.apply(model, instance, name, placement.color_hex)
+            end
             return attach_hardware_metadata(instance, placement, name, furniture_instance_id, exact: true)
           end
           return nil if invalid_hardware_preparation?(placement.placement_id)

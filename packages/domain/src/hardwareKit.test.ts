@@ -8,6 +8,7 @@ import {
   HARDWARE_KIT_SLOTS,
   defaultAgregadoCode,
   planHardwareKit,
+  syncAgregadoWithKitParts,
   validateHardwareKitInput,
   validateHardwareKitLink,
   validateHardwareKitTemplate,
@@ -301,5 +302,61 @@ describe('plantillas del taller editables (#1422 slice 2 — fixture compartido 
     expect(() =>
       validateHardwareKitInput({ ...baseInput, templateId: custom.id }),
     ).toThrow('Plantilla de juego desconocida');
+  });
+
+  describe('syncAgregadoWithKitParts (#1435)', () => {
+    it('agrega slots inferidos para piezas nuevas y preserva las existentes', () => {
+      const initialAgregado = {
+        id: 'agr-1',
+        code: 'AGR-CAJON',
+        commercialKitHardwareId: 'kit-1',
+        rigidMembers: [
+          {
+            memberId: 'existing_fij_i',
+            role: 'slide',
+            source: { kind: 'fixed', fixed: { hardwareId: 'hw-fij-i' } },
+            placement: { x: { ref: 'min', offsetMm: 10 } },
+            bomRole: 'included_in_kit',
+            actorMembership: 'body',
+          },
+        ],
+      };
+
+      const kitParts = [
+        { id: 'hw-fij-i', code: 'KIT-FIJ-I', name: 'Guía Fija Izq' },
+        { id: 'hw-mov-d', code: 'KIT-MOV-D', name: 'Corredera Móvil Der', previewShape: 'slide' },
+      ];
+
+      const synced = syncAgregadoWithKitParts(initialAgregado, kitParts);
+      expect(synced.rigidMembers).toHaveLength(2);
+      expect(synced.rigidMembers[0].memberId).toBe('existing_fij_i');
+
+      const added = synced.rigidMembers[1];
+      expect(added.source.fixed.hardwareId).toBe('hw-mov-d');
+      expect(added.placement.x.ref).toBe('max'); // Inferido de '-D'
+      expect(added.placement.x.offsetMm).toBe(-10); // Offset invertido para max
+      expect(added.actorMembership).toBe('actor:drawer'); // Inferido de '-MOV'
+    });
+
+    it('remueve de la receta miembros de partes que ya no están vinculadas al kit', () => {
+      const initialAgregado = {
+        id: 'agr-1',
+        code: 'AGR-CAJON',
+        commercialKitHardwareId: 'kit-1',
+        rigidMembers: [
+          {
+            memberId: 'part_old',
+            role: 'slide',
+            source: { kind: 'fixed', fixed: { hardwareId: 'hw-removed' } },
+            placement: { x: { ref: 'min', offsetMm: 10 } },
+            bomRole: 'included_in_kit',
+            actorMembership: 'body',
+          },
+        ],
+      };
+
+      const synced = syncAgregadoWithKitParts(initialAgregado, []);
+      expect(synced.rigidMembers).toHaveLength(0);
+    });
   });
 });

@@ -6,7 +6,6 @@ import type {
   Agregado,
   Catalog,
   Hardware,
-  MaterialBoard,
   Module,
   ModuleBaseMode,
   ModuleComponentInstance,
@@ -14,7 +13,6 @@ import type {
   Project,
   ProjectItem,
   ProjectedAssembly,
-  PublishedAssemblySnapshot,
   ResolvedBoardPart,
   ResolvedModuleAssembly,
   Structure,
@@ -595,17 +593,95 @@ export function resolveModuleHardwarePlacements(
           const hardware = hardwareCatalog.find((h) => h.id === targetId);
           // VH-09: swapped-to-cost-only or removed hardware renders nothing.
           if (!hardware) continue;
-          const resolved = resolveHardwarePlacement({
-            componentInstanceId,
-            placement,
-            board: {
-              widthMm: part.widthMm,
-              thicknessMm: part.thicknessMm,
-              lengthMm: part.lengthMm,
-            },
-            hardware,
-          });
-          if (resolved) out.push(resolved);
+          const kitChildren = hardwareCatalog
+            .filter((h) => h.active && h.kitHardwareId === hardware.id)
+            .sort((a, b) => a.code.localeCompare(b.code) || a.id.localeCompare(b.id));
+          const targetsToResolve = kitChildren.length > 0 ? kitChildren : [hardware];
+          const sidePart = boardParts.find(
+            (bp) =>
+              bp.componentPlacement === 'lateral_izquierdo' ||
+              bp.componentPlacement === 'lateral_derecho',
+          );
+          const sideThicknessMm =
+            sidePart && sidePart.thicknessMm > 0
+              ? sidePart.thicknessMm
+              : part.thicknessMm;
+          const effectiveBoardPlacement =
+            inst.placementOverride ?? part.componentPlacement;
+          const isDoorPart =
+            effectiveBoardPlacement === 'puerta' ||
+            part.optionRole?.toUpperCase() === 'FRENTE' ||
+            part.optionRole?.toUpperCase() === 'FRENTES';
+          for (const targetHw of targetsToResolve) {
+            let effectivePlacement = placement;
+            if (kitChildren.length > 0 && isDoorPart) {
+              const explicitActor = targetHw.designParts?.[0]?.actorMembership?.trim();
+              const lowerText = `${targetHw.code} ${targetHw.name}`.toLowerCase();
+              const isBodyActor =
+                explicitActor === 'body' ||
+                (!explicitActor &&
+                  (lowerText.includes('fija al mueble') ||
+                    lowerText.includes('fijo al mueble') ||
+                    lowerText.includes('copa') ||
+                    lowerText.includes('placa') ||
+                    lowerText.includes('base')));
+              if (isBodyActor) {
+                const w = Math.max(part.widthMm, 0);
+                const l = Math.max(part.lengthMm, 0);
+                const t = Math.max(part.thicknessMm, 0);
+                const hwSize = targetHw.previewSizeMm ?? 96;
+                const boardEnv = {
+                  W: Math.round(w),
+                  H: Math.round(l),
+                  D: Math.round(l),
+                  PW: Math.round(w),
+                  PH: Math.round(l),
+                  PD: Math.round(l),
+                  T: Math.round(t),
+                  HW: Math.round(hwSize),
+                };
+                let xMm = placement.relativePosition.xMm;
+                if (placement.relativePosition.xFormula) {
+                  try {
+                    xMm = evaluatePartFormula(
+                      placement.relativePosition.xFormula,
+                      boardEnv,
+                      {
+                        structureCode: targetHw.code,
+                        partDescription: targetHw.name,
+                        field: 'x',
+                      },
+                    );
+                  } catch {
+                    // keep fallback xMm
+                  }
+                }
+                const shiftedX =
+                  xMm <= w / 2 ? xMm + sideThicknessMm : xMm - sideThicknessMm;
+                effectivePlacement = {
+                  ...placement,
+                  relativePosition: {
+                    xMm: shiftedX,
+                    yMm: placement.relativePosition.yMm,
+                    ...(placement.relativePosition.yFormula
+                      ? { yFormula: placement.relativePosition.yFormula }
+                      : {}),
+                  },
+                };
+              }
+            }
+            const resolved = resolveHardwarePlacement({
+              componentInstanceId,
+              placement: effectivePlacement,
+              board: {
+                widthMm: part.widthMm,
+                thicknessMm: part.thicknessMm,
+                lengthMm: part.lengthMm,
+              },
+              hardware: targetHw,
+            });
+            if (resolved) out.push(resolved);
+          }
         }
       }
     }

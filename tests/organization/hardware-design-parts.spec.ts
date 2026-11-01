@@ -89,7 +89,12 @@ test.describe.serial('Herrajes — partes de diseño (#1417)', () => {
     await page.getByTestId('hardware-design-parts-add').click();
     await page.getByTestId('hardware-design-part-1-name').fill('riel_movil');
     await page.getByTestId('hardware-design-part-1-membership').selectOption('actor:drawer');
-    await page.getByTestId('hardware-design-part-1-finish').fill('body');
+    const finishEl = page.getByTestId('hardware-design-part-1-finish');
+    if ((await finishEl.evaluate((el) => el.tagName.toLowerCase())) === 'select') {
+      await finishEl.selectOption('body');
+    } else {
+      await finishEl.fill('body');
+    }
 
     await page.getByTestId('hardware-form-submit-btn').click();
     await expect(page.getByTestId('hardware-form-modal')).toBeHidden({ timeout: 20_000 });

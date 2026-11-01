@@ -7,12 +7,14 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { HARDWARE_FINISHES } from '@granete/domain';
 
 import type { HardwareDraft } from './hardwareDraft';
 
 const MEMBERSHIP_OPTIONS = [
   { value: 'body', label: 'Fija al cuerpo (body)' },
   { value: 'actor:drawer', label: 'Parte móvil del cajón (actor:drawer)' },
+  { value: 'actor:door', label: 'Parte móvil de la puerta (actor:door)' },
 ];
 
 export function HardwareDesignPartsSection({
@@ -84,15 +86,23 @@ export function HardwareDesignPartsSection({
             </select>
           </div>
           <div>
-            <label htmlFor={`hdp-finish-${idx}`}>Clave de acabado (opcional)</label>
-            <input
+            <label htmlFor={`hdp-finish-${idx}`}>Acabado de la parte</label>
+            <select
               id={`hdp-finish-${idx}`}
-              value={row.finishKey}
+              value={row.finishKey ?? ''}
               onChange={(e) => updateRow(idx, { finishKey: e.target.value })}
-              placeholder="ej. body"
-              autoComplete="off"
               data-testid={`hardware-design-part-${idx}-finish`}
-            />
+            >
+              <option value="">Heredar acabado global</option>
+              {HARDWARE_FINISHES.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+              <option value="body">Rol: Cuerpo (body)</option>
+              <option value="base">Rol: Base (base)</option>
+              <option value="grip">Rol: Agarre (grip)</option>
+            </select>
           </div>
           <div>
             <label htmlFor={`hdp-label-${idx}`}>Etiqueta (opcional)</label>
