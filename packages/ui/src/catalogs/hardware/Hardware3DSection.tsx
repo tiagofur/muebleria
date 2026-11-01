@@ -306,6 +306,49 @@ export function Hardware3DSection({
                         <Trash2 size={14} aria-hidden /> Quitar asociación
                       </button>
                     </div>
+
+                    <div className="catalog-form__section" style={{ marginTop: '1rem', borderTop: '1px solid var(--border-subtle, #e0e0e0)', paddingTop: '0.75rem' }}>
+                      <p className="catalog-form__hint" style={{ marginBottom: '0.5rem' }}>
+                        Acabado y color aplicados al modelo 3D:
+                      </p>
+                      <div className="catalog-form__row">
+                        <label className="catalog-form__field">
+                          <span>Acabado global</span>
+                          <select
+                            value={selectedFinishId}
+                            onChange={(e) => {
+                              const finish = HARDWARE_FINISHES.find((f) => f.id === e.target.value);
+                              if (finish) {
+                                setDraft({
+                                  ...draft,
+                                  previewColor: finish.color,
+                                  previewMetalness: String(finish.metalness),
+                                  previewRoughness: String(finish.roughness),
+                                  previewClearcoat: String(finish.clearcoat),
+                                });
+                              }
+                            }}
+                            data-testid="hardware-file-form-finish"
+                          >
+                            <option value="">— Personalizado —</option>
+                            {HARDWARE_FINISHES.map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="catalog-form__field">
+                          <span>Color</span>
+                          <input
+                            type="color"
+                            value={draft.previewColor || '#9aa0a6'}
+                            onChange={(e) => setDraft({ ...draft, previewColor: e.target.value })}
+                            data-testid="hardware-file-form-color"
+                          />
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="hardware-unbound-card" data-testid="hardware-unbound-card">

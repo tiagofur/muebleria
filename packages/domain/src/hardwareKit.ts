@@ -545,3 +545,65 @@ export function validateHardwareKitLink(
     throw new Error(`«${kit.code}» ya es parte de otro juego: un juego no puede ser parte de otro.`);
   }
 }
+
+/**
+ * Sincroniza un Agregado con la lista efectiva de partes vinculadas a su Kit (#1422 / #1435).
+ * - Preserva los miembros rígidos existentes.
+ * - Si una parte vinculada no tiene miembro en la receta, infiere un slot predeterminado
+ *   (lado izquierdo/derecho por sufijo o nombre, fija al cuerpo o móvil si es corredera/brazo).
+ * - Si una parte ya no está vinculada, remueve su miembro de la receta.
+ */
+export function syncAgregadoWithKitParts(
+  agregado: { readonly id: string; readonly code: string; readonly commercialKitHardwareId?: string; readonly rigidMembers?: readonly any[] },
+  kitParts: readonly { readonly id: string; readonly code: string; readonly name: string; readonly previewShape?: string }[],
+): any {
+  const currentMembers = agregado.rigidMembers ?? [];
+  const partIds = new Set(kitParts.map((p) => p.id));
+
+  // 1. Filtrar miembros de partes que ya no pertenecen al kit
+  const keptMembers = currentMembers.filter((m) => {
+    const hwId = m.source?.fixed?.hardwareId;
+    if (!hwId) return true;
+    return partIds.has(hwId);
+  });
+
+  const existingHwIds = new Set(
+    keptMembers.map((m) => m.source?.fixed?.hardwareId).filter(Boolean),
+  );
+
+  // 2. Para cada parte del kit que no esté en la receta, inferir un slot inicial
+  const newMembers: any[] = [];
+  for (const part of kitParts) {
+    if (existingHwIds.has(part.id)) continue;
+
+    const isRight = /-D\b|der|derech/i.test(part.code) || /derech/i.test(part.name);
+    const isMoving = /-MOV\b|mov|móvil|brazo/i.test(part.code) || /móvil|brazo/i.test(part.name);
+    const isCenter = /centr/i.test(part.code) || /centr/i.test(part.name) || /jaladera|tirador/i.test(part.name);
+
+    const anchorXRef = isCenter ? 'center' : isRight ? 'max' : 'min';
+    const offsetSign = isRight ? -1 : 1;
+    const actorMembership = isMoving
+      ? (agregado.code.includes('PUERTA') ? 'actor:door' : 'actor:drawer')
+      : 'body';
+
+    const safeMemberId = `part_${part.code.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
+
+    newMembers.push({
+      memberId: safeMemberId,
+      role: part.previewShape || 'part',
+      source: { kind: 'fixed', fixed: { hardwareId: part.id } },
+      placement: {
+        x: { ref: anchorXRef, offsetMm: offsetSign * 10 },
+        y: { ref: 'min', offsetMm: 0 },
+        z: { ref: 'min', offsetMm: 0 },
+      },
+      bomRole: 'included_in_kit',
+      actorMembership,
+    });
+  }
+
+  return {
+    ...agregado,
+    rigidMembers: [...keptMembers, ...newMembers],
+  };
+}

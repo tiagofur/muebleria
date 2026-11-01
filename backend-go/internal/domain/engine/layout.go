@@ -241,6 +241,17 @@ type FurnitureLayout struct {
 	DimensionsMm          [3]int            `json:"dimensionsMm"`
 	Components            []LayoutComponent `json:"components"`
 	Hardware              []LayoutHardware  `json:"hardware"`
+	Assemblies            []LayoutAssembly  `json:"assemblies,omitempty"`
+}
+
+// LayoutAssembly describes a resolved Agregado sub-assembly in furniture space (#670 / #1435).
+type LayoutAssembly struct {
+	AssemblyInstanceID   string                              `json:"assemblyInstanceId"`
+	AgregadoID           string                              `json:"agregadoId"`
+	Placement            map[string]any                      `json:"placement"`
+	DimensionsMm         [3]float64                          `json:"dimensionsMm,omitempty"`
+	RigidMembers         []domain.ResolvedRigidMember        `json:"rigidMembers,omitempty"`
+	FabricatedComponents []domain.ResolvedFabricatedComponent `json:"fabricatedComponents,omitempty"`
 }
 
 // layoutBoard is the intermediate resolved board before AABB projection.
@@ -533,7 +544,141 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			layout.Hardware = append(layout.Hardware, resolved)
 		}
 	}
+
+	// #670 / #1435: Emit resolved assemblies and their rigid members for SketchUp layout consumption.
+	layout.Assemblies = resolveLayoutAssemblies(module, catalog, dims, baseClearanceForLayout(module, module.BaseMode))
+
 	return layout, boards, nil
+}
+
+// resolveLayoutAssemblies traverses module & structure agregados, resolves their recipe
+// into rigid members with authoritative poses, and packages them into LayoutAssembly entries.
+func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims LayoutDims, baseClearance int) []LayoutAssembly {
+	structure, _ := findStructure(catalog, module.StructureID)
+	agregadoInstances := append(append([]domain.ModuleAgregadoInstance{}, structure.Agregados...), module.Agregados...)
+	if len(agregadoInstances) == 0 {
+		return nil
+	}
+
+	var assemblies []LayoutAssembly
+	parentDims := formulaDims{
+		W: dims.WidthMm, H: dims.HeightMm, D: dims.DepthMm,
+		PW: dims.WidthMm, PH: dims.HeightMm, PD: dims.DepthMm,
+		T: 18, B: baseClearance,
+	}
+
+	for _, agrInst := range agregadoInstances {
+		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
+		if !ok || len(agr.RigidMembers) == 0 {
+			continue
+		}
+
+		spaceW, spaceH, spaceD := float64(dims.WidthMm), float64(dims.HeightMm), float64(dims.DepthMm)
+		if agrInst.Dimensions != nil {
+			if agrInst.Dimensions.WidthFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Dimensions.WidthFormula, parentDims); err == nil {
+					spaceW = float64(v)
+				}
+			} else if agr.WidthMm > 0 {
+				spaceW = float64(agr.WidthMm)
+			}
+			if agrInst.Dimensions.HeightFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Dimensions.HeightFormula, parentDims); err == nil {
+					spaceH = float64(v)
+				}
+			} else if agr.HeightMm > 0 {
+				spaceH = float64(agr.HeightMm)
+			}
+			if agrInst.Dimensions.DepthFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Dimensions.DepthFormula, parentDims); err == nil {
+					spaceD = float64(v)
+				}
+			} else if agr.DepthMm > 0 {
+				spaceD = float64(agr.DepthMm)
+			}
+		}
+
+		spaceX, spaceY, spaceZ := 0.0, 0.0, 0.0
+		if agrInst.Position != nil {
+			if agrInst.Position.XFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Position.XFormula, parentDims); err == nil {
+					spaceX = float64(v)
+				}
+			}
+			if agrInst.Position.YFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Position.YFormula, parentDims); err == nil {
+					spaceY = float64(v)
+				}
+			}
+			if agrInst.Position.ZFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Position.ZFormula, parentDims); err == nil {
+					spaceZ = float64(v)
+				}
+			}
+		}
+
+		qty := agrInst.Quantity
+		if qty <= 0 {
+			qty = 1
+		}
+		units := agregadoSubspaceUnits(qty, spaceW, spaceH, spaceD, spaceX, spaceY, spaceZ, agrInst.LayoutDirection, agrInst.GapMm)
+
+		for _, unit := range units {
+			params := AssemblyResolutionParams{
+				WidthMm:  unit.w,
+				HeightMm: unit.h,
+				DepthMm:  unit.d,
+			}
+			resolvedAssembly, err := ResolveAgregadoAssembly(agr, params)
+			if err != nil {
+				continue
+			}
+
+			// Attach visual assets and mount frames from catalog hardware to rigid members
+			for rIdx := range resolvedAssembly.RigidMembers {
+				rm := &resolvedAssembly.RigidMembers[rIdx]
+				if hw, ok := findHardware(catalog, rm.HardwareID); ok {
+					if hw.VisualAsset != nil {
+						assetID := hw.VisualAsset.AssetID
+						revID := hw.VisualAsset.AssetRevisionID
+						rm.AssetID = &assetID
+						rm.AssetRevisionID = &revID
+						if hw.VisualAsset.SHA256 != "" {
+							sha := hw.VisualAsset.SHA256
+							rm.SHA256 = &sha
+						}
+						if hw.VisualAsset.MountFrame != nil {
+							rm.MountFrame = hw.VisualAsset.MountFrame
+						}
+					}
+				}
+			}
+
+			instID := agrInst.ID
+			if instID == "" {
+				instID = fmt.Sprintf("asm-%s-%d", agrInst.AgregadoID, unit.index)
+			} else if qty > 1 {
+				instID = fmt.Sprintf("asm-%s-u%d", instID, unit.index)
+			}
+
+			assemblies = append(assemblies, LayoutAssembly{
+				AssemblyInstanceID: instID,
+				AgregadoID:         agr.ID,
+				Placement: map[string]any{
+					"translation": []float64{unit.x, unit.y, unit.z},
+					"basis": map[string]any{
+						"x": []float64{1, 0, 0},
+						"y": []float64{0, 1, 0},
+						"z": []float64{0, 0, 1},
+					},
+				},
+				DimensionsMm:         [3]float64{unit.w, unit.h, unit.d},
+				RigidMembers:         resolvedAssembly.RigidMembers,
+				FabricatedComponents: resolvedAssembly.FabricatedComponents,
+			})
+		}
+	}
+	return assemblies
 }
 
 // boardPlacementLabel resolves the managed placement vocabulary a board or

@@ -443,4 +443,105 @@ describe('HardwareCatalog — kit con partes anidadas (#1422 owner)', () => {
     const [, draft] = onUpdate.mock.calls[0] as [string, { kitHardwareId?: string }];
     expect(draft.kitHardwareId).toBe('kit-1');
   });
+
+  it('permite vincular un herraje existente al kit desde el modal del formulario (#1435/#1437)', async () => {
+    const user = userEvent.setup();
+    const herrajeSuelto: Hardware = {
+      id: 'hw-suelto-1',
+      code: 'HER-SUELTO',
+      name: 'Herraje Libre',
+      unit: 'piece',
+      costPerUnit: 10,
+      active: true,
+    };
+    const onUpdate = vi.fn();
+    render(
+      <HardwareCatalog
+        hardware={[kit, copa, brazo, herrajeSuelto]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        agregados={[agregado]}
+      />,
+    );
+    // Abrir edición del kit
+    await user.click(screen.getByRole('row', { name: /^HER-BIS-QA\b/ }));
+    await user.click(screen.getByRole('button', { name: /Editar HER-BIS-QA$/i }));
+    // Seleccionar herraje existente en el select
+    const linkSelect = screen.getByTestId('hardware-form-link-existing-part');
+    expect(linkSelect).toBeDefined();
+    await user.selectOptions(linkSelect, 'hw-suelto-1');
+
+    await vi.waitFor(() => {
+      expect(onUpdate).toHaveBeenCalledWith(
+        'hw-suelto-1',
+        expect.objectContaining({ kitHardwareId: 'kit-1' }),
+      );
+    });
+  });
+
+  it('al vincular o quitar una parte, sincroniza automáticamente la receta del agregado (#1435)', async () => {
+    const user = userEvent.setup();
+    const kitBisagra: Hardware = {
+      id: 'kit-sync-1',
+      code: 'HER-KIT-SYNC',
+      name: 'Kit Bisagra Sync',
+      unit: 'set',
+      costPerUnit: 100,
+      active: true,
+    };
+    const copaSync: Hardware = {
+      id: 'copa-sync-1',
+      code: 'HER-KIT-SYNC-COPA',
+      name: 'Copa Sync',
+      unit: 'piece',
+      costPerUnit: 0,
+      active: true,
+      kitHardwareId: 'kit-sync-1',
+    };
+    const herrajeSuelto: Hardware = {
+      id: 'hw-suelto-2',
+      code: 'HER-BASE-SUELTA',
+      name: 'Base Suelta',
+      unit: 'piece',
+      costPerUnit: 12,
+      active: true,
+      previewShape: 'hinge',
+    };
+    const agregadoSync = {
+      id: 'agr-sync-1',
+      code: 'AGR-PUE-SYNC',
+      name: 'Puerta Sync',
+      commercialKitHardwareId: 'kit-sync-1',
+      rigidMembers: [
+        { memberId: 'hinge_cup', role: 'hinge_cup', source: { kind: 'fixed', fixed: { hardwareId: 'copa-sync-1' } }, placement: {}, bomRole: 'included_in_kit', actorMembership: 'body' },
+      ],
+    } as never;
+
+    const onUpdateAgregado = vi.fn();
+    render(
+      <HardwareCatalog
+        hardware={[kitBisagra, copaSync, herrajeSuelto]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        agregados={[agregadoSync]}
+        onUpdateAgregado={onUpdateAgregado}
+      />,
+    );
+    // Abrir edición del kit
+    await user.click(screen.getByRole('row', { name: /HER-KIT-SYNC/ }));
+    await user.click(screen.getByRole('button', { name: /Editar HER-KIT-SYNC$/i }));
+    // Vincular herraje
+    const linkSelect = screen.getByTestId('hardware-form-link-existing-part');
+    await user.selectOptions(linkSelect, 'hw-suelto-2');
+
+    await vi.waitFor(() => {
+      expect(onUpdateAgregado).toHaveBeenCalled();
+    });
+    const synced = onUpdateAgregado.mock.calls[0]![0];
+    expect(synced.rigidMembers.some((m: any) => m.source?.fixed?.hardwareId === 'hw-suelto-2')).toBe(true);
+  });
 });

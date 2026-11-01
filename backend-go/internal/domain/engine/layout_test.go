@@ -771,3 +771,132 @@ func TestAgregadoCopyPoseFormula(t *testing.T) {
 		}
 	})
 }
+
+func TestFurnitureLayout_EmitsAssembliesFromAgregadoRigidMembers(t *testing.T) {
+	hwLeft := domain.Hardware{
+		ID: "hw-slide-l", Code: "SLIDE-L", Name: "Guía Izquierda", Unit: domain.UnitPiece, Active: true,
+		VisualAsset: &domain.HardwareVisualAssetBinding{
+			AssetID:         "asset-slide-l",
+			AssetRevisionID: "rev-1",
+			SHA256:          "hash-l",
+			MountFrame: &domain.HardwareMountFrame{
+				OriginMm: [3]float64{0, 0, 0},
+				Basis: domain.HardwareBasis{
+					X: [3]float64{1, 0, 0},
+					Y: [3]float64{0, 1, 0},
+					Z: [3]float64{0, 0, 1},
+				},
+			},
+		},
+	}
+	hwRight := domain.Hardware{
+		ID: "hw-slide-r", Code: "SLIDE-R", Name: "Guía Derecha", Unit: domain.UnitPiece, Active: true,
+		VisualAsset: &domain.HardwareVisualAssetBinding{
+			AssetID:         "asset-slide-r",
+			AssetRevisionID: "rev-2",
+			SHA256:          "hash-r",
+			MountFrame: &domain.HardwareMountFrame{
+				OriginMm: [3]float64{0, 0, 0},
+				Basis: domain.HardwareBasis{
+					X: [3]float64{1, 0, 0},
+					Y: [3]float64{0, 1, 0},
+					Z: [3]float64{0, 0, 1},
+				},
+			},
+		},
+	}
+
+	kitID := "hw-kit-slides"
+	agr := domain.Agregado{
+		ID:                      "agr-drawer-slides",
+		Code:                    "KIT-SLIDES",
+		Name:                    "Juego de Correderas",
+		CommercialKitHardwareID: &kitID,
+		RigidMembers: []domain.AgregadoRigidMember{
+			{
+				MemberID: "rm-left",
+				Role:     "slide-left",
+				Source: domain.RigidMemberSource{
+					Kind:  domain.RigidMemberSourceFixed,
+					Fixed: &domain.FixedHardwareSource{HardwareID: "hw-slide-l"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 30},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 50},
+				},
+				BOMRole:         domain.BOMRoleIncludedInKit,
+				ActorMembership: "body",
+			},
+			{
+				MemberID: "rm-right",
+				Role:     "slide-right",
+				Source: domain.RigidMemberSource{
+					Kind:  domain.RigidMemberSourceFixed,
+					Fixed: &domain.FixedHardwareSource{HardwareID: "hw-slide-r"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: -10},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 30},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 50},
+				},
+				BOMRole:         domain.BOMRoleIncludedInKit,
+				ActorMembership: "body",
+			},
+		},
+	}
+
+	catalog := domain.Catalog{
+		Hardware:  []domain.Hardware{hwLeft, hwRight},
+		Agregados: []domain.Agregado{agr},
+	}
+
+	module := domain.Module{
+		ID: "mod-slides", Code: "MOD-SLIDES", Name: "Módulo con Correderas",
+		Agregados: []domain.ModuleAgregadoInstance{
+			{
+				ID: "inst-slides-1", AgregadoID: "agr-drawer-slides", Quantity: 1,
+			},
+		},
+	}
+
+	dims := &LayoutDims{WidthMm: 600, HeightMm: 720, DepthMm: 500}
+	layout, err := ResolveFurnitureLayout(module, catalog, dims, nil)
+	if err != nil {
+		t.Fatalf("unexpected layout error: %v", err)
+	}
+
+	if len(layout.Assemblies) != 1 {
+		t.Fatalf("expected 1 assembly, got %d", len(layout.Assemblies))
+	}
+
+	asm := layout.Assemblies[0]
+	if asm.AgregadoID != "agr-drawer-slides" {
+		t.Errorf("assembly AgregadoID = %q, want agr-drawer-slides", asm.AgregadoID)
+	}
+
+	if len(asm.RigidMembers) != 2 {
+		t.Fatalf("expected 2 rigid members in assembly, got %d", len(asm.RigidMembers))
+	}
+
+	leftMember := asm.RigidMembers[0]
+	if leftMember.HardwareID != "hw-slide-l" || leftMember.Role != "slide-left" {
+		t.Errorf("unexpected left member: %+v", leftMember)
+	}
+	if leftMember.AssetID == nil || *leftMember.AssetID != "asset-slide-l" {
+		t.Errorf("left member missing expected visual asset pin: %+v", leftMember.AssetID)
+	}
+
+	rightMember := asm.RigidMembers[1]
+	if rightMember.HardwareID != "hw-slide-r" || rightMember.Role != "slide-right" {
+		t.Errorf("unexpected right member: %+v", rightMember)
+	}
+	// Right member anchorX is "max" with offset -10mm. On 600mm width, x translation should be 590mm
+	if rightMember.LocalTransform.TranslationMm[0] != 590 {
+		t.Errorf("right member X translation = %f, want 590", rightMember.LocalTransform.TranslationMm[0])
+	}
+	if rightMember.AssetID == nil || *rightMember.AssetID != "asset-slide-r" {
+		t.Errorf("right member missing expected visual asset pin: %+v", rightMember.AssetID)
+	}
+}
+
