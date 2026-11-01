@@ -116,6 +116,8 @@ export function optionGroupKindLabel(kind: OptionGroupKind): string {
 
 /**
  * OPT-02: members available for a group kind (active catalog items only by default).
+ * #1436: kit design parts never list for hardware groups — the part is not
+ * purchasable on its own, the whole kit travels (owner decision 10-31).
  */
 export function membersForKind(
   kind: OptionGroupKind,
@@ -130,7 +132,7 @@ export function membersForKind(
     kind === 'board'
       ? catalogs.materials
       : kind === 'hardware'
-        ? catalogs.hardware
+        ? catalogs.hardware.filter((h) => !h.kitHardwareId)
         : catalogs.edges;
   return filterActiveForPicker(source, options).map((item) => ({
     id: item.id,

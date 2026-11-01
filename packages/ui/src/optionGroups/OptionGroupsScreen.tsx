@@ -561,6 +561,12 @@ export function OptionGroupsScreen({
             <legend className="catalog-form__section-title">
               Miembros ({optionGroupKindLabel(draft.kind).toLowerCase()})
             </legend>
+            {draft.kind === 'hardware' ? (
+              <p className="catalog-form__hint">
+                Las partes de diseño de un juego de herrajes no se listan: se
+                compran siempre con el juego completo.
+              </p>
+            ) : null}
             {memberCandidates.length === 0 ? (
               <p className="catalog-empty">
                 No hay ítems activos de este tipo en el catálogo.

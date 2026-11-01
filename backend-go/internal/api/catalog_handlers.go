@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
@@ -457,6 +458,73 @@ func (s *Server) validateHardwareKitLink(ctx context.Context, h *domain.Hardware
 	return nil
 }
 
+// kitPartHardwareCodes returns the codes of the given hardware ids that are
+// design parts of a kit (kit_hardware_id set). #1436: a part is never
+// purchasable on its own — the whole kit travels — so it can neither be an
+// option-group member nor a fixed module hardware line.
+func (s *Server) kitPartHardwareCodes(ctx context.Context, ids map[string]bool) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	list, err := s.Store.ListHardwares(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var codes []string
+	for i := range list {
+		h := &list[i]
+		if ids[h.ID] && h.KitHardwareID != nil && *h.KitHardwareID != "" {
+			codes = append(codes, h.Code)
+		}
+	}
+	sort.Strings(codes)
+	return codes, nil
+}
+
+// respondKitPartGuard writes the typed 422 shared by the option-group and
+// module hardware-line guards (#1436, owner decision 10-31: fail-closed).
+func respondKitPartGuard(w http.ResponseWriter, code string, codes []string) {
+	respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+		"code":    code,
+		"message": fmt.Sprintf("las partes de diseño de un juego no se compran por sí solas (el juego completo viaja junto): %s", strings.Join(codes, ", ")),
+	})
+}
+
+// validateOptionGroupKitParts rejects hardware option groups whose members
+// include kit design parts (#1436).
+func (s *Server) validateOptionGroupKitParts(w http.ResponseWriter, r *http.Request, og *domain.OptionGroup) bool {
+	if og.Kind != "hardware" || len(og.OptionIDs) == 0 {
+		return true
+	}
+	ids := make(map[string]bool, len(og.OptionIDs))
+	for _, id := range og.OptionIDs {
+		ids[id] = true
+	}
+	codes, err := s.kitPartHardwareCodes(r.Context(), ids)
+	if err != nil {
+		respondWithInternalError(w, err, "handler")
+		return false
+	}
+	if len(codes) > 0 {
+		respondKitPartGuard(w, "OPTION_GROUP_KIT_PART", codes)
+		return false
+	}
+	return true
+}
+
+// moduleFixedHardwareIDs collects the hardware ids of fixed module hardware
+// lines (optionRole-resolved lines carry no id and resolve through guarded
+// groups instead).
+func moduleFixedHardwareIDs(m *domain.Module) map[string]bool {
+	ids := map[string]bool{}
+	for _, line := range m.HardwareLines {
+		if line.HardwareID != "" {
+			ids[line.HardwareID] = true
+		}
+	}
+	return ids
+}
+
 // --- HARDWARES ---
 
 func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
@@ -553,13 +621,33 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var h domain.Hardware
-		if !decodeJSONBody(w, r, &h) {
+		present, ok := decodeJSONBodyKeys(w, r, &h)
+		if !ok {
 			return
 		}
 		if err := domain.ValidateHardwareDesignParts(h.DesignParts); err != nil {
 			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
 				"code":    "HARDWARE_DESIGN_PARTS_INVALID",
 				"message": err.Error(),
+			})
+			return
+		}
+		// cur doubles as the kit-unlink guard snapshot and the media-cleanup
+		// snapshot for the replaced file.
+		cur, curErr := s.Store.GetHardwareByID(r.Context(), id)
+		if curErr != nil || cur == nil {
+			// Nonexistent id: keep flowing so UpdateHardware produces the
+			// canonical 404 below.
+			cur = nil
+		}
+		// #1436: fail-closed silent unlink. A PUT that OMITS kit_hardware_id
+		// must not clear an existing link (a partial GET→PUT client lost the
+		// wizard's link this way in the 10-31 session). Echo the id to keep
+		// the link; an explicit null is the deliberate unlink.
+		if cur != nil && cur.KitHardwareID != nil && *cur.KitHardwareID != "" && !present["kit_hardware_id"] {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "HARDWARE_KIT_LINK_REQUIRED",
+				"message": fmt.Sprintf("«%s» es parte de un juego de herrajes: reenviá kit_hardware_id (el mismo id para conservar el vínculo, null explícito para desvincularlo)", cur.Code),
 			})
 			return
 		}
@@ -579,8 +667,7 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		// Snapshot current media URL so we can clean up the replaced file after
 		// a successful commit.
 		prevImage := ""
-		cur, err := s.Store.GetHardwareByID(r.Context(), id)
-		if err == nil && cur != nil {
+		if cur != nil {
 			prevImage = cur.ImageURL
 		}
 		// #667 M1: the visual asset binding is resolved and validated before
@@ -596,7 +683,7 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		} else if !s.resolveHardwareVisualBindingForWrite(r, w, &h) {
 			return
 		}
-		err = s.Store.UpdateHardware(r.Context(), id, expectedVersion, &h)
+		err := s.Store.UpdateHardware(r.Context(), id, expectedVersion, &h)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
@@ -691,6 +778,11 @@ func (s *Server) HandleOptionGroups(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &og) {
 			return
 		}
+		// #1436: a kit design part is never individually purchasable — it
+		// cannot become an option (the owner decision from the 10-31 session).
+		if !s.validateOptionGroupKitParts(w, r, &og) {
+			return
+		}
 		err := s.Store.CreateOptionGroup(r.Context(), &og)
 		if err != nil {
 			if isDuplicateKey(err) {
@@ -734,6 +826,11 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 		}
 		var og domain.OptionGroup
 		if !decodeJSONBody(w, r, &og) {
+			return
+		}
+		// #1436: same fail-closed guard on replace — a payload keeping a kit
+		// part as member is rejected so existing rows must be cleaned up.
+		if !s.validateOptionGroupKitParts(w, r, &og) {
 			return
 		}
 		err := s.Store.UpdateOptionGroup(r.Context(), id, expectedVersion, &og)

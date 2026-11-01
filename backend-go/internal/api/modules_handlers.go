@@ -34,6 +34,27 @@ func (s *Server) requireGeometryAuthoringFor(w http.ResponseWriter, r *http.Requ
 	return true
 }
 
+// validateModuleHardwareLines rejects module writes whose fixed hardware
+// lines reference kit design parts (#1436): the part is not purchasable on
+// its own, the whole kit does. OptionRole-resolved lines resolve through
+// option groups, which carry the same guard.
+func (s *Server) validateModuleHardwareLines(w http.ResponseWriter, r *http.Request, m *domain.Module) bool {
+	ids := moduleFixedHardwareIDs(m)
+	if len(ids) == 0 {
+		return true
+	}
+	codes, err := s.kitPartHardwareCodes(r.Context(), ids)
+	if err != nil {
+		respondWithInternalError(w, err, "handler")
+		return false
+	}
+	if len(codes) > 0 {
+		respondKitPartGuard(w, "MODULE_HARDWARE_KIT_PART", codes)
+		return false
+	}
+	return true
+}
+
 func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -50,6 +71,11 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 		}
 		var m domain.Module
 		if !decodeJSONBody(w, r, &m) {
+			return
+		}
+		// #1436: a fixed hardware line cannot point at a kit design part —
+		// the part is not purchasable on its own (the kit travels together).
+		if !s.validateModuleHardwareLines(w, r, &m) {
 			return
 		}
 		err := s.Store.CreateModule(r.Context(), &m)
@@ -113,6 +139,10 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 		}
 		var m domain.Module
 		if !decodeJSONBody(w, r, &m) {
+			return
+		}
+		// #1436: same fail-closed guard as create on replace.
+		if !s.validateModuleHardwareLines(w, r, &m) {
 			return
 		}
 		// cur doubles as the media-cleanup snapshot for the replaced file.
