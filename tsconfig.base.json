@@ -16,6 +16,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "baseUrl": ".",
     "paths": {
       "@granete/domain": ["./packages/domain/src/index.ts"],
       "@granete/domain/fixtures": [

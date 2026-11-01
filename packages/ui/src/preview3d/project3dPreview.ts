@@ -6,7 +6,6 @@ import type {
   Agregado,
   Catalog,
   Hardware,
-  MaterialBoard,
   Module,
   ModuleBaseMode,
   ModuleComponentInstance,
@@ -14,7 +13,6 @@ import type {
   Project,
   ProjectItem,
   ProjectedAssembly,
-  PublishedAssemblySnapshot,
   ResolvedBoardPart,
   ResolvedModuleAssembly,
   Structure,
@@ -660,12 +658,14 @@ export function resolveModuleHardwarePlacements(
                 }
                 const shiftedX =
                   xMm <= w / 2 ? xMm + sideThicknessMm : xMm - sideThicknessMm;
-                const { xFormula: _omit, ...restPos } = placement.relativePosition;
                 effectivePlacement = {
                   ...placement,
                   relativePosition: {
-                    ...restPos,
                     xMm: shiftedX,
+                    yMm: placement.relativePosition.yMm,
+                    ...(placement.relativePosition.yFormula
+                      ? { yFormula: placement.relativePosition.yFormula }
+                      : {}),
                   },
                 };
               }
