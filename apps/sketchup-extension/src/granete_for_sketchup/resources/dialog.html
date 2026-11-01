@@ -1623,6 +1623,7 @@
             if (!payload || payload.source !== "server" || rows.length === 0) {
               card.style.display = "none";
               body.innerHTML = "";
+              window.GraneteUI.hardwareAssetPrepPendingNote = null;
               return;
             }
             card.style.display = "block";

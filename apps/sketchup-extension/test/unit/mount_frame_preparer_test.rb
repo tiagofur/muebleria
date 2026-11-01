@@ -667,7 +667,7 @@ class MountFramePreparerTest < Minitest::Test
     controller.send(:process_derive_response, nil, {
                       'status' => 422,
                       'headers' => {},
-                      'body' => { 'error' => { 'message' => 'marco inválido' } }
+                      'body' => { 'code' => 'HARDWARE_ASSET_CONFLICT', 'message' => 'marco inválido' }
                     })
 
     assert_empty saved
@@ -687,11 +687,14 @@ class MountFramePreparerTest < Minitest::Test
       auth_provider: FakeAuthProvider.new,
       logger: logger
     )
-    def transport.request(req, _authorization_header: nil)
-      @requests << req
+    def transport.request(req, authorization_header: nil)
+      @requests << req.merge('auth' => authorization_header)
       { 'status' => 404, 'headers' => {}, 'body' => nil }
     end
 
     assert_nil controller.send(:fetch_asset, 'asset-missing')
+    # The call must reach the transport with auth — an ArgumentError here was
+    # silently swallowed by fetch_asset's rescue (#1448 review round 2).
+    assert_equal 'Bearer fake-token', transport.requests.last['auth']
   end
 end

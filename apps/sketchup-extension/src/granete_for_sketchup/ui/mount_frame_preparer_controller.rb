@@ -293,9 +293,12 @@ module Granete
             body.is_a?(Hash) && (body['id'] || body['revision_number'])
         end
 
+        # The derive API rejects with the FLAT openapi ApiError {code, message};
+        # the nested {error: {message}} shape is tolerated but never expected.
         def derive_error_message(body, resp)
+          return body['message'] if body.is_a?(Hash) && body['message'].is_a?(String)
           return body['error']['message'] if body.is_a?(Hash) && body['error'].is_a?(Hash)
-          return resp['error']['message'] if resp.is_a?(Hash) && resp['error'].is_a?(Hash)
+          return resp['message'] if resp.is_a?(Hash) && resp['message'].is_a?(String)
 
           'Error al guardar la revisión derivada en el servidor.'
         end
