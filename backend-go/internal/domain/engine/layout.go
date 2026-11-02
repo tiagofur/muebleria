@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -569,7 +570,11 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 
 	for _, agrInst := range agregadoInstances {
 		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
-		if !ok || len(agr.RigidMembers) == 0 {
+		if !ok {
+			continue
+		}
+		agr = syncAgregadoRigidMembersFromCatalog(agr, catalog)
+		if len(agr.RigidMembers) == 0 {
 			continue
 		}
 
@@ -697,6 +702,131 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 		}
 	}
 	return assemblies
+}
+
+func parseKitPartPlacementLabelGo(label string) (domain.AssemblyAxisRef, float64, float64, float64, bool) {
+	if !strings.HasPrefix(label, "pos:") {
+		return "", 0, 0, 0, false
+	}
+	parts := strings.Split(strings.TrimPrefix(label, "pos:"), ":")
+	if len(parts) != 4 {
+		return "", 0, 0, 0, false
+	}
+	var xRef domain.AssemblyAxisRef
+	switch parts[0] {
+	case "min":
+		xRef = domain.AxisRefMin
+	case "max":
+		xRef = domain.AxisRefMax
+	case "center":
+		xRef = domain.AxisRefCenter
+	default:
+		return "", 0, 0, 0, false
+	}
+	xOff, errX := strconv.ParseFloat(parts[1], 64)
+	yOff, errY := strconv.ParseFloat(parts[2], 64)
+	zOff, errZ := strconv.ParseFloat(parts[3], 64)
+	if errX != nil || errY != nil || errZ != nil {
+		return "", 0, 0, 0, false
+	}
+	return xRef, xOff, yOff, zOff, true
+}
+
+func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Catalog) domain.Agregado {
+	members := make([]domain.AgregadoRigidMember, 0, len(agr.RigidMembers))
+	existingHwIDs := make(map[string]bool, len(agr.RigidMembers))
+
+	for _, rm := range agr.RigidMembers {
+		if rm.Source.Fixed != nil && rm.Source.Fixed.HardwareID != "" {
+			existingHwIDs[rm.Source.Fixed.HardwareID] = true
+			if hw, ok := findHardware(catalog, rm.Source.Fixed.HardwareID); ok && len(hw.DesignParts) > 0 {
+				dp := hw.DesignParts[0]
+				if strings.TrimSpace(dp.ActorMembership) != "" {
+					rm.ActorMembership = strings.TrimSpace(dp.ActorMembership)
+				}
+				if xRef, xOff, yOff, zOff, okPos := parseKitPartPlacementLabelGo(dp.Label); okPos {
+					rm.Placement.X.Ref = xRef
+					rm.Placement.X.OffsetMm = xOff
+					rm.Placement.X.OffsetFormula = nil
+					rm.Placement.Y.OffsetMm = yOff
+					rm.Placement.Y.OffsetFormula = nil
+					rm.Placement.Z.OffsetMm = zOff
+					rm.Placement.Z.OffsetFormula = nil
+				}
+			}
+		}
+		members = append(members, rm)
+	}
+
+	if agr.CommercialKitHardwareID != nil && *agr.CommercialKitHardwareID != "" {
+		kitID := *agr.CommercialKitHardwareID
+		for _, hw := range catalog.Hardware {
+			if !hw.Active || hw.KitHardwareID == nil || *hw.KitHardwareID != kitID {
+				continue
+			}
+			if existingHwIDs[hw.ID] {
+				continue
+			}
+			actor := "body"
+			upperCode := strings.ToUpper(hw.Code)
+			lowerName := strings.ToLower(hw.Name)
+			isRight := strings.HasSuffix(upperCode, "-D") || strings.Contains(lowerName, "derech")
+			isMoving := strings.Contains(upperCode, "-MOV") || strings.Contains(upperCode, "-BRAZO") ||
+				strings.Contains(lowerName, "móvil") || strings.Contains(lowerName, "movil") || strings.Contains(lowerName, "brazo")
+			if isMoving {
+				if strings.Contains(strings.ToUpper(agr.Code), "PUERTA") || strings.Contains(strings.ToUpper(agr.Code), "PUE") {
+					actor = "actor:door"
+				} else {
+					actor = "actor:drawer"
+				}
+			}
+			xRef := domain.AxisRefMin
+			xOff := 10.0
+			if isMoving && actor == "actor:drawer" {
+				xOff = 35.0
+			}
+			if isRight {
+				xRef = domain.AxisRefMax
+				xOff = -xOff
+			}
+			yOff, zOff := 0.0, 0.0
+			if len(hw.DesignParts) > 0 {
+				dp := hw.DesignParts[0]
+				if strings.TrimSpace(dp.ActorMembership) != "" {
+					actor = strings.TrimSpace(dp.ActorMembership)
+				}
+				if parsedRef, px, py, pz, okPos := parseKitPartPlacementLabelGo(dp.Label); okPos {
+					xRef = parsedRef
+					xOff = px
+					yOff = py
+					zOff = pz
+				}
+			}
+			safeID := "part_" + strings.ToLower(strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(hw.Code))
+			role := "part"
+			if hw.PreviewShape != nil && *hw.PreviewShape != "" {
+				role = *hw.PreviewShape
+			}
+			members = append(members, domain.AgregadoRigidMember{
+				MemberID: safeID,
+				Role:     role,
+				Source: domain.RigidMemberSource{
+					Kind:  domain.RigidMemberSourceFixed,
+					Fixed: &domain.FixedHardwareSource{HardwareID: hw.ID},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: xRef, OffsetMm: xOff},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: yOff},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: zOff},
+				},
+				BOMRole:         domain.BOMRoleIncludedInKit,
+				ActorMembership: actor,
+			})
+		}
+	}
+
+	agr.RigidMembers = members
+	return agr
 }
 
 // boardPlacementLabel resolves the managed placement vocabulary a board or

@@ -544,4 +544,53 @@ describe('HardwareCatalog — kit con partes anidadas (#1422 owner)', () => {
     const synced = onUpdateAgregado.mock.calls[0]![0];
     expect(synced.rigidMembers.some((m: any) => m.source?.fixed?.hardwareId === 'hw-suelto-2')).toBe(true);
   });
+
+  it('oculta Partes del diseño (opcional) en kits y partes de kit, y permite configurar apertura y posición por parte', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    const onUpdateAgregado = vi.fn();
+    render(
+      <HardwareCatalog
+        hardware={[kit, copa, brazo]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        agregados={[agregado]}
+        onUpdateAgregado={onUpdateAgregado}
+      />,
+    );
+    await user.click(screen.getByRole('row', { name: /^HER-BIS-QA\b/ }));
+    await user.click(screen.getByRole('button', { name: /Editar HER-BIS-QA$/i }));
+
+    // En el kit NO debe aparecer la segunda sección "Partes del diseño (opcional)"
+    expect(screen.queryByTestId('hardware-design-parts-section')).toBeNull();
+
+    // Cada parte del juego muestra controles de apertura y lado/posición
+    const actorSelect = screen.getByTestId('hardware-form-kit-part-actor-HER-BIS-QA-COPA');
+    const xRefSelect = screen.getByTestId('hardware-form-kit-part-xref-HER-BIS-QA-COPA');
+    expect((actorSelect as HTMLSelectElement).value).toBe('body');
+    expect((xRefSelect as HTMLSelectElement).value).toBe('min');
+
+    await user.selectOptions(xRefSelect, 'max');
+    await vi.waitFor(() => {
+      expect(onUpdate).toHaveBeenCalledWith(
+        'copa-1',
+        expect.objectContaining({
+          designParts: [
+            expect.objectContaining({
+              actorMembership: 'body',
+              label: 'pos:max:-10:0:0',
+            }),
+          ],
+        }),
+      );
+      expect(onUpdateAgregado).toHaveBeenCalled();
+    });
+
+    // Al abrir la edición de una parte hija, muestra "Apertura y posición de esta parte" y oculta "Partes del diseño (opcional)"
+    await user.click(screen.getByTestId('hardware-form-kit-part-edit-HER-BIS-QA-BRAZO'));
+    expect(screen.getByTestId('hardware-part-kinematics-section')).toBeDefined();
+    expect(screen.queryByTestId('hardware-design-parts-section')).toBeNull();
+  });
 });

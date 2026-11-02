@@ -546,46 +546,187 @@ export function validateHardwareKitLink(
   }
 }
 
+export interface KitPartPlacementConfig {
+  readonly actorMembership: string;
+  readonly xRef: 'min' | 'max' | 'center';
+  readonly xOffsetMm: number;
+  readonly yOffsetMm: number;
+  readonly zOffsetMm: number;
+}
+
+const KIT_PART_POS_PREFIX = 'pos:';
+
+export function formatKitPartPlacementLabel(
+  cfg: Pick<KitPartPlacementConfig, 'xRef' | 'xOffsetMm' | 'yOffsetMm' | 'zOffsetMm'>,
+): string {
+  const xOff = Number.isFinite(cfg.xOffsetMm) ? cfg.xOffsetMm : 0;
+  const yOff = Number.isFinite(cfg.yOffsetMm) ? cfg.yOffsetMm : 0;
+  const zOff = Number.isFinite(cfg.zOffsetMm) ? cfg.zOffsetMm : 0;
+  return `${KIT_PART_POS_PREFIX}${cfg.xRef}:${xOff}:${yOff}:${zOff}`;
+}
+
+export function parseKitPartPlacementLabel(
+  label: string | undefined,
+): Pick<KitPartPlacementConfig, 'xRef' | 'xOffsetMm' | 'yOffsetMm' | 'zOffsetMm'> | null {
+  if (!label || !label.startsWith(KIT_PART_POS_PREFIX)) return null;
+  const parts = label.slice(KIT_PART_POS_PREFIX.length).split(':');
+  if (parts.length !== 4) return null;
+  const [rawRef, rawX, rawY, rawZ] = parts;
+  if (rawRef !== 'min' && rawRef !== 'max' && rawRef !== 'center') return null;
+  const xOffsetMm = Number(rawX);
+  const yOffsetMm = Number(rawY);
+  const zOffsetMm = Number(rawZ);
+  if (!Number.isFinite(xOffsetMm) || !Number.isFinite(yOffsetMm) || !Number.isFinite(zOffsetMm)) {
+    return null;
+  }
+  return { xRef: rawRef, xOffsetMm, yOffsetMm, zOffsetMm };
+}
+
+export function inferDefaultKitPartConfig(
+  part: { readonly code: string; readonly name: string; readonly previewShape?: string },
+  agregadoCode = '',
+): KitPartPlacementConfig {
+  const isRight = /-D\b|der|derech/i.test(part.code) || /derech/i.test(part.name);
+  const isMoving = /-MOV\b|mov|móvil|movil|brazo/i.test(part.code) || /móvil|movil|brazo/i.test(part.name);
+  const isCenter = /centr/i.test(part.code) || /centr/i.test(part.name) || /jaladera|tirador/i.test(part.name);
+  const isDoor =
+    agregadoCode.toUpperCase().includes('PUERTA') ||
+    agregadoCode.toUpperCase().includes('PUE') ||
+    /puerta|bisagra|-copa|-brazo/i.test(`${part.code} ${part.name}`) ||
+    part.previewShape === 'hinge';
+
+  const xRef: 'min' | 'max' | 'center' = isCenter ? 'center' : isRight ? 'max' : 'min';
+  const offsetSign = isRight ? -1 : 1;
+  const actorMembership = isMoving
+    ? isDoor
+      ? 'actor:door'
+      : 'actor:drawer'
+    : 'body';
+  const baseOffset = isCenter ? 0 : 10;
+
+  return {
+    actorMembership,
+    xRef,
+    xOffsetMm: offsetSign * baseOffset,
+    yOffsetMm: 0,
+    zOffsetMm: 0,
+  };
+}
+
+export function resolveKitPartConfig(
+  part: {
+    readonly id?: string;
+    readonly code: string;
+    readonly name: string;
+    readonly previewShape?: string;
+    readonly designParts?: readonly { readonly componentName: string; readonly actorMembership: string; readonly label?: string }[];
+  },
+  agregado?: { readonly code?: string; readonly rigidMembers?: readonly any[] } | null,
+): KitPartPlacementConfig {
+  const fallback = inferDefaultKitPartConfig(part, agregado?.code ?? '');
+  const dp = part.designParts?.[0];
+  const parsedLabel = parseKitPartPlacementLabel(dp?.label);
+  const member = part.id
+    ? agregado?.rigidMembers?.find((m) => m.source?.fixed?.hardwareId === part.id)
+    : undefined;
+
+  const actorMembership =
+    (dp?.actorMembership && dp.actorMembership.trim()) ||
+    (member?.actorMembership && String(member.actorMembership).trim()) ||
+    fallback.actorMembership;
+
+  const memberXRef = member?.placement?.x?.ref;
+  const xRef: 'min' | 'max' | 'center' =
+    parsedLabel?.xRef ??
+    (memberXRef === 'min' || memberXRef === 'max' || memberXRef === 'center'
+      ? memberXRef
+      : fallback.xRef);
+
+  const xOffsetMm =
+    parsedLabel?.xOffsetMm ??
+    (typeof member?.placement?.x?.offsetMm === 'number' && Number.isFinite(member.placement.x.offsetMm)
+      ? member.placement.x.offsetMm
+      : fallback.xOffsetMm);
+
+  const yOffsetMm =
+    parsedLabel?.yOffsetMm ??
+    (typeof member?.placement?.y?.offsetMm === 'number' && Number.isFinite(member.placement.y.offsetMm)
+      ? member.placement.y.offsetMm
+      : fallback.yOffsetMm);
+
+  const zOffsetMm =
+    parsedLabel?.zOffsetMm ??
+    (typeof member?.placement?.z?.offsetMm === 'number' && Number.isFinite(member.placement.z.offsetMm)
+      ? member.placement.z.offsetMm
+      : fallback.zOffsetMm);
+
+  return {
+    actorMembership,
+    xRef,
+    xOffsetMm,
+    yOffsetMm,
+    zOffsetMm,
+  };
+}
+
 /**
  * Sincroniza un Agregado con la lista efectiva de partes vinculadas a su Kit (#1422 / #1435).
- * - Preserva los miembros rígidos existentes.
- * - Si una parte vinculada no tiene miembro en la receta, infiere un slot predeterminado
- *   (lado izquierdo/derecho por sufijo o nombre, fija al cuerpo o móvil si es corredera/brazo).
+ * - Preserva los miembros rígidos existentes y actualiza su apertura/posición si la parte declara designParts[0].
+ * - Si una parte vinculada no tiene miembro en la receta, infiere o toma su slot configurado.
  * - Si una parte ya no está vinculada, remueve su miembro de la receta.
  */
 export function syncAgregadoWithKitParts(
   agregado: { readonly id: string; readonly code: string; readonly commercialKitHardwareId?: string; readonly rigidMembers?: readonly any[] },
-  kitParts: readonly { readonly id: string; readonly code: string; readonly name: string; readonly previewShape?: string }[],
+  kitParts: readonly {
+    readonly id: string;
+    readonly code: string;
+    readonly name: string;
+    readonly previewShape?: string;
+    readonly designParts?: readonly { readonly componentName: string; readonly actorMembership: string; readonly label?: string }[];
+  }[],
 ): any {
   const currentMembers = agregado.rigidMembers ?? [];
-  const partIds = new Set(kitParts.map((p) => p.id));
+  const partById = new Map(kitParts.map((p) => [p.id, p] as const));
 
-  // 1. Filtrar miembros de partes que ya no pertenecen al kit
-  const keptMembers = currentMembers.filter((m) => {
-    const hwId = m.source?.fixed?.hardwareId;
-    if (!hwId) return true;
-    return partIds.has(hwId);
-  });
+  // 1. Filtrar miembros de partes que ya no pertenecen al kit y sincronizar cambios explícitos
+  const keptMembers = currentMembers
+    .filter((m) => {
+      const hwId = m.source?.fixed?.hardwareId;
+      if (!hwId) return true;
+      return partById.has(hwId);
+    })
+    .map((m) => {
+      const hwId = m.source?.fixed?.hardwareId;
+      const part = hwId ? partById.get(hwId) : undefined;
+      const dp = part?.designParts?.[0];
+      if (!part || !dp) return m;
+      const parsedPos = parseKitPartPlacementLabel(dp.label);
+      const nextActor = dp.actorMembership?.trim() || m.actorMembership;
+      if (!parsedPos) {
+        return nextActor ? { ...m, actorMembership: nextActor } : m;
+      }
+      return {
+        ...m,
+        actorMembership: nextActor,
+        placement: {
+          ...(m.placement ?? {}),
+          x: { ...(m.placement?.x ?? {}), ref: parsedPos.xRef, offsetMm: parsedPos.xOffsetMm },
+          y: { ...(m.placement?.y ?? {}), ref: m.placement?.y?.ref ?? 'min', offsetMm: parsedPos.yOffsetMm },
+          z: { ...(m.placement?.z ?? {}), ref: m.placement?.z?.ref ?? 'min', offsetMm: parsedPos.zOffsetMm },
+        },
+      };
+    });
 
   const existingHwIds = new Set(
     keptMembers.map((m) => m.source?.fixed?.hardwareId).filter(Boolean),
   );
 
-  // 2. Para cada parte del kit que no esté en la receta, inferir un slot inicial
+  // 2. Para cada parte del kit que no esté en la receta, usar su configuración o inferir un slot inicial
   const newMembers: any[] = [];
   for (const part of kitParts) {
     if (existingHwIds.has(part.id)) continue;
 
-    const isRight = /-D\b|der|derech/i.test(part.code) || /derech/i.test(part.name);
-    const isMoving = /-MOV\b|mov|móvil|brazo/i.test(part.code) || /móvil|brazo/i.test(part.name);
-    const isCenter = /centr/i.test(part.code) || /centr/i.test(part.name) || /jaladera|tirador/i.test(part.name);
-
-    const anchorXRef = isCenter ? 'center' : isRight ? 'max' : 'min';
-    const offsetSign = isRight ? -1 : 1;
-    const actorMembership = isMoving
-      ? (agregado.code.includes('PUERTA') ? 'actor:door' : 'actor:drawer')
-      : 'body';
-
+    const cfg = resolveKitPartConfig(part, agregado);
     const safeMemberId = `part_${part.code.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
 
     newMembers.push({
@@ -593,12 +734,12 @@ export function syncAgregadoWithKitParts(
       role: part.previewShape || 'part',
       source: { kind: 'fixed', fixed: { hardwareId: part.id } },
       placement: {
-        x: { ref: anchorXRef, offsetMm: offsetSign * 10 },
-        y: { ref: 'min', offsetMm: 0 },
-        z: { ref: 'min', offsetMm: 0 },
+        x: { ref: cfg.xRef, offsetMm: cfg.xOffsetMm },
+        y: { ref: 'min', offsetMm: cfg.yOffsetMm },
+        z: { ref: 'min', offsetMm: cfg.zOffsetMm },
       },
       bomRole: 'included_in_kit',
-      actorMembership,
+      actorMembership: cfg.actorMembership,
     });
   }
 

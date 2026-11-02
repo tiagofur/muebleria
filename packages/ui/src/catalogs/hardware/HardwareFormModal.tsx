@@ -7,19 +7,37 @@
  */
 
 import {
-  useState,
   type Dispatch,
   type FormEvent,
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { HardwareUnit , Hardware } from '@granete/domain';
+import {
+  formatKitPartPlacementLabel,
+  resolveKitPartConfig,
+  type Agregado,
+  type Hardware,
+  type HardwareUnit,
+  type KitPartPlacementConfig,
+} from '@granete/domain';
 import type { HardwareAssetService } from '@granete/storage';
 import { CatalogImage, Modal } from '../../common';
 import { Hardware3DSection } from './Hardware3DSection';
 import { HardwareMachiningSection } from './HardwareMachiningSection';
 import { HardwareDesignPartsSection } from './HardwareDesignPartsSection';
 import { UNIT_LABELS, type HardwareDraft } from './hardwareDraft';
+
+const KIT_PART_ACTOR_OPTIONS = [
+  { value: 'body', label: 'Fija al mueble (no se mueve)' },
+  { value: 'actor:drawer', label: 'Móvil — sale con el cajón' },
+  { value: 'actor:door', label: 'Móvil — abre con la puerta' },
+] as const;
+
+const KIT_PART_XREF_OPTIONS = [
+  { value: 'min', label: 'Izquierda' },
+  { value: 'max', label: 'Derecha' },
+  { value: 'center', label: 'Centro' },
+] as const;
 
 export interface HardwareFormModalProps {
   /** K4 #1032: saved identity of the edited item, shown in the title. */
@@ -39,6 +57,8 @@ export interface HardwareFormModalProps {
   readonly onClose: () => void;
   /** #1422 owner: partes de diseño del kit en edición — indentadas dentro del formulario. */
   readonly kitParts?: readonly Hardware[];
+  /** Receta (Agregado) vinculada al kit actual o al kit padre de la parte en edición. */
+  readonly kitRecipe?: Agregado;
   /** Catálogo completo disponible para vincular partes existentes (#1435 / #1437). */
   readonly availableHardware?: readonly Hardware[];
   /** Abre la edición de una parte (el padre cierra este modal y abre la de la parte). */
@@ -49,6 +69,8 @@ export interface HardwareFormModalProps {
   readonly onAddKitPart?: () => void;
   /** Vincula un herraje existente del catálogo como parte de este juego (#1435 / #1437). */
   readonly onLinkExistingPart?: (hardwareId: string) => void;
+  /** Actualiza la apertura y posición de una parte directamente desde el modal del kit. */
+  readonly onUpdateKitPartConfig?: (part: Hardware, next: KitPartPlacementConfig) => void;
 }
 
 export function HardwareFormModal({
@@ -67,12 +89,46 @@ export function HardwareFormModal({
   onClose,
   identity,
   kitParts,
+  kitRecipe,
   availableHardware,
   onEditKitPart,
   onRemoveKitPart,
   onAddKitPart,
   onLinkExistingPart,
+  onUpdateKitPartConfig,
 }: HardwareFormModalProps): ReactNode {
+  const isKit = draft.unit === 'set' || Boolean(kitParts && kitParts.length > 0);
+  const isKitChildPart = Boolean(draft.kitHardwareId);
+  const childPartConfig = isKitChildPart
+    ? resolveKitPartConfig(
+        {
+          id: editingId ?? undefined,
+          code: draft.code,
+          name: draft.name,
+          previewShape: draft.previewShape || undefined,
+          designParts: draft.designParts,
+        },
+        kitRecipe,
+      )
+    : null;
+
+  const updateChildPartConfig = (patch: Partial<KitPartPlacementConfig>) => {
+    if (!childPartConfig) return;
+    const next: KitPartPlacementConfig = { ...childPartConfig, ...patch };
+    const compName = draft.code.trim() || 'part';
+    setDraft((prev) => ({
+      ...prev,
+      designParts: [
+        {
+          componentName: prev.code.trim() || compName,
+          actorMembership: next.actorMembership,
+          label: formatKitPartPlacementLabel(next),
+          finishKey: '',
+        },
+      ],
+    }));
+  };
+
   return (
     <Modal
       open={open}
@@ -164,44 +220,160 @@ export function HardwareFormModal({
           </div>
         </fieldset>
 
-        {editingId && (draft.unit === 'set' || (kitParts && kitParts.length > 0)) && onEditKitPart ? (
+        {editingId && isKit && onEditKitPart ? (
           <fieldset className="catalog-form__section" data-testid="hardware-form-kit-parts">
             <legend className="catalog-form__section-title">
               Partes de este juego ({(kitParts ?? []).length})
             </legend>
+            <p className="catalog-form__hint" style={{ marginBottom: '0.5rem' }}>
+              Definí acá cómo se comporta cada parte al abrir (fija al mueble o móvil con el cajón/puerta) y su lado/posición en milímetros. Para subir o cambiar el archivo 3D (.skp) de una parte, tocá «Editar».
+            </p>
             {(kitParts ?? []).length === 0 ? (
               <p className="catalog-form__hint" data-testid="hardware-form-kit-parts-empty">
                 Este juego todavía no tiene partes vinculadas. Podés agregar una parte nueva o vincular una existente.
               </p>
             ) : null}
-            {(kitParts ?? []).map((part) => (
-              <div
-                key={part.id}
-                className="catalog-kit-part-row"
-                data-testid={`hardware-form-kit-part-${part.code}`}
-              >
-                <span className="catalog-kit-part-row__code">{part.code}</span>
-                <span className="catalog-kit-part-row__name">{part.name}</span>
-                <button
-                  type="button"
-                  className="btn btn--sm"
-                  onClick={() => onEditKitPart(part)}
-                  data-testid={`hardware-form-kit-part-edit-${part.code}`}
+            {(kitParts ?? []).map((part) => {
+              const partCfg = resolveKitPartConfig(part, kitRecipe);
+              return (
+                <div
+                  key={part.id}
+                  className="catalog-kit-part-row"
+                  style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.5rem' }}
+                  data-testid={`hardware-form-kit-part-${part.code}`}
                 >
-                  Editar
-                </button>
-                {onRemoveKitPart ? (
-                  <button
-                    type="button"
-                    className="btn btn--sm btn--danger"
-                    onClick={() => onRemoveKitPart(part)}
-                    data-testid={`hardware-form-kit-part-remove-${part.code}`}
-                  >
-                    Quitar del juego
-                  </button>
-                ) : null}
-              </div>
-            ))}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <span className="catalog-kit-part-row__code">{part.code}</span>
+                    <span className="catalog-kit-part-row__name" style={{ flex: 1 }}>{part.name}</span>
+                    {part.visualAsset ? (
+                      <span className="status-badge status-badge--info">
+                        {(part.visualAsset.representation ?? 'skp').toUpperCase()}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="btn btn--sm"
+                      onClick={() => onEditKitPart(part)}
+                      data-testid={`hardware-form-kit-part-edit-${part.code}`}
+                    >
+                      Editar
+                    </button>
+                    {onRemoveKitPart ? (
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--danger"
+                        onClick={() => onRemoveKitPart(part)}
+                        data-testid={`hardware-form-kit-part-remove-${part.code}`}
+                      >
+                        Quitar del juego
+                      </button>
+                    ) : null}
+                  </div>
+                  {onUpdateKitPartConfig ? (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                        gap: '0.5rem',
+                        paddingTop: '0.35rem',
+                        borderTop: '1px solid var(--border-subtle, #e2e8f0)',
+                      }}
+                    >
+                      <label className="catalog-form__field" style={{ marginBottom: 0 }}>
+                        <span style={{ fontSize: '0.78rem' }}>Al abrir</span>
+                        <select
+                          className="select select--sm"
+                          value={partCfg.actorMembership}
+                          onChange={(e) =>
+                            onUpdateKitPartConfig(part, {
+                              ...partCfg,
+                              actorMembership: e.target.value,
+                            })
+                          }
+                          data-testid={`hardware-form-kit-part-actor-${part.code}`}
+                        >
+                          {KIT_PART_ACTOR_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="catalog-form__field" style={{ marginBottom: 0 }}>
+                        <span style={{ fontSize: '0.78rem' }}>Lado (X)</span>
+                        <select
+                          className="select select--sm"
+                          value={partCfg.xRef}
+                          onChange={(e) => {
+                            const nextRef = e.target.value as 'min' | 'max' | 'center';
+                            const absOff = Math.abs(partCfg.xOffsetMm);
+                            const nextOff =
+                              nextRef === 'max' ? -absOff : nextRef === 'min' ? absOff : 0;
+                            onUpdateKitPartConfig(part, {
+                              ...partCfg,
+                              xRef: nextRef,
+                              xOffsetMm: nextOff,
+                            });
+                          }}
+                          data-testid={`hardware-form-kit-part-xref-${part.code}`}
+                        >
+                          {KIT_PART_XREF_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="catalog-form__field" style={{ marginBottom: 0 }}>
+                        <span style={{ fontSize: '0.78rem' }}>Offset X (mm)</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={partCfg.xOffsetMm}
+                          onChange={(e) =>
+                            onUpdateKitPartConfig(part, {
+                              ...partCfg,
+                              xOffsetMm: Number(e.target.value) || 0,
+                            })
+                          }
+                          data-testid={`hardware-form-kit-part-xoffset-${part.code}`}
+                        />
+                      </label>
+                      <label className="catalog-form__field" style={{ marginBottom: 0 }}>
+                        <span style={{ fontSize: '0.78rem' }}>Offset Y (mm)</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={partCfg.yOffsetMm}
+                          onChange={(e) =>
+                            onUpdateKitPartConfig(part, {
+                              ...partCfg,
+                              yOffsetMm: Number(e.target.value) || 0,
+                            })
+                          }
+                          data-testid={`hardware-form-kit-part-yoffset-${part.code}`}
+                        />
+                      </label>
+                      <label className="catalog-form__field" style={{ marginBottom: 0 }}>
+                        <span style={{ fontSize: '0.78rem' }}>Offset Z (mm)</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={partCfg.zOffsetMm}
+                          onChange={(e) =>
+                            onUpdateKitPartConfig(part, {
+                              ...partCfg,
+                              zOffsetMm: Number(e.target.value) || 0,
+                            })
+                          }
+                          data-testid={`hardware-form-kit-part-zoffset-${part.code}`}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
               {onAddKitPart ? (
                 <button
@@ -243,6 +415,94 @@ export function HardwareFormModal({
                   </select>
                 </div>
               ) : null}
+            </div>
+          </fieldset>
+        ) : null}
+
+        {isKitChildPart && childPartConfig ? (
+          <fieldset
+            className="catalog-form__section"
+            data-testid="hardware-part-kinematics-section"
+          >
+            <legend className="catalog-form__section-title">
+              Apertura y posición de esta parte
+            </legend>
+            <p className="catalog-form__hint">
+              Configurá si esta pieza queda fija al mueble o se mueve al abrir, y en qué lado y posición se ubica.
+            </p>
+            <div className="catalog-form__row">
+              <label className="catalog-form__field">
+                <span>Al abrir</span>
+                <select
+                  value={childPartConfig.actorMembership}
+                  onChange={(e) => updateChildPartConfig({ actorMembership: e.target.value })}
+                  data-testid="hardware-part-kinematics-actor"
+                >
+                  {KIT_PART_ACTOR_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="catalog-form__field">
+                <span>Lado (Eje X)</span>
+                <select
+                  value={childPartConfig.xRef}
+                  onChange={(e) => {
+                    const nextRef = e.target.value as 'min' | 'max' | 'center';
+                    const absOff = Math.abs(childPartConfig.xOffsetMm);
+                    const nextOff =
+                      nextRef === 'max' ? -absOff : nextRef === 'min' ? absOff : 0;
+                    updateChildPartConfig({ xRef: nextRef, xOffsetMm: nextOff });
+                  }}
+                  data-testid="hardware-part-kinematics-xref"
+                >
+                  {KIT_PART_XREF_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="catalog-form__row">
+              <label className="catalog-form__field">
+                <span>Offset X (mm)</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={childPartConfig.xOffsetMm}
+                  onChange={(e) =>
+                    updateChildPartConfig({ xOffsetMm: Number(e.target.value) || 0 })
+                  }
+                  data-testid="hardware-part-kinematics-xoffset"
+                />
+              </label>
+              <label className="catalog-form__field">
+                <span>Offset Y — Profundidad (mm)</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={childPartConfig.yOffsetMm}
+                  onChange={(e) =>
+                    updateChildPartConfig({ yOffsetMm: Number(e.target.value) || 0 })
+                  }
+                  data-testid="hardware-part-kinematics-yoffset"
+                />
+              </label>
+              <label className="catalog-form__field">
+                <span>Offset Z — Altura (mm)</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={childPartConfig.zOffsetMm}
+                  onChange={(e) =>
+                    updateChildPartConfig({ zOffsetMm: Number(e.target.value) || 0 })
+                  }
+                  data-testid="hardware-part-kinematics-zoffset"
+                />
+              </label>
             </div>
           </fieldset>
         ) : null}
@@ -330,8 +590,10 @@ export function HardwareFormModal({
           setDraft={setDraft}
         />
 
-        {/* #1417: internal design parts (by SKP component name). */}
-        <HardwareDesignPartsSection draft={draft} setDraft={setDraft} />
+        {/* #1417: internal design parts (by SKP component name) — only for standalone non-kit hardware. */}
+        {!isKit && !isKitChildPart ? (
+          <HardwareDesignPartsSection draft={draft} setDraft={setDraft} />
+        ) : null}
       </form>
     </Modal>
   );
