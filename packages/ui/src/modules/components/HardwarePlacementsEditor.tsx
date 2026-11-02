@@ -32,6 +32,8 @@ export type HardwarePlacementsEditorProps = {
     next: readonly HardwarePlacement[] | undefined,
   ) => void;
   readonly testIdSuffix?: string;
+  /** #1451: pieza contenedora — el título nombra el contexto («Herraje 2 · en LAT»). */
+  readonly containerLabel?: string;
 };
 
 const ANCHOR_FACE_OPTIONS: readonly { value: AnchorFace; label: string }[] = [
@@ -68,6 +70,7 @@ export function HardwarePlacementsEditor({
   optionGroups,
   onChange,
   testIdSuffix,
+  containerLabel,
 }: HardwarePlacementsEditorProps): ReactNode {
   const suffix = testIdSuffix ? `-${testIdSuffix}` : '';
   const pickerItems = catalogHardware.map((h) => ({
@@ -160,7 +163,9 @@ export function HardwarePlacementsEditor({
             >
               <div className="module-part-card__header">
                 <span className="module-part-card__title">
-                  Herraje {idx + 1}
+                  {containerLabel
+                    ? `Herraje ${idx + 1} · en ${containerLabel}`
+                    : `Herraje ${idx + 1}`}
                 </span>
                 <button
                   type="button"
