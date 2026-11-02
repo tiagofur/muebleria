@@ -141,4 +141,23 @@ describe('isAgregadoDraft acepta los campos vivos de la receta (#1460)', () => {
     expect(isAgregadoDraft(draft)).toBe(true);
     expect(isAgregadoDraft(JSON.parse(JSON.stringify(draft)))).toBe(true);
   });
+
+  it('un miembro con dimensionOverrides (mm|fórmula) valida fresco y persistido (#1460 F2)', () => {
+    const memberDims = {
+      ...member,
+      dimensionOverrides: { width: { mm: 500 }, depth: { formula: 'PD/10' } },
+    };
+    const draft = agregadoToDraft({
+      ...agregadoConReceta,
+      rigidMembers: [memberDims],
+    });
+    expect(isAgregadoDraft(draft)).toBe(true);
+    expect(isAgregadoDraft(JSON.parse(JSON.stringify(draft)))).toBe(true);
+
+    const back = draftToAgregado('agr-1', draft);
+    expect(back.rigidMembers?.[0]?.dimensionOverrides).toEqual({
+      width: { mm: 500 },
+      depth: { formula: 'PD/10' },
+    });
+  });
 });

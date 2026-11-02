@@ -7,7 +7,7 @@
  */
 
 import type { Dispatch, SetStateAction } from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgregadoRigidMember, Hardware } from '@granete/domain';
@@ -23,7 +23,7 @@ const catalog = [
   { id: 'kit-1', code: 'CORR-KIT', name: 'Corredera juego 500', active: true, unit: 'set' },
   { id: 'mov-i', code: 'CORR-MOV-I', name: 'Corredera móvil izq', active: true, unit: 'piece', kitHardwareId: 'kit-1' },
   { id: 'mov-d', code: 'CORR-MOV-D', name: 'Corredera móvil der', active: true, unit: 'piece', kitHardwareId: 'kit-1' },
-  { id: 'tir-1', code: 'TIR-200', name: 'Tirador 200', active: true, unit: 'piece' },
+  { id: 'tir-1', code: 'TIR-200', name: 'Tirador 200', active: true, unit: 'piece', dimensions: { widthMm: 450, heightMm: 45, depthMm: 13 } },
 ] as unknown as Hardware[];
 
 const kitMember = (memberId: string, hardwareId: string): AgregadoRigidMember =>
@@ -64,7 +64,7 @@ const draftWith = (
 function renderSection(
   draft: AgregadoDraft,
   onEditKit?: (id: string) => void,
-): void {
+): Dispatch<SetStateAction<AgregadoDraft>> {
   const setDraft = vi.fn() as unknown as Dispatch<SetStateAction<AgregadoDraft>>;
   render(
     <AgregadoCajonHardwareSection
@@ -76,6 +76,16 @@ function renderSection(
       testId="sec"
     />,
   );
+  return setDraft;
+}
+
+/** patchDraft usa actualizadores funcionales: aplica el último al draft base. */
+function lastDraftPatch(
+  setDraft: Dispatch<SetStateAction<AgregadoDraft>>,
+  base: AgregadoDraft,
+): AgregadoDraft {
+  const last = (setDraft as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0];
+  return typeof last === 'function' ? last(base) : (last as AgregadoDraft);
 }
 
 describe('Herrajes — tarjeta única del kit (#1460 F1)', () => {
@@ -153,5 +163,98 @@ describe('Receta — miembros del kit read-only (#1460 F1)', () => {
     expect(screen.queryByTestId('rec-member-0')).toBeNull();
     expect(screen.getByTestId('rec-member-1')).toBeTruthy();
     expect(screen.getByTestId('rec-member-1-id')).toBeTruthy();
+  });
+});
+
+describe('Herrajes — posición visible y dimensiones del herraje propio (#1460 F2)', () => {
+  it('X/Y/Z desde + desplazamiento están visibles sin expandir nada', () => {
+    renderSection(draftWith([ownMember()], null));
+    expect(screen.getByTestId('sec-member-0-anchor-x-ref')).toBeTruthy();
+    expect(screen.getByTestId('sec-member-0-anchor-y-ref')).toBeTruthy();
+    expect(screen.getByTestId('sec-member-0-anchor-z-ref')).toBeTruthy();
+    expect(screen.getByTestId('sec-member-0-anchor-x-offset')).toBeTruthy();
+  });
+
+  it('«Centrar» fija X: mínimo + PW/2 (acompaña el ancho, igual que Receta)', () => {
+    const setDraft = renderSection(draftWith([ownMember()], null));
+    fireEvent.click(screen.getByTestId('sec-member-0-center-x'));
+
+    const next = lastDraftPatch(setDraft, draftWith([ownMember()], null));
+    expect(next.rigidMembers?.[0]?.placement.x).toEqual({
+      ref: 'min',
+      offsetMm: 0,
+      offsetFormula: 'PW/2',
+    });
+  });
+
+  it('las dimensiones aceptan mm y fórmula por eje; vacío vuelve al catálogo', () => {
+    const base = draftWith([ownMember()], null);
+    const setDraft = renderSection(base);
+
+    fireEvent.change(screen.getByTestId('sec-member-0-dim-width'), {
+      target: { value: '500' },
+    });
+    const conMm = lastDraftPatch(setDraft, base);
+    expect(conMm.rigidMembers?.[0]?.dimensionOverrides).toEqual({
+      width: { mm: 500 },
+    });
+
+    // La fórmula en otro eje se acumula sobre el override existente (el form
+    // re-renderiza entre ediciones; el prop ya trae el width).
+    cleanup();
+    const conWidth = draftWith(
+      [{ ...ownMember(), dimensionOverrides: { width: { mm: 500 } } } as AgregadoRigidMember],
+      null,
+    );
+    const setDraft2 = renderSection(conWidth);
+    fireEvent.change(screen.getByTestId('sec-member-0-dim-depth'), {
+      target: { value: 'PD/10' },
+    });
+    const conFormula = lastDraftPatch(setDraft2, conWidth);
+    expect(conFormula.rigidMembers?.[0]?.dimensionOverrides).toEqual({
+      width: { mm: 500 },
+      depth: { formula: 'PD/10' },
+    });
+
+    // Vaciar el único eje activo elimina el override completo (catálogo).
+    cleanup();
+    const setDraft3 = renderSection(conWidth);
+    fireEvent.change(screen.getByTestId('sec-member-0-dim-width'), {
+      target: { value: '' },
+    });
+    const limpio = lastDraftPatch(setDraft3, conWidth);
+    expect(limpio.rigidMembers?.[0]?.dimensionOverrides).toBeUndefined();
+  });
+
+  it('muestra las medidas del catálogo como placeholder y el efectivo con override', () => {
+    renderSection(
+      draftWith([
+        {
+          ...ownMember(),
+          dimensionOverrides: { width: { mm: 500 } },
+        } as AgregadoRigidMember,
+      ], null),
+    );
+
+    const width = screen.getByTestId(
+      'sec-member-0-dim-width',
+    ) as HTMLInputElement;
+    expect(width.placeholder).toContain('450');
+    expect(screen.getByTestId('sec-member-0-dims-effective').textContent).toContain(
+      '500×45×13',
+    );
+  });
+
+  it('fórmula que evalúa negativo muestra error en la tarjeta', () => {
+    renderSection(
+      draftWith([
+        {
+          ...ownMember(),
+          dimensionOverrides: { width: { formula: 'PW - 99999' } },
+        } as AgregadoRigidMember,
+      ], null),
+    );
+    // draft vacío ⇒ PW=0 ⇒ 0 - 99999 = -99999 < 0.
+    expect(screen.getByTestId('sec-member-0-dim-width-error')).toBeTruthy();
   });
 });
