@@ -141,3 +141,9 @@ Diseño fijado:
 - V1: domain 2083/2083 (nuevo `hardwarePlacementAnchoring.contract.test.ts` 8 casos), ui 2402/2402 (HardwarePlacementsEditor 16/16 con 3 tests F2), Go full suite verde (incl. `TestHardwarePlacementAnchoringSharedContract`), rake verify 1483/0.
 - SketchUp: proxy centrado EN GEOMETRÍA (`build_hardware_proxy_box`: in-plano centrado, +Z outward) — el origen de instancia queda en el punto de cara (contrato 405 intacto); primer intento (trasladar la instancia) rompía material_rebuild_test y se revirtió. EXTENSION_VERSION 0.1.92.
 - Sin migración DB: xRef/yRef/hwAnchor viajan en el JSONB de overrides existente.
+
+### Cierre de aceptación de la issue (para Delivery: complete)
+
+- Ítem 4 (convención de origen por familia): `docs/architecture/hardware-mount-origin.md`.
+- Test TestUp del proxy centrado (`build_hardware_proxy_box`): in-plano centrado, cara en el plano de montaje; el tramo outward no es asercionable con el stub de pushpull (sin extrusión) y NO cambió en F2.
+- Metadata del PR corregida: `Closes #1453` + `Delivery: complete` (Refs+complete era inválida — la checker lo marcó).
