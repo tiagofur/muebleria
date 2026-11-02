@@ -65,6 +65,9 @@ export function createEmptyAgregadoDraft(): AgregadoDraft {
 const axisPlacementDraftRule = objectRule({
   ref: stringRule,
   offsetMm: numberRule,
+  // #1418: la fórmula reemplaza al offset numérico — un draft con fórmula
+  // que fallara acá reseteaba TODO el borrador en el restore de sesión.
+  offsetFormula: optionalRule(stringRule),
 });
 
 const anchorRuleDraftRule = objectRule({

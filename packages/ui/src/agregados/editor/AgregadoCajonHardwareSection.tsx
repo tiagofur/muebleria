@@ -28,6 +28,7 @@ import type {
 } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
+import { KitCommercialPicker } from './KitCommercialPicker';
 import type { AgregadoDraft } from '../agregadoDraft';
 
 export type AgregadoCajonHardwareSectionProps = {
@@ -78,6 +79,14 @@ export function AgregadoCajonHardwareSection({
 }: AgregadoCajonHardwareSectionProps): ReactNode {
   const members = draft.rigidMembers ?? [];
   const kitId = draft.commercialKitHardwareId ?? '';
+  // #1460: resumen de pendientes — «Kit con par izq/der» deja 4 tarjetas con
+  // herraje vacío a propósito; el fail-closed por tarjeta no cambia, pero el
+  // estado se narra como pendiente y no como catástrofe.
+  const pendingCount = members.filter(
+    (m) =>
+      m.source.kind === 'fixed' &&
+      !(m.source.fixed?.hardwareId ?? '').trim(),
+  ).length;
 
   const patchDraft = (patch: Partial<AgregadoDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -199,30 +208,19 @@ export function AgregadoCajonHardwareSection({
         </div>
       ) : null}
 
+      {/* #1460: mismo picker que Receta — única superficie para el kit, sólo
+          juegos reales (unit === 'set') y con feedback de sus partes. */}
       <div className="catalog-form__field">
-        <label className="catalog-form__label" htmlFor={`${testId}-kit`}>
-          Kit comercial (el juego que se vende junto)
-        </label>
-        <select
-          id={`${testId}-kit`}
-          className="catalog-form__select"
+        <KitCommercialPicker
+          catalogHardware={catalogHardware}
           value={kitId}
-          onChange={(e) =>
-            patchDraft({ commercialKitHardwareId: e.target.value || undefined })
+          onChange={(hardwareId) =>
+            patchDraft({ commercialKitHardwareId: hardwareId })
           }
-          data-testid={`${testId}-kit`}
-        >
-          <option value="">Sin kit (compra por herraje)</option>
-          {catalogHardware.map((h) => (
-            <option key={h.id} value={h.id}>
-              {h.code} — {h.name}
-            </option>
-          ))}
-        </select>
-        <p className="catalog-form__hint">
-          Los herrajes «incluido en el juego» no generan línea de compra propia:
-          el kit cotiza una vez.
-        </p>
+          label="Kit comercial (el juego que se vende junto)"
+          id={`${testId}-kit`}
+          testId={`${testId}-kit`}
+        />
       </div>
 
       {members.length === 0 ? (
@@ -234,6 +232,18 @@ export function AgregadoCajonHardwareSection({
         </p>
       ) : (
         <ul className="agregado-editor__item-list">
+          {pendingCount > 0 ? (
+            <li>
+              <p
+                className="catalog-form__hint"
+                role="status"
+                data-testid={`${testId}-pending-summary`}
+              >
+                Pendiente: {pendingCount} de {members.length} sin herraje — el
+                guardado espera la receta completa.
+              </p>
+            </li>
+          ) : null}
           {members.map((m, idx) => {
             const sideLabel = (ref: AssemblyAxisRef): string =>
               SIDE_REFS.find((r) => r.value === ref)?.label ?? ref;

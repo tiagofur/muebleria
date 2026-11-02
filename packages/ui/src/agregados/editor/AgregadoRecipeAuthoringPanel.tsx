@@ -19,6 +19,7 @@ import type {
 } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
+import { KitCommercialPicker } from './KitCommercialPicker';
 import type { AgregadoDraft } from '../agregadoDraft';
 import { AgregadoRecipePanel } from './AgregadoRecipePanel';
 // #1451: vocabulario compartido con el nivel «Del cajón» de Herrajes — una
@@ -256,34 +257,21 @@ export function AgregadoRecipeAuthoringPanel({
         izquierda y la derecha son miembros separados — nunca un espejo.
       </p>
 
-      {/* Kit comercial */}
+      {/* Kit comercial — #1460: mismo picker que Herrajes (sólo juegos
+          reales, mismo feedback); una sola voz para el kit. */}
       <section className="agregado-recipe__section" aria-label="Kit comercial">
         <h5>Kit comercial</h5>
         <div className="catalog-form__field">
-          <label className="catalog-form__label" htmlFor={`${testId}-kit`}>
-            Herraje que se vende como juego
-          </label>
-          <CatalogPicker
-            id={`${testId}-kit`}
-            label="Kit comercial"
-            placeholder="Sin kit (compra separada)"
-            searchPlaceholder="Buscar herraje…"
+          <KitCommercialPicker
+            catalogHardware={catalogHardware}
             value={kitId}
             onChange={(hardwareId) =>
-              patchDraft({ commercialKitHardwareId: hardwareId || undefined })
+              patchDraft({ commercialKitHardwareId: hardwareId })
             }
-            items={catalogHardware.map((h) => ({
-              id: h.id,
-              code: h.code,
-              name: h.name,
-              active: h.active,
-            }))}
-            data-testid={`${testId}-kit`}
+            label="Herraje que se vende como juego"
+            id={`${testId}-kit`}
+            testId={`${testId}-kit`}
           />
-          <p className="catalog-form__hint">
-            Los miembros «incluido en el juego» no generan línea de compra propia: el
-            kit cotiza una vez.
-          </p>
         </div>
       </section>
 

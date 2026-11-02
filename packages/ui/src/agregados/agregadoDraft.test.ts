@@ -97,3 +97,48 @@ describe('agregadoDraft recipe round-trip (#1412)', () => {
     expect(back.code).toBe('VIEJO');
   });
 });
+
+describe('isAgregadoDraft acepta los campos vivos de la receta (#1460)', () => {
+  it('un miembro con offsetFormula valida fresco y persistido (antes F5 reseteaba el borrador)', () => {
+    const memberConFormula = {
+      ...member,
+      placement: {
+        x: { ref: 'center' as const, offsetMm: 0, offsetFormula: 'PW/2' },
+        y: { ref: 'min' as const, offsetMm: 0 },
+        z: { ref: 'min' as const, offsetMm: 0, offsetFormula: 'PH - 37' },
+      },
+    };
+    const draft = agregadoToDraft({
+      ...agregadoConReceta,
+      rigidMembers: [memberConFormula],
+    });
+    expect(isAgregadoDraft(draft)).toBe(true);
+    // Round-trip sessionStorage: lo que se persiste debe revalidar igual.
+    expect(isAgregadoDraft(JSON.parse(JSON.stringify(draft)))).toBe(true);
+
+    const back = draftToAgregado('agr-1', draft);
+    expect(back.rigidMembers?.[0]?.placement.x.offsetFormula).toBe('PW/2');
+  });
+
+  it('un placement F2 (optionRole, xRef/yRef, hwAnchor) valida dentro del borrador', () => {
+    const draft = agregadoToDraft(agregadoConReceta);
+    draft.components = [
+      {
+        componentId: 'comp-frente',
+        quantity: 1,
+        overrides: {
+          hardwarePlacements: [
+            {
+              optionRole: 'TIRADOR',
+              anchorFace: 'front',
+              relativePosition: { xMm: 0, yMm: 18, xRef: 'center', yRef: 'max' },
+              hwAnchor: 'center',
+            },
+          ],
+        },
+      },
+    ];
+    expect(isAgregadoDraft(draft)).toBe(true);
+    expect(isAgregadoDraft(JSON.parse(JSON.stringify(draft)))).toBe(true);
+  });
+});
