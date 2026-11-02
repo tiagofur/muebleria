@@ -28,7 +28,7 @@ import type {
 } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
-import { KitCommercialPicker } from './KitCommercialPicker';
+import { isKitDerivedMember, KitCommercialPicker, kitPartsOf } from './KitCommercialPicker';
 import type { AgregadoDraft } from '../agregadoDraft';
 
 export type AgregadoCajonHardwareSectionProps = {
@@ -37,6 +37,8 @@ export type AgregadoCajonHardwareSectionProps = {
   readonly catalogHardware: readonly Hardware[];
   /** Fábrica de miembro del form (la comparte el chooser «+ Añadir herraje»). */
   readonly onAddMember: () => void;
+  /** #1460: abrir el juego comercial en Catálogos. Ausente ⇒ CTA oculto. */
+  readonly onEditKit?: (kitHardwareId: string) => void;
   readonly testId?: string;
 };
 
@@ -75,6 +77,7 @@ export function AgregadoCajonHardwareSection({
   setDraft,
   catalogHardware,
   onAddMember,
+  onEditKit,
   testId = 'agregado-cajon-hardware',
 }: AgregadoCajonHardwareSectionProps): ReactNode {
   const members = draft.rigidMembers ?? [];
@@ -87,6 +90,30 @@ export function AgregadoCajonHardwareSection({
       m.source.kind === 'fixed' &&
       !(m.source.fixed?.hardwareId ?? '').trim(),
   ).length;
+
+  // #1460: el kit manda. Los miembros cuya parte pertenece al juego seleccionado
+  // se muestran en UNA tarjeta resumen de solo lectura; lo añadido a mano
+  // conserva su tarjeta editable. Los índices originales viajan para que
+  // update/remove sigan apuntando al array del draft.
+  const kitEntity = kitId
+    ? catalogHardware.find((h) => h.id === kitId)
+    : undefined;
+  const kitPartIds = new Set(
+    kitPartsOf(catalogHardware, kitId).map((h) => h.id),
+  );
+  const memberEntries = members.map((m, idx) => ({ m, idx }));
+  const ownEntries = memberEntries.filter(
+    ({ m }) => !isKitDerivedMember(m, kitPartIds),
+  );
+  const kitEntries = memberEntries.filter(({ m }) =>
+    isKitDerivedMember(m, kitPartIds),
+  );
+  const hardwareCode = (hardwareId: string): string =>
+    catalogHardware.find((h) => h.id === hardwareId)?.code ?? hardwareId;
+  const memberSide = (m: AgregadoRigidMember): string => {
+    if (m.placement.x.ref === 'center') return 'centrado';
+    return m.placement.x.ref === 'max' ? 'derecha' : 'izquierda';
+  };
 
   const patchDraft = (patch: Partial<AgregadoDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -223,12 +250,81 @@ export function AgregadoCajonHardwareSection({
         />
       </div>
 
-      {members.length === 0 ? (
+      {/* #1460 — tarjeta única del kit: los subitems del juego NO se editan
+          acá; viven en Catálogos y el sync los re-deriva. */}
+      {kitId ? (
+        <div
+          className="agregado-editor__item-row agregado-editor__item-row--block"
+          data-testid={`${testId}-kit-card`}
+        >
+          <div className="agregado-editor__item-header">
+            <strong className="agregado-editor__item-title">
+              <span className="catalog-badge catalog-badge--kit">Kit comercial</span>{' '}
+              {kitEntity ? (
+                <span className="eng-detail__mono">
+                  {kitEntity.code} — {kitEntity.name}
+                </span>
+              ) : null}
+            </strong>
+          </div>
+          {kitEntity ? (
+            <>
+              <p className="catalog-form__hint">
+                {kitEntries.length} herraje(s) incluido(s) en el juego · cotiza
+                una vez. Los subitems se administran en Catálogos — el juego
+                manda.
+              </p>
+              {kitEntries.length > 0 ? (
+                <div className="agregado-editor__item-fields">
+                  {kitEntries.map(({ m, idx }) => (
+                    <p
+                      key={m.memberId}
+                      className="catalog-form__hint"
+                      data-testid={`${testId}-kit-member-${idx}`}
+                    >
+                      <span className="eng-detail__mono">{m.memberId}</span>
+                      {' · '}
+                      {hardwareCode(m.source.fixed?.hardwareId ?? '')}
+                      {' · '}
+                      {memberSide(m)}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="catalog-form__hint">
+                  El juego todavía no sincronizó partes: crealas en Catálogos
+                  (herrajes con «parte de kit»).
+                </p>
+              )}
+              {onEditKit ? (
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--small"
+                  onClick={() => onEditKit(kitId)}
+                  data-testid={`${testId}-kit-card-edit`}
+                >
+                  Editar juego en Catálogos
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <p
+              className="catalog-form__error"
+              role="alert"
+              data-testid={`${testId}-kit-card-missing`}
+            >
+              El juego asignado ya no existe en el catálogo: elegí otro o quitá
+              el kit.
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {ownEntries.length === 0 ? (
         <p className="catalog-empty" data-testid={`${testId}-empty`}>
-          Sin herrajes del agregado. El kit de correderas de un cajón, las
-          bisagras de una puerta o un riel central van acá: se anclan a la caja
-          del ensamble — no a una pieza —, se ven en el 3D y viajan como
-          revisión al guardar.
+          {kitId
+            ? 'El juego comercial cubre los herrajes del ensamble. Si necesitás otro herraje anclado al agregado, añadilo con «Añadir herraje del agregado».'
+            : 'Sin herrajes del agregado. El kit de correderas de un cajón, las bisagras de una puerta o un riel central van acá: se anclan a la caja del ensamble — no a una pieza —, se ven en el 3D y viajan como revisión al guardar.'}
         </p>
       ) : (
         <ul className="agregado-editor__item-list">
@@ -239,12 +335,12 @@ export function AgregadoCajonHardwareSection({
                 role="status"
                 data-testid={`${testId}-pending-summary`}
               >
-                Pendiente: {pendingCount} de {members.length} sin herraje — el
-                guardado espera la receta completa.
+                Pendiente: {pendingCount} de {ownEntries.length} sin herraje —
+                el guardado espera la receta completa.
               </p>
             </li>
           ) : null}
-          {members.map((m, idx) => {
+          {ownEntries.map(({ m, idx }) => {
             const sideLabel = (ref: AssemblyAxisRef): string =>
               SIDE_REFS.find((r) => r.value === ref)?.label ?? ref;
             if (m.source.kind === 'variant') {

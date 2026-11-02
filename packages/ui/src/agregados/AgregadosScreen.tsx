@@ -79,6 +79,8 @@ export interface AgregadosScreenProps {
     readonly expectedVersion: number;
     readonly candidate: Agregado;
   }) => Promise<RecipeApplyResult>;
+  /** #1460: abrir el juego comercial del agregado en Catálogos de herrajes. */
+  readonly onEditKit?: (kitHardwareId: string) => void;
 }
 
 export function AgregadosScreen({
@@ -98,6 +100,7 @@ export function AgregadosScreen({
   resolveImageUrl,
   onSimulateRecipe,
   onApplyRecipe,
+  onEditKit,
 }: AgregadosScreenProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -395,6 +398,7 @@ export function AgregadosScreen({
             catalogInput={catalogInput}
             optionGroups={optionGroups}
             resolveImageUrl={resolveImageUrl}
+            onEditKit={onEditKit}
           />
         )}
       />

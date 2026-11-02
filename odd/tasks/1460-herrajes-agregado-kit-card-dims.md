@@ -23,7 +23,7 @@ Sin excepciones posicionales por-agregado para miembros de kit; «Por cantidad»
 - [x] F0: draft validators + tests round-trip
 - [x] F0: selector kit `unit==='set'` + feedback + unificación
 - [x] F0: placements add() sin default + par preset menos agresivo
-- [ ] F1: tarjeta única kit (Herrajes) + badge Receta + estado kit colgante
+- [x] F1: tarjeta única kit (Herrajes) + badge Receta + estado kit colgante
 - [ ] F2: modelo override dims TS+Go + paridad
 - [ ] F2: tarjeta posición visible + presets + dims UI
 - [ ] F2: drilling consume override (TS+Go)
@@ -33,6 +33,7 @@ Sin excepciones posicionales por-agregado para miembros de kit; «Por cantidad»
 
 - V0 preflight: `PREFLIGHT_OK_NOT_VERIFIED` (2026-11-02, árbol limpio).
 - F0 (2026-11-02): tsc --noEmit OK; vitest packages/ui targeted (agregados+modules+common) 373/373 PASS. Hallazgo en el camino: `hardwarePlacementRule` exigía `hardwareId` presente — los placements por grupo (#1046, sólo `optionRole`) también descartaban el draft; corregido con test. F2 testids de kit (`${testId}-kit`) preservados tras migrar el select nativo a CatalogPicker compartido.
+- F1 (2026-11-02): typecheck packages/ui (`typecheck` con `-p tsconfig.json`) + apps/web OK; vitest agregados 132/132. Tarjeta única del kit con chips read-only + CTA «Editar juego en Catálogos» cableado vía `onEditKit` (section→form→screen→ShellView, navega a 'hardware' con `onEntitySelectionChange`). Predicado de derivación: parte del kit por `kitHardwareId` (el rol `included_in_kit` no basta — un miembro manual con kit activo también lo lleva). Kit colgante ⇒ alerta explícita. Receta: filas read-only con badge `catalog-badge--kit` reutilizado.
 
 ## Forecast y entrega
 

@@ -19,7 +19,7 @@ import type {
 } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
-import { KitCommercialPicker } from './KitCommercialPicker';
+import { isKitDerivedMember, KitCommercialPicker, kitPartsOf } from './KitCommercialPicker';
 import type { AgregadoDraft } from '../agregadoDraft';
 import { AgregadoRecipePanel } from './AgregadoRecipePanel';
 // #1451: vocabulario compartido con el nivel «Del cajón» de Herrajes — una
@@ -56,6 +56,11 @@ export function AgregadoRecipeAuthoringPanel({
   const sets = draft.variantSets ?? [];
   const rules = draft.compatibilityRules ?? [];
   const kitId = draft.commercialKitHardwareId ?? '';
+  // #1460: los miembros derivados del kit se muestran read-only — el sync del
+  // catálogo los re-deriva y editarlos acá sería pisado en silencio.
+  const kitPartIds = new Set(
+    kitPartsOf(catalogHardware, kitId).map((h) => h.id),
+  );
 
   const patchDraft = (patch: Partial<AgregadoDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -352,6 +357,32 @@ export function AgregadoRecipeAuthoringPanel({
         ) : (
           <ul className="agregado-editor__item-list">
             {members.map((m, idx) => {
+              if (isKitDerivedMember(m, kitPartIds)) {
+                const kitHw = catalogHardware.find(
+                  (h) => h.id === m.source.fixed?.hardwareId,
+                );
+                return (
+                  <li
+                    key={idx}
+                    className="agregado-editor__item-row"
+                    data-testid={`${testId}-member-${idx}-kit`}
+                  >
+                    <span className="eng-detail__list-main eng-detail__mono">
+                      {m.memberId}
+                    </span>
+                    <p className="catalog-form__hint">
+                      <span className="catalog-badge catalog-badge--kit">
+                        incluido en el juego
+                      </span>{' '}
+                      {kitHw
+                        ? `${kitHw.code} — ${kitHw.name}`
+                        : (m.source.fixed?.hardwareId ?? '')}{' '}
+                      · Solo lectura: se administra en Catálogos — el kit manda
+                      y el sync repone cambios locales.
+                    </p>
+                  </li>
+                );
+              }
               const membershipKind =
                 m.actorMembership === 'body'
                   ? 'body'

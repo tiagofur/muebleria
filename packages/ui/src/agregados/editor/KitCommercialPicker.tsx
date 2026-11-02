@@ -6,7 +6,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { Hardware } from '@granete/domain';
+import type { AgregadoRigidMember, Hardware } from '@granete/domain';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 
 export type KitCommercialPickerProps = {
@@ -25,6 +25,22 @@ export function kitPartsOf(
   return kitId
     ? catalogHardware.filter((h) => h.kitHardwareId === kitId)
     : [];
+}
+
+/**
+ * #1460: un miembro es derivado del kit cuando su herraje es una parte del
+ * juego seleccionado. El rol `included_in_kit` NO basta — un miembro añadido
+ * a mano con el kit activo también lo lleva. El kit manda: estos miembros se
+ * muestran de solo lectura y el sync del catálogo los re-deriva.
+ */
+export function isKitDerivedMember(
+  member: AgregadoRigidMember,
+  kitPartIds: ReadonlySet<string>,
+): boolean {
+  return (
+    member.source.kind === 'fixed' &&
+    kitPartIds.has(member.source.fixed?.hardwareId ?? '')
+  );
 }
 
 export function KitCommercialPicker({
