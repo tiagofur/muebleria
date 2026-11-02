@@ -2027,6 +2027,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onReloadKitTemplates={loadKitTemplates}
           agregadoCodes={agregados.map((a) => a.code)}
           agregados={agregados}
+          onUpdateAgregado={canMutateCatalog ? updateAgregado : undefined}
           onUpdate={updateHardware}
           onDeactivate={(id) => setHardwareActive(id, false)}
           onReactivate={(id) => setHardwareActive(id, true)}

@@ -2,7 +2,12 @@
  * catalog/hardware — Hardware mutations incl. 3D preview fields (F069/F080).
  */
 
-import { normalizeHardwarePartFinishes, validateHardwareDesignParts, type HardwareDesignPart } from '@granete/domain';
+import {
+  normalizeHardwarePartFinishes,
+  syncAgregadoWithKitParts,
+  validateHardwareDesignParts,
+  type HardwareDesignPart,
+} from '@granete/domain';
 import type { Hardware } from '@granete/domain';
 import type { HardwareDraft } from '@granete/ui';
 
@@ -146,7 +151,24 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
         ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
       };
       return ctx.saveAndToast(
-        (c) => ({ ...c, hardware: [...c.hardware, item] }),
+        (c) => {
+          const nextHardware = [...c.hardware, item];
+          const nextAgregados = item.kitHardwareId
+            ? (c.agregados ?? []).map((a) =>
+                a.commercialKitHardwareId === item.kitHardwareId
+                  ? syncAgregadoWithKitParts(
+                      a,
+                      nextHardware.filter((h) => h.active && h.kitHardwareId === item.kitHardwareId),
+                    )
+                  : a,
+              )
+            : c.agregados;
+          return {
+            ...c,
+            hardware: nextHardware,
+            ...(nextAgregados ? { agregados: nextAgregados } : {}),
+          };
+        },
         `✓ "${code}" creado`,
       );
     },
@@ -156,9 +178,9 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
       const packageSize =
         Number.isFinite(pkg) && pkg > 0 ? pkg : undefined;
       return ctx.saveAndToast(
-        (c) => ({
-          ...c,
-          hardware: c.hardware.map((h) => {
+        (c) => {
+          const prevTarget = c.hardware.find((h) => h.id === id);
+          const nextHardware = c.hardware.map((h) => {
             if (h.id !== id) return h;
             const {
               packageSize: _drop,
@@ -175,6 +197,8 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               machining: _dma,
               visualAsset: _dva,
               maxOpeningAngleDeg: _dmoa,
+              designParts: _ddp,
+              kitHardwareId: _dkid,
               ...rest
             } = h;
             return {
@@ -190,8 +214,29 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               ...hardwareMachiningField(draft),
               ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
             };
-          }),
-        }),
+          });
+          const affectedKitIds = new Set<string>();
+          if (prevTarget?.kitHardwareId) affectedKitIds.add(prevTarget.kitHardwareId);
+          if (draft.kitHardwareId) affectedKitIds.add(draft.kitHardwareId);
+          const nextAgregados =
+            affectedKitIds.size > 0
+              ? (c.agregados ?? []).map((a) =>
+                  a.commercialKitHardwareId && affectedKitIds.has(a.commercialKitHardwareId)
+                    ? syncAgregadoWithKitParts(
+                        a,
+                        nextHardware.filter(
+                          (h) => h.active && h.kitHardwareId === a.commercialKitHardwareId,
+                        ),
+                      )
+                    : a,
+                )
+              : c.agregados;
+          return {
+            ...c,
+            hardware: nextHardware,
+            ...(nextAgregados ? { agregados: nextAgregados } : {}),
+          };
+        },
         '✓ Cambios guardados',
       );
     },
