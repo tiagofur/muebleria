@@ -1292,3 +1292,34 @@
 .catalog-row-detail__field--full {
   grid-column: 1 / -1;
 }
+
+/* ── Partes del diseño (#1455): filas compactas — antes cada campo vivía en
+   su propia línea dentro de un modal ancho, con huecos enormes. Ahora la
+   fila es una tarjeta 2×2 agrupando por significado, con acción al pie. */
+.catalog-design-parts__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+  align-items: end;
+  padding: var(--space-3);
+  margin-top: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.catalog-design-parts__row-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.catalog-design-parts__add {
+  display: flex;
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 640px) {
+  .catalog-design-parts__row {
+    grid-template-columns: 1fr;
+  }
+}
