@@ -58,8 +58,8 @@ export function HardwareDesignPartsSection({
         como una sola pieza.
       </p>
       {rows.map((row, idx) => (
-        <div key={idx} className="catalog-form__field" data-testid={`hardware-design-part-${idx}`}>
-          <div>
+        <div key={idx} className="catalog-design-parts__row" data-testid={`hardware-design-part-${idx}`}>
+          <div className="catalog-form__field">
             <label htmlFor={`hdp-name-${idx}`}>Componente del SKP</label>
             <input
               id={`hdp-name-${idx}`}
@@ -70,7 +70,7 @@ export function HardwareDesignPartsSection({
               data-testid={`hardware-design-part-${idx}-name`}
             />
           </div>
-          <div>
+          <div className="catalog-form__field">
             <label htmlFor={`hdp-membership-${idx}`}>Al abrir</label>
             <select
               id={`hdp-membership-${idx}`}
@@ -85,7 +85,7 @@ export function HardwareDesignPartsSection({
               ))}
             </select>
           </div>
-          <div>
+          <div className="catalog-form__field">
             <label htmlFor={`hdp-finish-${idx}`}>Acabado de la parte</label>
             <select
               id={`hdp-finish-${idx}`}
@@ -104,7 +104,7 @@ export function HardwareDesignPartsSection({
               <option value="grip">Rol: Agarre (grip)</option>
             </select>
           </div>
-          <div>
+          <div className="catalog-form__field">
             <label htmlFor={`hdp-label-${idx}`}>Etiqueta (opcional)</label>
             <input
               id={`hdp-label-${idx}`}
@@ -115,25 +115,29 @@ export function HardwareDesignPartsSection({
               data-testid={`hardware-design-part-${idx}-label`}
             />
           </div>
-          <button
-            type="button"
-            className="btn btn--sm"
-            onClick={() => removeRow(idx)}
-            aria-label={`Eliminar parte ${idx + 1}`}
-            data-testid={`hardware-design-part-${idx}-remove`}
-          >
-            Eliminar
-          </button>
+          <div className="catalog-design-parts__row-actions">
+            <button
+              type="button"
+              className="btn btn--sm btn--danger"
+              onClick={() => removeRow(idx)}
+              aria-label={`Eliminar parte ${idx + 1}`}
+              data-testid={`hardware-design-part-${idx}-remove`}
+            >
+              Eliminar
+            </button>
+          </div>
         </div>
       ))}
-      <button
-        type="button"
-        className="btn"
-        onClick={addRow}
-        data-testid="hardware-design-parts-add"
-      >
-        Añadir parte
-      </button>
+      <div className="catalog-design-parts__add">
+        <button
+          type="button"
+          className="btn btn--sm"
+          onClick={addRow}
+          data-testid="hardware-design-parts-add"
+        >
+          Añadir parte
+        </button>
+      </div>
     </fieldset>
   );
 }
