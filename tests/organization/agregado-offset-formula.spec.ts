@@ -89,8 +89,10 @@ test.describe.serial('Agregado — presets y anclas con fórmula (#1418)', () =>
     const token = await loginOwner(page);
 
     // Fixture autocontenida: herraje + agregado SIN receta (camino del owner).
+    // #1460: el kit comercial sólo acepta unit 'set' — el selector ya no
+    // lista piezas sueltas, así que la semilla del kit es un juego.
     const hw = await api(token, 'POST', '/catalog/hardware', {
-      id: HW_ID, code: HW_CODE, name: 'Corredera para fórmulas', unit: 'piece', cost_per_unit: 0, active: true,
+      id: HW_ID, code: HW_CODE, name: 'Corredera para fórmulas', unit: 'set', cost_per_unit: 0, active: true,
     });
     expect([201, 409]).toContain(hw.status);
     const created = await api(token, 'POST', '/catalog/agregados', {
