@@ -250,6 +250,9 @@ func (s *Server) HandleAgregadoRecipeSimulation(w http.ResponseWriter, r *http.R
 	}
 	if req.Params != nil {
 		params = *req.Params
+		// #1453 F1: server-derived only — a client-supplied lookup would
+		// skew the simulation away from what the live resolve computes.
+		params.HardwareDimensions = nil
 	}
 	if err := engine.ValidateAssemblyResolutionParams(params); err != nil {
 		respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
@@ -258,6 +261,16 @@ func (s *Server) HandleAgregadoRecipeSimulation(w http.ResponseWriter, r *http.R
 		})
 		return
 	}
+	// #1453 F1: member offset formulas see HW/HH/HD exactly like the live
+	// resolve — without this the diff would report false changes on
+	// dimension-aware formulas. Fail closed: an unreadable catalog is not a
+	// dimensionless simulation.
+	hardwareList, err := s.Store.ListHardwares(r.Context())
+	if err != nil {
+		respondWithInternalError(w, err, "agregado recipe simulation hardware catalog")
+		return
+	}
+	params.HardwareDimensions = engine.HardwareDimensionsFromCatalog(hardwareList)
 
 	// The candidate is a recipe for THIS agregado: identity is never taken from
 	// the body.

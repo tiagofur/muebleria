@@ -351,10 +351,10 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 			SELECT m.new_id, $2, s.code, s.name, s.thickness_mm, s.cost_per_ml, s.notes, s.active, s.preview_color
 			FROM edge_bands s JOIN tmp_edges m ON m.old_id = s.id`},
 		{"hardwares", 1, `INSERT INTO hardwares (id, organization_id, code, name, unit, cost_per_unit, notes, active, image_url, package_size,
-				preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness,
+				preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, dimensions, preview_color, preview_roughness,
 				preview_metalness, preview_clearcoat, part_finishes, machining)
 			SELECT m.new_id, $2, s.code, s.name, s.unit, s.cost_per_unit, s.notes, s.active, s.image_url, s.package_size,
-				s.preview_shape, s.preview_size_mm, s.preview_projection_mm, s.preview_diameter_mm, s.preview_color, s.preview_roughness,
+				s.preview_shape, s.preview_size_mm, s.preview_projection_mm, s.preview_diameter_mm, s.dimensions, s.preview_color, s.preview_roughness,
 				s.preview_metalness, s.preview_clearcoat, s.part_finishes, s.machining
 			FROM hardwares s JOIN tmp_hw m ON m.old_id = s.id`},
 		{"components", 1, `INSERT INTO components (id, organization_id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm,

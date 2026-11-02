@@ -193,6 +193,18 @@ export interface EdgeBand {
   readonly previewColor?: string;
 }
 
+/**
+ * Canonical physical bounding box of a hardware item (#1453 F1), in mm.
+ * The object is complete (all three axes, finite and > 0) or absent —
+ * partial states do not exist. Absent = effective dimensions derive from
+ * the preview* scalars per family (see `resolveHardwareDimensions`).
+ */
+export interface HardwareDimensions {
+  readonly widthMm: number;
+  readonly heightMm: number;
+  readonly depthMm: number;
+}
+
 export interface Hardware {
   readonly id: string;
   readonly code: string;
@@ -216,6 +228,12 @@ export interface Hardware {
   readonly previewShape?: 'knob' | 'bar-pull' | 'cup-pull' | 'hinge' | 'slide' | 'rail' | 'leg';
   /** Knob diameter, bar-pull length, hinge cup diameter, slide/rail length, or leg height, in mm. */
   readonly previewSizeMm?: number;
+  /**
+   * Canonical physical bounding box W×H×D in mm (#1453 F1). Authoritative
+   * when present; formulas see it as HW/HH/HD and drawing uses its axes.
+   * Omitted = derive per-family effective dimensions from preview* scalars.
+   */
+  readonly dimensions?: HardwareDimensions;
   /** Standoff of the handle from the anchor face, in mm (0 = flush). */
   readonly previewProjectionMm?: number;
   /** Grip tube diameter (bar-pull / cup-pull), in mm. */

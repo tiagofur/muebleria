@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -112,10 +113,15 @@ type Hardware struct {
 	PreviewSizeMm       *float64 `json:"preview_size_mm,omitempty"`
 	PreviewProjectionMm *float64 `json:"preview_projection_mm,omitempty"`
 	PreviewDiameterMm   *float64 `json:"preview_diameter_mm,omitempty"`
-	PreviewColor        *string  `json:"preview_color,omitempty"`
-	PreviewRoughness    *float64 `json:"preview_roughness,omitempty"`
-	PreviewMetalness    *float64 `json:"preview_metalness,omitempty"`
-	PreviewClearcoat    *float64 `json:"preview_clearcoat,omitempty"`
+	// Dimensions is the canonical physical bounding box W×H×D in mm (#1453
+	// F1). Complete object or nil — partial states don't exist. Authoritative
+	// when present: formulas see HW/HH/HD and drawing uses its axes. Nil =
+	// effective dims derive from the preview* scalars (HardwareFormulaDims).
+	Dimensions       *HardwareDimensions `json:"dimensions,omitempty"`
+	PreviewColor     *string             `json:"preview_color,omitempty"`
+	PreviewRoughness *float64            `json:"preview_roughness,omitempty"`
+	PreviewMetalness *float64            `json:"preview_metalness,omitempty"`
+	PreviewClearcoat *float64            `json:"preview_clearcoat,omitempty"`
 	// PartFinishes maps a structural part role (body/base/grip) to a finish
 	// preset id (F080). Nil/empty = every part uses the global preview finish.
 	PartFinishes map[string]string `json:"part_finishes,omitempty"`
@@ -151,6 +157,36 @@ type Hardware struct {
 	// Version is server-owned optimistic-concurrency state (#443/#448):
 	// writes carry the expected version as If-Match and the server bumps it.
 	Version int64 `json:"version"`
+}
+
+// HardwareDimensions is the canonical physical bounding box of a hardware
+// item (#1453 F1), in mm. JSON casing matches the TS domain shape so the
+// JSONB column round-trips through the API without key rewriting.
+type HardwareDimensions struct {
+	WidthMm  float64 `json:"widthMm"`
+	HeightMm float64 `json:"heightMm"`
+	DepthMm  float64 `json:"depthMm"`
+}
+
+// ValidateHardwareDimensions enforces the complete-or-nothing bounding box
+// (#1453 F1): every axis finite and positive, or nil (derive from preview*).
+func ValidateHardwareDimensions(d *HardwareDimensions) error {
+	if d == nil {
+		return nil
+	}
+	for _, axis := range []struct {
+		name  string
+		value float64
+	}{
+		{"ancho (widthMm)", d.WidthMm},
+		{"alto (heightMm)", d.HeightMm},
+		{"profundidad (depthMm)", d.DepthMm},
+	} {
+		if math.IsNaN(axis.value) || math.IsInf(axis.value, 0) || axis.value <= 0 {
+			return fmt.Errorf("las dimensiones del herraje deben ser completas y positivas: %s = %g mm", axis.name, axis.value)
+		}
+	}
+	return nil
 }
 
 // MachiningOperation is one drill entry a hardware part requires (F127).

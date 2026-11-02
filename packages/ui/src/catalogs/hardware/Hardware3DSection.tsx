@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import * as THREE from 'three';
 import type { Hardware, HardwareVisualAssetBinding } from '@granete/domain';
 import {
   HARDWARE_FINISHES,
@@ -24,6 +25,7 @@ import {
   FileUp,
   Info,
   Layers,
+  Ruler,
   Sparkles,
   Trash2,
 } from 'lucide-react';
@@ -32,6 +34,7 @@ import { WorkspaceTabs } from '../../common';
 import { HardwareAssetSelectorModal } from './HardwareAssetSelectorModal';
 import { HardwareAssetUploadModal } from './HardwareAssetUploadModal';
 import { HardwareGlbViewport, bindingHasCompleteGlb } from './HardwareGlbViewport';
+import { useGlbAssetAuthority } from '../../preview3d/glbAssetSourceContext';
 
 export interface Hardware3DSectionProps {
   readonly draft: HardwareDraft;
@@ -58,6 +61,53 @@ export function Hardware3DSection({
 
   // Loaded asset metadata for the current binding (display name, etc.)
   const [boundAsset, setBoundAsset] = useState<HardwareAsset | null>(null);
+
+  // #1453 F1: «Cargar del diseño» reads the bound GLB's bounding box.
+  const glbAuthority = useGlbAssetAuthority();
+  const [dimLoadState, setDimLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const hasDesignGlb = draft.visualAsset ? bindingHasCompleteGlb(draft.visualAsset) : false;
+
+  const handleLoadDimensionsFromDesign = async () => {
+    const binding = draft.visualAsset;
+    const glb = binding?.glb;
+    if (!binding || !glb || !bindingHasCompleteGlb(binding)) return;
+    setDimLoadState('loading');
+    const cache = glbAuthority.cache;
+    if (!cache) {
+      // No GLB byte source in this session (e.g. guest view): the suggestion
+      // is unavailable, never fabricated.
+      setDimLoadState('error');
+      return;
+    }
+    try {
+      const scene = await cache.load({
+        assetId: binding.assetId,
+        revisionId: glb.revisionId!,
+        sha256: glb.sha256!,
+        sourceUnits: glb.sourceUnits!,
+        upAxis: glb.upAxis!,
+      });
+      const box = new THREE.Box3().setFromObject(scene);
+      if (box.isEmpty()) {
+        throw new Error('empty bounding box');
+      }
+      const size = box.getSize(new THREE.Vector3());
+      // Asset canonical space: +X longitudinal (W), +Y transversal (H),
+      // +Z outward from the mount face (D).
+      const round1 = (n: number) => String(Math.round(Math.abs(n) * 10) / 10);
+      setDraft((prev) => ({
+        ...prev,
+        dimensionWidthMm: round1(size.x),
+        dimensionHeightMm: round1(size.y),
+        dimensionDepthMm: round1(size.z),
+      }));
+      setDimLoadState('idle');
+    } catch {
+      // The suggestion never silently fabricates numbers: fields stay as
+      // they are and the operator can type the measurements by hand.
+      setDimLoadState('error');
+    }
+  };
 
   // Automatically open section if editing an item with visual asset or generic shape
   useEffect(() => {
@@ -181,6 +231,80 @@ export function Hardware3DSection({
 
         {sectionOpen ? (
           <div className="catalog-form__disclosure-body" data-testid="hardware-3d-section-body">
+            {/* #1453 F1: canonical dimensions — shared by both modes (the
+                formulas see HW/HH/HD and the drawing uses these axes). */}
+            <div className="catalog-form__section" data-testid="hardware-dimensions-section">
+              <p className="catalog-form__hint">
+                Dimensiones físicas (W×H×D en mm). Van completas o vacías; si se
+                omiten, se derivan de la forma genérica. Las fórmulas de
+                posicionado las usan como HW/HH/HD.
+              </p>
+              <div className="catalog-form__row">
+                <label className="catalog-form__field">
+                  <span>Ancho (W)</span>
+                  <input
+                    type="number"
+                    min={0.1}
+                    step={0.1}
+                    placeholder="ej. 128"
+                    value={draft.dimensionWidthMm}
+                    onChange={(e) => setDraft({ ...draft, dimensionWidthMm: e.target.value })}
+                    disabled={!canMutate}
+                    data-testid="hardware-dim-width"
+                  />
+                </label>
+                <label className="catalog-form__field">
+                  <span>Alto (H)</span>
+                  <input
+                    type="number"
+                    min={0.1}
+                    step={0.1}
+                    placeholder="ej. 32"
+                    value={draft.dimensionHeightMm}
+                    onChange={(e) => setDraft({ ...draft, dimensionHeightMm: e.target.value })}
+                    disabled={!canMutate}
+                    data-testid="hardware-dim-height"
+                  />
+                </label>
+                <label className="catalog-form__field">
+                  <span>Profundidad (D)</span>
+                  <input
+                    type="number"
+                    min={0.1}
+                    step={0.1}
+                    placeholder="ej. 35"
+                    value={draft.dimensionDepthMm}
+                    onChange={(e) => setDraft({ ...draft, dimensionDepthMm: e.target.value })}
+                    disabled={!canMutate}
+                    data-testid="hardware-dim-depth"
+                  />
+                </label>
+                <div className="catalog-form__field">
+                  <span aria-hidden="true" style={{ visibility: 'hidden' }}>—</span>
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    onClick={handleLoadDimensionsFromDesign}
+                    disabled={!canMutate || !hasDesignGlb || dimLoadState === 'loading'}
+                    title={
+                      hasDesignGlb
+                        ? 'Lee el bounding box del modelo vinculado (GLB) como sugerencia — queda editable.'
+                        : 'Vinculá un modelo de archivo con GLB derivado para sugerir las medidas.'
+                    }
+                    data-testid="hardware-dim-load-from-design"
+                  >
+                    <Ruler size={14} aria-hidden />
+                    {dimLoadState === 'loading' ? 'Leyendo modelo…' : 'Cargar del diseño'}
+                  </button>
+                </div>
+              </div>
+              {dimLoadState === 'error' ? (
+                <p className="catalog-form__hint" role="alert" data-testid="hardware-dim-load-error">
+                  No se pudo leer el modelo vinculado — cargalo de nuevo o ingresá las medidas a mano.
+                </p>
+              ) : null}
+            </div>
+
             {/* Mode selection tabs */}
             <div style={{ marginBottom: 'var(--space-3)' }}>
               <WorkspaceTabs<'file' | 'generic'>

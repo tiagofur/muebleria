@@ -545,3 +545,63 @@ describe('HardwareCatalog — kit con partes anidadas (#1422 owner)', () => {
     expect(synced.rigidMembers.some((m: any) => m.source?.fixed?.hardwareId === 'hw-suelto-2')).toBe(true);
   });
 });
+
+describe('HardwareCatalog — Dimensiones W×H×D (#1453 F1)', () => {
+  const dimensionedHardware: Hardware = {
+    ...sampleHardware,
+    dimensions: { widthMm: 128, heightMm: 32, depthMm: 35 },
+  };
+
+  async function openDimensionsEdit(
+    user: ReturnType<typeof userEvent.setup>,
+    item: Hardware,
+  ) {
+    await user.click(screen.getByText(item.code));
+    await user.click(screen.getByRole('button', { name: `Editar ${item.code}` }));
+  }
+
+  it('muestra las medidas del registro y «Cargar del diseño» deshabilitado sin GLB derivado', async () => {
+    const user = userEvent.setup();
+    setup([dimensionedHardware]);
+    await openDimensionsEdit(user, dimensionedHardware);
+
+    expect((screen.getByTestId('hardware-dim-width') as HTMLInputElement).value).toBe('128');
+    expect((screen.getByTestId('hardware-dim-height') as HTMLInputElement).value).toBe('32');
+    expect((screen.getByTestId('hardware-dim-depth') as HTMLInputElement).value).toBe('35');
+    const load = screen.getByTestId('hardware-dim-load-from-design') as HTMLButtonElement;
+    expect(load.disabled).toBe(true);
+    expect(load.title).toMatch(/Vinculá un modelo de archivo/);
+  });
+
+  it('edita las medidas y el draft viaja completo al guardar', async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = setup([dimensionedHardware]);
+    await openDimensionsEdit(user, dimensionedHardware);
+
+    await user.clear(screen.getByTestId('hardware-dim-width'));
+    await user.type(screen.getByTestId('hardware-dim-width'), '160');
+    fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const draft = onUpdate.mock.calls[0]![1] as {
+      dimensionWidthMm: string;
+      dimensionHeightMm: string;
+      dimensionDepthMm: string;
+    };
+    expect(draft.dimensionWidthMm).toBe('160');
+    expect(draft.dimensionHeightMm).toBe('32');
+    expect(draft.dimensionDepthMm).toBe('35');
+  });
+
+  it('dimensiones parciales bloquean el guardado con error visible', async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = setup([dimensionedHardware]);
+    await openDimensionsEdit(user, dimensionedHardware);
+
+    await user.clear(screen.getByTestId('hardware-dim-height'));
+    fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
+
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(screen.getByText(/van completas o vacías/)).toBeTruthy();
+  });
+});

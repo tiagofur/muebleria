@@ -251,11 +251,11 @@ type FurnitureLayout struct {
 
 // LayoutAssembly describes a resolved Agregado sub-assembly in furniture space (#670 / #1435).
 type LayoutAssembly struct {
-	AssemblyInstanceID   string                              `json:"assemblyInstanceId"`
-	AgregadoID           string                              `json:"agregadoId"`
-	Placement            map[string]any                      `json:"placement"`
-	DimensionsMm         [3]float64                          `json:"dimensionsMm,omitempty"`
-	RigidMembers         []domain.ResolvedRigidMember        `json:"rigidMembers,omitempty"`
+	AssemblyInstanceID   string                               `json:"assemblyInstanceId"`
+	AgregadoID           string                               `json:"agregadoId"`
+	Placement            map[string]any                       `json:"placement"`
+	DimensionsMm         [3]float64                           `json:"dimensionsMm,omitempty"`
+	RigidMembers         []domain.ResolvedRigidMember         `json:"rigidMembers,omitempty"`
 	FabricatedComponents []domain.ResolvedFabricatedComponent `json:"fabricatedComponents,omitempty"`
 }
 
@@ -566,6 +566,9 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 		PW: dims.WidthMm, PH: dims.HeightMm, PD: dims.DepthMm,
 		T: 18, B: baseClearance,
 	}
+	// #1453 F1: member offset formulas see HW/HH/HD from the catalog — built
+	// once for every agregado instance of this layout.
+	hardwareDimsLookup := HardwareDimensionsFromCatalog(catalog.Hardware)
 
 	for _, agrInst := range agregadoInstances {
 		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
@@ -631,9 +634,10 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 			}
 
 			params := AssemblyResolutionParams{
-				WidthMm:  unit.w,
-				HeightMm: unit.h,
-				DepthMm:  unit.d,
+				WidthMm:            unit.w,
+				HeightMm:           unit.h,
+				DepthMm:            unit.d,
+				HardwareDimensions: hardwareDimsLookup,
 			}
 			resolvedAssembly, err := ResolveAgregadoAssembly(agr, params)
 			if err != nil || len(resolvedAssembly.RigidMembers) == 0 {
@@ -1567,23 +1571,65 @@ const (
 	defaultHardwareProjectionMm = 25
 )
 
+// HardwareFormulaDims returns the effective hardware dimensions (mm) for the
+// HW/HH/HD formula variables (#1453 F1) — TS `resolveHardwareDimensions`
+// parity twin, shape-agnostic. Explicit Dimensions win per axis; otherwise
+// HW keeps the historical `previewSizeMm ?? 96` while HH/HD fall back to the
+// preview scalars and then 0 (= axis not modeled; projection 0 = flush is a
+// real value). Drawing chains keep their own visual defaults (32/25).
+func HardwareFormulaDims(hw *domain.Hardware) (widthMm, heightMm, depthMm float64) {
+	widthMm = positivePtrOr(hw.PreviewSizeMm, defaultHardwareSizeMm)
+	heightMm = 0
+	if hw.PreviewDiameterMm != nil && *hw.PreviewDiameterMm > 0 {
+		heightMm = *hw.PreviewDiameterMm
+	}
+	depthMm = 0
+	if hw.PreviewProjectionMm != nil && *hw.PreviewProjectionMm >= 0 {
+		depthMm = *hw.PreviewProjectionMm
+	}
+	if hw.Dimensions != nil {
+		if hw.Dimensions.WidthMm > 0 {
+			widthMm = hw.Dimensions.WidthMm
+		}
+		if hw.Dimensions.HeightMm > 0 {
+			heightMm = hw.Dimensions.HeightMm
+		}
+		if hw.Dimensions.DepthMm > 0 {
+			depthMm = hw.Dimensions.DepthMm
+		}
+	}
+	return widthMm, heightMm, depthMm
+}
+
+// HardwareDimensionsFromCatalog builds the hardwareId → effective dimensions
+// lookup that rigid-member offset formulas consume (#1453 F1).
+func HardwareDimensionsFromCatalog(catalog []domain.Hardware) map[string]domain.HardwareDimensions {
+	out := make(map[string]domain.HardwareDimensions, len(catalog))
+	for i := range catalog {
+		hw := &catalog[i]
+		w, h, d := HardwareFormulaDims(hw)
+		out[hw.ID] = domain.HardwareDimensions{WidthMm: w, HeightMm: h, DepthMm: d}
+	}
+	return out
+}
+
 var validHardwarePreviewShapes = map[string]bool{
 	"knob": true, "bar-pull": true, "cup-pull": true, "hinge": true,
 	"slide": true, "rail": true, "leg": true,
 }
 
 var hardwareFinishPresetColors = map[string]string{
-	"chrome":       "#d8dde6",
-	"cromo":        "#d8dde6",
-	"black-matte":  "#22252a",
-	"negro-mate":   "#22252a",
-	"bronze":       "#8c6239",
-	"bronce":       "#8c6239",
-	"brushed":      "#b5bac2",
-	"acero-inox":   "#b5bac2",
-	"gold":         "#d4af37",
+	"chrome":          "#d8dde6",
+	"cromo":           "#d8dde6",
+	"black-matte":     "#22252a",
+	"negro-mate":      "#22252a",
+	"bronze":          "#8c6239",
+	"bronce":          "#8c6239",
+	"brushed":         "#b5bac2",
+	"acero-inox":      "#b5bac2",
+	"gold":            "#d4af37",
 	"laton-cepillado": "#c5a059",
-	"blanco-mate":  "#f0f2f5",
+	"blanco-mate":     "#f0f2f5",
 }
 
 func agregadoBoardsHaveHardwarePlacements(agr domain.Agregado) bool {
@@ -1706,11 +1752,12 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 				w := math.Max(board.widthMm, 0)
 				t := math.Max(board.thicknessMm, 0)
 				l := math.Max(board.lengthMm, 0)
-				size := positivePtrOr(item.hw.PreviewSizeMm, defaultHardwareSizeMm)
+				hwW, hwH, hwD := HardwareFormulaDims(&item.hw)
 				boardEnv := formulaDims{
 					W: int(math.Round(w)), H: int(math.Round(l)), D: int(math.Round(l)),
 					PW: int(math.Round(w)), PH: int(math.Round(l)), PD: int(math.Round(l)),
-					T: int(math.Round(t)), HW: int(math.Round(size)),
+					T:  int(math.Round(t)),
+					HW: int(math.Round(hwW)), HH: int(math.Round(hwH)), HD: int(math.Round(hwD)),
 				}
 				xMm := childHp.RelativePosition.XMm
 				if childHp.RelativePosition.XFormula != "" {
@@ -1785,15 +1832,26 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 	t := math.Max(board.thicknessMm, 0)
 	l := math.Max(board.lengthMm, 0)
 
-	size := positivePtrOr(hw.PreviewSizeMm, defaultHardwareSizeMm)
+	formulaW, formulaH, formulaD := HardwareFormulaDims(&hw)
+	// Drawing chains (#1453 F1): explicit dimensions win, then the legacy
+	// preview scalars with their visual defaults — rows without dimensions
+	// stay byte-identical with the previous behavior.
+	size := formulaW
 	diameter := positivePtrOr(hw.PreviewDiameterMm, defaultHardwareDiameterMm)
+	if hw.Dimensions != nil && hw.Dimensions.HeightMm > 0 {
+		diameter = hw.Dimensions.HeightMm
+	}
 	projection := positivePtrOr(hw.PreviewProjectionMm, defaultHardwareProjectionMm)
+	if hw.Dimensions != nil && hw.Dimensions.DepthMm > 0 {
+		projection = hw.Dimensions.DepthMm
+	}
 
 	// Face-plane offsets (mm or formula; formulas see the board env, TS parity).
 	boardEnv := formulaDims{
 		W: int(math.Round(w)), H: int(math.Round(l)), D: int(math.Round(l)),
 		PW: int(math.Round(w)), PH: int(math.Round(l)), PD: int(math.Round(l)),
-		T: int(math.Round(t)), HW: int(math.Round(size)),
+		T:  int(math.Round(t)),
+		HW: int(math.Round(formulaW)), HH: int(math.Round(formulaH)), HD: int(math.Round(formulaD)),
 	}
 	xMm := hp.RelativePosition.XMm
 	if hp.RelativePosition.XFormula != "" {

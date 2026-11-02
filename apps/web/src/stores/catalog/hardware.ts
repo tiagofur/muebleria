@@ -28,6 +28,7 @@ function hardwarePreviewFields(
   | 'previewClearcoat'
   | 'partFinishes'
   | 'maxOpeningAngleDeg'
+  | 'dimensions'
 > {
   const shape = HARDWARE_SHAPES.includes(draft.previewShape)
     ? (draft.previewShape as Hardware['previewShape'])
@@ -51,6 +52,7 @@ function hardwarePreviewFields(
     ...(draft.previewClearcoat ? { previewClearcoat: parseDraftNum(draft.previewClearcoat, true) } : {}),
     ...(partFinishes ? { partFinishes } : {}),
     ...(maxOpeningAngleDeg ? { maxOpeningAngleDeg } : {}),
+    ...hardwareDimensionsField(draft),
     ...hardwareDesignPartsField(draft),
     // #1422 slice 1: el link kit↔parte sobrevive a cualquier edición del form.
     ...(draft.kitHardwareId ? { kitHardwareId: draft.kitHardwareId } : {}),
@@ -75,6 +77,33 @@ function hardwareDesignPartsField(draft: HardwareDraft): Pick<Hardware, 'designP
   const parts: HardwareDesignPart[] = rows;
   validateHardwareDesignParts(parts);
   return { designParts: parts };
+}
+
+/**
+ * #1453 F1: canonical bounding box — the three fields travel together or not
+ * at all. Partial input throws (the modal catches it and nothing persists);
+ * all-empty keeps the hardware deriving effective dims from preview*.
+ */
+function hardwareDimensionsField(
+  draft: HardwareDraft,
+): Pick<Hardware, 'dimensions'> {
+  const w = draft.dimensionWidthMm.trim();
+  const h = draft.dimensionHeightMm.trim();
+  const d = draft.dimensionDepthMm.trim();
+  const filled = [w, h, d].filter((v) => v !== '').length;
+  if (filled === 0) return {};
+  if (filled !== 3) {
+    throw new Error('Las dimensiones W×H×D van completas o vacías — completá las tres o dejá las tres en blanco');
+  }
+  // parseDraftNum devuelve undefined ante basura; 0 cae en el guard > 0 con
+  // el mismo mensaje (nunca un NaN hacia el servidor).
+  const widthMm = parseDraftNum(w) ?? 0;
+  const heightMm = parseDraftNum(h) ?? 0;
+  const depthMm = parseDraftNum(d) ?? 0;
+  if (!(widthMm > 0) || !(heightMm > 0) || !(depthMm > 0)) {
+    throw new Error('Las dimensiones W×H×D deben ser mayores a 0 mm');
+  }
+  return { dimensions: { widthMm, heightMm, depthMm } };
 }
 
 type HardwareSlice = Pick<
@@ -141,6 +170,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               previewRoughness: _dr,
               previewMetalness: _dm,
               previewClearcoat: _dcl,
+              dimensions: _ddim,
               partFinishes: _dpf,
               machining: _dma,
               visualAsset: _dva,

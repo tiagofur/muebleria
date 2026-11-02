@@ -161,8 +161,16 @@ export function resolveHardwareGeometry(
           ? DEFAULT_LEG_DIAMETER_MM
           : DEFAULT_KNOB_DIAMETER_MM,
   );
-  const gripLengthMm = positiveOr(hardware.previewSizeMm, DEFAULT_BAR_LENGTH_MM);
-  const gripDiameterMm = positiveOr(hardware.previewDiameterMm, DEFAULT_BAR_DIAMETER_MM);
+  // #1453 F1: canonical dimensions win per axis; legacy preview* scalars and
+  // their visual defaults follow — rows without dimensions render identically.
+  const gripLengthMm = positiveOr(
+    hardware.dimensions?.widthMm ?? hardware.previewSizeMm,
+    DEFAULT_BAR_LENGTH_MM,
+  );
+  const gripDiameterMm = positiveOr(
+    hardware.dimensions?.heightMm ?? hardware.previewDiameterMm,
+    DEFAULT_BAR_DIAMETER_MM,
+  );
   const cupDepthMm = positiveOr(hardware.previewProjectionMm, DEFAULT_HINGE_CUP_DEPTH_MM);
   const armLengthMm = positiveOr(hardware.previewSizeMm, DEFAULT_HINGE_ARM_LENGTH_MM);
   const railLengthMm = positiveOr(hardware.previewSizeMm,

@@ -17,6 +17,10 @@
 import { ValidationError } from './errors';
 import { evaluatePartFormula } from './engine/shared';
 import {
+  DEFAULT_HARDWARE_SIZE_MM,
+  resolveHardwareDimensions,
+} from './hardwarePlacement';
+import {
   DEFAULT_BOARD_THICKNESS_MM,
   inferHolesForPiece,
   type HoleDefinition,
@@ -434,7 +438,7 @@ export function resolvePartDrilling(
   const resolvedHoles: HoleDefinition[] = [];
   let foundAnyMachiningProfile = false;
 
-  const boardEnv = {
+  const boardEnvBase = {
     W: widthMm,
     L: lengthMm,
     H: lengthMm,
@@ -445,7 +449,6 @@ export function resolvePartDrilling(
     PH: lengthMm,
     PD: lengthMm,
     PT: thicknessMm,
-    HW: 96,
   };
 
   for (const placement of placements) {
@@ -464,6 +467,17 @@ export function resolvePartDrilling(
     foundAnyMachiningProfile = true;
     const part = resolvePartForPlacement(profile.parts, placement, pieceContext, partRole);
     if (!part || part.operations.length === 0) continue;
+
+    // #1453 F1: the formula env carries the resolved hardware's effective
+    // dimensions (never the legacy 96 placeholder). Derived-only machining
+    // without a catalog record keeps the historical default.
+    const hwDims = hardware ? resolveHardwareDimensions(hardware) : undefined;
+    const boardEnv = {
+      ...boardEnvBase,
+      HW: hwDims?.widthMm ?? DEFAULT_HARDWARE_SIZE_MM,
+      HH: hwDims?.heightMm ?? 0,
+      HD: hwDims?.depthMm ?? 0,
+    };
 
     // Evaluate placement anchor position on anchorFace
     let anchorX = placement.relativePosition.xMm;
