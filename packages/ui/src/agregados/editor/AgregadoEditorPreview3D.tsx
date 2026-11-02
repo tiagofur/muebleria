@@ -18,8 +18,11 @@ export type AgregadoEditorPreview3DProps = {
   readonly draft: AgregadoDraft;
   readonly catalogInput: Module3DCatalogInput;
   /**
-   * Catalog agregado id whose assembly recipe renders as GLB members (#669).
-   * Null for a brand-new agregado (no catalog entry yet) → assemblies stay empty.
+   * Catalog agregado id used as FALLBACK when the draft has no recipe yet
+   * (#669, ajustado por #1412): la receta del borrador (`draft.rigidMembers`)
+   * gana — el preview refleja la autoría en vivo; sin miembros en el borrador
+   * se proyecta la receta guardada; sin ninguna → assemblies vacíos, nunca
+   * geometría inventada.
    */
   readonly agregadoId?: string | null;
   // Reserved for the texture follow-up (V1 renders colors/grain only, matching
@@ -55,7 +58,7 @@ export function AgregadoEditorPreview3D({
 
       {preview.empty && !preview.error ? (
         <p className="catalog-empty">
-          Vista previa vacía. Agregá piezas a la izquierda.
+          Vista previa vacía. Agregá piezas o herrajes del cajón.
         </p>
       ) : null}
 

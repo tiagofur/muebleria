@@ -16,11 +16,14 @@ import type {
   AgregadoVariantSet,
   AssemblyAxisRef,
   Hardware,
-  RigidMemberBOMRole,
 } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
+import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import type { AgregadoDraft } from '../agregadoDraft';
 import { AgregadoRecipePanel } from './AgregadoRecipePanel';
+// #1451: vocabulario compartido con el nivel «Del cajón» de Herrajes — una
+// sola voz para compra, ids de miembro y ejes.
+import { axisLabel, BOM_ROLES, uniqueMemberId } from './AgregadoCajonHardwareSection';
 
 export type AgregadoRecipeAuthoringPanelProps = {
   readonly draft: AgregadoDraft;
@@ -38,24 +41,7 @@ const AXIS_REFS: { value: AssemblyAxisRef; label: string }[] = [
   { value: 'center', label: 'Centro' },
 ];
 
-const BOM_ROLES: { value: RigidMemberBOMRole; label: string }[] = [
-  { value: 'included_in_kit', label: 'Incluido en el juego (kit)' },
-  { value: 'separately_purchased', label: 'Compra separada' },
-  { value: 'non_purchasing', label: 'Solo visual (no se compra)' },
-];
-
 const AXIS_NAMES = ['x', 'y', 'z'] as const;
-
-function axisLabel(name: 'x' | 'y' | 'z'): string {
-  // Assembly space: +X ancho/dcha, +Y fondo/frente, +Z alto (contrato #670).
-  return name === 'x' ? 'X (ancho)' : name === 'y' ? 'Y (fondo)' : 'Z (alto)';
-}
-
-function uniqueMemberId(members: readonly AgregadoRigidMember[]): string {
-  let n = members.length + 1;
-  while (members.some((m) => m.memberId === `miembro-${n}`)) n += 1;
-  return `miembro-${n}`;
-}
 
 export function AgregadoRecipeAuthoringPanel({
   draft,
@@ -78,7 +64,9 @@ export function AgregadoRecipeAuthoringPanel({
     const member: AgregadoRigidMember = {
       memberId: uniqueMemberId(members),
       role: members.length === 0 ? 'side_left' : members.length === 1 ? 'side_right' : `rol-${members.length + 1}`,
-      source: { kind: 'fixed', fixed: { hardwareId: catalogHardware[0]?.id ?? '' } },
+      // #1451: sin default encubierto a catalogHardware[0] — el miembro nace
+      // sin herraje y queda inválido-visible hasta que el autor elige.
+      source: { kind: 'fixed', fixed: { hardwareId: '' } },
       placement: {
         x: { ref: 'min', offsetMm: 0 },
         y: { ref: 'min', offsetMm: 0 },
@@ -108,7 +96,9 @@ export function AgregadoRecipeAuthoringPanel({
     setPresetConfirm(kind);
   };
   const applyPreset = (kind: 'drawer-slides' | 'center-rail') => {
-    const hardwareId = catalogHardware[0]?.id ?? '';
+    // #1451: la plantilla arma la estructura; el herraje lo elige el autor en
+    // cada tarjeta — sin herraje implícito del catálogo.
+    const hardwareId = '';
     const bomRole: AgregadoRigidMember['bomRole'] = kitId !== '' ? 'included_in_kit' : 'separately_purchased';
     const base = (id: string, role: string): AgregadoRigidMember => ({
       memberId: id,
@@ -166,7 +156,8 @@ export function AgregadoRecipeAuthoringPanel({
         id: `set-fondo-${n}`,
         dimension: 'depth',
         variants: [
-          { nominalDimensionMm: 500, hardwareId: catalogHardware[0]?.id ?? '' },
+          // #1451: herraje vacío a propósito — la variante nace inválida-visible.
+          { nominalDimensionMm: 500, hardwareId: '' },
         ],
       },
     ];
@@ -272,22 +263,23 @@ export function AgregadoRecipeAuthoringPanel({
           <label className="catalog-form__label" htmlFor={`${testId}-kit`}>
             Herraje que se vende como juego
           </label>
-          <select
+          <CatalogPicker
             id={`${testId}-kit`}
-            className="catalog-form__select"
+            label="Kit comercial"
+            placeholder="Sin kit (compra separada)"
+            searchPlaceholder="Buscar herraje…"
             value={kitId}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-              patchDraft({ commercialKitHardwareId: e.target.value || undefined })
+            onChange={(hardwareId) =>
+              patchDraft({ commercialKitHardwareId: hardwareId || undefined })
             }
+            items={catalogHardware.map((h) => ({
+              id: h.id,
+              code: h.code,
+              name: h.name,
+              active: h.active,
+            }))}
             data-testid={`${testId}-kit`}
-          >
-            <option value="">Sin kit (compra separada)</option>
-            {catalogHardware.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.code} — {h.name}
-              </option>
-            ))}
-          </select>
+          />
           <p className="catalog-form__hint">
             Los miembros «incluido en el juego» no generan línea de compra propia: el
             kit cotiza una vez.
@@ -436,9 +428,7 @@ export function AgregadoRecipeAuthoringPanel({
                               ? {
                                   source: {
                                     kind,
-                                    fixed: {
-                                      hardwareId: catalogHardware[0]?.id ?? '',
-                                    },
+                                    fixed: { hardwareId: '' },
                                   },
                                 }
                               : {
@@ -459,29 +449,38 @@ export function AgregadoRecipeAuthoringPanel({
                     </div>
                     {m.source.kind === 'fixed' ? (
                       <div className="catalog-form__field">
-                        <label className="catalog-form__label">Herraje</label>
-                        <select
-                          className="catalog-form__select"
+                        <CatalogPicker
+                          id={`${testId}-member-${idx}-source-hardware`}
+                          label="Herraje"
+                          placeholder="Seleccionar herraje…"
+                          searchPlaceholder="Buscar herraje…"
                           value={m.source.fixed?.hardwareId ?? ''}
-                          onChange={(e) =>
+                          onChange={(hardwareId) =>
                             updateMember(idx, {
                               source: {
                                 kind: 'fixed',
-                                fixed: { hardwareId: e.target.value },
+                                fixed: { hardwareId },
                               },
                             })
                           }
+                          items={catalogHardware.map((h) => ({
+                            id: h.id,
+                            code: h.code,
+                            name: h.name,
+                            active: h.active,
+                          }))}
                           data-testid={`${testId}-member-${idx}-source-hardware`}
-                        >
-                          <option value="" disabled>
-                            Seleccionar herraje…
-                          </option>
-                          {catalogHardware.map((h) => (
-                            <option key={h.id} value={h.id}>
-                              {h.code} — {h.name}
-                            </option>
-                          ))}
-                        </select>
+                        />
+                        {(m.source.fixed?.hardwareId ?? '') === '' ? (
+                          <p
+                            className="catalog-form__error"
+                            role="alert"
+                            data-testid={`${testId}-member-${idx}-identity-error`}
+                          >
+                            Elegí un herraje: sin herraje el miembro no resuelve y
+                            bloquea el guardado.
+                          </p>
+                        ) : null}
                       </div>
                     ) : (
                       <div className="catalog-form__field">
@@ -516,7 +515,9 @@ export function AgregadoRecipeAuthoringPanel({
                         className="catalog-form__select"
                         value={m.bomRole}
                         onChange={(e) =>
-                          updateMember(idx, { bomRole: e.target.value as RigidMemberBOMRole })
+                          updateMember(idx, {
+                            bomRole: e.target.value as AgregadoRigidMember['bomRole'],
+                          })
                         }
                         data-testid={`${testId}-member-${idx}-bom-role`}
                       >
@@ -788,27 +789,26 @@ export function AgregadoRecipeAuthoringPanel({
                           data-testid={`${testId}-set-${idx}-variant-${vIdx}-nominal`}
                         />
                         <span className="agregado-recipe__variant-mm">mm</span>
-                        <select
-                          className="catalog-form__select"
+                        <CatalogPicker
+                          id={`${testId}-set-${idx}-variant-${vIdx}-hardware`}
+                          label="Herraje"
+                          placeholder="Herraje…"
+                          searchPlaceholder="Buscar herraje…"
                           value={v.hardwareId}
-                          aria-label="Herraje de la variante"
-                          onChange={(e) => {
+                          onChange={(hardwareId) => {
                             const variants = s.variants.map((vv, i) =>
-                              i === vIdx ? { ...vv, hardwareId: e.target.value } : vv,
+                              i === vIdx ? { ...vv, hardwareId } : vv,
                             );
                             updateVariantSet(idx, { variants });
                           }}
+                          items={catalogHardware.map((h) => ({
+                            id: h.id,
+                            code: h.code,
+                            name: h.name,
+                            active: h.active,
+                          }))}
                           data-testid={`${testId}-set-${idx}-variant-${vIdx}-hardware`}
-                        >
-                          <option value="" disabled>
-                            Herraje…
-                          </option>
-                          {catalogHardware.map((h) => (
-                            <option key={h.id} value={h.id}>
-                              {h.code} — {h.name}
-                            </option>
-                          ))}
-                        </select>
+                        />
                         <button
                           type="button"
                           className="btn btn--ghost btn--small btn--icon-only"
@@ -835,7 +835,7 @@ export function AgregadoRecipeAuthoringPanel({
                             {
                               nominalDimensionMm:
                                 Math.max(0, ...s.variants.map((vv) => vv.nominalDimensionMm)) + 50,
-                              hardwareId: catalogHardware[0]?.id ?? '',
+                              hardwareId: '',
                             },
                           ],
                         })

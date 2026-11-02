@@ -80,10 +80,11 @@ function dimsFromDraft(draft: AgregadoDraft): {
 /**
  * Resolve 3D preview for an agregado draft.
  * @param optionChoicesOverride partial board finishes merged over defaults
- * @param agregadoId catalog agregado id whose assembly recipe to project as
- * `assemblies` (#669). The draft itself never carries a recipe, so the caller
- * passes the authoritative identity explicitly; unknown id or no recipe →
- * empty assemblies, never invented geometry.
+ * @param agregadoId catalog agregado id used as FALLBACK for `assemblies`
+ *   (#669). Desde #1412 el borrador SÍ lleva receta: `draft.rigidMembers`
+ *   gana y el preview refleja la autoría en vivo; sin miembros en el borrador
+ *   cae a la receta guardada; sin ninguna → empty assemblies, never invented
+ *   geometry.
  */
 export function resolveAgregado3DPreview(
   draft: AgregadoDraft,
