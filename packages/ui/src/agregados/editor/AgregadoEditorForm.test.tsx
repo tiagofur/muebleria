@@ -92,6 +92,7 @@ function renderForm({
   optionGroups,
   setDraft,
   catalogComponents = [mockComponent],
+  catalogHardware = [] as unknown as readonly Hardware[],
 }: {
   readonly catalogInput?: Module3DCatalogInput;
   readonly editorTab?: AgregadoEditorTab;
@@ -100,6 +101,7 @@ function renderForm({
   readonly optionGroups?: readonly OptionGroup[];
   readonly setDraft?: Dispatch<SetStateAction<AgregadoDraft>>;
   readonly catalogComponents?: readonly Component[];
+  readonly catalogHardware?: readonly Hardware[];
 }) {
   render(
     <AgregadoEditorForm
@@ -115,7 +117,7 @@ function renderForm({
       setDraft={setDraft ?? (vi.fn() as Dispatch<SetStateAction<AgregadoDraft>>)}
       editingId={null}
       catalogComponents={catalogComponents}
-      catalogHardware={[] as unknown as readonly Hardware[]}
+      catalogHardware={catalogHardware}
       catalogInput={catalogInput}
       optionGroups={optionGroups}
     />,
@@ -233,7 +235,7 @@ describe('AgregadoEditorForm — General tab', () => {
     expect(document.activeElement).toBe(components);
   });
 
-  it('reflects combined bulk and positioned hardware in the Herrajes tab badge and general summary', () => {
+  it('reflects hardware per level in the Herrajes tab badge and general summary (#1451)', () => {
     const draft = doorDraft();
     draft.hardwareLines = [{ id: 'hl-1', quantity: 1, optionRole: 'BISAGRA' }];
     draft.components[0] = {
@@ -251,11 +253,11 @@ describe('AgregadoEditorForm — General tab', () => {
 
     renderForm({ editorTab: 'general', draft });
 
-    // Herrajes tab button badge should display 2 (1 bulk + 1 positioned)
+    // Herrajes tab badge shows levels, never the raw sum: «1 + 1 pos.»
     const hwTab = screen.getByTestId('agregado-editor-tab-hardware');
-    expect(hwTab.textContent).toContain('2');
+    expect(hwTab.textContent).toContain('1 + 1 pos.');
 
-    // General summary count should also display 2
+    // General summary count keeps the combined total
     expect(
       screen.getByTestId('agregado-general-count-hardware').textContent,
     ).toBe('2');
@@ -489,16 +491,27 @@ describe('AgregadoEditorForm — herrajes por grupo (#1046)', () => {
     return draft;
   }
 
-  it('a line with concrete hardware renders the specific select without (Por Rol)', () => {
+  it('a line with concrete hardware renders the searchable picker with its value', () => {
     renderForm({
       editorTab: 'hardware',
       draft: specificDraft(),
       optionGroups: grupoOptionGroups,
+      catalogHardware: [
+        {
+          id: 'hw-blum',
+          code: 'BIS-BLUM',
+          name: 'Bisagra Blum',
+          active: true,
+        } as unknown as Hardware,
+      ],
     });
 
     expect(screen.getByTestId('agregado-hw-0-mode')).toBeTruthy();
-    const select = screen.getByTestId('agregado-hw-0-select') as HTMLSelectElement;
-    expect((select.options[0] as HTMLOptionElement).textContent).not.toContain('(Por Rol)');
+    // #1451: the specific author is a CatalogPicker (searchable), never a
+    // raw select — and it shows the picked hardware, not a placeholder.
+    const picker = screen.getByTestId('agregado-hw-0-select');
+    expect(picker.textContent).not.toContain('Seleccionar herraje…');
+    expect(picker.textContent).toContain('BIS-BLUM');
   });
 
   it('switching a line to group mode clears hardwareId, keeps the role and lists members', () => {
@@ -547,5 +560,160 @@ describe('AgregadoEditorForm — herrajes por grupo (#1046)', () => {
     renderForm({ editorTab: 'hardware', draft: specificDraft() });
     expect(screen.queryByTestId('agregado-hw-0-mode')).toBeNull();
     expect(screen.getByTestId('agregado-hw-0-select')).toBeTruthy();
+  });
+});
+
+describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const hwFixture = [
+    { id: 'hw-corr', code: 'CORR-500', name: 'Corredera Telescópica 500mm', active: true },
+    { id: 'hw-jal', code: 'JAL-120', name: 'Jaladera 120mm', active: true },
+  ] as unknown as Hardware[];
+
+  const memberDraft = (): AgregadoDraft => {
+    const draft = doorDraft();
+    draft.rigidMembers = [
+      {
+        memberId: 'miembro-1',
+        role: 'fixed_rail',
+        source: { kind: 'fixed', fixed: { hardwareId: 'hw-corr' } },
+        placement: {
+          x: { ref: 'min', offsetMm: 0 },
+          y: { ref: 'min', offsetMm: 0 },
+          z: { ref: 'min', offsetMm: 0 },
+        },
+        bomRole: 'separately_purchased',
+      },
+    ];
+    return draft;
+  };
+
+  it('«Añadir herraje» opens the level chooser and «Del agregado» adds a member without hidden hardware', async () => {
+    const user = userEvent.setup();
+    const setDraftMock = vi.fn();
+    renderForm({
+      editorTab: 'hardware',
+      setDraft: setDraftMock as unknown as Dispatch<SetStateAction<AgregadoDraft>>,
+      catalogHardware: hwFixture,
+    });
+
+    await user.click(screen.getByTestId('agregado-add-hardware'));
+    expect(screen.getByTestId('agregado-hw-chooser')).toBeTruthy();
+
+    await user.click(screen.getByTestId('agregado-hw-chooser-cajon'));
+
+    const updater = setDraftMock.mock.calls.at(-1)![0] as (
+      prev: AgregadoDraft,
+    ) => AgregadoDraft;
+    const next = updater(doorDraft());
+    expect(next.rigidMembers).toHaveLength(1);
+    expect(next.rigidMembers![0]!.source.kind).toBe('fixed');
+    // Nace sin herraje: el picker lo exige — nunca catalogHardware[0].
+    expect(next.rigidMembers![0]!.source.fixed?.hardwareId).toBe('');
+    expect(next.rigidMembers![0]!.bomRole).toBe('separately_purchased');
+  });
+
+  it('the chooser adds a bulk line without hidden hardware or role defaults', async () => {
+    const user = userEvent.setup();
+    const setDraftMock = vi.fn();
+    renderForm({
+      editorTab: 'hardware',
+      setDraft: setDraftMock as unknown as Dispatch<SetStateAction<AgregadoDraft>>,
+      catalogHardware: hwFixture,
+    });
+
+    await user.click(screen.getByTestId('agregado-add-hardware'));
+    await user.click(screen.getByTestId('agregado-hw-chooser-cantidad'));
+
+    const updater = setDraftMock.mock.calls.at(-1)![0] as (
+      prev: AgregadoDraft,
+    ) => AgregadoDraft;
+    const next = updater(doorDraft());
+    expect(next.hardwareLines.at(-1)!.hardwareId).toBeUndefined();
+    expect(next.hardwareLines.at(-1)!.optionRole).toBe('');
+  });
+
+  it('the Del agregado level shows the member with workshop labels and the identity error', () => {
+    const draft = memberDraft();
+    draft.rigidMembers![0] = {
+      ...draft.rigidMembers![0]!,
+      source: { kind: 'fixed', fixed: { hardwareId: '' } },
+      placement: {
+        x: { ref: 'max', offsetMm: -10 },
+        y: { ref: 'min', offsetMm: 0 },
+        z: { ref: 'min', offsetMm: 0 },
+      },
+      bomRole: 'included_in_kit',
+    };
+    renderForm({ editorTab: 'hardware', draft, catalogHardware: hwFixture });
+
+    expect(screen.getByTestId('agregado-hw-level-cajon')).toBeTruthy();
+    const card = screen.getByTestId('agregado-cajon-hardware-member-0');
+    expect(card.textContent).toContain('miembro-1');
+    expect(card.textContent).toContain('derecha');
+    expect(
+      screen.getByTestId('agregado-cajon-hardware-member-0-identity-error'),
+    ).toBeTruthy();
+    // La sección de piezas enseña en vez de mentir (solo-herraje mixto).
+    expect(screen.getByTestId('agregado-hw-level-piezas')).toBeTruthy();
+  });
+
+  it('«Kit con par izq/der» creates 4 separate left/right members (never a mirror)', async () => {
+    const user = userEvent.setup();
+    const setDraftMock = vi.fn();
+    renderForm({
+      editorTab: 'hardware',
+      setDraft: setDraftMock as unknown as Dispatch<SetStateAction<AgregadoDraft>>,
+      catalogHardware: hwFixture,
+    });
+
+    await user.click(screen.getByTestId('agregado-cajon-hardware-preset-pair'));
+
+    const updater = setDraftMock.mock.calls.at(-1)![0] as (
+      prev: AgregadoDraft,
+    ) => AgregadoDraft;
+    const next = updater(doorDraft());
+    expect(next.rigidMembers).toHaveLength(4);
+    expect(next.rigidMembers!.map((m) => m.placement.x.ref)).toEqual([
+      'min',
+      'max',
+      'min',
+      'max',
+    ]);
+    expect(next.rigidMembers!.map((m) => m.actorMembership)).toEqual([
+      'body',
+      'body',
+      'actor:drawer',
+      'actor:drawer',
+    ]);
+    expect(next.rigidMembers!.every((m) => m.source.fixed?.hardwareId === '')).toBe(
+      true,
+    );
+  });
+
+  it('with existing members the pair preset asks for confirmation first', async () => {
+    const user = userEvent.setup();
+    const setDraftMock = vi.fn();
+    renderForm({
+      editorTab: 'hardware',
+      draft: memberDraft(),
+      setDraft: setDraftMock as unknown as Dispatch<SetStateAction<AgregadoDraft>>,
+      catalogHardware: hwFixture,
+    });
+
+    await user.click(screen.getByTestId('agregado-cajon-hardware-preset-pair'));
+    expect(
+      screen.getByTestId('agregado-cajon-hardware-preset-confirm'),
+    ).toBeTruthy();
+
+    await user.click(screen.getByTestId('agregado-cajon-hardware-preset-confirm-yes'));
+    const updater = setDraftMock.mock.calls.at(-1)![0] as (
+      prev: AgregadoDraft,
+    ) => AgregadoDraft;
+    const next = updater(memberDraft());
+    expect(next.rigidMembers).toHaveLength(4);
   });
 });

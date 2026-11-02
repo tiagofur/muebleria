@@ -54,6 +54,18 @@ async function saveAndAwaitPut(page: Page): Promise<number | null> {
   return status;
 }
 
+/**
+ * #1451: kit y herraje de miembro son CatalogPicker (combobox), no <select>;
+ * los presets arman la estructura con herraje vacío y el autor elige antes de
+ * guardar — sin default encubierto.
+ */
+async function pickCombobox(page: Page, testId: string, label: RegExp): Promise<void> {
+  const picker = page.getByTestId(testId);
+  await picker.getByRole('button').click();
+  await picker.getByRole('option', { name: label }).click();
+  await expect(picker.getByRole('option', { name: label })).toHaveCount(0);
+}
+
 async function loginOwner(page: Page): Promise<string> {
   let browserToken: string | null = null;
   page.on('request', (req) => {
@@ -93,11 +105,16 @@ test.describe.serial('Agregado — presets y anclas con fórmula (#1418)', () =>
     await page.getByTestId('agregado-editor-page').waitFor({ state: 'visible' });
     await page.getByRole('tab', { name: 'Receta' }).click();
 
-    // Kit + preset «cajón con correderas».
-    await page
-      .getByTestId('agregado-tab-recipe-authoring-kit')
-      .selectOption({ label: `${HW_CODE} — Corredera para fórmulas` });
+    // Kit + preset «cajón con correderas» + herraje por miembro (nacen vacíos).
+    await pickCombobox(page, 'agregado-tab-recipe-authoring-kit', new RegExp(HW_CODE));
     await page.getByTestId('agregado-tab-recipe-authoring-preset-drawer-slides').click();
+    for (let i = 0; i < 4; i += 1) {
+      await pickCombobox(
+        page,
+        `agregado-tab-recipe-authoring-member-${i}-source-hardware`,
+        new RegExp(HW_CODE),
+      );
+    }
     await saveAndAwaitPut(page);
     // Readback exacto: 4 miembros con membresías y anclajes del preset.
     const afterPreset = await readAgregado(token);
@@ -139,6 +156,12 @@ test.describe.serial('Agregado — presets y anclas con fórmula (#1418)', () =>
     await page
       .getByTestId('agregado-tab-recipe-authoring-preset-confirm-yes')
       .click({ timeout: 5_000 });
+    // El miembro del preset nace sin herraje (#1451): elegirlo antes de guardar.
+    await pickCombobox(
+      page,
+      'agregado-tab-recipe-authoring-member-0-source-hardware',
+      new RegExp(HW_CODE),
+    );
     // El panel debe mostrar EXACTAMENTE 1 miembro antes de guardar; si una
     // hidratación tardía lo pisó, falla acá y no en el readback.
     await expect(

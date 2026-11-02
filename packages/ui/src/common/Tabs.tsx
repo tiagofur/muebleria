@@ -9,7 +9,8 @@ import { useRovingTabList } from './rovingTabList';
 export type TabDefinition<TTabId extends string> = {
   readonly id: TTabId;
   readonly label: string;
-  readonly count?: number;
+  /** Número de elementos o resumen compuesto por nivel (p. ej. «2 + 4 pos.», #1451). */
+  readonly count?: number | string;
   readonly disabled?: boolean;
   /** Tooltip nativo (p. ej. razón por la que la tab está deshabilitada). */
   readonly title?: string;
@@ -82,7 +83,12 @@ function Tabs<TTabId extends string>({
               {tab.icon}
               {tab.label}
               {tab.count !== undefined ? (
-                <span className="tabs__count" aria-label={`${tab.count} elementos`}>
+                <span
+                  className="tabs__count"
+                  aria-label={
+                    typeof tab.count === 'string' ? tab.count : `${tab.count} elementos`
+                  }
+                >
                   {tab.count}
                 </span>
               ) : null}

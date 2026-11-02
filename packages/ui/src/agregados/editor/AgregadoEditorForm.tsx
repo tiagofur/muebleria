@@ -10,11 +10,13 @@ import {
   type ReactNode,
   type SetStateAction,
   useMemo,
+  useRef,
   useState,
 } from 'react';
-import type { Agregado, Component, Hardware, HardwareLine, ModuleComponentInstance, OptionGroup } from '@granete/domain';
+import type { Agregado, AgregadoRigidMember, Component, Hardware, HardwareLine, ModuleComponentInstance, OptionGroup } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
+import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import { ModuleComponentAdderModal } from '../../modules/components/ModuleComponentAdderModal';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import { InstanceOverridesEditor } from '../../modules/components/InstanceOverridesEditor';
@@ -25,6 +27,7 @@ import {
 import { optionGroupsForHardware } from '../../modules/helpers/moduleRolePickers';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import type { AgregadoDraft } from '../agregadoDraft';
+import { AgregadoCajonHardwareSection, uniqueMemberId } from './AgregadoCajonHardwareSection';
 import { AgregadoEditorGeneralPanel } from './AgregadoEditorGeneralPanel';
 import { AgregadoEditorPreview3D } from './AgregadoEditorPreview3D';
 import { AgregadoRecipeAuthoringPanel } from './AgregadoRecipeAuthoringPanel';
@@ -88,6 +91,18 @@ export function AgregadoEditorForm({
     [optionGroups],
   );
 
+  // #1451: items del picker de herrajes — una sola voz en líneas y members.
+  const pickerHardwareItems = useMemo(
+    () =>
+      catalogHardware.map((h) => ({
+        id: h.id,
+        code: h.code,
+        name: h.name,
+        active: h.active,
+      })),
+    [catalogHardware],
+  );
+
   // S5 #1009: «Añadir Pieza» opens a searchable picker instead of blindly
   // appending the catalog's first component (ModuleComponentAdderModal parity).
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -142,7 +157,9 @@ export function AgregadoEditorForm({
   };
 
   const addHardwareLine = () => {
-    const first = catalogHardware[0];
+    // #1451: la línea nace sin herraje ni grupo — inválida-visible hasta que
+    // el autor elige (mismo trato fail-closed que los placements #1147);
+    // nunca un default encubierto a catalogHardware[0].
     setDraft((prev) => ({
       ...prev,
       hardwareLines: [
@@ -150,13 +167,58 @@ export function AgregadoEditorForm({
         {
           id: `hl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           quantity: 1,
-          // S4 #1009: default to the catalog's first hardware role when the
-          // groups are known — never a hardcoded role the catalog may not have.
-          optionRole: hardwareRoles[0]?.code ?? 'HERRAJE',
-          hardwareId: first?.id,
+          optionRole: '',
         },
       ],
     }));
+  };
+
+  // #1451: fábrica del miembro «Del agregado» — comparte el chooser del header y
+  // el botón de la sección. Nace SIN herraje (inválido-visible) anclado al
+  // borde izquierdo; el kit del borrador manda para el bomRole.
+  const addAgregadoMember = () => {
+    setDraft((prev) => {
+      const member: AgregadoRigidMember = {
+        memberId: uniqueMemberId(prev.rigidMembers ?? []),
+        role: 'fixed_rail',
+        source: { kind: 'fixed', fixed: { hardwareId: '' } },
+        placement: {
+          x: { ref: 'min', offsetMm: 0 },
+          y: { ref: 'min', offsetMm: 0 },
+          z: { ref: 'min', offsetMm: 0 },
+        },
+        bomRole: prev.commercialKitHardwareId
+          ? 'included_in_kit'
+          : 'separately_purchased',
+        actorMembership: 'body',
+      };
+      return { ...prev, rigidMembers: [...(prev.rigidMembers ?? []), member] };
+    });
+  };
+
+  // #1451: el «+ Añadir herraje» pregunta primero el nivel — la distinción
+  // que el usuario ya hace de forma natural (del agregado / pieza / cantidad).
+  const [hwChooserOpen, setHwChooserOpen] = useState(false);
+  const cajonLevelRef = useRef<HTMLDivElement | null>(null);
+  const cantidadLevelRef = useRef<HTMLDivElement | null>(null);
+  const piezasLevelRef = useRef<HTMLDivElement | null>(null);
+
+  const chooseHardwareLevel = (level: 'cajon' | 'pieza' | 'cantidad') => {
+    setHwChooserOpen(false);
+    if (level === 'cajon') {
+      addAgregadoMember();
+    } else if (level === 'cantidad') {
+      addHardwareLine();
+    }
+    window.requestAnimationFrame(() => {
+      const target =
+        level === 'cajon'
+          ? cajonLevelRef.current
+          : level === 'pieza'
+          ? piezasLevelRef.current
+          : cantidadLevelRef.current;
+      target?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
   };
 
   const removeHardwareLine = (idx: number) => {
@@ -178,9 +240,21 @@ export function AgregadoEditorForm({
     0,
   );
 
-  const tabBadge: Partial<Record<AgregadoEditorTab, number>> = {
+  // #1451: badge por nivel — «cantidad + posiciones», nunca la suma cruda.
+  const bulkHardwareCount = draft.hardwareLines.length;
+  const positionedHardwareCount =
+    totalHardwarePlacements + (draft.rigidMembers?.length ?? 0);
+  const hardwareBadge =
+    bulkHardwareCount === 0 && positionedHardwareCount === 0
+      ? undefined
+      : [
+          ...(bulkHardwareCount > 0 ? [String(bulkHardwareCount)] : []),
+          `${positionedHardwareCount} pos.`,
+        ].join(' + ');
+
+  const tabBadge: Partial<Record<AgregadoEditorTab, string | number>> = {
     components: draft.components.length,
-    hardware: draft.hardwareLines.length + totalHardwarePlacements,
+    hardware: hardwareBadge,
     // #1412: la pestaña ahora AUTORA la receta del borrador; el resumen de la
     // guardada vive dentro (lectura) y «Simular cambio» sigue contra la guardada.
     recipe: draft.rigidMembers?.length,
@@ -388,7 +462,7 @@ export function AgregadoEditorForm({
         </div>
       )}
 
-      {/* Tab: Herrajes */}
+      {/* Tab: Herrajes (#1451) — un hogar, tres niveles de anclaje */}
       {editorTab === 'hardware' && (
         <div
           className="agregado-editor__panel"
@@ -407,188 +481,279 @@ export function AgregadoEditorForm({
             <div className="agregado-editor__components-list">
               <div className="agregado-editor__panel-header">
                 <p className="catalog-form__hint">
-                  Herrajes en cantidad (solo costo, sin posición): tornillería,
-                  perfiles, insumos. Para jaladeras/bisagras con posición 3D, usá la
-                  sección de abajo.
+                  Cada herraje vive en un nivel: del agregado (anclado al
+                  ensamble entero), por cantidad (insumo sin posición) o de una
+                  pieza (cara + perforaciones). Un herraje tiene un solo nivel y
+                  una sola línea de compra.
                 </p>
                 <button
                   type="button"
                   className="btn btn--secondary btn--small"
-                  onClick={addHardwareLine}
+                  onClick={() => setHwChooserOpen((open) => !open)}
+                  aria-expanded={hwChooserOpen}
                   data-testid="agregado-add-hardware"
                 >
-                  <Plus size={14} /> Añadir Herraje
+                  <Plus size={14} /> Añadir herraje
                 </button>
               </div>
 
-              {draft.hardwareLines.length === 0 ? (
-                <div className="agregado-editor__empty-slot">
-                  No hay herrajes en este sub-ensamble.
+              {hwChooserOpen ? (
+                <div
+                  className="agregado-editor__hw-chooser"
+                  role="group"
+                  aria-label="¿Dónde va este herraje?"
+                  data-testid="agregado-hw-chooser"
+                >
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--small"
+                    onClick={() => chooseHardwareLevel('cajon')}
+                    data-testid="agregado-hw-chooser-cajon"
+                  >
+                    Del agregado — kit o herraje anclado al ensamble
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--small"
+                    onClick={() => chooseHardwareLevel('pieza')}
+                    data-testid="agregado-hw-chooser-pieza"
+                  >
+                    De una pieza — con cara y perforaciones
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--small"
+                    onClick={() => chooseHardwareLevel('cantidad')}
+                    data-testid="agregado-hw-chooser-cantidad"
+                  >
+                    Solo cantidad — insumo sin posición
+                  </button>
                 </div>
-              ) : (
-                <ul className="agregado-editor__item-list">
-                  {draft.hardwareLines.map((hw, idx) => {
-                    const lineMode = hw.hardwareId ? 'especifico' : 'grupo';
-                    const selectedGroup = hardwareRoles.find((g) => g.code === hw.optionRole);
-                    return (
-                    <li key={idx} className="agregado-editor__item-row">
-                      <div className="agregado-editor__item-fields">
-                        {hardwareRoles.length > 0 ? (
-                          <div className="catalog-form__field">
-                            <label className="catalog-form__label">Modo</label>
-                            <select
-                              className="catalog-form__select"
-                              value={lineMode}
-                              onChange={(e: ChangeEvent<HTMLSelectElement>) => {
-                                if (e.target.value === 'grupo') {
-                                  updateHardwareLine(idx, {
-                                    hardwareId: undefined,
-                                    optionRole:
-                                      hardwareRoles.find((g) => g.code === hw.optionRole)?.code ??
-                                      hardwareRoles[0]?.code ??
-                                      '',
-                                  });
-                                } else {
-                                  updateHardwareLine(idx, {
-                                    hardwareId:
-                                      catalogHardware.find((h) => h.id === hw.hardwareId)?.id ??
-                                      catalogHardware[0]?.id ??
-                                      '',
-                                  });
-                                }
-                              }}
-                              data-testid={`agregado-hw-${idx}-mode`}
-                            >
-                              <option value="especifico">Herraje específico</option>
-                              <option value="grupo">Grupo de opciones</option>
-                            </select>
-                          </div>
-                        ) : null}
-                        {lineMode === 'grupo' ? (
-                          <div className="catalog-form__field">
-                            <label className="catalog-form__label">Grupo de herrajes</label>
-                            {hardwareRoles.length > 0 ? (
-                              /* S4 #1009 + #1046: role is a resolution key for
-                               * pricing and drilling — pick from the catalog's
-                               * hardware option groups. A saved value outside
-                               * the catalog stays visible, never rewritten. */
-                              <>
-                                <select
-                                  className="catalog-form__select"
-                                  value={hw.optionRole}
-                                  onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                                    updateHardwareLine(idx, { optionRole: e.target.value })
-                                  }
-                                  data-testid={`agregado-hw-${idx}-role`}
-                                >
-                                  {!hw.optionRole ? (
-                                    <option value="">Seleccionar grupo…</option>
-                                  ) : null}
-                                  {!hardwareRoles.some((g) => g.code === hw.optionRole) ? (
-                                    <option value={hw.optionRole}>
-                                      {hw.optionRole} (guardado)
-                                    </option>
-                                  ) : null}
-                                  {hardwareRoles.map((g) => (
-                                    <option key={g.id} value={g.code}>
-                                      {g.code} — {g.name}
-                                    </option>
-                                  ))}
-                                </select>
-                                {selectedGroup ? (
-                                  <p className="catalog-form__hint" data-testid={`agregado-hw-${idx}-members`}>
-                                    {/* #1046: same members-with-cost hint as the
-                                     * placements editor — one voice per surface. */}
-                                    Se elige al cotizar: {hardwareGroupMembersHint(selectedGroup, catalogHardware)}
-                                  </p>
-                                ) : null}
-                              </>
-                            ) : (
-                              <input
-                                type="text"
-                                className="catalog-form__input"
-                                value={hw.optionRole}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                                  updateHardwareLine(idx, { optionRole: e.target.value })
-                                }
-                                placeholder="BISAGRA / CORREDERA / JALADERA"
-                                data-testid={`agregado-hw-${idx}-role`}
-                              />
-                            )}
-                          </div>
-                        ) : (
-                          <div className="catalog-form__field">
-                            <label className="catalog-form__label">Herraje específico</label>
-                            <select
-                              className="catalog-form__select"
-                              value={hw.hardwareId ?? ''}
-                              onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                                updateHardwareLine(idx, {
-                                  hardwareId: e.target.value || undefined,
-                                })
-                              }
-                              data-testid={`agregado-hw-${idx}-select`}
-                            >
-                              <option value="" disabled>
-                                Seleccionar herraje…
-                              </option>
-                              {catalogHardware.map((h) => (
-                                <option key={h.id} value={h.id}>
-                                  {h.code} — {h.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                        <div className="catalog-form__field catalog-form__field--narrow">
-                          <label className="catalog-form__label">Cantidad</label>
-                          <input
-                            type="number"
-                            min={1}
-                            className="catalog-form__input"
-                            value={hw.quantity}
-                            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                              updateHardwareLine(idx, {
-                                quantity: Math.max(1, Number(e.target.value) || 1),
-                              })
-                            }
-                            data-testid={`agregado-hw-${idx}-qty`}
-                          />
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--small btn--icon-only"
-                        aria-label="Eliminar herraje"
-                        onClick={() => removeHardwareLine(idx)}
-                        data-testid={`agregado-hw-${idx}-remove`}
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </li>
-                    );
-                  })}
-                </ul>
-              )}
+              ) : null}
 
-              {/* Posición 3D de herrajes, unificado en este tab. Ancla cada herraje
-                  a una pieza del agregado (cara + X%/Y% + rotación) — lo que se ve
-                  en el 3D y alimenta las perforaciones. */}
+              {/* Nivel: Del agregado — rigidMembers fixed del borrador (#1412) */}
               <div
+                ref={cajonLevelRef}
                 className="agregado-editor__hardware-placements"
-                data-testid="agregado-hardware-placements"
+                aria-label="Herrajes del agregado"
+                data-testid="agregado-hw-level-cajon"
               >
                 <h4 className="module-editor__section-title">
-                  Herrajes posicionados (3D + costo automático)
+                  Del agregado (anclado al ensamble)
                 </h4>
                 <p className="catalog-form__hint">
-                  Cada herraje acá se cotiza según la cantidad de posiciones (no lo
-                  sumes también a la lista de arriba). Es lo que se ve en la Vista 3D
-                  y la base de las perforaciones.
+                  El kit de correderas de un cajón, las bisagras de una puerta,
+                  los soportes de un entrepaño: herrajes que pertenecen al
+                  ensamble entero, no a una pieza. Izquierda y derecha son
+                  entradas separadas — nunca un espejo. Se ven en el 3D del
+                  borrador.
+                </p>
+                <AgregadoCajonHardwareSection
+                  draft={draft}
+                  setDraft={setDraft}
+                  catalogHardware={catalogHardware}
+                  onAddMember={addAgregadoMember}
+                />
+              </div>
+
+              {/* Nivel: Por cantidad — hardwareLines sin posición */}
+              <div
+                ref={cantidadLevelRef}
+                className="agregado-editor__hardware-placements"
+                aria-label="Herrajes por cantidad"
+                data-testid="agregado-hw-level-cantidad"
+              >
+                <h4 className="module-editor__section-title">
+                  Por cantidad (sin posición)
+                </h4>
+                <p className="catalog-form__hint">
+                  Tornillería, perfiles, insumos que se compran a granel: se
+                  cotizan por cantidad, sin posición 3D ni perforaciones.
+                </p>
+                {draft.hardwareLines.length === 0 ? (
+                  <div
+                    className="agregado-editor__empty-slot"
+                    data-testid="agregado-hw-cantidad-empty"
+                  >
+                    Sin herrajes por cantidad. Tornillería e insumos van acá.
+                  </div>
+                ) : (
+                  <ul className="agregado-editor__item-list">
+                    {draft.hardwareLines.map((hw, idx) => {
+                      const lineMode =
+                        hw.optionRole && !hw.hardwareId ? 'grupo' : 'especifico';
+                      const selectedGroup = hardwareRoles.find((g) => g.code === hw.optionRole);
+                      return (
+                      <li key={idx} className="agregado-editor__item-row">
+                        <div className="agregado-editor__item-fields">
+                          {hardwareRoles.length > 0 ? (
+                            <div className="catalog-form__field">
+                              <label
+                                className="catalog-form__label"
+                                htmlFor={`agregado-hw-${idx}-mode`}
+                              >
+                                Modo
+                              </label>
+                              <select
+                                id={`agregado-hw-${idx}-mode`}
+                                className="catalog-form__select"
+                                value={lineMode}
+                                onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+                                  if (e.target.value === 'grupo') {
+                                    updateHardwareLine(idx, {
+                                      hardwareId: undefined,
+                                      // #1147: sin rol elegido la línea queda
+                                      // inválida-visible; nunca se inventa uno.
+                                      optionRole: hw.optionRole ?? '',
+                                    });
+                                  } else {
+                                    updateHardwareLine(idx, {
+                                      hardwareId: hw.hardwareId ?? '',
+                                      optionRole: undefined,
+                                    });
+                                  }
+                                }}
+                                data-testid={`agregado-hw-${idx}-mode`}
+                              >
+                                <option value="especifico">Herraje específico</option>
+                                <option value="grupo">Grupo de opciones</option>
+                              </select>
+                            </div>
+                          ) : null}
+                          {lineMode === 'grupo' ? (
+                            <div className="catalog-form__field">
+                              <label
+                                className="catalog-form__label"
+                                htmlFor={`agregado-hw-${idx}-role`}
+                              >
+                                Grupo de herrajes
+                              </label>
+                              {hardwareRoles.length > 0 ? (
+                                /* S4 #1009 + #1046: role is a resolution key for
+                                 * pricing and drilling — pick from the catalog's
+                                 * hardware option groups. A saved value outside
+                                 * the catalog stays visible, never rewritten. */
+                                <>
+                                  <select
+                                    id={`agregado-hw-${idx}-role`}
+                                    className="catalog-form__select"
+                                    value={hw.optionRole}
+                                    onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                                      updateHardwareLine(idx, { optionRole: e.target.value })
+                                    }
+                                    data-testid={`agregado-hw-${idx}-role`}
+                                  >
+                                    {!hw.optionRole ? (
+                                      <option value="">Seleccionar grupo…</option>
+                                    ) : null}
+                                    {!hardwareRoles.some((g) => g.code === hw.optionRole) ? (
+                                      <option value={hw.optionRole}>
+                                        {hw.optionRole} (guardado)
+                                      </option>
+                                    ) : null}
+                                    {hardwareRoles.map((g) => (
+                                      <option key={g.id} value={g.code}>
+                                        {g.code} — {g.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {selectedGroup ? (
+                                    <p className="catalog-form__hint" data-testid={`agregado-hw-${idx}-members`}>
+                                      {/* #1046: same members-with-cost hint as the
+                                       * placements editor — one voice per surface. */}
+                                      Se elige al cotizar: {hardwareGroupMembersHint(selectedGroup, catalogHardware)}
+                                    </p>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <input
+                                  id={`agregado-hw-${idx}-role`}
+                                  type="text"
+                                  className="catalog-form__input"
+                                  value={hw.optionRole}
+                                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                    updateHardwareLine(idx, { optionRole: e.target.value })
+                                  }
+                                  placeholder="BISAGRA / CORREDERA / JALADERA"
+                                  data-testid={`agregado-hw-${idx}-role`}
+                                />
+                              )}
+                            </div>
+                          ) : (
+                            <div className="catalog-form__field">
+                              <CatalogPicker
+                                id={`agregado-hw-${idx}-select`}
+                                label="Herraje específico"
+                                placeholder="Seleccionar herraje…"
+                                searchPlaceholder="Buscar herraje…"
+                                value={hw.hardwareId ?? ''}
+                                onChange={(hardwareId) =>
+                                  updateHardwareLine(idx, {
+                                    hardwareId: hardwareId || undefined,
+                                  })
+                                }
+                                items={pickerHardwareItems}
+                                data-testid={`agregado-hw-${idx}-select`}
+                              />
+                            </div>
+                          )}
+                          <div className="catalog-form__field catalog-form__field--narrow">
+                            <label
+                              className="catalog-form__label"
+                              htmlFor={`agregado-hw-${idx}-qty`}
+                            >
+                              Cantidad
+                            </label>
+                            <input
+                              id={`agregado-hw-${idx}-qty`}
+                              type="number"
+                              min={1}
+                              className="catalog-form__input"
+                              value={hw.quantity}
+                              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                updateHardwareLine(idx, {
+                                  quantity: Math.max(1, Number(e.target.value) || 1),
+                                })
+                              }
+                              data-testid={`agregado-hw-${idx}-qty`}
+                            />
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--small btn--icon-only"
+                          aria-label="Eliminar herraje"
+                          onClick={() => removeHardwareLine(idx)}
+                          data-testid={`agregado-hw-${idx}-remove`}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              {/* Nivel: De las piezas — placements con cara y perforaciones */}
+              <div
+                ref={piezasLevelRef}
+                className="agregado-editor__hardware-placements"
+                aria-label="Herrajes de las piezas"
+                data-testid="agregado-hw-level-piezas"
+              >
+                <h4 className="module-editor__section-title">
+                  De las piezas (con cara y perforaciones)
+                </h4>
+                <p className="catalog-form__hint">
+                  Cada herraje se ancla a una cara de una pieza: es lo que se ve
+                  en la Vista 3D y la base de las perforaciones.
                 </p>
                 {draft.components.length === 0 ? (
-                  <p className="catalog-empty">
-                    Agregá piezas en la pestaña Piezas para posicionar herrajes.
+                  <p className="catalog-empty" data-testid="agregado-hw-placements-empty">
+                    Sin piezas en el agregado. Si los herrajes son del ensamble
+                    entero, usá la sección «Del agregado»; si no, agregá piezas
+                    en la pestaña Piezas.
                   </p>
                 ) : (
                   draft.components.map((comp, idx) => {
@@ -608,6 +773,7 @@ export function AgregadoEditorForm({
                           placements={comp.overrides?.hardwarePlacements ?? []}
                           catalogHardware={catalogHardware}
                           optionGroups={optionGroups}
+                          containerLabel={info ? info.code : comp.componentId}
                           testIdSuffix={`hw-pc-${idx}`}
                           onChange={(next) => {
                             const current = comp.overrides ?? {};

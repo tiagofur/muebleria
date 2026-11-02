@@ -106,6 +106,18 @@ async function loginOwner(page: Page): Promise<string> {
 const recipeCard = (page: Page) => page.getByTestId('agregado-detail-recipe-card');
 const authoring = (page: Page, part: string) => page.getByTestId(`agregado-tab-recipe-authoring-${part}`);
 
+/**
+ * #1451: kit comercial y herraje de miembro son CatalogPicker (combobox con
+ * búsqueda), no <select> — y los miembros nacen SIN herraje (sin default
+ * encubierto): el autor elige antes de que la receta sea válida.
+ */
+async function pickCombobox(page: Page, testId: string, label: RegExp): Promise<void> {
+  const picker = page.getByTestId(testId);
+  await picker.getByRole('button').click();
+  await picker.getByRole('option', { name: label }).click();
+  await expect(picker.getByRole('option', { name: label })).toHaveCount(0);
+}
+
 async function openEditorOnRecipeTab(page: Page): Promise<void> {
   await page.goto(`/add-ons/${AGREGADO_ID}`);
   await expect(recipeCard(page)).toBeVisible({ timeout: 20_000 });
@@ -134,17 +146,27 @@ test.describe.serial('Agregado — autoría de receta en browser real (#1412)', 
 
     await openEditorOnRecipeTab(page);
 
-    // Kit comercial.
-    await authoring(page, 'kit').selectOption({ label: `${KIT_CODE} — Kit cajón 500 (gate)` });
+    // Kit comercial (picker con búsqueda, #1451).
+    await pickCombobox(page, 'agregado-tab-recipe-authoring-kit', new RegExp(KIT_CODE));
 
     // Miembro 1: guía izquierda anclada al mínimo (defaults + nombre).
     await authoring(page, 'add-member').click();
     await authoring(page, 'member-0-id').fill('guia-izq');
+    await pickCombobox(
+      page,
+      'agregado-tab-recipe-authoring-member-0-source-hardware',
+      new RegExp(CORREDERA_CODE),
+    );
 
     // Miembro 2: guía derecha anclada al MÁXIMO — el ancho la separa sola.
     await authoring(page, 'add-member').click();
     await authoring(page, 'member-1-id').fill('guia-der');
     await authoring(page, 'member-1-anchor-x-ref').selectOption({ label: 'Máximo' });
+    await pickCombobox(
+      page,
+      'agregado-tab-recipe-authoring-member-1-source-hardware',
+      new RegExp(CORREDERA_CODE),
+    );
 
     // Esperar el PUT explícitamente: el readback de version exige que el
     // guardado haya COMMITTEADO (una carrera del optimista vs el servidor
