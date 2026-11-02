@@ -117,11 +117,11 @@ type Hardware struct {
 	// F1). Complete object or nil — partial states don't exist. Authoritative
 	// when present: formulas see HW/HH/HD and drawing uses its axes. Nil =
 	// effective dims derive from the preview* scalars (HardwareFormulaDims).
-	Dimensions *HardwareDimensions `json:"dimensions,omitempty"`
-	PreviewColor        *string  `json:"preview_color,omitempty"`
-	PreviewRoughness    *float64 `json:"preview_roughness,omitempty"`
-	PreviewMetalness    *float64 `json:"preview_metalness,omitempty"`
-	PreviewClearcoat    *float64 `json:"preview_clearcoat,omitempty"`
+	Dimensions       *HardwareDimensions `json:"dimensions,omitempty"`
+	PreviewColor     *string             `json:"preview_color,omitempty"`
+	PreviewRoughness *float64            `json:"preview_roughness,omitempty"`
+	PreviewMetalness *float64            `json:"preview_metalness,omitempty"`
+	PreviewClearcoat *float64            `json:"preview_clearcoat,omitempty"`
 	// PartFinishes maps a structural part role (body/base/grip) to a finish
 	// preset id (F080). Nil/empty = every part uses the global preview finish.
 	PartFinishes map[string]string `json:"part_finishes,omitempty"`

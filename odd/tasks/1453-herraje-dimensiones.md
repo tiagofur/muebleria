@@ -48,12 +48,11 @@ y el formulario muestra/edita las tres medidas con valores sugeridos del diseño
 - Contratos: `contracts/openapi/granete-api.v1.yaml` (+dimensions en esquemas
   hardware) → `pnpm openapi:generate` (types.ts/client.ts/types.gen.go);
   `packages/storage/src/apiMappers.ts`.
-- UI: `packages/ui/src/catalogs/hardware/{Hardware3DSection,HardwareFormModal,
-  HardwareCatalog}.tsx`, `hardwareDraft.ts`, `apps/web/src/stores/catalog/hardware.ts`,
+- UI: `packages/ui/src/catalogs/hardware/{Hardware3DSection,HardwareCatalog}.tsx`,
+  `hardwareDraft.ts`, `apps/web/src/stores/catalog/hardware.ts`,
   `packages/ui/src/preview3d/HardwareMesh.tsx` (grip usa dims efectivos).
 - Fixture paridad: `contracts/hardwareDimensions.contract.json` (familias +
-  fórmulas HW/HH/HD) consumido por vitest + go test; caso HW en
-  `agregadoOffsetFormula.contract.json`.
+  fórmulas HW/HH/HD) consumido por vitest + go test.
 
 ## Tareas
 
@@ -75,6 +74,33 @@ y el formulario muestra/edita las tres medidas con valores sugeridos del diseño
 
 PR con `Refs #1453` + `Delivery: partial`: Fase 1 completa; Fase 2 (xRef/yRef
 panel-side + hwAnchor + presets por tipo de frente) queda en la issue.
+
+## Ronda de corrección consolidada (review CHANGES_REQUESTED + fallo CI)
+
+- **CI (Storage shard 2/4)**: `TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions`
+  re-anclado 171→173 siguiendo el patrón documentado del propio test (el pin
+  sube cada vez que la lectura de catálogo requiere columnas nuevas).
+  Reproducido con PG real (7/7 FAIL → PASS); **4 shards oficiales locales:
+  153+157+153+183 = 646 PASS, 0 FAIL, 0 SKIP**. El verde local previo del
+  storage era SKIP silencioso (sin MIGRATION_DATABASE_URL).
+- **B1**: backfill de la migración ahora excluye filas cuyos preview*
+  producirían ejes no positivos (diámetro 0 / proyección 0 = flush): quedan
+  NULL y los fallbacks runtime aplican. `scanHardwareDimensions` además
+  degrada objetos null/parciales/no-positivos de SQL directo a nil.
+- **B2**: `resolveModuleAgregadoAssemblies` (preview de proyecto) pasa
+  `hardwareDimensions` desde el catálogo — misma paridad que Go; nuevo test
+  `agregadoModuleAssembliesDimensions.test.ts` (236 vs 300 con HW=0).
+- **B3**: tests de regresión añadidos — drilling con HW real (preview 128→136,
+  dims 160→120, derivado sin registro→152 histórico), 422 tipado POST×2 +
+  PUT×2 en `catalog_handlers_test.go`, placement con dims (fórmula HW +
+  precedencia standoff), geometría del mesh (grip length/diameter por eje).
+- Baratas del review: hoist del lookup fuera del loop de instancias
+  (layout.go), gofmt de los archivos tocados. NO adoptadas (documentadas):
+  default de altura 32 del backfill vs 12 del mesh TS (decision documentada),
+  divergencia mm fraccional por redondeo int en Go (convención preexistente).
+- Corregidas inexactitudes de este artefacto señaladas por el review
+  (superficie sin HardwareFormModal; no hay caso HW en
+  agregadoOffsetFormula.contract.json).
 
 ## Notas de borde (para el review)
 

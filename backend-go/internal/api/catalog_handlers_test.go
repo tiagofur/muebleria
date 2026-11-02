@@ -522,3 +522,74 @@ func TestHandleHardwaresRejectsDuplicatedAvailableFinish(t *testing.T) {
 		t.Errorf("error message = %q, want it to mention the duplicate", msg)
 	}
 }
+
+// #1453 F1 (review B3): the canonical bounding box is complete-or-nothing —
+// partial or non-positive axes fail closed with the typed 422 on both write
+// paths and nothing reaches persistence.
+func TestHandleHardwareDimensionsValidation(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("POST rechaza dimensions parciales", func(t *testing.T) {
+		store := &stubStore{}
+		srv := &Server{Store: store, MediaDir: dir}
+		body := strings.NewReader(`{"code":"HC","name":"N","unit":"pza","cost_per_unit":1,"active":true,"dimensions":{"widthMm":128,"heightMm":32}}`)
+		req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/hardware", body), "eng", string(domain.RoleIngeniero))
+		rr := httptest.NewRecorder()
+		srv.HandleHardwares(rr, req)
+
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422 (body=%s)", rr.Code, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), "HARDWARE_DIMENSIONS_INVALID") {
+			t.Fatalf("expected typed HARDWARE_DIMENSIONS_INVALID, got %s", rr.Body.String())
+		}
+	})
+
+	t.Run("POST rechaza eje no positivo (depthMm=0)", func(t *testing.T) {
+		srv := &Server{Store: &stubStore{}, MediaDir: dir}
+		body := strings.NewReader(`{"code":"HC","name":"N","unit":"pza","cost_per_unit":1,"active":true,"dimensions":{"widthMm":128,"heightMm":32,"depthMm":0}}`)
+		req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/hardware", body), "eng", string(domain.RoleIngeniero))
+		rr := httptest.NewRecorder()
+		srv.HandleHardwares(rr, req)
+
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422 (body=%s)", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("PUT rechaza igual y no persiste", func(t *testing.T) {
+		store := &stubStore{hardwareReturnedByID: &domain.Hardware{ID: "h1", Code: "HC"}}
+		srv := &Server{Store: store, MediaDir: dir}
+		body := strings.NewReader(`{"code":"HC","name":"N","unit":"pza","cost_per_unit":1,"active":true,"dimensions":{"widthMm":-5,"heightMm":32,"depthMm":35}}`)
+		req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/hardware/h1", body), "eng", string(domain.RoleIngeniero))
+		req.Header.Set("If-Match", `"v1"`)
+		req.SetPathValue("id", "h1")
+		rr := httptest.NewRecorder()
+		srv.HandleHardwareByID(rr, req)
+
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422 (body=%s)", rr.Code, rr.Body.String())
+		}
+		if store.updateHardwareCalled {
+			t.Fatal("an invalid dimensions payload must never reach persistence")
+		}
+	})
+
+	t.Run("PUT acepta el objeto completo", func(t *testing.T) {
+		store := &stubStore{hardwareReturnedByID: &domain.Hardware{ID: "h1", Code: "HC"}}
+		srv := &Server{Store: store, MediaDir: dir}
+		body := strings.NewReader(`{"code":"HC","name":"N","unit":"pza","cost_per_unit":1,"active":true,"dimensions":{"widthMm":128,"heightMm":32,"depthMm":35}}`)
+		req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/hardware/h1", body), "eng", string(domain.RoleIngeniero))
+		req.Header.Set("If-Match", `"v1"`)
+		req.SetPathValue("id", "h1")
+		rr := httptest.NewRecorder()
+		srv.HandleHardwareByID(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+		}
+		if !store.updateHardwareCalled {
+			t.Fatal("a complete dimensions object must persist")
+		}
+	})
+}

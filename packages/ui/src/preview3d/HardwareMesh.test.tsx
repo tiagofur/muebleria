@@ -152,6 +152,22 @@ describe('resolveHardwareGeometry', () => {
     expect(g.gripLengthMm).toBe(DEFAULT_BAR_LENGTH_MM);
   });
 
+  it('canonical dimensions win per axis over the preview scalars (#1453 F1)', () => {
+    const bar: Hardware = {
+      ...knob,
+      previewShape: 'bar-pull',
+      previewSizeMm: 96,
+      previewDiameterMm: 12,
+      dimensions: { widthMm: 160, heightMm: 32, depthMm: 35 },
+    };
+    const g = resolveHardwareGeometry(bar, 28)!;
+    expect(g.gripLengthMm).toBe(160);
+    expect(g.gripDiameterMm).toBe(32);
+    // Standoff comes from the placement resolution chain (dimensions.depthMm
+    // → previewProjectionMm → 25); here it echoes the passed standoff.
+    expect(g.projectionMm).toBe(28);
+  });
+
   it('returns null for a cost-only hardware (no valid shape)', () => {
     const costOnly: Hardware = { ...knob, previewShape: undefined };
     expect(resolveHardwareGeometry(costOnly, 25)).toBeNull();

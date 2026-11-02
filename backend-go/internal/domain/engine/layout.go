@@ -251,11 +251,11 @@ type FurnitureLayout struct {
 
 // LayoutAssembly describes a resolved Agregado sub-assembly in furniture space (#670 / #1435).
 type LayoutAssembly struct {
-	AssemblyInstanceID   string                              `json:"assemblyInstanceId"`
-	AgregadoID           string                              `json:"agregadoId"`
-	Placement            map[string]any                      `json:"placement"`
-	DimensionsMm         [3]float64                          `json:"dimensionsMm,omitempty"`
-	RigidMembers         []domain.ResolvedRigidMember        `json:"rigidMembers,omitempty"`
+	AssemblyInstanceID   string                               `json:"assemblyInstanceId"`
+	AgregadoID           string                               `json:"agregadoId"`
+	Placement            map[string]any                       `json:"placement"`
+	DimensionsMm         [3]float64                           `json:"dimensionsMm,omitempty"`
+	RigidMembers         []domain.ResolvedRigidMember         `json:"rigidMembers,omitempty"`
 	FabricatedComponents []domain.ResolvedFabricatedComponent `json:"fabricatedComponents,omitempty"`
 }
 
@@ -566,6 +566,9 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 		PW: dims.WidthMm, PH: dims.HeightMm, PD: dims.DepthMm,
 		T: 18, B: baseClearance,
 	}
+	// #1453 F1: member offset formulas see HW/HH/HD from the catalog — built
+	// once for every agregado instance of this layout.
+	hardwareDimsLookup := HardwareDimensionsFromCatalog(catalog.Hardware)
 
 	for _, agrInst := range agregadoInstances {
 		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
@@ -621,23 +624,21 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 		if qty <= 0 {
 			qty = 1
 		}
-			units := agregadoSubspaceUnits(qty, spaceW, spaceH, spaceD, spaceX, spaceY, spaceZ, agrInst.LayoutDirection, agrInst.GapMm)
+		units := agregadoSubspaceUnits(qty, spaceW, spaceH, spaceD, spaceX, spaceY, spaceZ, agrInst.LayoutDirection, agrInst.GapMm)
 
-			// #1453 F1: member offset formulas see HW/HH/HD from the catalog.
-			hardwareDimsLookup := HardwareDimensionsFromCatalog(catalog.Hardware)
-			for _, unit := range units {
-				// Skip assembly emission if the agregado's board components already place
-				// the commercial kit hardware on the board face (avoids duplicate hinges at 0,0,0).
-				if agr.CommercialKitHardwareID != nil && *agr.CommercialKitHardwareID != "" && agregadoBoardsHaveHardwarePlacements(agr) {
-					continue
-				}
+		for _, unit := range units {
+			// Skip assembly emission if the agregado's board components already place
+			// the commercial kit hardware on the board face (avoids duplicate hinges at 0,0,0).
+			if agr.CommercialKitHardwareID != nil && *agr.CommercialKitHardwareID != "" && agregadoBoardsHaveHardwarePlacements(agr) {
+				continue
+			}
 
-				params := AssemblyResolutionParams{
-					WidthMm:            unit.w,
-					HeightMm:           unit.h,
-					DepthMm:            unit.d,
-					HardwareDimensions: hardwareDimsLookup,
-				}
+			params := AssemblyResolutionParams{
+				WidthMm:            unit.w,
+				HeightMm:           unit.h,
+				DepthMm:            unit.d,
+				HardwareDimensions: hardwareDimsLookup,
+			}
 			resolvedAssembly, err := ResolveAgregadoAssembly(agr, params)
 			if err != nil || len(resolvedAssembly.RigidMembers) == 0 {
 				continue
@@ -1618,17 +1619,17 @@ var validHardwarePreviewShapes = map[string]bool{
 }
 
 var hardwareFinishPresetColors = map[string]string{
-	"chrome":       "#d8dde6",
-	"cromo":        "#d8dde6",
-	"black-matte":  "#22252a",
-	"negro-mate":   "#22252a",
-	"bronze":       "#8c6239",
-	"bronce":       "#8c6239",
-	"brushed":      "#b5bac2",
-	"acero-inox":   "#b5bac2",
-	"gold":         "#d4af37",
+	"chrome":          "#d8dde6",
+	"cromo":           "#d8dde6",
+	"black-matte":     "#22252a",
+	"negro-mate":      "#22252a",
+	"bronze":          "#8c6239",
+	"bronce":          "#8c6239",
+	"brushed":         "#b5bac2",
+	"acero-inox":      "#b5bac2",
+	"gold":            "#d4af37",
 	"laton-cepillado": "#c5a059",
-	"blanco-mate":  "#f0f2f5",
+	"blanco-mate":     "#f0f2f5",
 }
 
 func agregadoBoardsHaveHardwarePlacements(agr domain.Agregado) bool {
@@ -1755,7 +1756,7 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 				boardEnv := formulaDims{
 					W: int(math.Round(w)), H: int(math.Round(l)), D: int(math.Round(l)),
 					PW: int(math.Round(w)), PH: int(math.Round(l)), PD: int(math.Round(l)),
-					T: int(math.Round(t)),
+					T:  int(math.Round(t)),
 					HW: int(math.Round(hwW)), HH: int(math.Round(hwH)), HD: int(math.Round(hwD)),
 				}
 				xMm := childHp.RelativePosition.XMm
@@ -1849,7 +1850,7 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 	boardEnv := formulaDims{
 		W: int(math.Round(w)), H: int(math.Round(l)), D: int(math.Round(l)),
 		PW: int(math.Round(w)), PH: int(math.Round(l)), PD: int(math.Round(l)),
-		T: int(math.Round(t)),
+		T:  int(math.Round(t)),
 		HW: int(math.Round(formulaW)), HH: int(math.Round(formulaH)), HD: int(math.Round(formulaD)),
 	}
 	xMm := hp.RelativePosition.XMm

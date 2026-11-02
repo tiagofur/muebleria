@@ -132,13 +132,18 @@ func hardwareDesignPartsArg(parts []domain.HardwareDesignPart) any {
 
 // scanHardwareDimensions decodes the dimensions JSONB column (#1453 F1).
 // NULL / empty / invalid JSON → nil (effective dims derive from preview*).
-// A stored object is trusted complete and positive — writes validate that.
+// Direct-SQL rows may also hold null/partial/non-positive shapes; the stored
+// invariant is complete-and-positive, so anything else also falls back to nil
+// (never an invalid object in memory — review B1 hardening).
 func scanHardwareDimensions(raw []byte) *domain.HardwareDimensions {
 	if len(raw) == 0 {
 		return nil
 	}
 	var out domain.HardwareDimensions
 	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	if !(out.WidthMm > 0) || !(out.HeightMm > 0) || !(out.DepthMm > 0) {
 		return nil
 	}
 	return &out

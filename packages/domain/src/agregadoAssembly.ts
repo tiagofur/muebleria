@@ -28,7 +28,7 @@ import type {
 } from './types';
 import { calculateAgregadoSubspaceUnits, type SubspaceUnit } from './agregados';
 import type { HardwareDesignPart } from './hardwareDesignParts';
-import type { EffectiveHardwareDimensions } from './hardwarePlacement';
+import { resolveHardwareDimensions, type EffectiveHardwareDimensions } from './hardwarePlacement';
 import { evaluatePartFormula } from './engine/shared';
 import { materialBindingRole } from './materialRole';
 import { resolveBoardOptionChoiceId } from './plinth';
@@ -1551,6 +1551,13 @@ export function resolveModuleAgregadoAssemblies(
   const out: ResolvedModuleAssembly[] = [];
   const visualLookup =
     options.visualAssetLookup ?? createCatalogVisualAssetLookup(catalog.hardware);
+  // #1453 F1: member offset formulas see HW/HH/HD from the catalog — same
+  // lookup the Go layout resolve passes (HardwareDimensionsFromCatalog), so
+  // the project preview and the engine agree on every formula.
+  const hardwareDimensions: Record<string, EffectiveHardwareDimensions> = {};
+  for (const hw of catalog.hardware ?? []) {
+    hardwareDimensions[hw.id] = resolveHardwareDimensions(hw);
+  }
 
   for (const agrInst of allAgregadoInstances) {
     const agregado = catalog.agregados?.find((a) => a.id === agrInst.agregadoId);
@@ -1681,6 +1688,7 @@ export function resolveModuleAgregadoAssemblies(
           widthMm: unit.width,
           depthMm: unit.depth,
           heightMm: unit.height,
+          hardwareDimensions,
         });
 
         const enrichedFabricated = enrichFabricatedComponentsWithAuthority(

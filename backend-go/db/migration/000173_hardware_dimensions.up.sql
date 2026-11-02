@@ -9,6 +9,10 @@ ALTER TABLE hardwares ADD COLUMN IF NOT EXISTS dimensions JSONB;
 -- depths the standoff default (25). slide/rail/leg stay NULL: cross-section
 -- not modeled in F1 — effective dims derive at runtime (TS/Go
 -- resolveHardwareDimensions/HardwareFormulaDims parity fixture).
+-- The stored object honors its own complete-and-positive invariant: rows
+-- whose preview scalars would yield a non-positive axis (e.g. diameter 0 or
+-- projection 0 = flush, both valid preview states) keep NULL and the runtime
+-- fallbacks apply.
 UPDATE hardwares
 SET dimensions = jsonb_build_object(
   'widthMm', preview_size_mm,
@@ -21,4 +25,6 @@ SET dimensions = jsonb_build_object(
 WHERE dimensions IS NULL
   AND preview_shape IN ('bar-pull', 'cup-pull', 'knob', 'hinge')
   AND preview_size_mm IS NOT NULL
-  AND preview_size_mm > 0;
+  AND preview_size_mm > 0
+  AND COALESCE(preview_diameter_mm, 32) > 0
+  AND COALESCE(preview_projection_mm, 25) > 0;

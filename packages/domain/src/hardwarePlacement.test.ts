@@ -444,3 +444,60 @@ describe('hardwarePlacementIdentityError / findHardwarePlacementsWithoutIdentity
     ).toEqual([]);
   });
 });
+
+describe('resolveHardwarePlacement — dimensions canónicas (#1453 F1, review B3)', () => {
+  const board = { widthMm: 600, thicknessMm: 18, lengthMm: 400 };
+
+  it('las fórmulas ven HW desde dimensions (widthMm=160 centra en 220)', () => {
+    const hardware: Hardware = {
+      ...knob,
+      previewSizeMm: 96,
+      dimensions: { widthMm: 160, heightMm: 32, depthMm: 35 },
+    };
+    const resolved = resolveHardwarePlacement({
+      componentInstanceId: 'ci-1',
+      placement: {
+        hardwareId: hardware.id,
+        anchorFace: 'front',
+        relativePosition: { xMm: 0, yMm: 50, xFormula: '(PW-HW)/2' },
+      },
+      board,
+      hardware,
+    });
+    expect(resolved?.localPosition[0]).toBe(220);
+  });
+
+  it('dimensions.depthMm gana la precedencia del standoff sobre previewProjectionMm', () => {
+    const hardware: Hardware = {
+      ...knob,
+      previewProjectionMm: 28,
+      dimensions: { widthMm: 160, heightMm: 32, depthMm: 35 },
+    };
+    const resolved = resolveHardwarePlacement({
+      componentInstanceId: 'ci-1',
+      placement: {
+        hardwareId: hardware.id,
+        anchorFace: 'front',
+        relativePosition: { xMm: 40, yMm: 50 },
+      },
+      board,
+      hardware,
+    });
+    expect(resolved?.standoffMm).toBe(35);
+  });
+
+  it('sin dimensions el standoff conserva la cadena histórica (projectionMm ?? 25)', () => {
+    const hardware: Hardware = { ...knob, previewProjectionMm: 28 };
+    const resolved = resolveHardwarePlacement({
+      componentInstanceId: 'ci-1',
+      placement: {
+        hardwareId: hardware.id,
+        anchorFace: 'front',
+        relativePosition: { xMm: 40, yMm: 50 },
+      },
+      board,
+      hardware,
+    });
+    expect(resolved?.standoffMm).toBe(28);
+  });
+});

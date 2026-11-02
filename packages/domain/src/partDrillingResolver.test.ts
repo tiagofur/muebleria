@@ -763,3 +763,80 @@ describe('resolvePartDrilling — placements por grupo (#1046)', () => {
     expect(res.holes).toEqual(baseline.holes);
   });
 });
+
+describe('resolvePartDrilling — env HW real del registro (#1453 F1)', () => {
+  const gripOp = {
+    id: 'h',
+    kind: 'blind_hole' as const,
+    diameterMm: 5,
+    depthMm: 10,
+    xMm: 0,
+    yMm: 0,
+    face: 'anchor' as const,
+  };
+  const profile = {
+    parts: [{ id: 'grip', role: 'grip', operations: [gripOp] }],
+  };
+  const dimHw: Hardware = {
+    id: 'hw-dim-pull',
+    code: 'PULL-DIM',
+    name: 'Jaladera con dimensiones',
+    unit: 'piece',
+    costPerUnit: 1,
+    active: true,
+    previewShape: 'bar-pull',
+    previewSizeMm: 128,
+    machining: profile,
+  };
+  const formula = '(PW-HW)/2';
+
+  it('usa el tamaño real del herraje en la fórmula del ancla (previewSizeMm=128 → 136, no el 96 histórico)', () => {
+    const placement: HardwarePlacement = {
+      hardwareId: dimHw.id,
+      anchorFace: 'front',
+      relativePosition: { xMm: 0, yMm: 40, xFormula: formula },
+    };
+    const result = resolvePartDrilling({
+      piece: testDoor, // PW=400
+      placements: [placement],
+      hardwareCatalog: [dimHw],
+    });
+    expect(result.holes).toHaveLength(1);
+    // (400 - 128) / 2 = 136 — con el 96 hardcodeado histórico sería 152.
+    expect(result.holes[0]!.xMm).toBe(136);
+  });
+
+  it('las dimensions canónicas ganan sobre el preview (widthMm=160 → 120)', () => {
+    const withDims: Hardware = {
+      ...dimHw,
+      dimensions: { widthMm: 160, heightMm: 32, depthMm: 35 },
+    };
+    const placement: HardwarePlacement = {
+      hardwareId: withDims.id,
+      anchorFace: 'front',
+      relativePosition: { xMm: 0, yMm: 40, xFormula: formula },
+    };
+    const result = resolvePartDrilling({
+      piece: testDoor,
+      placements: [placement],
+      hardwareCatalog: [withDims],
+    });
+    expect(result.holes[0]!.xMm).toBe(120);
+  });
+
+  it('maquinado derivado sin registro de catálogo conserva el default 96 (histórico)', () => {
+    const placement: HardwarePlacement = {
+      hardwareId: 'hw-inexistente',
+      anchorFace: 'front',
+      relativePosition: { xMm: 0, yMm: 40, xFormula: formula },
+      derivedMachining: profile,
+    };
+    const result = resolvePartDrilling({
+      piece: testDoor,
+      placements: [placement],
+      hardwareCatalog: [],
+    });
+    // (400 - 96) / 2 = 152 — sin registro no se adivina tamaño.
+    expect(result.holes[0]!.xMm).toBe(152);
+  });
+});
