@@ -2,7 +2,7 @@
  * #1451 — browser proof de la pestaña Herrajes del editor de agregados
  * reorganizada por nivel de anclaje:
  *
- *   «+ Añadir herraje» pregunta el nivel → «Del cajón» autoriza los
+ *   «+ Añadir herraje» pregunta el nivel → «Del agregado» autoriza los
  *   rigidMembers del borrador con copy de taller (el caso solo-herraje del
  *   owner: el kit de correderas es del cajón, no de un costado) → el 3D del
  *   borrador lo refleja sin guardar → sin herraje el guardado no viaja →
@@ -70,7 +70,7 @@ async function pickHardware(page: Page, pickerTestId: string): Promise<void> {
 }
 
 test.describe.serial('AGREGADOS — pestaña Herrajes por nivel de anclaje (#1451)', () => {
-  test('solo-herraje: del cajón con par izq/der, 3D del borrador, guardado y lectura', async ({ page }) => {
+  test('solo-herraje: del agregado con par izq/der, 3D del borrador, guardado y lectura', async ({ page }) => {
     test.setTimeout(180_000);
     const token = await loginOwner(page);
 
@@ -104,7 +104,7 @@ test.describe.serial('AGREGADOS — pestaña Herrajes por nivel de anclaje (#145
       'Sin piezas en el agregado',
     );
 
-    // El chooser pregunta el nivel; «Del cajón» agrega el primer miembro.
+    // El chooser pregunta el nivel; «Del agregado» agrega el primer miembro.
     await page.getByTestId('agregado-add-hardware').click();
     await expect(page.getByTestId('agregado-hw-chooser')).toBeVisible();
     await page.getByTestId('agregado-hw-chooser-cajon').click();
@@ -149,14 +149,14 @@ test.describe.serial('AGREGADOS — pestaña Herrajes por nivel de anclaje (#145
     // en pantalla tras cerrar el editor — sin reload: el goto a mitad de
     // sesión re-disesiona el SPA).
     await page.getByTestId(`agregado-card-${AGR_CODE}`).click();
-    await expect(page.getByTestId('agregado-detail-hw-group-cajon')).toContainText('Del cajón (4)');
+    await expect(page.getByTestId('agregado-detail-hw-group-cajon')).toContainText('Del agregado (4)');
     await expect(page.getByTestId('agregado-detail-hardware-members')).toContainText('borde izq. +10');
     await expect(page.getByTestId('agregado-detail-hardware-members')).toContainText('borde der. -10');
     // El conteo del chrome incluye a los miembros del cajón (antes invisibles).
     await expect(page.getByText('0 piezas · 4 herrajes')).toBeVisible();
   });
 
-  test('mixto: por cantidad convive con del cajón sin doble conteo', async ({ page }) => {
+  test('mixto: por cantidad convive con del agregado sin doble conteo', async ({ page }) => {
     test.setTimeout(120_000);
     await loginOwner(page);
 
@@ -181,7 +181,7 @@ test.describe.serial('AGREGADOS — pestaña Herrajes por nivel de anclaje (#145
 
     // El editor se abrió desde el detalle: cierra de vuelta al detalle.
     await expect(page.getByText('0 piezas · 5 herrajes')).toBeVisible();
-    await expect(page.getByTestId('agregado-detail-hw-group-cajon')).toContainText('Del cajón (4)');
+    await expect(page.getByTestId('agregado-detail-hw-group-cajon')).toContainText('Del agregado (4)');
     await expect(page.getByTestId('agregado-detail-bulk-hw-0')).toBeVisible();
     await expect(page.getByTestId('agregado-detail-hardware')).toContainText('× 8');
   });

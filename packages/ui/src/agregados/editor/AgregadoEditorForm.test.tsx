@@ -591,7 +591,7 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
     return draft;
   };
 
-  it('«Añadir herraje» opens the level chooser and «Del cajón» adds a member without hidden hardware', async () => {
+  it('«Añadir herraje» opens the level chooser and «Del agregado» adds a member without hidden hardware', async () => {
     const user = userEvent.setup();
     const setDraftMock = vi.fn();
     renderForm({
@@ -636,7 +636,7 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
     expect(next.hardwareLines.at(-1)!.optionRole).toBe('');
   });
 
-  it('the Del cajón level shows the member with workshop labels and the identity error', () => {
+  it('the Del agregado level shows the member with workshop labels and the identity error', () => {
     const draft = memberDraft();
     draft.rigidMembers![0] = {
       ...draft.rigidMembers![0]!,

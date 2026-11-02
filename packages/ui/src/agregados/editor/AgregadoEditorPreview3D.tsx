@@ -58,7 +58,7 @@ export function AgregadoEditorPreview3D({
 
       {preview.empty && !preview.error ? (
         <p className="catalog-empty">
-          Vista previa vacía. Agregá piezas o herrajes del cajón.
+          Vista previa vacía. Agregá piezas o herrajes del agregado.
         </p>
       ) : null}
 

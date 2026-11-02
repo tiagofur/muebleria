@@ -173,7 +173,7 @@ export function AgregadoEditorForm({
     }));
   };
 
-  // #1451: fábrica del miembro «Del cajón» — comparte el chooser del header y
+  // #1451: fábrica del miembro «Del agregado» — comparte el chooser del header y
   // el botón de la sección. Nace SIN herraje (inválido-visible) anclado al
   // borde izquierdo; el kit del borrador manda para el bomRole.
   const addAgregadoMember = () => {
@@ -197,7 +197,7 @@ export function AgregadoEditorForm({
   };
 
   // #1451: el «+ Añadir herraje» pregunta primero el nivel — la distinción
-  // que el usuario ya hace de forma natural (del cajón / pieza / cantidad).
+  // que el usuario ya hace de forma natural (del agregado / pieza / cantidad).
   const [hwChooserOpen, setHwChooserOpen] = useState(false);
   const cajonLevelRef = useRef<HTMLDivElement | null>(null);
   const cantidadLevelRef = useRef<HTMLDivElement | null>(null);
@@ -481,10 +481,10 @@ export function AgregadoEditorForm({
             <div className="agregado-editor__components-list">
               <div className="agregado-editor__panel-header">
                 <p className="catalog-form__hint">
-                  Cada herraje vive en un nivel: del cajón (anclado a la caja del
-                  agregado), por cantidad (insumo sin posición) o de una pieza
-                  (cara + perforaciones). Un herraje tiene un solo nivel y una
-                  sola línea de compra.
+                  Cada herraje vive en un nivel: del agregado (anclado al
+                  ensamble entero), por cantidad (insumo sin posición) o de una
+                  pieza (cara + perforaciones). Un herraje tiene un solo nivel y
+                  una sola línea de compra.
                 </p>
                 <button
                   type="button"
@@ -510,7 +510,7 @@ export function AgregadoEditorForm({
                     onClick={() => chooseHardwareLevel('cajon')}
                     data-testid="agregado-hw-chooser-cajon"
                   >
-                    Del cajón — kit o riel anclado a la caja
+                    Del agregado — kit o herraje anclado al ensamble
                   </button>
                   <button
                     type="button"
@@ -531,20 +531,22 @@ export function AgregadoEditorForm({
                 </div>
               ) : null}
 
-              {/* Nivel: Del cajón — rigidMembers fixed del borrador (#1412) */}
+              {/* Nivel: Del agregado — rigidMembers fixed del borrador (#1412) */}
               <div
                 ref={cajonLevelRef}
                 className="agregado-editor__hardware-placements"
-                aria-label="Herrajes del cajón"
+                aria-label="Herrajes del agregado"
                 data-testid="agregado-hw-level-cajon"
               >
                 <h4 className="module-editor__section-title">
-                  Del cajón (anclado al agregado)
+                  Del agregado (anclado al ensamble)
                 </h4>
                 <p className="catalog-form__hint">
-                  Kit de correderas, guías o rieles que pertenecen al cajón
-                  entero, no a una pieza. Izquierda y derecha son entradas
-                  separadas — nunca un espejo. Se ven en el 3D del borrador.
+                  El kit de correderas de un cajón, las bisagras de una puerta,
+                  los soportes de un entrepaño: herrajes que pertenecen al
+                  ensamble entero, no a una pieza. Izquierda y derecha son
+                  entradas separadas — nunca un espejo. Se ven en el 3D del
+                  borrador.
                 </p>
                 <AgregadoCajonHardwareSection
                   draft={draft}
@@ -749,9 +751,9 @@ export function AgregadoEditorForm({
                 </p>
                 {draft.components.length === 0 ? (
                   <p className="catalog-empty" data-testid="agregado-hw-placements-empty">
-                    Sin piezas en el agregado. Si los herrajes son del cajón
-                    entero, usá la sección «Del cajón»; si no, agregá piezas en
-                    la pestaña Piezas.
+                    Sin piezas en el agregado. Si los herrajes son del ensamble
+                    entero, usá la sección «Del agregado»; si no, agregá piezas
+                    en la pestaña Piezas.
                   </p>
                 ) : (
                   draft.components.map((comp, idx) => {

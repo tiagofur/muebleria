@@ -292,10 +292,10 @@ describe('AgregadoDetailView', () => {
     // Members count in the chrome even with zero pieces (solo-herraje).
     expect(screen.getByText('0 piezas · 2 herrajes')).toBeTruthy();
 
-    // The «Del cajón» group lists each member in workshop vocabulary.
+    // The «Del agregado» group lists each member in workshop vocabulary.
     expect(screen.getByTestId('agregado-detail-hw-group-cajon')).toBeTruthy();
     expect(screen.getByTestId('agregado-detail-hw-member-0').textContent).toContain('borde izq. +10');
-    expect(screen.getByTestId('agregado-detail-hw-member-0').textContent).toContain('fijo al cajón');
+    expect(screen.getByTestId('agregado-detail-hw-member-0').textContent).toContain('fijo al agregado');
     expect(screen.getByTestId('agregado-detail-hw-member-0').textContent).toContain('incluido en el juego');
     expect(screen.getByTestId('agregado-detail-hw-member-1').textContent).toContain('borde der. -10');
     expect(screen.getByTestId('agregado-detail-hw-member-1').textContent).toContain('se mueve con «drawer»');

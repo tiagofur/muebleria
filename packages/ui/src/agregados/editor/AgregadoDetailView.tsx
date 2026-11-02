@@ -94,7 +94,7 @@ export function AgregadoDetailView({
   }
 
   function memberMoveSummary(m: (typeof members)[number]): string {
-    if (m.actorMembership === 'body') return 'fijo al cajón';
+    if (m.actorMembership === 'body') return 'fijo al agregado';
     if (m.actorMembership !== undefined && m.actorMembership.startsWith('actor:')) {
       return `se mueve con «${m.actorMembership.slice('actor:'.length)}»`;
     }
@@ -277,7 +277,7 @@ export function AgregadoDetailView({
             {members.length > 0 ? (
               <div className="agregado-detail__hw-group">
                 <h4 className="eng-detail__group-title" data-testid="agregado-detail-hw-group-cajon">
-                  Del cajón ({members.length})
+                  Del agregado ({members.length})
                 </h4>
                 {a.commercialKitHardwareId ? (
                   <p className="eng-detail__list-sub">
@@ -312,7 +312,7 @@ export function AgregadoDetailView({
                               color: 'var(--text-muted)',
                             }}
                           >
-                            Del cajón · {memberSideSummary(m)} · {memberMoveSummary(m)} ·{' '}
+                            Del agregado · {memberSideSummary(m)} · {memberMoveSummary(m)} ·{' '}
                             {BOM_ROLE_SUMMARY[m.bomRole] ?? m.bomRole}
                           </small>
                         </span>

@@ -1,11 +1,13 @@
 /**
- * Nivel «Del cajón» de la pestaña Herrajes (#1451): autoría común de los
+ * Nivel «Del agregado» de la pestaña Herrajes (#1451): autoría común de los
  * miembros rígidos FIXED de la receta del borrador (`draft.rigidMembers`,
  * #1412) con vocabulario de taller — «borde izq./centro/borde der. + mm»,
- * «¿se mueve con una parte?», «compra». Edita el MISMO array que la pestaña
- * Receta: acá vive lo común (herraje, lado, movimiento, compra); los sets de
- * variantes, la rotación y la identidad avanzada siguen en Receta, y un
- * miembro variante se muestra read-only con puntero.
+ * «¿se mueve con una parte?», «compra». Aplica a CUALQUIER agregado (el kit
+ * de correderas de un cajón fue el caso seminal, pero son las bisagras de una
+ * puerta o los soportes de un entrepaño también). Edita el MISMO array que la
+ * pestaña Receta: acá vive lo común (herraje, lado, movimiento, compra); los
+ * sets de variantes, la rotación y la identidad avanzada siguen en Receta, y
+ * un miembro variante se muestra read-only con puntero.
  *
  * Invariante de paridad (#670/#1412): izquierda y derecha son miembros
  * separados, nunca un espejo — la plantilla «Kit con par izq/der» crea
@@ -159,7 +161,7 @@ export function AgregadoCajonHardwareSection({
             disabled={catalogHardware.length === 0}
             data-testid={`${testId}-add-member`}
           >
-            <Plus size={14} /> Añadir herraje del cajón
+            <Plus size={14} /> Añadir herraje del agregado
           </button>
         </div>
       </div>
@@ -168,12 +170,12 @@ export function AgregadoCajonHardwareSection({
         <div
           className="agregado-recipe__preset-confirm"
           role="alertdialog"
-          aria-label="Confirmar reemplazo de herrajes del cajón"
+          aria-label="Confirmar reemplazo de herrajes del agregado"
           data-testid={`${testId}-preset-confirm`}
         >
           <span>
-            ¿Reemplazar los {members.length} herraje(s) del cajón por la plantilla
-            del kit?
+            ¿Reemplazar los {members.length} herraje(s) del agregado por la
+            plantilla del kit?
           </span>
           <button
             type="button"
@@ -225,9 +227,10 @@ export function AgregadoCajonHardwareSection({
 
       {members.length === 0 ? (
         <p className="catalog-empty" data-testid={`${testId}-empty`}>
-          Sin herrajes del cajón. Un kit de correderas o un riel central van acá:
-          se anclan a la caja del agregado — no a una pieza —, se ven en el 3D y
-          viajan como revisión al guardar.
+          Sin herrajes del agregado. El kit de correderas de un cajón, las
+          bisagras de una puerta o un riel central van acá: se anclan a la caja
+          del ensamble — no a una pieza —, se ven en el 3D y viajan como
+          revisión al guardar.
         </p>
       ) : (
         <ul className="agregado-editor__item-list">
@@ -273,7 +276,7 @@ export function AgregadoCajonHardwareSection({
                   <button
                     type="button"
                     className="btn btn--ghost btn--small btn--icon-only"
-                    aria-label={`Quitar herraje del cajón ${m.memberId}`}
+                    aria-label={`Quitar herraje del agregado ${m.memberId}`}
                     onClick={() => removeMember(idx)}
                     data-testid={`${testId}-member-${idx}-remove`}
                   >
@@ -402,7 +405,7 @@ export function AgregadoCajonHardwareSection({
                       }}
                       data-testid={`${testId}-member-${idx}-membership`}
                     >
-                      <option value="body">No — fijo al cajón</option>
+                      <option value="body">No — fijo al agregado</option>
                       <option value="actor">Sí — parte móvil (se traslada)</option>
                       <option value="none">Sin membresía</option>
                     </select>
