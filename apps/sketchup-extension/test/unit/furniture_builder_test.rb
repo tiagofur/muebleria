@@ -797,4 +797,29 @@ class FurnitureBuilderTest < Minitest::Test
       )
     end
   end
+
+  # #1453 F2: the hardware proxy box renders centered IN-PLANE on the
+  # definition origin (the mount point) and growing outward on Z — the same
+  # convention web/Go AABB draw with. Boards keep the [0,dims] convention.
+  def test_build_hardware_proxy_box_centers_in_plane_and_grows_outward
+    definition = @model.definitions.add('test-hw-proxy')
+
+    Granete::SketchUpExtension::Model::LocalGeometry.build_hardware_proxy_box(
+      definition, [128, 32, 35]
+    )
+
+    points = definition.entities.faces.flat_map(&:vertices).map(&:position)
+    xs = points.map(&:x)
+    ys = points.map(&:y)
+    zs = points.map(&:z)
+    assert_in_delta(-64 * MM, xs.min, 1e-9, 'X must be centered on the origin')
+    assert_in_delta 64 * MM, xs.max, 1e-9
+    assert_in_delta(-16 * MM, ys.min, 1e-9)
+    assert_in_delta 16 * MM, ys.max, 1e-9
+    # The stub's pushpull does not model extrusion (every vertex stays on
+    # the z=0 plane), so the outward span is not assertable here — the Z
+    # convention (0..out, never below the mount face) is unchanged by #1453
+    # F2 and lives in the segment coordinates. What F2 changed is in-plane:
+    assert_in_delta 0, zs.min, 1e-9, 'the face sits on the mount plane'
+  end
 end
