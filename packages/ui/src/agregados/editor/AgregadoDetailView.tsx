@@ -67,6 +67,7 @@ export function AgregadoDetailView({
   const hwLookup = new Map(catalogHardware.map((h) => [h.id, h]));
 
   const bulkLines = a.hardwareLines ?? [];
+  const members = a.rigidMembers ?? [];
   const placementItems = (a.components ?? []).flatMap((inst, compIdx) => {
     const comp = compLookup.get(inst.componentId);
     const compName = comp ? `${comp.code} — ${comp.name}` : inst.componentId;
@@ -77,7 +78,34 @@ export function AgregadoDetailView({
       compName,
     }));
   });
-  const totalHardwareCount = bulkLines.length + placementItems.length;
+  // #1451: los miembros de la receta también son herrajes del agregado —
+  // el conteo y la lista los incluyen (antes eran invisibles en lectura).
+  const totalHardwareCount = bulkLines.length + placementItems.length + members.length;
+
+  // #1451: anclaje en vocabulario de taller — «borde izq. +10», «centro 0».
+  function memberSideSummary(m: (typeof members)[number]): string {
+    const x = m.placement.x;
+    const offset = x.offsetFormula ?? x.offsetMm;
+    const signed =
+      typeof offset === 'number' && offset >= 0 ? `+${offset}` : `${offset}`;
+    if (x.ref === 'max') return `borde der. ${signed}`;
+    if (x.ref === 'center') return `centro ${signed}`;
+    return `borde izq. ${signed}`;
+  }
+
+  function memberMoveSummary(m: (typeof members)[number]): string {
+    if (m.actorMembership === 'body') return 'fijo al cajón';
+    if (m.actorMembership !== undefined && m.actorMembership.startsWith('actor:')) {
+      return `se mueve con «${m.actorMembership.slice('actor:'.length)}»`;
+    }
+    return 'sin membresía';
+  }
+
+  const BOM_ROLE_SUMMARY: Record<string, string> = {
+    included_in_kit: 'incluido en el juego',
+    separately_purchased: 'compra separada',
+    non_purchasing: 'solo visual',
+  };
 
   const chrome = (
     <header className="workspace-chrome" data-testid="agregado-detail-chrome">
@@ -236,62 +264,124 @@ export function AgregadoDetailView({
         )}
       </section>
 
-      {/* Hardware */}
-      <section className="surface-card surface-card--lg" aria-label="Herrajes incluidos">
+      {/* Hardware (#1451) — tres niveles de anclaje, mismos nombres que el editor */}
+      <section className="surface-card surface-card--lg" aria-label="Herrajes">
         <h3 className="eng-detail__panel-title">
           <Settings2 size={15} style={{ display: 'inline', marginRight: 6 }} />
-          Herrajes incluidos ({totalHardwareCount})
+          Herrajes ({totalHardwareCount})
         </h3>
         {totalHardwareCount === 0 ? (
           <p className="eng-detail__empty">Sin herrajes definidos.</p>
         ) : (
-          <ul className="eng-detail__list" data-testid="agregado-detail-hardware">
-            {bulkLines.map((line, idx) => {
-              const hw = line.hardwareId ? hwLookup.get(line.hardwareId) : undefined;
-              return (
-                <li key={`bulk-${idx}`} className="eng-detail__list-item" data-testid={`agregado-detail-bulk-hw-${idx}`}>
-                  <span className="eng-detail__list-main eng-detail__mono">
-                    {hw
-                      ? `${hw.code} — ${hw.name}`
-                      : `Rol: ${optionRoleLabel(line.optionRole, optionGroups)}`}
-                    <small
-                      className="eng-detail__list-meta"
-                      style={{
-                        display: 'block',
-                        fontSize: 'var(--text-xs)',
-                        color: 'var(--text-muted)',
-                      }}
-                    >
-                      Presupuesto / Cantidad
-                    </small>
-                  </span>
-                  <span className="eng-detail__list-sub">× {line.quantity}</span>
-                </li>
-              );
-            })}
-            {placementItems.map(({ key, placement: p, component: inst, compName }) => {
-              const hw = p.hardwareId ? hwLookup.get(p.hardwareId) : undefined;
-              const posText = `Cara: ${p.anchorFace} · X: ${p.relativePosition.xFormula ?? p.relativePosition.xMm} · Y: ${p.relativePosition.yFormula ?? p.relativePosition.yMm}`;
-              return (
-                <li key={key} className="eng-detail__list-item" data-testid={`agregado-detail-${key}`}>
-                  <span className="eng-detail__list-main eng-detail__mono">
-                    {hw ? `${hw.code} — ${hw.name}` : p.hardwareId || 'Herraje'}
-                    <small
-                      className="eng-detail__list-meta"
-                      style={{
-                        display: 'block',
-                        fontSize: 'var(--text-xs)',
-                        color: 'var(--text-muted)',
-                      }}
-                    >
-                      Posicionado 3D en {compName} ({posText})
-                    </small>
-                  </span>
-                  <span className="eng-detail__list-sub">× {inst.quantity}</span>
-                </li>
-              );
-            })}
-          </ul>
+          <>
+            {members.length > 0 ? (
+              <div className="agregado-detail__hw-group">
+                <h4 className="eng-detail__group-title" data-testid="agregado-detail-hw-group-cajon">
+                  Del cajón ({members.length})
+                </h4>
+                {a.commercialKitHardwareId ? (
+                  <p className="eng-detail__list-sub">
+                    Kit: {hwLookup.get(a.commercialKitHardwareId)?.code ?? a.commercialKitHardwareId} — el juego cotiza una vez.
+                  </p>
+                ) : null}
+                <ul className="eng-detail__list" data-testid="agregado-detail-hardware-members">
+                  {members.map((m, idx) => {
+                    const hw =
+                      m.source.kind === 'fixed' && m.source.fixed
+                        ? hwLookup.get(m.source.fixed.hardwareId)
+                        : undefined;
+                    const label =
+                      m.source.kind === 'variant'
+                        ? `Variante del set ${m.source.variant?.variantSetId ?? ''}`
+                        : hw
+                        ? `${hw.code} — ${hw.name}`
+                        : m.source.fixed?.hardwareId || 'Herraje';
+                    return (
+                      <li
+                        key={`member-${idx}`}
+                        className="eng-detail__list-item"
+                        data-testid={`agregado-detail-hw-member-${idx}`}
+                      >
+                        <span className="eng-detail__list-main eng-detail__mono">
+                          {label}
+                          <small
+                            className="eng-detail__list-meta"
+                            style={{
+                              display: 'block',
+                              fontSize: 'var(--text-xs)',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            Del cajón · {memberSideSummary(m)} · {memberMoveSummary(m)} ·{' '}
+                            {BOM_ROLE_SUMMARY[m.bomRole] ?? m.bomRole}
+                          </small>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
+            {bulkLines.length > 0 ? (
+              <div className="agregado-detail__hw-group">
+                <h4 className="eng-detail__group-title">Por cantidad ({bulkLines.length})</h4>
+                <ul className="eng-detail__list" data-testid="agregado-detail-hardware">
+                  {bulkLines.map((line, idx) => {
+                    const hw = line.hardwareId ? hwLookup.get(line.hardwareId) : undefined;
+                    return (
+                      <li key={`bulk-${idx}`} className="eng-detail__list-item" data-testid={`agregado-detail-bulk-hw-${idx}`}>
+                        <span className="eng-detail__list-main eng-detail__mono">
+                          {hw
+                            ? `${hw.code} — ${hw.name}`
+                            : `Rol: ${optionRoleLabel(line.optionRole, optionGroups)}`}
+                          <small
+                            className="eng-detail__list-meta"
+                            style={{
+                              display: 'block',
+                              fontSize: 'var(--text-xs)',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            Presupuesto / Cantidad
+                          </small>
+                        </span>
+                        <span className="eng-detail__list-sub">× {line.quantity}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
+            {placementItems.length > 0 ? (
+              <div className="agregado-detail__hw-group">
+                <h4 className="eng-detail__group-title">De las piezas ({placementItems.length})</h4>
+                <ul className="eng-detail__list" data-testid="agregado-detail-hardware-placements">
+                  {placementItems.map(({ key, placement: p, component: inst, compName }) => {
+                    const hw = p.hardwareId ? hwLookup.get(p.hardwareId) : undefined;
+                    const posText = `Cara: ${p.anchorFace} · X: ${p.relativePosition.xFormula ?? p.relativePosition.xMm} · Y: ${p.relativePosition.yFormula ?? p.relativePosition.yMm}`;
+                    return (
+                      <li key={key} className="eng-detail__list-item" data-testid={`agregado-detail-${key}`}>
+                        <span className="eng-detail__list-main eng-detail__mono">
+                          {hw ? `${hw.code} — ${hw.name}` : p.hardwareId || 'Herraje'}
+                          <small
+                            className="eng-detail__list-meta"
+                            style={{
+                              display: 'block',
+                              fontSize: 'var(--text-xs)',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            Posicionado 3D en {compName} ({posText})
+                          </small>
+                        </span>
+                        <span className="eng-detail__list-sub">× {inst.quantity}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
+          </>
         )}
       </section>
     </>
