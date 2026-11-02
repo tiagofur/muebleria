@@ -705,24 +705,21 @@
                 <div id="inspector-opening-inline-editor" style="display: none; margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--border-color, #e0e0e0);"></div>
               </div>
 
-              <!-- #529: Card condicional de presentación de puertas. Se muestra
-                   únicamente si el mueble tiene puertas detectadas (metadata
-                   gestionada, parámetro doorSwing o doorAccessories del
-                   resolve). Sólo listado de puertas + pose de presentación.
-                   #1256: renombrada de «Apertura» a «Presentación de
-                   puertas» — la SELECCIÓN de apertura vive en la tarjeta
-                   «Apertura del diseño» (#1137) del diseño conectado. -->
+              <!-- #529 / #1377: Card condicional de presentación y apertura (puertas y cajones).
+                   Se muestra si el mueble tiene puertas o cajones detectados (metadata
+                   gestionada, parámetro doorSwing o doorAccessories del resolve).
+                   #1256: renombrada de «Apertura» a «Apertura y presentación». -->
               <div class="card" id="inspector-opening-accessories-card" style="display: none;">
                 <div class="card-header-row">
                   <div>
-                    <div class="card-title">Presentación de puertas</div>
+                    <div class="card-title">Apertura y presentación</div>
                     <div id="opening-accessories-summary" class="subhead" style="margin-top: var(--space-1); font-size: var(--text-xs);">
                       Vista de presentación: abrir o cerrar no modifica el diseño.
                     </div>
                   </div>
-                  <button id="btn-close-all-doors" type="button" class="btn btn-sm btn-ghost" style="display: none;">Cerrar todas</button>
+                  <button id="btn-close-all-doors" type="button" class="btn btn-sm btn-ghost" style="display: none;">Cerrar todo</button>
                 </div>
-                <div id="inspector-opening-accessories-container" style="margin-top: var(--space-3);"></div>
+                <div id="inspector-opening-accessories-container" style="margin-top: var(--space-2);"></div>
               </div>
 
               <div class="card" id="inspector-materials-card" style="display: none;">

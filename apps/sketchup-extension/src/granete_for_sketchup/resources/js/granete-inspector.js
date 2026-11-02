@@ -452,12 +452,17 @@
   function buildActorDoors(actors) {
     var doors = [];
     for (var i = 0; i < actors.length; i++) {
-      var slot = actors[i] && actors[i].slotIndex !== undefined ? actors[i].slotIndex : i;
+      var a = actors[i];
+      var slot = a && a.slotIndex !== undefined ? a.slotIndex : i;
       var side = actors.length === 1 ? "left" : (slot === 0 ? "left" : "right");
+      var defaultLabel = a && a.kind === "drawer"
+        ? (actors.length === 1 ? "Cajón" : "Cajón " + (Number(slot) + 1))
+        : ("Puerta " + (Number(slot) + 1) + (actors.length > 1 ? " · " + (side === "left" ? "Izquierda" : "Derecha") : ""));
       doors.push({
         doorSlotIndex: slot,
-        doorLabel: "Puerta " + (Number(slot) + 1) + (actors.length > 1 ? " · " + (side === "left" ? "Izquierda" : "Derecha") : ""),
-        swingSide: side
+        doorLabel: a && a.label ? a.label : defaultLabel,
+        swingSide: a && a.swingSide ? a.swingSide : side,
+        kind: a && a.kind ? a.kind : "door"
       });
     }
     return doors;
@@ -472,7 +477,7 @@
         window.GraneteUI.library.findDefinitionById(ctx.furnitureDefinitionId) : null);
     var params = overrideParams || inspectorParams || (ctx.parameters || {});
 
-    // Gate: la card existe sólo si hay algo que abrir — puertas detectadas
+    // Gate: la card existe sólo si hay algo que abrir — puertas o cajones detectados
     // por metadata (doorActors), doorSwing en la definición, o doorAccessories
     // del resolve. Nada de herrajes: la cinemática los mueve solidarios por
     // host binding; listarlos no aporta en esta vista.
@@ -493,7 +498,7 @@
 
     if (!doors || doors.length === 0) {
       if (btnCloseAllDoors) btnCloseAllDoors.style.display = "none";
-      if (openingAccessoriesSummary) openingAccessoriesSummary.textContent = "Sin puertas.";
+      if (openingAccessoriesSummary) openingAccessoriesSummary.textContent = "Sin elementos de apertura.";
       return;
     }
 
