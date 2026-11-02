@@ -8,7 +8,7 @@ import {
   hardwarePlacementIdentityError,
   type ResolvedHardwarePlacement,
 } from './hardwarePlacement';
-import type { Hardware } from './types';
+import type { Hardware, HardwareMachiningProfile } from './types';
 
 /**
  * Golden placement table for resolveHardwarePlacement.
@@ -538,13 +538,13 @@ describe('resolveHardwarePlacement — ancla hole:<id> vía el camino 3D (#1453 
   });
 
   it('derivedMachining gana la precedencia sobre el perfil del catálogo', () => {
-    const derived = {
+    const derived: HardwareMachiningProfile = {
       parts: [
         {
           id: 'grip',
           role: 'grip',
           operations: [
-            { id: 'h1', kind: 'blind_hole', diameterMm: 5, depthMm: 10, xMm: 30, yMm: 0, face: 'anchor' as const },
+            { id: 'h1', kind: 'blind_hole', diameterMm: 5, depthMm: 10, xMm: 30, yMm: 0, face: 'anchor' },
           ],
         },
       ],
