@@ -329,3 +329,92 @@ describe('HardwarePlacementsEditor — fila sin identidad (#1147)', () => {
     expect(groupSelect.value).toBe('BISAGRA');
   });
 });
+
+describe('HardwarePlacementsEditor — anclaje panel↔herraje (#1453 F2)', () => {
+  const machinedHardware: readonly Hardware[] = [
+    {
+      ...mockHardware[0]!,
+      id: 'hw-mach',
+      machining: {
+        parts: [
+          {
+            id: 'grip',
+            role: 'grip',
+            operations: [
+              { id: 'h1', kind: 'blind_hole', diameterMm: 5, depthMm: 10, xMm: 10, yMm: -20, face: 'anchor' },
+            ],
+          },
+        ],
+      },
+    },
+  ];
+
+  function AnchoringHarness({ initial }: { readonly initial: readonly HardwarePlacement[] }) {
+    const [placements, setPlacements] = useState<readonly HardwarePlacement[]>(initial);
+    return (
+      <HardwarePlacementsEditor
+        placements={placements}
+        catalogHardware={machinedHardware}
+        onChange={(next) => setPlacements(next ?? [])}
+      />
+    );
+  }
+
+  it('el preset «Cajón centrado» fija X desde centro + 0 y ancla de montaje', async () => {
+    const user = userEvent.setup();
+    render(
+      <AnchoringHarness
+        initial={[
+          { hardwareId: 'hw-mach', anchorFace: 'front', relativePosition: { xMm: 40, yMm: 50 } },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByTestId('instance-hardware-placement-0-preset-drawer'));
+
+    const xref = screen.getByTestId('instance-hardware-placement-0-xref') as HTMLSelectElement;
+    expect(xref.value).toBe('center');
+    const x = screen.getByTestId('instance-hardware-placement-0-x') as HTMLInputElement;
+    expect(x.value).toBe('0');
+    const anchor = screen.getByTestId('instance-hardware-placement-0-anchor') as HTMLSelectElement;
+    expect(anchor.value).toBe('mount');
+  });
+
+  it('el preset «Puerta borde» ancla X/Y a los bordes opuestos con offsets editables', async () => {
+    const user = userEvent.setup();
+    render(
+      <AnchoringHarness
+        initial={[
+          { hardwareId: 'hw-mach', anchorFace: 'front', relativePosition: { xMm: 0, yMm: 0 } },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByTestId('instance-hardware-placement-0-preset-door'));
+
+    const xref = screen.getByTestId('instance-hardware-placement-0-xref') as HTMLSelectElement;
+    const yref = screen.getByTestId('instance-hardware-placement-0-yref') as HTMLSelectElement;
+    const x = screen.getByTestId('instance-hardware-placement-0-x') as HTMLInputElement;
+    expect(xref.value).toBe('max');
+    expect(yref.value).toBe('max');
+    expect(x.value).toBe('-40');
+  });
+
+  it('los agujeros del maquinado se ofrecen como anclas hole:<id>', async () => {
+    const user = userEvent.setup();
+    render(
+      <AnchoringHarness
+        initial={[
+          { hardwareId: 'hw-mach', anchorFace: 'front', relativePosition: { xMm: 100, yMm: 100 } },
+        ]}
+      />,
+    );
+
+    const anchor = screen.getByTestId('instance-hardware-placement-0-anchor') as HTMLSelectElement;
+    const holeOption = Array.from(anchor.options).find((o) => o.value === 'hole:h1');
+    expect(holeOption).toBeDefined();
+
+    await user.selectOptions(anchor, 'hole:h1');
+    expect(anchor.value).toBe('hole:h1');
+  });
+});

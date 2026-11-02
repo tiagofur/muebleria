@@ -122,6 +122,20 @@ module Granete
           end
         end
 
+        # #1453 F2: hardware proxy box centered IN-PLANE on the definition
+        # origin (the mount point) and growing outward from the mount face
+        # on Z — the convention web/Go AABB render with. Boards keep the
+        # [0,dims] corner convention of build_local_box.
+        def build_hardware_proxy_box(definition, dims_mm)
+          u, v, out = dims_mm.map { |value| value * MM_TO_INCHES }
+          add_box_segment(
+            definition,
+            x0: -u / 2, x1: u / 2,
+            y0: -v / 2, y1: v / 2,
+            z0: 0, z1: out
+          )
+        end
+
         def add_box_segment(definition, segment)
           x0 = segment[:x0]
           x1 = segment[:x1]
@@ -914,7 +928,12 @@ module Granete
           hardware_definition = model.definitions.add(
             "#{FurnitureBuilder::HARDWARE_DEFINITION_PREFIX}#{name} · #{placement.placement_id}"
           )
-          LocalGeometry.build_local_box(hardware_definition, dims[0], dims[1], dims[2])
+          # #1453 F2: the proxy renders centered IN-PLANE on the definition
+          # origin (the mount point) and growing outward on Z — the same
+          # convention web/Go AABB draw with. The instance origin stays at
+          # the face point (the #405 contract pins it), so centering lives
+          # in the geometry, never in the instance transform.
+          LocalGeometry.build_hardware_proxy_box(hardware_definition, dims)
           transform = if defined?(::Geom::Transformation) && pos.is_a?(::Geom::Transformation)
                         pos
                       elsif placement.basis

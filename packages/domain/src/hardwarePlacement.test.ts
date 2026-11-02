@@ -8,7 +8,7 @@ import {
   hardwarePlacementIdentityError,
   type ResolvedHardwarePlacement,
 } from './hardwarePlacement';
-import type { Hardware } from './types';
+import type { Hardware, HardwareMachiningProfile } from './types';
 
 /**
  * Golden placement table for resolveHardwarePlacement.
@@ -499,5 +499,68 @@ describe('resolveHardwarePlacement — dimensions canónicas (#1453 F1, review B
       hardware,
     });
     expect(resolved?.standoffMm).toBe(28);
+  });
+});
+
+describe('resolveHardwarePlacement — ancla hole:<id> vía el camino 3D (#1453 F2 review P1)', () => {
+  const machined: Hardware = {
+    ...knob,
+    previewShape: 'bar-pull',
+    machining: {
+      parts: [
+        {
+          id: 'grip',
+          role: 'grip',
+          operations: [
+            { id: 'h1', kind: 'blind_hole', diameterMm: 5, depthMm: 10, xMm: 10, yMm: -20, face: 'anchor' },
+          ],
+        },
+      ],
+    },
+  };
+
+  it('la preview 3D corre el origen igual que el drilling (panel − op rotada)', () => {
+    const resolved = resolveHardwarePlacement({
+      componentInstanceId: 'ci-1',
+      placement: {
+        hardwareId: machined.id,
+        anchorFace: 'front',
+        relativePosition: { xMm: 100, yMm: 100 },
+        hwAnchor: 'hole:h1',
+      },
+      board: BOARD,
+      hardware: machined,
+    });
+    // mount = panel(100,100) − op(10,−20) = (90,120); front: [x, t, y]
+    expect(resolved?.localPosition[0]).toBe(90);
+    expect(resolved?.localPosition[1]).toBe(BOARD.thicknessMm);
+    expect(resolved?.localPosition[2]).toBe(120);
+  });
+
+  it('derivedMachining gana la precedencia sobre el perfil del catálogo', () => {
+    const derived: HardwareMachiningProfile = {
+      parts: [
+        {
+          id: 'grip',
+          role: 'grip',
+          operations: [
+            { id: 'h1', kind: 'blind_hole', diameterMm: 5, depthMm: 10, xMm: 30, yMm: 0, face: 'anchor' },
+          ],
+        },
+      ],
+    };
+    const resolved = resolveHardwarePlacement({
+      componentInstanceId: 'ci-1',
+      placement: {
+        hardwareId: machined.id,
+        anchorFace: 'front',
+        relativePosition: { xMm: 100, yMm: 100 },
+        hwAnchor: 'hole:h1',
+        derivedMachining: derived,
+      },
+      board: BOARD,
+      hardware: machined,
+    });
+    expect(resolved?.localPosition[0]).toBe(70);
   });
 });

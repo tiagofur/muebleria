@@ -119,6 +119,26 @@ export function HardwarePlacementsEditor({
   const membersHintFor = (group: OptionGroup): string =>
     hardwareGroupMembersHint(group, catalogHardware);
 
+  /** Resolved catalog hardware of a row (undefined for group-mode rows). */
+  const rowHardware = (p: HardwarePlacement): Hardware | undefined =>
+    p.hardwareId ? catalogHardware.find((h) => h.id === p.hardwareId) : undefined;
+
+  /**
+   * #1453 F2: machining operations offered as `hole:<opId>` anchors — the
+   * same ids the drilling resolver rotates into position.
+   */
+  const hardwareAnchorHoleOptions = (
+    hw: Hardware | undefined,
+  ): readonly { id: string; label?: string }[] => {
+    const ops: { id: string; label?: string }[] = [];
+    for (const part of hw?.machining?.parts ?? []) {
+      for (const op of part.operations) {
+        ops.push({ id: op.id, label: op.label });
+      }
+    }
+    return ops;
+  };
+
   return (
     <div
       className="instance-hardware-placements"
@@ -334,6 +354,117 @@ export function HardwarePlacementsEditor({
                     }}
                     data-testid={`instance-hardware-placement-${idx}${suffix}-y`}
                   />
+                </div>
+              </div>
+
+              {/* #1453 F2: panel-side references + hardware-side anchor. */}
+              <div className="module-editor__grid module-editor__grid--rotations">
+                <div className="catalog-form__field catalog-form__field--narrow">
+                  <label htmlFor={`hw-placement-xref-${idx}${suffix}`}>X desde</label>
+                  <select
+                    id={`hw-placement-xref-${idx}${suffix}`}
+                    value={p.relativePosition.xRef ?? 'min'}
+                    onChange={(e) =>
+                      update(idx, {
+                        relativePosition: {
+                          ...p.relativePosition,
+                          xRef: e.target.value === 'min' ? undefined : (e.target.value as 'max' | 'center'),
+                        },
+                      })
+                    }
+                    data-testid={`instance-hardware-placement-${idx}${suffix}-xref`}
+                  >
+                    <option value="min">Borde origen</option>
+                    <option value="center">Centro de la cara</option>
+                    <option value="max">Borde opuesto</option>
+                  </select>
+                </div>
+                <div className="catalog-form__field catalog-form__field--narrow">
+                  <label htmlFor={`hw-placement-yref-${idx}${suffix}`}>Y desde</label>
+                  <select
+                    id={`hw-placement-yref-${idx}${suffix}`}
+                    value={p.relativePosition.yRef ?? 'min'}
+                    onChange={(e) =>
+                      update(idx, {
+                        relativePosition: {
+                          ...p.relativePosition,
+                          yRef: e.target.value === 'min' ? undefined : (e.target.value as 'max' | 'center'),
+                        },
+                      })
+                    }
+                    data-testid={`instance-hardware-placement-${idx}${suffix}-yref`}
+                  >
+                    <option value="min">Borde origen</option>
+                    <option value="center">Centro de la cara</option>
+                    <option value="max">Borde opuesto</option>
+                  </select>
+                </div>
+                <div className="catalog-form__field catalog-form__field--narrow">
+                  <label htmlFor={`hw-placement-anchor-${idx}${suffix}`}>Ancla del herraje</label>
+                  <select
+                    id={`hw-placement-anchor-${idx}${suffix}`}
+                    value={p.hwAnchor ?? 'mount'}
+                    onChange={(e) =>
+                      update(idx, {
+                        hwAnchor: e.target.value === 'mount' ? undefined : (e.target.value as NonNullable<HardwarePlacement['hwAnchor']>),
+                      })
+                    }
+                    data-testid={`instance-hardware-placement-${idx}${suffix}-anchor`}
+                  >
+                    <option value="mount">Punto de montaje (origen)</option>
+                    <option value="center">Centro del herraje</option>
+                    {hardwareAnchorHoleOptions(rowHardware(p)).map((op) => (
+                      <option key={op.id} value={`hole:${op.id}`}>
+                        {op.label ? `Agujero ${op.id} · ${op.label}` : `Agujero ${op.id}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="catalog-form__field catalog-form__field--narrow">
+                  <span aria-hidden="true" style={{ visibility: 'hidden' }}>—</span>
+                  <div className="catalog-form__row">
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      title="Centra el herraje en la cara sin importar su tamaño (X desde centro + 0)"
+                      onClick={() =>
+                        update(idx, {
+                          relativePosition: {
+                            ...p.relativePosition,
+                            xMm: 0,
+                            xFormula: undefined,
+                            xRef: 'center',
+                          },
+                          hwAnchor: 'mount',
+                        })
+                      }
+                      data-testid={`instance-hardware-placement-${idx}${suffix}-preset-drawer`}
+                    >
+                      Cajón centrado
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      title="Ancla al borde opuesto y arriba con holgura editable (−40 / −50)"
+                      onClick={() =>
+                        update(idx, {
+                          relativePosition: {
+                            ...p.relativePosition,
+                            xMm: -40,
+                            xFormula: undefined,
+                            xRef: 'max',
+                            yMm: -50,
+                            yFormula: undefined,
+                            yRef: 'max',
+                          },
+                          hwAnchor: 'mount',
+                        })
+                      }
+                      data-testid={`instance-hardware-placement-${idx}${suffix}-preset-door`}
+                    >
+                      Puerta borde
+                    </button>
+                  </div>
                 </div>
               </div>
 

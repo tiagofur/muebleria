@@ -231,16 +231,21 @@ type HardwarePlacement struct {
 	// set (#1046): the layout resolver substitutes the chosen catalog hardware
 	// from the effective option choices, mirroring HardwareLine.HardwareID.
 	// Machining/drilling/demand only ever see the resolved concrete id.
-	HardwareID       string               `json:"hardwareId,omitempty"`
+	HardwareID string `json:"hardwareId,omitempty"`
 	// OptionRole is the option-group code (kind hardware) when the concrete
 	// item is chosen later (Blum vs Hafele vs económica — #1046). Exactly one
 	// of HardwareID/OptionRole must be usable; a required group without a
 	// choice fails the resolve.
-	OptionRole       string               `json:"optionRole,omitempty"`
-	AnchorFace       string               `json:"anchorFace"` // front|back|left|right|top|bottom
-	RelativePosition HardwareRelPosition  `json:"relativePosition"`
-	RotationDeg      *HardwareRotationDeg `json:"rotationDeg,omitempty"`
-	Scale            *float64             `json:"scale,omitempty"`
+	OptionRole       string              `json:"optionRole,omitempty"`
+	AnchorFace       string              `json:"anchorFace"` // front|back|left|right|top|bottom
+	RelativePosition HardwareRelPosition `json:"relativePosition"`
+	// HwAnchor (#1453 F2): which point of the HARDWARE lands on the resolved
+	// panel point. ""/mount = the hardware origin (historical behavior);
+	// center = bbox center (corner-authored assets); "hole:<opId>" = that
+	// machining operation's position.
+	HwAnchor    string               `json:"hwAnchor,omitempty"`
+	RotationDeg *HardwareRotationDeg `json:"rotationDeg,omitempty"`
+	Scale       *float64             `json:"scale,omitempty"`
 	// PartRole optionally distinguishes multi-part hardware (e.g. minifix cam vs bolt).
 	PartRole string `json:"partRole,omitempty"`
 	// DerivedMachining replaces the catalog technical profile for this specific
@@ -304,6 +309,11 @@ type HardwareRelPosition struct {
 	YFormula string  `json:"yFormula,omitempty"`
 	XPercent float64 `json:"xPercent,omitempty"`
 	YPercent float64 `json:"yPercent,omitempty"`
+	// XRef/YRef (#1453 F2): panel-side reference the mm/formula offset
+	// resolves against on the anchor face. ""/min = the face's origin corner
+	// (historical behavior); max = the far edge; center = the face midpoint.
+	XRef string `json:"xRef,omitempty"`
+	YRef string `json:"yRef,omitempty"`
 }
 
 // HardwareRotationDeg is an optional per-axis rotation in degrees (board frame).
@@ -361,16 +371,16 @@ type ComponentConstruction struct {
 // Component is a reusable engineering component (carcasa piece).
 // Mirrors the frontend Component type from @granete/domain.
 type Component struct {
-	ID           string             `json:"id"`
-	Code         string             `json:"code"`
-	Name         string             `json:"name"`
-	Placement    ComponentPlacement `json:"placement"`
-	GeometryKind string             `json:"geometry_kind"`
-	LengthMm     int                `json:"length_mm"`
-	WidthMm      int                `json:"width_mm"`
-	ThicknessMm  int                `json:"thickness_mm"`
-	DefaultEdges []EdgeAssignment   `json:"default_edges"`
-	OptionRoles  []string           `json:"option_roles,omitempty"`
+	ID           string                 `json:"id"`
+	Code         string                 `json:"code"`
+	Name         string                 `json:"name"`
+	Placement    ComponentPlacement     `json:"placement"`
+	GeometryKind string                 `json:"geometry_kind"`
+	LengthMm     int                    `json:"length_mm"`
+	WidthMm      int                    `json:"width_mm"`
+	ThicknessMm  int                    `json:"thickness_mm"`
+	DefaultEdges []EdgeAssignment       `json:"default_edges"`
+	OptionRoles  []string               `json:"option_roles,omitempty"`
 	Construction *ComponentConstruction `json:"construction,omitempty"`
 	// CompatibleHardwareCategories optionally lists the hardware categories this component can host (#350).
 	CompatibleHardwareCategories []string  `json:"compatible_hardware_categories,omitempty"`

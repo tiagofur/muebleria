@@ -17597,6 +17597,24 @@
           },
           "yPercent": {
             "type": "number"
+          },
+          "xRef": {
+            "type": "string",
+            "enum": [
+              "min",
+              "max",
+              "center"
+            ],
+            "description": "#1453 F2 panel-side reference the X offset resolves against on the anchor face. Omitted/min = the face's origin corner (historical absolute behavior); max = the far edge; center = the face midpoint."
+          },
+          "yRef": {
+            "type": "string",
+            "enum": [
+              "min",
+              "max",
+              "center"
+            ],
+            "description": "#1453 F2 panel-side reference for Y — same semantics as xRef."
           }
         },
         "required": [
@@ -17631,6 +17649,10 @@
           },
           "relativePosition": {
             "$ref": "#/components/schemas/CatalogHardwareRelativePosition"
+          },
+          "hwAnchor": {
+            "type": "string",
+            "description": "#1453 F2: which point of the HARDWARE lands on the resolved panel point. Omitted/mount = the hardware origin (grip center for parametric shapes, the asset mountFrame origin — historical behavior); center = bbox center (corner-authored assets); hole:<opId> = that machining operation's position, rotated with the placement."
           },
           "rotationDeg": {
             "$ref": "#/components/schemas/CatalogHardwareRotationDeg"
