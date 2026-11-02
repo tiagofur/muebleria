@@ -292,6 +292,25 @@ export function HardwareCatalog({
     if (nameErr) return nameErr;
     const costErr = validateNonNegativeNumber(draft.costPerUnit, 'Costo unitario');
     if (costErr) return costErr;
+    // #1453 F1: the canonical bounding box travels complete or empty.
+    const dimFilled = [
+      draft.dimensionWidthMm,
+      draft.dimensionHeightMm,
+      draft.dimensionDepthMm,
+    ].filter((v) => v.trim() !== '').length;
+    if (dimFilled !== 0 && dimFilled !== 3) {
+      return 'Las dimensiones W×H×D van completas o vacías — completá las tres o dejá las tres en blanco';
+    }
+    if (dimFilled === 3) {
+      const nums = [
+        Number(draft.dimensionWidthMm),
+        Number(draft.dimensionHeightMm),
+        Number(draft.dimensionDepthMm),
+      ];
+      if (nums.some((n) => !Number.isFinite(n) || n <= 0)) {
+        return 'Las dimensiones W×H×D deben ser mayores a 0 mm';
+      }
+    }
     if (draft.machining && draft.machining.parts.length > 0) {
       try {
         validateMachiningProfile(draft.machining);

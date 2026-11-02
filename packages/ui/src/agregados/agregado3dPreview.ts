@@ -37,6 +37,8 @@ import {
   projectResolvedAssemblyFor3D,
   resolveAgregadoAssembly,
   resolveComposedModule,
+  resolveHardwareDimensions,
+  type EffectiveHardwareDimensions,
 } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
@@ -230,6 +232,12 @@ export function resolveAgregado3DPreview(
     );
     if (recipe && recipe.rigidMembers && recipe.rigidMembers.length > 0) {
       try {
+        // #1453 F1: rigid-member offset formulas see HW/HH/HD from the
+        // effective dimensions of each member's catalog hardware.
+        const hardwareDimensions: Record<string, EffectiveHardwareDimensions> = {};
+        for (const hw of catalogInput.hardware ?? []) {
+          hardwareDimensions[hw.id] = resolveHardwareDimensions(hw);
+        }
         const resolved = resolveAgregadoAssembly(
           {
             id: recipe.id,
@@ -239,7 +247,7 @@ export function resolveAgregado3DPreview(
             variantSets: recipe.variantSets,
             compatibilityRules: recipe.compatibilityRules,
           },
-          { widthMm: dims.width, depthMm: dims.depth, heightMm: dims.height },
+          { widthMm: dims.width, depthMm: dims.depth, heightMm: dims.height, hardwareDimensions },
         );
         const enriched = {
           ...resolved,

@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "hardwareDimensions.contract",
+  "comment": [
+    "#1453 F1 — paridad TS↔Go de dimensiones efectivas de herraje y de las",
+    "variables HW/HH/HD en fórmulas. Los registros usan vocabulario neutro",
+    "(shape/sizeMm/diameterMm/projectionMm/dimensions); cada motor mapea a su",
+    "dominio. Convención: HW = dimensions.widthMm ?? sizeMm ?? 96 (histórico),",
+    "HH = dimensions.heightMm ?? diameterMm ?? 0, HD = dimensions.depthMm ??",
+    "projectionMm ?? 0 (0 = eje no modelado; proyección 0 = flush es válido).",
+    "Las fórmulas se evalúan con redondeo a mm entero (half away from zero)."
+  ],
+  "hardware": [
+    {
+      "id": "hw-pull-dims",
+      "shape": "bar-pull",
+      "sizeMm": 96,
+      "diameterMm": 30,
+      "projectionMm": 25,
+      "dimensions": { "widthMm": 128, "heightMm": 32, "depthMm": 35 }
+    },
+    {
+      "id": "hw-pull-preview",
+      "shape": "bar-pull",
+      "sizeMm": 128,
+      "diameterMm": 30,
+      "projectionMm": 35
+    },
+    {
+      "id": "hw-pull-legacy",
+      "shape": "bar-pull",
+      "sizeMm": 128
+    },
+    {
+      "id": "hw-knob-flush",
+      "shape": "knob",
+      "sizeMm": 32,
+      "projectionMm": 0
+    },
+    {
+      "id": "hw-costonly"
+    }
+  ],
+  "expected": {
+    "hw-pull-dims": { "HW": 128, "HH": 32, "HD": 35 },
+    "hw-pull-preview": { "HW": 128, "HH": 30, "HD": 35 },
+    "hw-pull-legacy": { "HW": 128, "HH": 0, "HD": 0 },
+    "hw-knob-flush": { "HW": 32, "HH": 0, "HD": 0 },
+    "hw-costonly": { "HW": 96, "HH": 0, "HD": 0 }
+  },
+  "formulaCases": [
+    {
+      "name": "centrado de cajón con HW explícito",
+      "hwId": "hw-pull-dims",
+      "formula": "(PW-HW)/2",
+      "env": { "W": 600, "H": 400, "D": 400, "T": 18, "PW": 600, "PH": 144, "PD": 400 },
+      "expected": 236
+    },
+    {
+      "name": "centrado de cajón con HW derivado del preview",
+      "hwId": "hw-pull-preview",
+      "formula": "(PW-HW)/2",
+      "env": { "W": 600, "H": 400, "D": 400, "T": 18, "PW": 600, "PH": 144, "PD": 400 },
+      "expected": 236
+    },
+    {
+      "name": "centrado absoluto — sin depender del herraje",
+      "hwId": "hw-costonly",
+      "formula": "PW/2",
+      "env": { "W": 600, "H": 400, "D": 400, "T": 18, "PW": 600, "PH": 144, "PD": 400 },
+      "expected": 300
+    },
+    {
+      "name": "centrado vertical con HH",
+      "hwId": "hw-pull-dims",
+      "formula": "(PH-HH)/2",
+      "env": { "W": 600, "H": 400, "D": 400, "T": 18, "PW": 600, "PH": 144, "PD": 400 },
+      "expected": 56
+    },
+    {
+      "name": "HD en una expresión con H y D — los tokens no se pisan",
+      "hwId": "hw-pull-dims",
+      "formula": "H*D - HD",
+      "env": { "W": 600, "H": 400, "D": 400, "T": 18, "PW": 600, "PH": 144, "PD": 400 },
+      "expected": 159965
+    },
+    {
+      "name": "HH junto a H — sustitución por token completo",
+      "hwId": "hw-pull-dims",
+      "formula": "HH - H",
+      "env": { "W": 600, "H": 400, "D": 400, "T": 18, "PW": 600, "PH": 144, "PD": 400 },
+      "expected": -368
+    },
+    {
+      "name": "HW default 96 en cost-only mantiene el histórico",
+      "hwId": "hw-costonly",
+      "formula": "(PW-HW)/2",
+      "env": { "W": 600, "H": 400, "D": 400, "T": 18, "PW": 600, "PH": 144, "PD": 400 },
+      "expected": 252
+    }
+  ]
+}

@@ -18029,6 +18029,17 @@
               "null"
             ]
           },
+          "dimensions": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HardwareDimensions"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "#1453 F1 canonical physical bounding box W×H×D (mm); complete object or null — partial states don't exist. Authoritative when present: formulas see HW/HH/HD and drawing uses its axes. null = effective dims derive from preview_* scalars."
+          },
           "preview_color": {
             "type": [
               "string",
@@ -18194,6 +18205,17 @@
               "null"
             ]
           },
+          "dimensions": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HardwareDimensions"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "#1453 F1 canonical physical bounding box W×H×D (mm); complete object or null — partial states don't exist. Authoritative when present: formulas see HW/HH/HD and drawing uses its axes. null = effective dims derive from preview_* scalars."
+          },
           "preview_color": {
             "type": [
               "string",
@@ -18295,6 +18317,33 @@
             "type": "string"
           }
         }
+      },
+      "HardwareDimensions": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "widthMm",
+          "heightMm",
+          "depthMm"
+        ],
+        "properties": {
+          "widthMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Bounding-box width in mm (grip length for pulls)."
+          },
+          "heightMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Bounding-box height in mm (grip tube diameter for pulls)."
+          },
+          "depthMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Bounding-box depth in mm (standoff from the mount face)."
+          }
+        },
+        "description": "#1453 F1 canonical physical bounding box of a hardware item. Complete or nothing; writes validate finite/positive axes (HARDWARE_DIMENSIONS_INVALID)."
       },
       "CatalogModuleWrite": {
         "type": "object",

@@ -30,6 +30,15 @@ export type HardwareDraft = {
   previewSizeMm: string;
   previewDiameterMm: string;
   previewProjectionMm: string;
+  /**
+   * #1453 F1: canonical bounding box W×H×D (mm). All three set (and > 0) =
+   * complete dimensions; all three empty = none. Partial states are a form
+   * error caught on submit. Fields can be suggested from the bound 3D design
+   * («Cargar del diseño») and stay editable — the manual value wins.
+   */
+  dimensionWidthMm: string;
+  dimensionHeightMm: string;
+  dimensionDepthMm: string;
   previewRoughness: string;
   previewMetalness: string;
   previewClearcoat: string;
@@ -85,6 +94,9 @@ export const emptyDraft = (): HardwareDraft => ({
   previewSizeMm: '',
   previewDiameterMm: '',
   previewProjectionMm: '',
+  dimensionWidthMm: '',
+  dimensionHeightMm: '',
+  dimensionDepthMm: '',
   previewRoughness: '',
   previewMetalness: '',
   previewClearcoat: '',
@@ -110,6 +122,9 @@ export function toDraft(item: Hardware): HardwareDraft {
     previewSizeMm: item.previewSizeMm !== undefined ? String(item.previewSizeMm) : '',
     previewDiameterMm: item.previewDiameterMm !== undefined ? String(item.previewDiameterMm) : '',
     previewProjectionMm: item.previewProjectionMm !== undefined ? String(item.previewProjectionMm) : '',
+    dimensionWidthMm: item.dimensions !== undefined ? String(item.dimensions.widthMm) : '',
+    dimensionHeightMm: item.dimensions !== undefined ? String(item.dimensions.heightMm) : '',
+    dimensionDepthMm: item.dimensions !== undefined ? String(item.dimensions.depthMm) : '',
     previewRoughness: item.previewRoughness !== undefined ? String(item.previewRoughness) : '',
     previewMetalness: item.previewMetalness !== undefined ? String(item.previewMetalness) : '',
     previewClearcoat: item.previewClearcoat !== undefined ? String(item.previewClearcoat) : '',

@@ -399,6 +399,32 @@ export function edgeFromApi(raw: Record<string, unknown>): EdgeBand {
 
 // --- Hardware ---
 
+/**
+ * Canonical bounding box (#1453 F1): only a complete, positive, finite triple
+ * enters the catalog state; anything else is dropped (the server rejects
+ * partial/non-positive writes with HARDWARE_DIMENSIONS_INVALID).
+ */
+function normalizeHardwareDimensions(
+  raw: unknown,
+): { dimensions?: Hardware['dimensions'] } {
+  if (typeof raw !== 'object' || raw === null) return {};
+  const rec = raw as Record<string, unknown>;
+  const widthMm = optionalNum(rec.widthMm);
+  const heightMm = optionalNum(rec.heightMm);
+  const depthMm = optionalNum(rec.depthMm);
+  if (
+    widthMm === undefined ||
+    heightMm === undefined ||
+    depthMm === undefined ||
+    widthMm <= 0 ||
+    heightMm <= 0 ||
+    depthMm <= 0
+  ) {
+    return {};
+  }
+  return { dimensions: { widthMm, heightMm, depthMm } };
+}
+
 export function hardwareToApi(h: Hardware): Record<string, unknown> {
   return {
     id: h.id,
@@ -417,6 +443,14 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     preview_size_mm: h.previewSizeMm ?? null,
     preview_projection_mm: h.previewProjectionMm ?? null,
     preview_diameter_mm: h.previewDiameterMm ?? null,
+    // Canonical bounding box (#1453 F1); null = derive from preview_*.
+    dimensions: h.dimensions
+      ? {
+          widthMm: h.dimensions.widthMm,
+          heightMm: h.dimensions.heightMm,
+          depthMm: h.dimensions.depthMm,
+        }
+      : null,
     preview_color: h.previewColor ?? null,
     preview_roughness: h.previewRoughness ?? null,
     preview_metalness: h.previewMetalness ?? null,
@@ -482,6 +516,9 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     previewSizeMm: optionalNum(raw.preview_size_mm ?? raw.previewSizeMm),
     previewProjectionMm: optionalNum(raw.preview_projection_mm ?? raw.previewProjectionMm),
     previewDiameterMm: optionalNum(raw.preview_diameter_mm ?? raw.previewDiameterMm),
+    // Canonical bounding box (#1453 F1) — complete or dropped; partial or
+    // non-positive shapes never enter the catalog (the server rejects writes).
+    ...normalizeHardwareDimensions(raw.dimensions),
     previewColor: str(raw.preview_color ?? raw.previewColor) || undefined,
     previewRoughness: optionalNum(raw.preview_roughness ?? raw.previewRoughness),
     previewMetalness: optionalNum(raw.preview_metalness ?? raw.previewMetalness),

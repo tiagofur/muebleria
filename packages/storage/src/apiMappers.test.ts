@@ -1675,6 +1675,49 @@ describe('hardwareToApi / hardwareFromApi — available finishes round-trip (#12
   });
 });
 
+describe('hardwareToApi / hardwareFromApi — dimensions round-trip (#1453 F1)', () => {
+  const base: Hardware = {
+    id: 'hw-1',
+    code: 'HW-PULL',
+    name: 'Jaladera',
+    unit: 'piece',
+    costPerUnit: 5,
+    active: true,
+  };
+
+  it('round-trips the complete bounding box', () => {
+    const hw: Hardware = {
+      ...base,
+      dimensions: { widthMm: 128, heightMm: 32, depthMm: 35 },
+    };
+    const api = hardwareToApi(hw);
+    expect(api.dimensions).toEqual({ widthMm: 128, heightMm: 32, depthMm: 35 });
+
+    const round = hardwareFromApi(api as Record<string, unknown>);
+    expect(round.dimensions).toEqual({ widthMm: 128, heightMm: 32, depthMm: 35 });
+  });
+
+  it('writes null and drops null on legacy rows (derive from preview*)', () => {
+    expect(hardwareToApi(base).dimensions).toBeNull();
+    expect(
+      hardwareFromApi({ ...base, dimensions: null }).dimensions,
+    ).toBeUndefined();
+  });
+
+  it('never ingests partial or non-positive dimensions', () => {
+    expect(
+      hardwareFromApi({ ...base, dimensions: { widthMm: 128, heightMm: 32 } })
+        .dimensions,
+    ).toBeUndefined();
+    expect(
+      hardwareFromApi({
+        ...base,
+        dimensions: { widthMm: 128, heightMm: 32, depthMm: 0 },
+      }).dimensions,
+    ).toBeUndefined();
+  });
+});
+
 describe('hardwareToApi / hardwareFromApi — PBR round-trip (F069)', () => {
   it('round-trips preview fields (shape + PBR)', () => {
     const hw: Hardware = {

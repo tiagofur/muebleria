@@ -72,6 +72,7 @@ export type { Grain };
 /**
  * Safely evaluates simple math formulas involving W, H, D, T, B, PW, PH, PD, N variables and numbers.
  * B = plinth / toe-kick height (zoclo), mm.
+ * HW/HH/HD = hardware effective dimensions (#1453 F1); missing → 0.
  */
 export function evaluatePartFormula(
   formula: string,
@@ -87,6 +88,10 @@ export function evaluatePartFormula(
     i?: number;
     /** Total copies of the component instance (#1383); 0 where it doesn't apply. */
     N?: number;
+    /** Hardware effective width/height/depth in mm (#1453 F1); undefined → 0. */
+    HW?: number;
+    HH?: number;
+    HD?: number;
   },
   contextInfo?: { structureCode: string; partDescription: string; field: 'length' | 'width' | 'x' | 'y' | 'z' }
 ): number {
@@ -115,10 +120,13 @@ export function evaluatePartFormula(
   const t = dims.T !== undefined ? dims.T : 0;
   const b = dims.B !== undefined ? dims.B : 0;
 
-  // Substitute variables (multi-letter tokens before single letters)
-  const hw = (dims as { HW?: number }).HW;
+  // Substitute variables (multi-letter tokens before single letters; the
+  // two-letter hardware tokens HW/HH/HD must run before H and D so their
+  // leading letter is never replaced out from under them).
   const expr = clean
-    .replace(/HW/g, String(hw ?? 0))
+    .replace(/HW/g, String(dims.HW ?? 0))
+    .replace(/HH/g, String(dims.HH ?? 0))
+    .replace(/HD/g, String(dims.HD ?? 0))
     .replace(/PW/g, String(pw))
     .replace(/PH/g, String(ph))
     .replace(/PD/g, String(pd))

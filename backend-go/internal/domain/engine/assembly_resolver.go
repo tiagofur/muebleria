@@ -16,6 +16,11 @@ type AssemblyResolutionParams struct {
 	WidthMm  float64 `json:"widthMm"`
 	DepthMm  float64 `json:"depthMm"`
 	HeightMm float64 `json:"heightMm"`
+	// HardwareDimensions maps hardwareId → effective dimensions (mm) for
+	// rigid-member offset formulas (#1453 F1): they expose HW/HH/HD. Server
+	// derived only — json:"-" keeps client payloads from injecting it; a
+	// missing id evaluates all three to 0 (the historical behavior).
+	HardwareDimensions map[string]domain.HardwareDimensions `json:"-"`
 }
 
 func ValidateAssemblyResolutionParams(params AssemblyResolutionParams) error {
@@ -164,15 +169,16 @@ func ResolveAgregadoAssembly(
 				member.MemberID, member.Source.Kind)
 		}
 
-		xCoord, err := calculateAxisPlacementCoord("x", member.Placement.X, params.WidthMm)
+		hwDims := params.HardwareDimensions[hardwareID]
+		xCoord, err := calculateAxisPlacementCoord("x", member.Placement.X, params.WidthMm, hwDims)
 		if err != nil {
 			return domain.ResolvedAssembly{}, fmt.Errorf("member %s: %w", member.MemberID, err)
 		}
-		yCoord, err := calculateAxisPlacementCoord("y", member.Placement.Y, params.DepthMm)
+		yCoord, err := calculateAxisPlacementCoord("y", member.Placement.Y, params.DepthMm, hwDims)
 		if err != nil {
 			return domain.ResolvedAssembly{}, fmt.Errorf("member %s: %w", member.MemberID, err)
 		}
-		zCoord, err := calculateAxisPlacementCoord("z", member.Placement.Z, params.HeightMm)
+		zCoord, err := calculateAxisPlacementCoord("z", member.Placement.Z, params.HeightMm, hwDims)
 		if err != nil {
 			return domain.ResolvedAssembly{}, fmt.Errorf("member %s: %w", member.MemberID, err)
 		}
@@ -227,15 +233,15 @@ func ResolveAgregadoAssembly(
 		}
 
 		if c.Overrides != nil && c.Overrides.PlacementRule != nil {
-			xCoord, err := calculateAxisPlacementCoord("x", c.Overrides.PlacementRule.X, params.WidthMm)
+			xCoord, err := calculateAxisPlacementCoord("x", c.Overrides.PlacementRule.X, params.WidthMm, domain.HardwareDimensions{})
 			if err != nil {
-				return domain.ResolvedAssembly{}, fmt.Errorf("component '%s': %w", c.ComponentID, err)
+				return domain.ResolvedAssembly{}, fmt.Errorf("component %s: %w", c.ComponentID, err)
 			}
-			yCoord, err := calculateAxisPlacementCoord("y", c.Overrides.PlacementRule.Y, params.DepthMm)
+			yCoord, err := calculateAxisPlacementCoord("y", c.Overrides.PlacementRule.Y, params.DepthMm, domain.HardwareDimensions{})
 			if err != nil {
-				return domain.ResolvedAssembly{}, fmt.Errorf("component '%s': %w", c.ComponentID, err)
+				return domain.ResolvedAssembly{}, fmt.Errorf("component %s: %w", c.ComponentID, err)
 			}
-			zCoord, err := calculateAxisPlacementCoord("z", c.Overrides.PlacementRule.Z, params.HeightMm)
+			zCoord, err := calculateAxisPlacementCoord("z", c.Overrides.PlacementRule.Z, params.HeightMm, domain.HardwareDimensions{})
 			if err != nil {
 				return domain.ResolvedAssembly{}, fmt.Errorf("component '%s': %w", c.ComponentID, err)
 			}
@@ -509,7 +515,7 @@ func selectAssemblyVariant(
 	}, nil
 }
 
-func calculateAxisPlacementCoord(axisName string, p domain.AssemblyAxisPlacement, dimensionMm float64) (float64, error) {
+func calculateAxisPlacementCoord(axisName string, p domain.AssemblyAxisPlacement, dimensionMm float64, hwDims domain.HardwareDimensions) (float64, error) {
 	var base float64
 	switch p.Ref {
 	case domain.AxisRefMin:
@@ -526,6 +532,11 @@ func calculateAxisPlacementCoord(axisName string, p domain.AssemblyAxisPlacement
 		// (the shared evaluator's convention) keeps TS and Go identical.
 		d := int(math.Round(dimensionMm))
 		dims := formulaDims{W: d, H: d, D: d}
+		// #1453 F1: HW/HH/HD from the member's effective dimensions
+		// (zero value → 0/0/0, matching the TS env fallback).
+		dims.HW = int(math.Round(hwDims.WidthMm))
+		dims.HH = int(math.Round(hwDims.HeightMm))
+		dims.HD = int(math.Round(hwDims.DepthMm))
 		switch axisName {
 		case "x":
 			dims.PW = d

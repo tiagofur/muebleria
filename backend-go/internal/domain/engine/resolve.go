@@ -808,8 +808,9 @@ type formulaDims struct {
 	T, I       int
 	// B is the plinth/toe-kick height (zoclo) in mm; 0 when the module has none.
 	B int
-	// HW is the hardware preview size for hardware relative-position formulas.
-	HW int
+	// HW/HH/HD are the hardware effective dimensions for hardware
+	// relative-position formulas (#1453 F1); 0 where they don't apply.
+	HW, HH, HD int
 	// N is the total copies of the component instance after parameter
 	// bindings (#1383): lets a formula distribute the copies (a shelf row
 	// declares z = PH/(N+1)*(i+1)). 0 where copies don't apply.
@@ -963,10 +964,19 @@ func (p *formulaParser) parseFactor() (float64, error) {
 		p.i += 2
 		return float64(p.parentD()), nil
 	}
-	// HW is the hardware preview size (hardware relative-position formulas).
+	// HW/HH/HD are the hardware effective dimensions (#1453 F1). Checked
+	// before the single-letter H/D so their leading letter is never consumed.
 	if strings.HasPrefix(p.s[p.i:], "HW") {
 		p.i += 2
 		return float64(p.dims.HW), nil
+	}
+	if strings.HasPrefix(p.s[p.i:], "HH") {
+		p.i += 2
+		return float64(p.dims.HH), nil
+	}
+	if strings.HasPrefix(p.s[p.i:], "HD") {
+		p.i += 2
+		return float64(p.dims.HD), nil
 	}
 	if p.s[p.i] == 'W' {
 		p.i++

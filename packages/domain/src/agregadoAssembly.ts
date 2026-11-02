@@ -28,6 +28,7 @@ import type {
 } from './types';
 import { calculateAgregadoSubspaceUnits, type SubspaceUnit } from './agregados';
 import type { HardwareDesignPart } from './hardwareDesignParts';
+import type { EffectiveHardwareDimensions } from './hardwarePlacement';
 import { evaluatePartFormula } from './engine/shared';
 import { materialBindingRole } from './materialRole';
 import { resolveBoardOptionChoiceId } from './plinth';
@@ -237,6 +238,12 @@ export interface AssemblyResolutionParams {
   readonly widthMm: number;
   readonly depthMm: number;
   readonly heightMm: number;
+  /**
+   * Effective dimensions (mm) per hardwareId for rigid-member offset formulas
+   * (#1453 F1): they expose HW/HH/HD to `offsetFormula`. Omitted or a missing
+   * id → all three evaluate to 0 (the historical behavior), never a guess.
+   */
+  readonly hardwareDimensions?: Readonly<Record<string, EffectiveHardwareDimensions>>;
 }
 
 export class AssemblyVariantNotFoundError extends Error {
@@ -760,6 +767,7 @@ function calculateAxisPlacementCoord(
   axisName: string,
   p: AssemblyAxisPlacement,
   dimensionMm: number,
+  hwDims?: EffectiveHardwareDimensions,
 ): number {
   let base: number;
   switch (p.ref) {
@@ -783,6 +791,9 @@ function calculateAxisPlacementCoord(
     const vars = axisName === 'x' ? { PW: dimensionMm } : axisName === 'y' ? { PD: dimensionMm } : { PH: dimensionMm };
     const evaluated = evaluatePartFormula(p.offsetFormula, {
       W: dimensionMm, H: dimensionMm, D: dimensionMm, ...vars,
+      HW: hwDims?.widthMm ?? 0,
+      HH: hwDims?.heightMm ?? 0,
+      HD: hwDims?.depthMm ?? 0,
     }, {
       structureCode: 'agregado',
       partDescription: `axis ${axisName}`,
@@ -893,9 +904,9 @@ export function resolveAgregadoAssembly(
         hardwareId = variant.hardwareId;
       }
 
-      const xCoord = calculateAxisPlacementCoord('x', member.placement.x, params.widthMm);
-      const yCoord = calculateAxisPlacementCoord('y', member.placement.y, params.depthMm);
-      const zCoord = calculateAxisPlacementCoord('z', member.placement.z, params.heightMm);
+      const xCoord = calculateAxisPlacementCoord('x', member.placement.x, params.widthMm, params.hardwareDimensions?.[hardwareId]);
+      const yCoord = calculateAxisPlacementCoord('y', member.placement.y, params.depthMm, params.hardwareDimensions?.[hardwareId]);
+      const zCoord = calculateAxisPlacementCoord('z', member.placement.z, params.heightMm, params.hardwareDimensions?.[hardwareId]);
 
       const basis = member.placement.rotationDeg
         ? deriveHardwareBasisFromEuler(member.placement.rotationDeg)

@@ -555,6 +555,14 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		// #1453 F1: the canonical bounding box is complete-or-nothing.
+		if err := domain.ValidateHardwareDimensions(h.Dimensions); err != nil {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "HARDWARE_DIMENSIONS_INVALID",
+				"message": err.Error(),
+			})
+			return
+		}
 		if h.KitHardwareID != nil && *h.KitHardwareID != "" {
 			if err := s.validateHardwareKitLink(r.Context(), &h, h.ID); err != nil {
 				respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
@@ -659,6 +667,14 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 				})
 				return
 			}
+		}
+		// #1453 F1: the canonical bounding box is complete-or-nothing.
+		if err := domain.ValidateHardwareDimensions(h.Dimensions); err != nil {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "HARDWARE_DIMENSIONS_INVALID",
+				"message": err.Error(),
+			})
+			return
 		}
 		if err := domain.ValidateHardwareFinishIDs(h.AvailableFinishes); err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())

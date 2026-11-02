@@ -102,6 +102,52 @@ export function findHardwarePlacementsWithoutIdentity(
 export const DEFAULT_HARDWARE_PROJECTION_MM = 25;
 
 /**
+ * Default hardware size (mm) for the formula variable `HW` when the hardware
+ * has neither explicit `dimensions.widthMm` nor a positive `previewSizeMm`.
+ * Historical value — changing it moves every legacy placement formula.
+ */
+export const DEFAULT_HARDWARE_SIZE_MM = 96;
+
+/**
+ * Effective hardware dimensions (mm) for the HW/HH/HD formula variables and
+ * drawing (#1453 F1). Explicit `dimensions` win per axis; otherwise the
+ * preview* scalars feed their natural axis with the historical defaults:
+ * `HW` stays byte-identical with `previewSizeMm ?? 96`, while `HH`/`HD` are
+ * new variables and default to 0 (= axis not modeled) when unknown. The
+ * projection fallback accepts 0 (flush standoff is a real value).
+ * Shape-agnostic on purpose — parity twin of Go `hardwareFormulaDims`.
+ */
+export interface EffectiveHardwareDimensions {
+  readonly widthMm: number;
+  readonly heightMm: number;
+  readonly depthMm: number;
+}
+
+function nonNegativeFinite(value: number | undefined): value is number {
+  return value != null && Number.isFinite(value) && value >= 0;
+}
+
+export function resolveHardwareDimensions(hardware: Hardware): EffectiveHardwareDimensions {
+  const dims = hardware.dimensions;
+  const width = isPositiveFinite(dims?.widthMm)
+    ? dims!.widthMm
+    : isPositiveFinite(hardware.previewSizeMm)
+      ? hardware.previewSizeMm!
+      : DEFAULT_HARDWARE_SIZE_MM;
+  const height = isPositiveFinite(dims?.heightMm)
+    ? dims!.heightMm
+    : isPositiveFinite(hardware.previewDiameterMm)
+      ? hardware.previewDiameterMm!
+      : 0;
+  const depth = isPositiveFinite(dims?.depthMm)
+    ? dims!.depthMm
+    : nonNegativeFinite(hardware.previewProjectionMm)
+      ? hardware.previewProjectionMm!
+      : 0;
+  return { widthMm: width, heightMm: height, depthMm: depth };
+}
+
+/**
  * Resolver output (D4). All coordinates are in the BOARD-LOCAL frame so the
  * renderer can attach this directly as a child of the board group.
  */
@@ -114,7 +160,7 @@ export interface ResolvedHardwarePlacement {
   readonly localPosition: Vec3;
   /** Unit normal of the anchor face, in the local frame. */
   readonly localNormal: Vec3;
-  /** Standoff of the handle from the face (previewProjectionMm, 0 = flush). */
+  /** Standoff of the handle from the face (dimensions.depthMm → previewProjectionMm → 25). */
   readonly standoffMm: number;
   /** Per-instance scale (placement.scale, default 1). */
   readonly scale: number;
@@ -250,7 +296,7 @@ export function resolveHardwarePlacement(
   // Millimeter offsets from the face's origin corner along the two in-plane
   // axes (same axis mapping as before), clamped per-face so the hardware never
   // leaves the board surface.
-  const hwSize = normalized.sizeMm ?? 96;
+  const hwDims = resolveHardwareDimensions(hardware);
   const boardEnv = {
     W: w,
     L: l,
@@ -262,7 +308,9 @@ export function resolveHardwarePlacement(
     PH: l,
     PD: l,
     PT: t,
-    HW: hwSize,
+    HW: hwDims.widthMm,
+    HH: hwDims.heightMm,
+    HD: hwDims.depthMm,
   };
 
   let xMm = placement.relativePosition.xMm;
@@ -328,7 +376,9 @@ export function resolveHardwarePlacement(
     hardwareId: hardware.id,
     localPosition: [snap(localPosition[0]), snap(localPosition[1]), snap(localPosition[2])],
     localNormal,
-    standoffMm: normalized.projectionMm ?? DEFAULT_HARDWARE_PROJECTION_MM,
+    standoffMm: isPositiveFinite(hardware.dimensions?.depthMm)
+      ? hardware.dimensions!.depthMm
+      : normalized.projectionMm ?? DEFAULT_HARDWARE_PROJECTION_MM,
     scale,
     rotationDeg: {
       x: Number.isFinite(placement.rotationDeg?.x) ? placement.rotationDeg!.x! : 0,
