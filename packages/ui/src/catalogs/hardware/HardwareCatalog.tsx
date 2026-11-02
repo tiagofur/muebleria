@@ -10,10 +10,17 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Agregado, Hardware, HardwareKitCreateRequest, HardwareKitResult } from '@granete/domain';
+import type {
+  Agregado,
+  Hardware,
+  HardwareKitCreateRequest,
+  HardwareKitResult,
+  KitPartPlacementConfig,
+} from '@granete/domain';
 import {
   ValidationError,
   countMachiningOperations,
+  formatKitPartPlacementLabel,
   validateMachiningProfile,
   suggestDuplicateCode,
   syncAgregadoWithKitParts,
@@ -175,19 +182,30 @@ export function HardwareCatalog({
         map.set(a.commercialKitHardwareId, a);
       }
     }
+    for (const a of agregados) {
+      for (const rm of a.rigidMembers ?? []) {
+        const hwId = rm.source.fixed?.hardwareId;
+        if (!hwId) continue;
+        const part = kitById.get(hwId);
+        if (part?.kitHardwareId && !map.has(part.kitHardwareId)) {
+          map.set(part.kitHardwareId, a);
+        }
+      }
+    }
     return map;
-  }, [agregados]);
+  }, [agregados, kitById]);
 
-  /** #1422 owner: badge fija/móvil de una parte, leído de la receta del kit. */
+  /** #1422 owner: badge fija/móvil de una parte, leído de la receta del kit o de la parte. */
   const membershipBadgeOf = (part: Hardware): string | null => {
     const recipe = part.kitHardwareId ? designByKit.get(part.kitHardwareId) : undefined;
     const member = recipe?.rigidMembers?.find(
       (m) => m.source.fixed?.hardwareId === part.id,
     );
-    if (!member?.actorMembership) return null;
-    return member.actorMembership === 'body'
-      ? 'Fija al mueble'
-      : 'Móvil — abre con la puerta';
+    const actor = part.designParts?.[0]?.actorMembership || member?.actorMembership;
+    if (!actor) return null;
+    if (actor === 'body') return 'Fija al mueble';
+    if (actor === 'actor:drawer') return 'Móvil — sale con el cajón';
+    return 'Móvil — abre con la puerta';
   };
 
   const rows = useMemo(
@@ -279,6 +297,38 @@ export function HardwareCatalog({
     setDraft(next);
     setError(null);
     setModalOpen(true);
+  };
+
+  const updateKitPartConfig = (part: Hardware, nextCfg: KitPartPlacementConfig) => {
+    const nextDesignParts = [
+      {
+        componentName: part.code,
+        actorMembership: nextCfg.actorMembership,
+        label: formatKitPartPlacementLabel(nextCfg),
+        finishKey: '',
+      },
+    ];
+    const partDraft = toDraft(part);
+    partDraft.designParts = nextDesignParts;
+    void onUpdate(part.id, partDraft);
+    if (part.kitHardwareId) {
+      const currentParts = partsByKit.get(part.kitHardwareId) ?? [];
+      const updatedParts = currentParts.map((p) =>
+        p.id === part.id
+          ? {
+              ...p,
+              designParts: [
+                {
+                  componentName: part.code,
+                  actorMembership: nextCfg.actorMembership,
+                  label: formatKitPartPlacementLabel(nextCfg),
+                },
+              ],
+            }
+          : p,
+      );
+      syncKitAgregado(part.kitHardwareId, updatedParts);
+    }
   };
 
   const validate = (): string | null => {
@@ -797,6 +847,14 @@ export function HardwareCatalog({
         onSubmit={handleSubmit}
         onClose={closeModal}
         kitParts={editingHardware ? partsByKit.get(editingHardware.id) : undefined}
+        kitRecipe={
+          editingHardware
+            ? designByKit.get(editingHardware.id) ??
+              (draft.kitHardwareId ? designByKit.get(draft.kitHardwareId) : undefined)
+            : draft.kitHardwareId
+              ? designByKit.get(draft.kitHardwareId)
+              : undefined
+        }
         availableHardware={hardware}
         onEditKitPart={canMutate ? openKitPart : undefined}
         onRemoveKitPart={canMutate ? removeKitPart : undefined}
@@ -806,6 +864,7 @@ export function HardwareCatalog({
             ? (partId) => linkExistingPartToKit(editingHardware, partId)
             : undefined
         }
+        onUpdateKitPartConfig={canMutate ? updateKitPartConfig : undefined}
       />
 
       {onCreateKit ? (
