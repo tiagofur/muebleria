@@ -442,6 +442,10 @@ export function resolveHardwarePlacement(
   const { xMm, yMm } = resolveHardwareFacePoint({
     placement,
     hardware,
+    // hole:<opId> anchors must resolve identically to the drilling path
+    // (#1453 F2 review P1): the 3D preview sees the same profile precedence
+    // (derived ?? catalog) as partDrillingResolver.
+    machining: placement.derivedMachining ?? hardware.machining,
     faceDimXMm: faceDimX,
     faceDimYMm: faceDimY,
     env: boardEnv,

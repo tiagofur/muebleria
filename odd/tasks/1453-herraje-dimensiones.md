@@ -147,3 +147,11 @@ Diseño fijado:
 - Ítem 4 (convención de origen por familia): `docs/architecture/hardware-mount-origin.md`.
 - Test TestUp del proxy centrado (`build_hardware_proxy_box`): in-plano centrado, cara en el plano de montaje; el tramo outward no es asercionable con el stub de pushpull (sin extrusión) y NO cambió en F2.
 - Metadata del PR corregida: `Closes #1453` + `Delivery: complete` (Refs+complete era inválida — la checker lo marcó).
+
+### Ronda de corrección F2 (review CHANGES_REQUESTED)
+
+- **P1-1**: `resolveHardwarePlacement` (3D TS) ahora pasa `machining: derivedMachining ?? hardware.machining` al helper — `hole:<opId>` resuelve igual en preview, drilling y layout Go. 2 tests de regresión POR el camino 3D (no solo del helper).
+- **P2-1**: el shift de bisagras por kit (`project3dPreview.ts`) preserva la placement intacta cuando hay anclaje autorado (xRef/yRef/hwAnchor) — la heurística asume offsets de esquina y no reescribe intención explícita.
+- **P2-2**: eco de autoría Go (`resolveFacePlaneOffsets`) documentado como RAW intent vs `OffsetMm` efectivo — mismo nombre, dos significados documentados.
+- **P2-4** (no bloqueante, aclarado): con asset vinculado el host renderiza el asset (mountFrame) y el box no participa; el proxy box representa la forma paramétrica (centro-montada) — autoconsistente con `hwAnchor=center`.
+- P3 adoptados como notas: desviación round6 (>6 decimales, <1e-6 mm, documentada en ambos motores); «Cajón centrado» implementado como `xRef=center + mount` (visualmente correcto bajo la convención de origen — nota en la issue); gates browser de F2 son cobertura adyacente (hardware-3d-catalog + offset-formula), sin escenario E2E propio.

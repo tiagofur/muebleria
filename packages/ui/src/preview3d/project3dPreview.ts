@@ -658,16 +658,26 @@ export function resolveModuleHardwarePlacements(
                 }
                 const shiftedX =
                   xMm <= w / 2 ? xMm + sideThicknessMm : xMm - sideThicknessMm;
-                effectivePlacement = {
-                  ...placement,
-                  relativePosition: {
-                    xMm: shiftedX,
-                    yMm: placement.relativePosition.yMm,
-                    ...(placement.relativePosition.yFormula
-                      ? { yFormula: placement.relativePosition.yFormula }
-                      : {}),
-                  },
-                };
+                // #1453 F2 (review P2): the shift assumes corner-based
+                // offsets. A placement with explicit panel refs or a
+                // hwAnchor carries authored intent — preserve every field
+                // and skip the heuristic instead of silently rewriting it.
+                const hasAuthoredAnchoring =
+                  placement.relativePosition.xRef != null ||
+                  placement.relativePosition.yRef != null ||
+                  placement.hwAnchor != null;
+                effectivePlacement = hasAuthoredAnchoring
+                  ? placement
+                  : {
+                      ...placement,
+                      relativePosition: {
+                        xMm: shiftedX,
+                        yMm: placement.relativePosition.yMm,
+                        ...(placement.relativePosition.yFormula
+                          ? { yFormula: placement.relativePosition.yFormula }
+                          : {}),
+                      },
+                    };
               }
             }
             const resolved = resolveHardwarePlacement({

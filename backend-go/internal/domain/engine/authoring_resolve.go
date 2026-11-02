@@ -1308,6 +1308,13 @@ func validHardwareAnchorFace(face string) bool {
 // resolveFacePlaneOffsets resolves a definition placement's face-plane
 // offsets (mm or formula) against its board environment — the numeric echo
 // the normalized snapshot carries.
+//
+// #1453 F2 (review P2): this is the RAW authored intent echo (formula
+// evaluated, no panel-ref base, no hwAnchor shift) — deliberately different
+// from LayoutHardware.OffsetMm, which carries the EFFECTIVE mount point the
+// drilling origin consumes. Same field name, two documented meanings: the
+// echo round-trips what the author wrote; the layout row is what the host
+// and CNC act on.
 func resolveFacePlaneOffsets(board *layoutBoard, hp domain.HardwarePlacement) [2]float64 {
 	boardEnv := formulaDims{
 		W: int(math.Round(board.widthMm)), H: int(math.Round(board.lengthMm)), D: int(math.Round(board.lengthMm)),
