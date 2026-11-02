@@ -63,16 +63,14 @@ module Granete
           end
 
           adapter = presentation_motion_adapter_for(target_furniture, open_angle_deg)
-          motion_id = "door-slot-#{slot_index}"
           if adapter.motions.empty?
             @logger.warn('toggle_door_motion_no_doors', slot_index: slot_index)
             execute_bridge(dialog, 'onDoorMotionFailed',
-                           { 'message' => 'Este mueble no tiene puertas para abrir.' })
+                           { 'message' => 'Este mueble no tiene puertas ni cajones para abrir.' })
             return
           end
-          # The per-door side arrives with EVERY toggle (card convention /
-          # authored data) — the cached adapter never freezes a side.
-          is_open = adapter.toggle_motion(motion_id, swing_side)
+          # Matches motion by doorSlotIndex (covering both door and drawer slots)
+          is_open = adapter.toggle_motion(slot_index.to_s, swing_side)
 
           execute_bridge(dialog, 'onDoorMotionToggled', {
                            'doorSlotIndex' => slot_index,
@@ -96,7 +94,7 @@ module Granete
             # would desync the JS buttons from the model. The existing door
             # motion failure callback shows the Spanish toast.
             execute_bridge(dialog, 'onDoorMotionFailed',
-                           { 'message' => 'No todas las puertas se cerraron; probá de nuevo.' })
+                           { 'message' => 'No todas las puertas y cajones se cerraron; probá de nuevo.' })
             return
           end
           execute_bridge(dialog, 'onAllDoorsClosed', {})
@@ -104,7 +102,7 @@ module Granete
         rescue StandardError => e
           @logger.error('close_all_doors_failed', error: e)
           execute_bridge(dialog, 'onDoorMotionFailed',
-                         { 'message' => 'No se pudieron cerrar las puertas; probá de nuevo.' })
+                         { 'message' => 'No se pudieron cerrar las puertas y cajones; probá de nuevo.' })
         end
 
         private
@@ -135,18 +133,38 @@ module Granete
           # cached adapter tracks: reuse only a cache over living entities.
           return adapter if adapter&.entities_valid?
 
-          door_entities, hardware_by_host = inspect_furniture_door_actors(furniture_entity)
+          door_entities, hw_scanned, drawer_actors = inspect_furniture_door_actors(furniture_entity)
+          motions, comp_map, hw_map = build_presentation_motions(
+            door_entities, hw_scanned, drawer_actors, open_angle_deg
+          )
+
+          adapter = Motion::PresentationMotionAdapter.new(motions, comp_map, hw_map)
+          @motion_adapters[key] = adapter
+          adapter
+        end
+
+        def build_presentation_motions(doors, hw_scanned, drawers, open_angle_deg)
           motions = []
           component_map = {}
+          hardware_by_host = Hash.new { |h, k| h[k] = [] }
+          (hw_scanned || {}).each { |k, v| hardware_by_host[k] = Array(v).dup }
 
-          door_entities.each_with_index do |door, idx|
-            motion_id = "door-slot-#{idx}"
+          slot_idx = append_door_motions(doors, open_angle_deg, motions, component_map, hardware_by_host)
+          append_drawer_motions(drawers, slot_idx, motions, component_map, hardware_by_host)
+
+          [motions, component_map, hardware_by_host]
+        end
+
+        def append_door_motions(doors, open_angle_deg, motions, component_map, hardware_by_host)
+          slot_idx = 0
+          Array(doors).each_with_index do |door, idx|
             comp_id = "door-comp-#{idx}"
             component_map[comp_id] = door
+            hardware_by_host[comp_id] = hardware_by_host["door-comp-#{idx}"] || []
 
             motions << {
-              'id' => motion_id,
-              'doorSlotIndex' => idx,
+              'id' => "door-slot-#{slot_idx}",
+              'doorSlotIndex' => slot_idx,
               'componentInstanceIds' => [comp_id],
               'motion' => {
                 'kind' => 'rotate',
@@ -154,11 +172,38 @@ module Granete
                 'axisLocal' => { 'x' => 0, 'y' => 0, 'z' => 1 }
               }
             }
+            slot_idx += 1
           end
+          slot_idx
+        end
 
-          adapter = Motion::PresentationMotionAdapter.new(motions, component_map, hardware_by_host)
-          @motion_adapters[key] = adapter
-          adapter
+        def append_drawer_motions(drawers, start_slot_idx, motions, component_map, hardware_by_host)
+          slot_idx = start_slot_idx
+          Array(drawers).each_with_index do |drawer, d_idx|
+            comp_ids = []
+            Array(drawer.components).each_with_index do |comp, c_idx|
+              c_id = "drawer-comp-#{d_idx}-#{c_idx}"
+              component_map[c_id] = comp
+              comp_ids << c_id
+            end
+
+            primary_id = comp_ids.first || "drawer-comp-#{d_idx}-0"
+            hardware_by_host[primary_id] = Array(drawer.hardware)
+
+            dist_mm = (drawer.respond_to?(:distance_mm) && drawer.distance_mm) || 400.0
+            motions << {
+              'id' => "drawer-slot-#{slot_idx}",
+              'doorSlotIndex' => slot_idx,
+              'componentInstanceIds' => comp_ids,
+              'motion' => {
+                'kind' => 'translate',
+                'distanceMm' => dist_mm,
+                'axisLocal' => { 'x' => 0, 'y' => 1, 'z' => 0 }
+              }
+            }
+            slot_idx += 1
+          end
+          slot_idx
         end
 
         def furniture_key(furniture_entity)
@@ -167,7 +212,7 @@ module Granete
 
         def inspect_furniture_door_actors(furniture_entity)
           scanned = Selection::DoorActors.scan(furniture_entity, @metadata_store_factory.call(active_model))
-          [scanned.doors, scanned.hardware_by_host]
+          [scanned.doors, scanned.hardware_by_host, scanned.drawers]
         end
 
         def parse_payload(raw_payload)

@@ -200,4 +200,144 @@ class PresentationMotionAdapterTest < Minitest::Test
     assert_equal @door_closed.to_a, @door.transformation.to_a
     assert_equal @handle_closed.to_a, @handle.transformation.to_a
   end
+
+  # #1377 Slice 1 — Drawer translate motion moves the entire sub-assembly forward (+Y)
+  # by distanceMm (400 mm), leaves fixed body rails stationary, and restores exactly.
+  def test_translate_motion_moves_drawer_subassembly_forward_along_y
+    front_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.0, 590.0 / 25.4, 2.0))
+    front = FakeComponentInstance.new('drawer-front-1', front_closed)
+
+    box_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.0, 90.0 / 25.4, 2.0))
+    box = FakeComponentInstance.new('drawer-box-1', box_closed)
+
+    handle_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.0, 605.0 / 25.4, 2.0))
+    handle = FakeComponentInstance.new('handle-drawer-1', handle_closed)
+
+    rail_mov_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.5, 90.0 / 25.4, 2.0))
+    rail_mov = FakeComponentInstance.new('rail-mov-1', rail_mov_closed)
+
+    rail_fix_closed = Geom::Transformation.translation(Geom::Vector3d.new(0.5, 90.0 / 25.4, 2.0))
+    rail_fix = FakeComponentInstance.new('rail-fix-1', rail_fix_closed)
+
+    drawer_motion = [{
+      'id' => 'drawer-slot-0',
+      'doorSlotIndex' => 0,
+      'componentInstanceIds' => %w[drawer-front-1 drawer-box-1],
+      'motion' => {
+        'kind' => 'translate',
+        'distanceMm' => 400.0,
+        'axisLocal' => { 'x' => 0, 'y' => 1, 'z' => 0 }
+      }
+    }]
+
+    adapter = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+      drawer_motion,
+      { 'drawer-front-1' => front, 'drawer-box-1' => box },
+      { 'drawer-front-1' => [handle, rail_mov] }
+    )
+
+    # 1. Open drawer
+    adapter.apply_motion('drawer-slot-0', 1.0)
+    assert adapter.open?('drawer-slot-0')
+
+    dy_inches = 400.0 / 25.4
+    # All moving parts translated forward (+Y) by 400 mm
+    assert_in_delta (590.0 / 25.4) + dy_inches, front.transformation.origin.y, 1e-4,
+                    'frente debe avanzar +400mm en Y'
+    assert_in_delta (90.0 / 25.4) + dy_inches, box.transformation.origin.y, 1e-4,
+                    'caja debe avanzar +400mm en Y'
+    assert_in_delta (605.0 / 25.4) + dy_inches, handle.transformation.origin.y, 1e-4,
+                    'jaladera debe avanzar +400mm en Y'
+    assert_in_delta (90.0 / 25.4) + dy_inches, rail_mov.transformation.origin.y, 1e-4,
+                    'riel móvil debe avanzar +400mm en Y'
+
+    # Fixed rail never moved
+    assert_equal rail_fix_closed.to_a, rail_fix.transformation.to_a
+
+    # 2. Close drawer — restores exact canonical closed transforms
+    adapter.apply_motion('drawer-slot-0', 0.0)
+    refute adapter.open?('drawer-slot-0')
+    assert_equal front_closed.to_a, front.transformation.to_a
+    assert_equal box_closed.to_a, box.transformation.to_a
+    assert_equal handle_closed.to_a, handle.transformation.to_a
+    assert_equal rail_mov_closed.to_a, rail_mov.transformation.to_a
+  end
+
+  def test_drawer_50_cycles_zero_drift
+    front_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.0, 590.0 / 25.4, 2.0))
+    front = FakeComponentInstance.new('drawer-front-1', front_closed)
+
+    drawer_motion = [{
+      'id' => 'drawer-slot-0',
+      'doorSlotIndex' => 0,
+      'componentInstanceIds' => ['drawer-front-1'],
+      'motion' => { 'kind' => 'translate', 'distanceMm' => 400.0 }
+    }]
+
+    adapter = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+      drawer_motion, { 'drawer-front-1' => front }
+    )
+
+    50.times do
+      adapter.apply_motion('drawer-slot-0', 1.0)
+      adapter.apply_motion('drawer-slot-0', 0.0)
+    end
+
+    assert_equal front_closed.to_a, front.transformation.to_a
+  end
+
+  def test_multiple_drawers_move_independently
+    front0_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.0, 590.0 / 25.4, 2.0))
+    front0 = FakeComponentInstance.new('f-0', front0_closed)
+
+    front1_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.0, 590.0 / 25.4, 300.0 / 25.4))
+    front1 = FakeComponentInstance.new('f-1', front1_closed)
+
+    front2_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.0, 590.0 / 25.4, 500.0 / 25.4))
+    front2 = FakeComponentInstance.new('f-2', front2_closed)
+
+    motions = [
+      { 'id' => 'drawer-slot-0', 'doorSlotIndex' => 0, 'componentInstanceIds' => ['f-0'],
+        'motion' => { 'kind' => 'translate', 'distanceMm' => 400.0 } },
+      { 'id' => 'drawer-slot-1', 'doorSlotIndex' => 1, 'componentInstanceIds' => ['f-1'],
+        'motion' => { 'kind' => 'translate', 'distanceMm' => 400.0 } },
+      { 'id' => 'drawer-slot-2', 'doorSlotIndex' => 2, 'componentInstanceIds' => ['f-2'],
+        'motion' => { 'kind' => 'translate', 'distanceMm' => 400.0 } }
+    ]
+
+    adapter = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+      motions, { 'f-0' => front0, 'f-1' => front1, 'f-2' => front2 }
+    )
+
+    # Open only drawer 0
+    adapter.apply_motion('drawer-slot-0', 1.0)
+    assert adapter.open?('drawer-slot-0')
+    refute adapter.open?('drawer-slot-1')
+    refute adapter.open?('drawer-slot-2')
+
+    refute_equal front0_closed.to_a, front0.transformation.to_a
+    assert_equal front1_closed.to_a, front1.transformation.to_a
+    assert_equal front2_closed.to_a, front2.transformation.to_a
+
+    # Open drawer 1 (both 0 and 1 open, 2 closed)
+    adapter.apply_motion('drawer-slot-1', 1.0)
+    assert adapter.open?('drawer-slot-0')
+    assert adapter.open?('drawer-slot-1')
+    refute adapter.open?('drawer-slot-2')
+    refute_equal front1_closed.to_a, front1.transformation.to_a
+    assert_equal front2_closed.to_a, front2.transformation.to_a
+
+    # Close drawer 0 (only 1 open)
+    adapter.apply_motion('drawer-slot-0', 0.0)
+    refute adapter.open?('drawer-slot-0')
+    assert adapter.open?('drawer-slot-1')
+    refute adapter.open?('drawer-slot-2')
+    assert_equal front0_closed.to_a, front0.transformation.to_a
+    refute_equal front1_closed.to_a, front1.transformation.to_a
+
+    # Open drawer 2
+    adapter.apply_motion('drawer-slot-2', 1.0)
+    assert adapter.open?('drawer-slot-2')
+    refute_equal front2_closed.to_a, front2.transformation.to_a
+  end
 end

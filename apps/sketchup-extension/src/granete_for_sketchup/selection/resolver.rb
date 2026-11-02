@@ -108,14 +108,23 @@ module Granete
           context
         end
 
-        # #529: door actors discovered from managed metadata ride the payload
-        # (slot indexes only) so the Inspector card can offer Abrir/Cerrar
-        # per detected door.
+        # #529 / #1377: opening actors (doors and drawers) discovered from
+        # managed metadata ride the payload so the Inspector card can offer
+        # Abrir/Cerrar per detected door or drawer.
         def publish_door_actors(context, entity)
           scanned = DoorActors.scan(entity, @metadata_store)
-          context.door_actors = scanned.doors.each_with_index.map do |_door, slot_index|
-            { 'slotIndex' => slot_index }
+          actors = []
+          scanned.doors.each_with_index do |_door, slot_index|
+            actors << { 'slotIndex' => slot_index, 'kind' => 'door' }
           end
+          scanned.drawers.each do |drawer|
+            actors << {
+              'slotIndex' => actors.size,
+              'kind' => 'drawer',
+              'label' => drawer.name
+            }
+          end
+          context.door_actors = actors
         rescue StandardError
           # Discovery is presentation affordance only: a scan failure must
           # never take the whole SelectionContext down.
