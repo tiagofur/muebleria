@@ -229,8 +229,8 @@ describe('AgregadoDetailView', () => {
     // Chrome total should show 2 herrajes (1 bulk + 1 positioned)
     expect(screen.getByText('1 piezas · 2 herrajes')).toBeTruthy();
 
-    // Section title
-    expect(screen.getByText('Herrajes incluidos (2)')).toBeTruthy();
+    // Section title (#1451: nombre unificado con el editor)
+    expect(screen.getByText('Herrajes (2)')).toBeTruthy();
 
     // Bulk hardware item rendered
     expect(screen.getByTestId('agregado-detail-bulk-hw-0')).toBeTruthy();
@@ -240,6 +240,68 @@ describe('AgregadoDetailView', () => {
     expect(screen.getByTestId('agregado-detail-placement-0-0')).toBeTruthy();
     expect(screen.getByText(/Posicionado 3D en LAT-CAJ/)).toBeTruthy();
     expect(screen.getByText(/Cara: front · X: 30 · Y: PH-30-HW\/2/)).toBeTruthy();
+  });
+
+  it('shows the recipe rigid members as hardware of the aggregate level (#1451, subsume #1443)', () => {
+    const agregadoWithMembers: Agregado = {
+      ...mockAgregado,
+      rigidMembers: [
+        {
+          memberId: 'fixed_rail_left',
+          role: 'fixed_rail',
+          source: { kind: 'fixed', fixed: { hardwareId: 'hw-1' } },
+          placement: { x: { ref: 'min', offsetMm: 10 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 0 } },
+          bomRole: 'included_in_kit',
+          actorMembership: 'body',
+        },
+        {
+          memberId: 'moving_rail_left',
+          role: 'moving_rail',
+          source: { kind: 'fixed', fixed: { hardwareId: 'hw-2' } },
+          placement: { x: { ref: 'max', offsetMm: -10 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 0 } },
+          bomRole: 'included_in_kit',
+          actorMembership: 'actor:drawer',
+        },
+      ],
+      commercialKitHardwareId: 'hw-1',
+      components: [],
+      hardwareLines: [],
+    };
+
+    render(
+      <AgregadoDetailView
+        agregado={agregadoWithMembers}
+        catalogComponents={mockCatalogComponents}
+        catalogHardware={[
+          ...mockCatalogHardware,
+          {
+            id: 'hw-2',
+            code: 'CORR-500',
+            name: 'Corredera Telescópica 500mm',
+            unit: 'piece',
+            costPerUnit: 18,
+            active: true,
+          },
+        ]}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    // Members count in the chrome even with zero pieces (solo-herraje).
+    expect(screen.getByText('0 piezas · 2 herrajes')).toBeTruthy();
+
+    // The «Del cajón» group lists each member in workshop vocabulary.
+    expect(screen.getByTestId('agregado-detail-hw-group-cajon')).toBeTruthy();
+    expect(screen.getByTestId('agregado-detail-hw-member-0').textContent).toContain('borde izq. +10');
+    expect(screen.getByTestId('agregado-detail-hw-member-0').textContent).toContain('fijo al cajón');
+    expect(screen.getByTestId('agregado-detail-hw-member-0').textContent).toContain('incluido en el juego');
+    expect(screen.getByTestId('agregado-detail-hw-member-1').textContent).toContain('borde der. -10');
+    expect(screen.getByTestId('agregado-detail-hw-member-1').textContent).toContain('se mueve con «drawer»');
+
+    // The commercial kit is named once.
+    expect(screen.getByText(/Kit: CORR-450 — el juego cotiza una vez./)).toBeTruthy();
   });
 
   it('renders Vista 3D button when onView3D is provided and triggers callback on click', () => {

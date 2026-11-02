@@ -119,7 +119,7 @@ describe('AgregadosScreen — guardado con placement sin identidad (#1147)', () 
     const error = screen.getByTestId('form-error');
     expect(error.textContent).toContain('AGR-PUERTA — Puerta');
     expect(error.textContent).toContain('sin identidad');
-    expect(screen.getByTestId('agregado-hardware-placements')).toBeTruthy();
+    expect(screen.getByTestId('agregado-hw-level-piezas')).toBeTruthy();
     expect(screen.getByTestId('instance-hardware-placement-0-hw-pc-0-identity-error')).toBeTruthy();
 
     // The editor stays open: nothing was stored.
@@ -301,12 +301,40 @@ describe('AgregadosScreen — guard de receta (#1412)', () => {
     await screen.findByTestId('agregado-editor-page');
     await user.click(screen.getByRole('tab', { name: 'Receta' }));
     await user.click(screen.getByTestId('agregado-tab-recipe-authoring-add-member'));
+    // #1451: el miembro nace sin herraje — el autor elige en el picker
+    // (sin default encubierto) antes de que la receta sea válida.
+    const memberPicker = screen.getByTestId(
+      'agregado-tab-recipe-authoring-member-0-source-hardware',
+    );
+    await user.click(within(memberPicker).getByRole('button'));
+    await user.click(screen.getByRole('option', { name: /CORR/ }));
     await user.click(screen.getByTestId('agregado-save-btn'));
 
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
     const saved = onUpdate.mock.calls[0]![0] as Agregado;
     expect(saved.rigidMembers).toHaveLength(1);
     expect(saved.rigidMembers?.[0]?.memberId).toBe('miembro-1');
+    expect(saved.rigidMembers?.[0]?.source.fixed?.hardwareId).toBe('hw-corr');
     expect(saved.rigidMembers?.[0]?.bomRole).toBe('separately_purchased');
+  });
+
+  it('un miembro sin herraje bloquea el guardado con error visible (#1451)', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    renderScreen({ onUpdate, catalogHardware: hwCorredera });
+
+    await user.click(screen.getByTestId('agregado-detail-edit'));
+    await screen.findByTestId('agregado-editor-page');
+    await user.click(screen.getByRole('tab', { name: 'Receta' }));
+    await user.click(screen.getByTestId('agregado-tab-recipe-authoring-add-member'));
+    await user.click(screen.getByTestId('agregado-save-btn'));
+
+    // Fail-closed: la receta inválida no llega al servidor, el error nombra
+    // la causa y el editor queda abierto con el borrador intacto.
+    await waitFor(() =>
+      expect(screen.getByTestId('form-error').textContent).toContain('Receta inválida'),
+    );
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(screen.getByTestId('agregado-editor-page')).toBeTruthy();
   });
 });
