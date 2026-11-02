@@ -84,7 +84,10 @@ module Granete
           return if membership == 'body'
 
           if membership == 'actor:drawer' && assembly_id
-            drawer_boxes[assembly_id][:hardware] << child
+            box = drawer_boxes[assembly_id]
+            box[:hardware] << child
+            z = entity_min_z(child)
+            box[:min_z] = [box[:min_z], z].min
             return
           end
 
@@ -119,20 +122,20 @@ module Granete
         end
 
         def entity_min_z(child)
-          if child.respond_to?(:bounds) && child.bounds
-            child.bounds.min.z
-          elsif child.respond_to?(:transformation) && child.transformation.respond_to?(:origin)
-            child.transformation.origin.z
-          else
-            0.0
+          if child.respond_to?(:transformation) && child.transformation.respond_to?(:origin)
+            return child.transformation.origin.z
           end
+
+          return child.bounds.min.z if child.respond_to?(:bounds) && child.bounds.respond_to?(:min)
+
+          0.0
         rescue StandardError
           0.0
         end
 
         def build_drawers(drawer_fronts, drawer_boxes, hardware_by_host)
-          sorted_fronts = drawer_fronts.sort_by { |f| f[:min_z] }
-          sorted_boxes = drawer_boxes.values.sort_by { |b| b[:min_z] }
+          sorted_fronts = drawer_fronts.sort_by { |f| [f[:min_z], f[:id].to_s] }
+          sorted_boxes = drawer_boxes.values.sort_by { |b| [b[:min_z], b[:components].first&.name.to_s] }
 
           count = [sorted_fronts.size, sorted_boxes.size].max
           return [] if count.zero?

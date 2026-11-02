@@ -293,35 +293,51 @@ class PresentationMotionAdapterTest < Minitest::Test
     front1_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.0, 590.0 / 25.4, 300.0 / 25.4))
     front1 = FakeComponentInstance.new('f-1', front1_closed)
 
+    front2_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.0, 590.0 / 25.4, 500.0 / 25.4))
+    front2 = FakeComponentInstance.new('f-2', front2_closed)
+
     motions = [
       { 'id' => 'drawer-slot-0', 'doorSlotIndex' => 0, 'componentInstanceIds' => ['f-0'],
         'motion' => { 'kind' => 'translate', 'distanceMm' => 400.0 } },
       { 'id' => 'drawer-slot-1', 'doorSlotIndex' => 1, 'componentInstanceIds' => ['f-1'],
+        'motion' => { 'kind' => 'translate', 'distanceMm' => 400.0 } },
+      { 'id' => 'drawer-slot-2', 'doorSlotIndex' => 2, 'componentInstanceIds' => ['f-2'],
         'motion' => { 'kind' => 'translate', 'distanceMm' => 400.0 } }
     ]
 
     adapter = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
-      motions, { 'f-0' => front0, 'f-1' => front1 }
+      motions, { 'f-0' => front0, 'f-1' => front1, 'f-2' => front2 }
     )
 
     # Open only drawer 0
     adapter.apply_motion('drawer-slot-0', 1.0)
     assert adapter.open?('drawer-slot-0')
     refute adapter.open?('drawer-slot-1')
+    refute adapter.open?('drawer-slot-2')
 
     refute_equal front0_closed.to_a, front0.transformation.to_a
     assert_equal front1_closed.to_a, front1.transformation.to_a
+    assert_equal front2_closed.to_a, front2.transformation.to_a
 
-    # Open drawer 1
+    # Open drawer 1 (both 0 and 1 open, 2 closed)
     adapter.apply_motion('drawer-slot-1', 1.0)
     assert adapter.open?('drawer-slot-0')
     assert adapter.open?('drawer-slot-1')
+    refute adapter.open?('drawer-slot-2')
+    refute_equal front1_closed.to_a, front1.transformation.to_a
+    assert_equal front2_closed.to_a, front2.transformation.to_a
 
-    # Close drawer 0
+    # Close drawer 0 (only 1 open)
     adapter.apply_motion('drawer-slot-0', 0.0)
     refute adapter.open?('drawer-slot-0')
     assert adapter.open?('drawer-slot-1')
+    refute adapter.open?('drawer-slot-2')
     assert_equal front0_closed.to_a, front0.transformation.to_a
     refute_equal front1_closed.to_a, front1.transformation.to_a
+
+    # Open drawer 2
+    adapter.apply_motion('drawer-slot-2', 1.0)
+    assert adapter.open?('drawer-slot-2')
+    refute_equal front2_closed.to_a, front2.transformation.to_a
   end
 end

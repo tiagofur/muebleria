@@ -97,6 +97,48 @@ class DrawerActorsTest < Minitest::Test
     assert_includes d1.hardware.map(&:name), 'slide-upper'
   end
 
+  # #1377 acceptance: 3 drawers with independent subassembly discovery (MOD-BAJ-3CAJ)
+  def test_pairs_three_drawers_in_mod_baj_3caj_pattern
+    furniture = build_furniture do |definition|
+      # Lower drawer (Z = 30) — cacerolero inferior
+      drawer_front_child(definition, 'front-0', pos_z: 30.0)
+      drawer_box_child(definition, 'box-0', assembly_id: 'asm-0', pos_z: 30.0)
+      slide_rail_child(definition, 'slide-0', assembly_id: 'asm-0', membership: 'actor:drawer')
+
+      # Middle drawer (Z = 380) — cacerolero medio
+      drawer_front_child(definition, 'front-1', pos_z: 380.0)
+      drawer_box_child(definition, 'box-1', assembly_id: 'asm-1', pos_z: 380.0)
+      slide_rail_child(definition, 'slide-1', assembly_id: 'asm-1', membership: 'actor:drawer')
+
+      # Upper drawer (Z = 540) — cubiertero superior
+      drawer_front_child(definition, 'front-2', pos_z: 540.0)
+      drawer_box_child(definition, 'box-2', assembly_id: 'asm-2', pos_z: 540.0)
+      slide_rail_child(definition, 'slide-2', assembly_id: 'asm-2', membership: 'actor:drawer')
+    end
+
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_equal 3, scanned.drawers.length
+
+    assert_equal 'Cajón 1', scanned.drawers[0].name
+    assert_equal 0, scanned.drawers[0].slot_index
+    assert_includes scanned.drawers[0].components.map(&:name), 'front-0'
+    assert_includes scanned.drawers[0].components.map(&:name), 'box-0'
+    assert_includes scanned.drawers[0].hardware.map(&:name), 'slide-0'
+
+    assert_equal 'Cajón 2', scanned.drawers[1].name
+    assert_equal 1, scanned.drawers[1].slot_index
+    assert_includes scanned.drawers[1].components.map(&:name), 'front-1'
+    assert_includes scanned.drawers[1].components.map(&:name), 'box-1'
+    assert_includes scanned.drawers[1].hardware.map(&:name), 'slide-1'
+
+    assert_equal 'Cajón 3', scanned.drawers[2].name
+    assert_equal 2, scanned.drawers[2].slot_index
+    assert_includes scanned.drawers[2].components.map(&:name), 'front-2'
+    assert_includes scanned.drawers[2].components.map(&:name), 'box-2'
+    assert_includes scanned.drawers[2].hardware.map(&:name), 'slide-2'
+  end
+
   def test_cabinet_with_both_door_and_drawer
     furniture = build_furniture do |definition|
       door_child(definition, 'door-1', placement: 'puerta', role: 'FRENTE')
