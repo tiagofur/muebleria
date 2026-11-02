@@ -65,11 +65,16 @@ y el formulario muestra/edita las tres medidas con valores sugeridos del diseño
 - [x] Fixture paridad consumido por ambos motores
 - [ ] Congelar candidato, verify_affected, PR
 
-## Verificación observada (candidato, rama feat/1453-herraje-dimensiones)
+## Verificación observada (candidato congelado 70c5c0b3, base 13fed4ee)
 
 - V0: `pnpm typecheck` workspace completo PASS; `pnpm openapi:check` sin drift; `go build ./...` OK.
 - V1: vitest domain 2075/2075 (incl. `hardwareDimensions.contract.test.ts` 2/2, drilling 28/28, placement 41/41, offsetFormula 1/1); vitest ui 2398/2398 (incl. HardwareCatalog 24/24 con 3 tests nuevos de Dimensiones); vitest storage 279/279 (mapper dimensions round-trip 3 nuevos); vitest web 610/610; `go test ./... -p 1` verde completo (incl. `TestHardwareDimensionsSharedContract`, `TestAssemblyMemberFormulaSeesHardwareDimensions`).
-- V2: gate postgres (foundation-gate-a --stage postgres) en corrida al momento de esta edición — resultado en el PR; browser gate hardware-3d-catalog pendiente.
+- V2: `foundation-gate-a --stage postgres` **PASS** (mig 000173 fresh+upgrade sobre PostgreSQL real); `organization-browser-gate hardware-3d-catalog.spec.ts` **PASS** 1/1; `organization-browser-gate agregado-offset-formula.spec.ts` **PASS** 1/1 (simulación con lookup de dimensiones).
+
+## Entrega
+
+PR con `Refs #1453` + `Delivery: partial`: Fase 1 completa; Fase 2 (xRef/yRef
+panel-side + hwAnchor + presets por tipo de frente) queda en la issue.
 
 ## Notas de borde (para el review)
 
