@@ -1613,6 +1613,80 @@ func HardwareDimensionsFromCatalog(catalog []domain.Hardware) map[string]domain.
 	return out
 }
 
+// panelRefBaseMm returns the panel-side reference base for one face axis
+// (#1453 F2) — TS panelRefBaseMm parity twin.
+func panelRefBaseMm(ref string, faceDimMm float64) float64 {
+	switch ref {
+	case "max":
+		return faceDimMm
+	case "center":
+		return faceDimMm / 2
+	default:
+		return 0
+	}
+}
+
+// resolveHardwareFacePoint resolves a placement's face-plane MOUNT point
+// (#1453 F2): panel-ref base + mm/formula offset − the hwAnchor shift
+// (rotated by the placement's z-rotation, exactly like drilling offsets).
+// Only the FINAL point clamps into the face, so historical placements (no
+// refs, no anchor) resolve byte-identically. The world/preview resolution
+// and OffsetMm (the drilling origin, #1322) both flow from these numbers —
+// preview and CNC can never disagree.
+func resolveHardwareFacePoint(hp domain.HardwarePlacement, hw *domain.Hardware, machining *domain.HardwareMachiningProfile, faceDimX, faceDimY float64, env formulaDims) (float64, float64) {
+	x := hp.RelativePosition.XMm
+	if hp.RelativePosition.XFormula != "" {
+		if v, err := evaluatePartFormula(hp.RelativePosition.XFormula, env); err == nil {
+			x = float64(v)
+		}
+	}
+	y := hp.RelativePosition.YMm
+	if hp.RelativePosition.YFormula != "" {
+		if v, err := evaluatePartFormula(hp.RelativePosition.YFormula, env); err == nil {
+			y = float64(v)
+		}
+	}
+	panelX := panelRefBaseMm(hp.RelativePosition.XRef, faceDimX) + x
+	panelY := panelRefBaseMm(hp.RelativePosition.YRef, faceDimY) + y
+
+	anchor := strings.TrimSpace(hp.HwAnchor)
+	anchorX, anchorY := 0.0, 0.0
+	switch {
+	case anchor == "center":
+		if hw != nil {
+			w, h, _ := HardwareFormulaDims(hw)
+			anchorX = w / 2
+			anchorY = h / 2
+		}
+	case strings.HasPrefix(anchor, "hole:"):
+		opID := strings.TrimPrefix(anchor, "hole:")
+		if machining != nil {
+		opLoop:
+			for _, part := range machining.Parts {
+				for _, op := range part.Operations {
+					if op.ID == opID {
+						anchorX = op.XMm
+						anchorY = op.YMm
+						break opLoop
+					}
+				}
+			}
+		}
+	}
+	rotZ := 0.0
+	if hp.RotationDeg != nil {
+		rotZ = hp.RotationDeg.Z
+	}
+	theta := rotZ * math.Pi / 180
+	cos, sin := math.Cos(theta), math.Sin(theta)
+	shiftedX := panelX - (anchorX*cos - anchorY*sin)
+	shiftedY := panelY - (anchorX*sin + anchorY*cos)
+	// Deterministic parity: rotation trig noise (cos 90° ≈ 6e-17) must never
+	// leak into the mount point — TS rounds identically.
+	round6 := func(v float64) float64 { return math.Round(v*1e6) / 1e6 }
+	return round6(clampMm(shiftedX, faceDimX)), round6(clampMm(shiftedY, faceDimY))
+}
+
 var validHardwarePreviewShapes = map[string]bool{
 	"knob": true, "bar-pull": true, "cup-pull": true, "hinge": true,
 	"slide": true, "rail": true, "leg": true,
@@ -1853,39 +1927,44 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		T:  int(math.Round(t)),
 		HW: int(math.Round(formulaW)), HH: int(math.Round(formulaH)), HD: int(math.Round(formulaD)),
 	}
-	xMm := hp.RelativePosition.XMm
-	if hp.RelativePosition.XFormula != "" {
-		if v, err := evaluatePartFormula(hp.RelativePosition.XFormula, boardEnv); err == nil {
-			xMm = float64(v)
-		}
+	// Face-plane mount point (#1453 F2): panel refs + formula offsets − the
+	// hwAnchor shift, clamped into the face. The per-face switch below maps
+	// the point onto the board-local frame.
+	var faceDimX, faceDimY float64
+	switch hp.AnchorFace {
+	case "left", "right":
+		faceDimX, faceDimY = t, l
+	case "top", "bottom":
+		faceDimX, faceDimY = w, t
+	default: // front|back
+		faceDimX, faceDimY = w, l
 	}
-	yMm := hp.RelativePosition.YMm
-	if hp.RelativePosition.YFormula != "" {
-		if v, err := evaluatePartFormula(hp.RelativePosition.YFormula, boardEnv); err == nil {
-			yMm = float64(v)
-		}
+	machiningProfile := hp.DerivedMachining
+	if machiningProfile == nil {
+		machiningProfile = hw.Machining
 	}
+	xMm, yMm := resolveHardwareFacePoint(hp, &hw, machiningProfile, faceDimX, faceDimY, boardEnv)
 
 	var local [3]float64
 	var normal [3]float64
 	switch hp.AnchorFace {
 	case "front":
-		local = [3]float64{clampMm(xMm, w), t, clampMm(yMm, l)}
+		local = [3]float64{xMm, t, yMm}
 		normal = [3]float64{0, 1, 0}
 	case "back":
-		local = [3]float64{clampMm(xMm, w), 0, clampMm(yMm, l)}
+		local = [3]float64{xMm, 0, yMm}
 		normal = [3]float64{0, -1, 0}
 	case "left":
-		local = [3]float64{0, clampMm(xMm, t), clampMm(yMm, l)}
+		local = [3]float64{0, xMm, yMm}
 		normal = [3]float64{-1, 0, 0}
 	case "right":
-		local = [3]float64{w, clampMm(xMm, t), clampMm(yMm, l)}
+		local = [3]float64{w, xMm, yMm}
 		normal = [3]float64{1, 0, 0}
 	case "top":
-		local = [3]float64{clampMm(xMm, w), clampMm(yMm, t), l}
+		local = [3]float64{xMm, yMm, l}
 		normal = [3]float64{0, 0, 1}
 	case "bottom":
-		local = [3]float64{clampMm(xMm, w), clampMm(yMm, t), 0}
+		local = [3]float64{xMm, yMm, 0}
 		normal = [3]float64{0, 0, -1}
 	default:
 		return LayoutHardware{}, false

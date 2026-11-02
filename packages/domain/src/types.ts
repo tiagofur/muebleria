@@ -821,7 +821,25 @@ export interface HardwarePlacement {
     readonly yMm: number;
     readonly xFormula?: string;
     readonly yFormula?: string;
+    /**
+     * Panel-side reference for X (#1453 F2): the base the mm/formula offset
+     * resolves against on the anchor face. Absent/'min' = the face's origin
+     * corner (the historical absolute behavior); 'max' = the far edge;
+     * 'center' = the face's midpoint — `(xRef center, 0)` centers without
+     * knowing the hardware's size.
+     */
+    readonly xRef?: 'min' | 'max' | 'center';
+    /** Panel-side reference for Y (#1453 F2) — same semantics as `xRef`. */
+    readonly yRef?: 'min' | 'max' | 'center';
   };
+  /**
+   * Which point of the HARDWARE lands on the resolved panel point (#1453
+   * F2). 'mount' (default/absent) = the hardware origin — grip center for
+   * parametric shapes, the asset's mountFrame origin — exactly the
+   * historical behavior. 'center' = bbox center (corner-authored assets).
+   * 'hole:<opId>' = that machining operation's position (drilling-aligned).
+   */
+  readonly hwAnchor?: 'mount' | 'center' | `hole:${string}`;
   readonly rotationDeg?: HardwareRotationDeg;
   readonly scale?: number;
   /** Optional role within a multi-part hardware profile (F128): e.g. 'cam' vs 'bolt' for minifix. */

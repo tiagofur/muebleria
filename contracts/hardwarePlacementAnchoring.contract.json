@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "hardwarePlacementAnchoring.contract",
+  "comment": [
+    "#1453 F2 — paridad TS↔Go del punto de montaje de un placement:",
+    "base de referencia del panel (xRef/yRef min|max|center) + offset",
+    "(mm o fórmula) − desplazamiento del hwAnchor (mount|center|hole:<opId>,",
+    "rotado por rotZ), con clamp SOLO sobre el punto final. Los casos legacy",
+    "(sin refs, sin ancla) deben resolver byte-idéntico al histórico.",
+    "Consumido por vitest (packages/domain) y go test (engine, paquete interno)."
+  ],
+  "hardware": [
+    {
+      "id": "hw-pull-anchoring",
+      "shape": "bar-pull",
+      "sizeMm": 128,
+      "diameterMm": 32,
+      "projectionMm": 35,
+      "dimensions": { "widthMm": 128, "heightMm": 32, "depthMm": 35 },
+      "machining": {
+        "parts": [
+          {
+            "id": "grip",
+            "role": "grip",
+            "operations": [
+              { "id": "h1", "kind": "blind_hole", "diameterMm": 5, "depthMm": 10, "xMm": 10, "yMm": -20, "face": "anchor" }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "legacy sin refs ni ancla — byte-idéntico al histórico",
+      "placement": { "anchorFace": "front", "relativePosition": { "xMm": 40, "yMm": 50 } },
+      "faceDimXMm": 600,
+      "faceDimYMm": 400,
+      "expected": { "xMm": 40, "yMm": 50 }
+    },
+    {
+      "name": "xRef center centra sin conocer el herraje",
+      "placement": { "anchorFace": "front", "relativePosition": { "xMm": 0, "yMm": 50, "xRef": "center" } },
+      "faceDimXMm": 600,
+      "faceDimYMm": 400,
+      "expected": { "xMm": 300, "yMm": 50 }
+    },
+    {
+      "name": "xRef max con offset negativo (borde libre de puerta)",
+      "placement": { "anchorFace": "front", "relativePosition": { "xMm": -40, "yMm": 50, "xRef": "max" } },
+      "faceDimXMm": 600,
+      "faceDimYMm": 400,
+      "expected": { "xMm": 560, "yMm": 50 }
+    },
+    {
+      "name": "fórmula sobre la referencia del panel (HD disponible)",
+      "placement": { "anchorFace": "front", "relativePosition": { "xMm": 0, "xFormula": "HD - 35", "yMm": 50, "xRef": "center" } },
+      "faceDimXMm": 600,
+      "faceDimYMm": 400,
+      "expected": { "xMm": 300, "yMm": 50 }
+    },
+    {
+      "name": "hwAnchor center desplaza medio bbox (asset con origen en esquina)",
+      "placement": { "anchorFace": "front", "relativePosition": { "xMm": 0, "yMm": 0, "xRef": "center", "yRef": "center" }, "hwAnchor": "center" },
+      "faceDimXMm": 600,
+      "faceDimYMm": 400,
+      "expected": { "xMm": 236, "yMm": 184 }
+    },
+    {
+      "name": "hwAnchor hole:<opId> alinea el agujero con el punto del panel",
+      "placement": { "anchorFace": "front", "relativePosition": { "xMm": 100, "yMm": 100 }, "hwAnchor": "hole:h1" },
+      "faceDimXMm": 600,
+      "faceDimYMm": 400,
+      "expected": { "xMm": 90, "yMm": 120 }
+    },
+    {
+      "name": "hwAnchor hole:<opId> rota con rotZ=90",
+      "placement": { "anchorFace": "front", "relativePosition": { "xMm": 100, "yMm": 100 }, "hwAnchor": "hole:h1", "rotationDeg": { "x": 0, "y": 0, "z": 90 } },
+      "faceDimXMm": 600,
+      "faceDimYMm": 400,
+      "expected": { "xMm": 80, "yMm": 90 }
+    },
+    {
+      "name": "clamp sobre el punto final (nunca fuera de la cara)",
+      "placement": { "anchorFace": "front", "relativePosition": { "xMm": -999, "yMm": 9999 } },
+      "faceDimXMm": 600,
+      "faceDimYMm": 400,
+      "expected": { "xMm": 0, "yMm": 400 }
+    }
+  ]
+}

@@ -112,3 +112,32 @@ panel-side + hwAnchor + presets por tipo de frente) queda en la issue.
 ## Non-goals (fijos)
 
 Fase 2 (xRef/hwAnchor), #1452 espejo copias, #1065 perforaciones por dimensión.
+
+## FASE 2 (post-merge a30d6bf9, rama feat/1453-f2-herraje-anclaje)
+
+Diseño fijado:
+
+- `relativePosition` gana `xRef`/`yRef: 'min'|'max'|'center'` (base del offset
+  sobre la cara; ausente = 'min' = histórico byte-idéntico). `HardwarePlacement`
+  gana `hwAnchor: 'mount'|'center'|'hole:<opId>'` — qué punto del herraje
+  aterriza en el punto del panel. mount=(0,0) default; center=(dims.w/2,
+  dims.h/2) para assets con origen en esquina; hole:<opId>=(op.xMm, op.yMm) del
+  maquinado, rotado por rotZ como el drilling.
+- Resolución compartida por superficie: punto final = clamp(ref base + offset
+  ó fórmula − offsetDeAncla rotado). El clamp aplica SOLO al punto final.
+  TS: helper en hardwarePlacement.ts consumido por resolveHardwarePlacement Y
+  partDrillingResolver (paridad preview/CNC). Go: helper gemelo en layout.go;
+  resolveHardwareToWorld usa el punto corrido para local/faceRender/OffsetMm
+  (OffsetMm es el origen de perforación #1322 → CNC sigue solo).
+- UI: HardwarePlacementsEditor con selects «X desde/Y desde» + «Ancla» +
+  presets «Cajón centrado» (xRef center +0) y «Puerta borde» (max + offset).
+- SketchUp: proxy box centrado en el origen (mata la divergencia
+  esquina-vs-centro) + EXTENSION_VERSION bump.
+- Fixture: casos xRef/hwAnchor consumidos por vitest + go test.
+
+### Evidencia F2 (candidato, rama feat/1453-f2-herraje-anclaje)
+
+- V0: typecheck workspace ✓, openapi:check sin drift ✓, `go build ./...` ✓, Ruby syntax ✓.
+- V1: domain 2083/2083 (nuevo `hardwarePlacementAnchoring.contract.test.ts` 8 casos), ui 2402/2402 (HardwarePlacementsEditor 16/16 con 3 tests F2), Go full suite verde (incl. `TestHardwarePlacementAnchoringSharedContract`), rake verify 1483/0.
+- SketchUp: proxy centrado EN GEOMETRÍA (`build_hardware_proxy_box`: in-plano centrado, +Z outward) — el origen de instancia queda en el punto de cara (contrato 405 intacto); primer intento (trasladar la instancia) rompía material_rebuild_test y se revirtió. EXTENSION_VERSION 0.1.92.
+- Sin migración DB: xRef/yRef/hwAnchor viajan en el JSONB de overrides existente.

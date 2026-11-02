@@ -19,6 +19,7 @@ import { evaluatePartFormula } from './engine/shared';
 import {
   DEFAULT_HARDWARE_SIZE_MM,
   resolveHardwareDimensions,
+  resolveHardwareFacePoint,
 } from './hardwarePlacement';
 import {
   DEFAULT_BOARD_THICKNESS_MM,
@@ -479,24 +480,22 @@ export function resolvePartDrilling(
       HD: hwDims?.depthMm ?? 0,
     };
 
-    // Evaluate placement anchor position on anchorFace
-    let anchorX = placement.relativePosition.xMm;
-    if (placement.relativePosition.xFormula?.trim()) {
-      try {
-        anchorX = evaluatePartFormula(placement.relativePosition.xFormula, boardEnv);
-      } catch {
-        anchorX = placement.relativePosition.xMm;
-      }
-    }
-
-    let anchorY = placement.relativePosition.yMm;
-    if (placement.relativePosition.yFormula?.trim()) {
-      try {
-        anchorY = evaluatePartFormula(placement.relativePosition.yFormula, boardEnv);
-      } catch {
-        anchorY = placement.relativePosition.yMm;
-      }
-    }
+    // #1453 F2: the drilling anchor resolves through the SAME shared helper
+    // as the 3D placement — panel refs and hwAnchor shift included — so
+    // preview and CNC can never disagree on where the hardware sits.
+    const anchorFaceDims = getFaceDimensions(placement.anchorFace, {
+      lengthMm,
+      widthMm,
+      thicknessMm,
+    });
+    const { xMm: anchorX, yMm: anchorY } = resolveHardwareFacePoint({
+      placement,
+      hardware,
+      machining: profile,
+      faceDimXMm: anchorFaceDims.widthMm,
+      faceDimYMm: anchorFaceDims.heightMm,
+      env: boardEnv,
+    });
 
     const rotDegZ = Number.isFinite(placement.rotationDeg?.z) ? placement.rotationDeg!.z! : 0;
     const thetaRad = (rotDegZ * Math.PI) / 180;

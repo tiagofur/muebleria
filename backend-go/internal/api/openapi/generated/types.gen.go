@@ -2839,6 +2839,8 @@ type CatalogHardwareRelativePosition struct {
 	YFormula *string  `json:"yFormula,omitempty"`
 	XPercent *float64 `json:"xPercent,omitempty"`
 	YPercent *float64 `json:"yPercent,omitempty"`
+	XRef     *string  `json:"xRef,omitempty"`
+	YRef     *string  `json:"yRef,omitempty"`
 }
 
 type CatalogHardwareRotationDeg struct {
@@ -2851,6 +2853,7 @@ type CatalogHardwarePlacement struct {
 	HardwareId       string                          `json:"hardwareId"`
 	AnchorFace       string                          `json:"anchorFace"`
 	RelativePosition CatalogHardwareRelativePosition `json:"relativePosition"`
+	HwAnchor         *string                         `json:"hwAnchor,omitempty"`
 	RotationDeg      *CatalogHardwareRotationDeg     `json:"rotationDeg,omitempty"`
 	Scale            *float64                        `json:"scale,omitempty"`
 }

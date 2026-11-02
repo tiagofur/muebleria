@@ -15,7 +15,7 @@
 import { evaluatePartFormula } from './engine/shared';
 import { normalizePreviewColor } from './materialPreview';
 import type { BoardLocalSize, Vec3 } from './spatialAnchor';
-import type { Hardware, HardwarePlacement } from './types';
+import type { Hardware, HardwareMachiningProfile, HardwarePlacement } from './types';
 
 /**
  * Resolution of one placement's concrete hardware (#1046). Mirrors the Go
@@ -253,6 +253,121 @@ export function normalizeHardwarePreview(hardware: Hardware): NormalizedHardware
   return result;
 }
 
+/**
+ * Panel-side reference base for one face axis (#1453 F2): absent/'min' = the
+ * face's origin corner (historical behavior), 'max' = the far edge, 'center'
+ * = the face midpoint.
+ */
+function panelRefBaseMm(
+  ref: 'min' | 'max' | 'center' | undefined,
+  faceDimMm: number,
+): number {
+  switch (ref) {
+    case 'max':
+      return faceDimMm;
+    case 'center':
+      return faceDimMm / 2;
+    default:
+      return 0;
+  }
+}
+
+function findMachiningOperationOffset(
+  profile: HardwareMachiningProfile | undefined,
+  operationId: string,
+): { readonly xMm: number; readonly yMm: number } | undefined {
+  for (const part of profile?.parts ?? []) {
+    for (const op of part.operations) {
+      if (op.id === operationId) {
+        return { xMm: op.xMm, yMm: op.yMm };
+      }
+    }
+  }
+  return undefined;
+}
+
+export interface ResolveHardwareFacePointParams {
+  readonly placement: HardwarePlacement;
+  readonly hardware: Hardware | undefined;
+  /** Machining profile for `hole:<opId>` anchors (derived ?? catalog). */
+  readonly machining?: HardwareMachiningProfile;
+  /** In-plane extent of the ANCHOR face along its x and y axes, mm. */
+  readonly faceDimXMm: number;
+  readonly faceDimYMm: number;
+  /** Formula env (board + HW/HH/HD), shared with the caller's own evaluation. */
+  readonly env: Parameters<typeof evaluatePartFormula>[1];
+}
+
+/**
+ * Resolve a placement's face-plane MOUNT point (#1453 F2): the point where
+ * the hardware ORIGIN lands. Panel point = panel-ref base + mm/formula
+ * offset; the `hwAnchor` point then shifts it (rotated by rotZ exactly like
+ * the drilling offsets). Only the FINAL point clamps into the face, so
+ * historical placements (no refs, no anchor) resolve byte-identically.
+ * Consumed by both the 3D placement resolution and the drilling resolver —
+ * preview and CNC can never disagree.
+ */
+export function resolveHardwareFacePoint(
+  params: ResolveHardwareFacePointParams,
+): { readonly xMm: number; readonly yMm: number } {
+  const { placement, hardware, machining, faceDimXMm, faceDimYMm, env } = params;
+  const rp = placement.relativePosition;
+
+  let x = rp.xMm;
+  if (rp.xFormula?.trim()) {
+    try {
+      x = evaluatePartFormula(rp.xFormula, env);
+    } catch {
+      x = rp.xMm;
+    }
+  }
+  let y = rp.yMm;
+  if (rp.yFormula?.trim()) {
+    try {
+      y = evaluatePartFormula(rp.yFormula, env);
+    } catch {
+      y = rp.yMm;
+    }
+  }
+
+  const panelX = panelRefBaseMm(rp.xRef, faceDimXMm) + x;
+  const panelY = panelRefBaseMm(rp.yRef, faceDimYMm) + y;
+
+  // Hardware-side anchor: which hardware point lands on the panel point. The
+  // anchor offset lives in the hardware's own face frame, so it rotates with
+  // the placement's z-rotation like every machining offset.
+  const anchor = placement.hwAnchor?.trim();
+  let anchorX = 0;
+  let anchorY = 0;
+  if (anchor === 'center') {
+    if (hardware != null) {
+      const dims = resolveHardwareDimensions(hardware);
+      anchorX = dims.widthMm / 2;
+      anchorY = dims.heightMm / 2;
+    }
+  } else if (anchor != null && anchor.startsWith('hole:')) {
+    const op = findMachiningOperationOffset(machining, anchor.slice('hole:'.length));
+    if (op) {
+      anchorX = op.xMm;
+      anchorY = op.yMm;
+    }
+  }
+  const rotZ = Number.isFinite(placement.rotationDeg?.z) ? placement.rotationDeg!.z! : 0;
+  const theta = (rotZ * Math.PI) / 180;
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  const shiftedX = panelX - (anchorX * cos - anchorY * sin);
+  const shiftedY = panelY - (anchorX * sin + anchorY * cos);
+
+  // Deterministic parity: rotation trig noise (cos 90° ≈ 6e-17) must never
+  // leak into the mount point — Go rounds identically.
+  const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
+  return {
+    xMm: round6(clampMm(shiftedX, faceDimXMm)),
+    yMm: round6(clampMm(shiftedY, faceDimYMm)),
+  };
+}
+
 export interface ResolveHardwarePlacementParams {
   readonly componentInstanceId: string;
   readonly placement: HardwarePlacement;
@@ -313,55 +428,56 @@ export function resolveHardwarePlacement(
     HD: hwDims.depthMm,
   };
 
-  let xMm = placement.relativePosition.xMm;
-  if (placement.relativePosition.xFormula?.trim()) {
-    try {
-      xMm = evaluatePartFormula(placement.relativePosition.xFormula, boardEnv);
-    } catch {
-      xMm = placement.relativePosition.xMm;
-    }
-  }
-
-  let yMm = placement.relativePosition.yMm;
-  if (placement.relativePosition.yFormula?.trim()) {
-    try {
-      yMm = evaluatePartFormula(placement.relativePosition.yFormula, boardEnv);
-    } catch {
-      yMm = placement.relativePosition.yMm;
-    }
-  }
+  // Face-plane mount point (#1453 F2): panel refs + formula offsets − the
+  // hwAnchor shift, clamped into the face. The per-face axis mapping below
+  // decides which board dimension feeds each in-plane axis.
+  const validFaces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+  if (!validFaces.includes(placement.anchorFace)) return null;
+  const [faceDimX, faceDimY] =
+    placement.anchorFace === 'left' || placement.anchorFace === 'right'
+      ? [t, l]
+      : placement.anchorFace === 'top' || placement.anchorFace === 'bottom'
+        ? [w, t]
+        : [w, l];
+  const { xMm, yMm } = resolveHardwareFacePoint({
+    placement,
+    hardware,
+    faceDimXMm: faceDimX,
+    faceDimYMm: faceDimY,
+    env: boardEnv,
+  });
 
   let localPosition: Vec3;
   let localNormal: Vec3;
   switch (placement.anchorFace) {
     case 'front':
       // Face plane W x L on the +thickness surface. xMm along width, yMm along length.
-      localPosition = [clampMm(xMm, w), t, clampMm(yMm, l)];
+      localPosition = [xMm, t, yMm];
       localNormal = [0, 1, 0];
       break;
     case 'back':
       // Face plane W x L on the 0-thickness surface.
-      localPosition = [clampMm(xMm, w), 0, clampMm(yMm, l)];
+      localPosition = [xMm, 0, yMm];
       localNormal = [0, -1, 0];
       break;
     case 'left':
       // Face plane T x L on the 0-width surface. xMm along thickness, yMm along length.
-      localPosition = [0, clampMm(xMm, t), clampMm(yMm, l)];
+      localPosition = [0, xMm, yMm];
       localNormal = [-1, 0, 0];
       break;
     case 'right':
       // Face plane T x L on the +width surface.
-      localPosition = [w, clampMm(xMm, t), clampMm(yMm, l)];
+      localPosition = [w, xMm, yMm];
       localNormal = [1, 0, 0];
       break;
     case 'top':
       // Face plane W x T on the +length surface. xMm along width, yMm along thickness.
-      localPosition = [clampMm(xMm, w), clampMm(yMm, t), l];
+      localPosition = [xMm, yMm, l];
       localNormal = [0, 0, 1];
       break;
     case 'bottom':
       // Face plane W x T on the 0-length surface.
-      localPosition = [clampMm(xMm, w), clampMm(yMm, t), 0];
+      localPosition = [xMm, yMm, 0];
       localNormal = [0, 0, -1];
       break;
     default:
