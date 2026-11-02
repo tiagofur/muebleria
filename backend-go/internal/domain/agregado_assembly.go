@@ -81,14 +81,32 @@ type RigidMemberSource struct {
 	Variant *VariantHardwareSource `json:"variant,omitempty"`
 }
 
+// #1460 F2: un eje del override de dimensiones de un miembro — mm directo o
+// fórmula acotada. La fórmula reemplaza al mm (mismo contrato que
+// offsetFormula/offsetMm).
+type HardwareDimensionOverrideAxis struct {
+	Mm      *float64 `json:"mm,omitempty"`
+	Formula *string  `json:"formula,omitempty"`
+}
+
+// #1460 F2: override opcional de dimensiones del herraje de un miembro rígido.
+// Eje ausente (o nil) = la dimensión del catálogo; el entorno de la fórmula ve
+// el envelope del ensamble (PW/PH/PD) y las dims de catálogo (HW/HH/HD).
+type HardwareDimensionOverride struct {
+	Width  *HardwareDimensionOverrideAxis `json:"width,omitempty"`
+	Height *HardwareDimensionOverrideAxis `json:"height,omitempty"`
+	Depth  *HardwareDimensionOverrideAxis `json:"depth,omitempty"`
+}
+
 // AgregadoRigidMember defines an autonomous bought rigid hardware component inside an Agregado recipe.
 type AgregadoRigidMember struct {
-	MemberID        string             `json:"memberId"`
-	Role            string             `json:"role"` // e.g. "side_left", "side_right", "runner_left", "runner_right"
-	Source          RigidMemberSource  `json:"source"`
-	Placement       AssemblyAnchorRule `json:"placement"`
-	BOMRole         RigidMemberBOMRole `json:"bomRole"`
-	ActorMembership string             `json:"actorMembership,omitempty"` // #1376: "body" | "actor:<id>" | ""
+	MemberID           string                     `json:"memberId"`
+	Role               string                     `json:"role"` // e.g. "side_left", "side_right", "runner_left", "runner_right"
+	Source             RigidMemberSource          `json:"source"`
+	Placement          AssemblyAnchorRule         `json:"placement"`
+	BOMRole            RigidMemberBOMRole         `json:"bomRole"`
+	ActorMembership    string                     `json:"actorMembership,omitempty"`    // #1376: "body" | "actor:<id>" | ""
+	DimensionOverrides *HardwareDimensionOverride `json:"dimensionOverrides,omitempty"` // #1460 F2: Ancho×Alto×Fondo mm|fórmula.
 }
 
 // DimensionRuleSource defines the authoritative source for recalculating fabricated board dimensions.
@@ -166,6 +184,9 @@ type ResolvedRigidMember struct {
 	MountFrame       *HardwareMountFrame     `json:"mountFrame,omitempty"`
 	ActorMembership  string                  `json:"actorMembership,omitempty"` // #1376: "body" | "actor:<id>" | ""
 	DesignParts      []HardwareDesignPart    `json:"designParts,omitempty"`     // #1417: parts of the member's hardware (by SKP component name).
+	// #1460 F2: dimensiones efectivas tras aplicar DimensionOverrides (merge
+	// sobre catálogo). Sólo con override — payloads legacy byte-idénticos.
+	ResolvedDimensions *HardwareDimensions `json:"resolvedDimensions,omitempty"`
 }
 
 // AssemblyBOMItem is one purchasing row produced by the assembly.
@@ -634,6 +655,36 @@ func ValidateAgregadoRigidMember(m AgregadoRigidMember, hasCommercialKit bool) e
 	}
 	if err := ValidateAssemblyAnchorRule(m.Placement); err != nil {
 		return fmt.Errorf("rigid member '%s': %w", m.MemberID, err)
+	}
+
+	// #1460 F2: estructura del override de dimensiones — fail-closed en
+	// definición; la sintaxis de la fórmula la valida el resolve (evaluador).
+	if m.DimensionOverrides != nil {
+		axes := []struct {
+			name string
+			axis *HardwareDimensionOverrideAxis
+		}{
+			{"width", m.DimensionOverrides.Width},
+			{"height", m.DimensionOverrides.Height},
+			{"depth", m.DimensionOverrides.Depth},
+		}
+		for _, a := range axes {
+			if a.axis == nil {
+				continue
+			}
+			if a.axis.Mm != nil {
+				mm := *a.axis.Mm
+				if math.IsNaN(mm) || math.IsInf(mm, 0) || mm < 0 || mm > 100000.0 {
+					return fmt.Errorf("rigid member '%s': %s dimension override mm must be a finite value in [0, 100000] (got %v)", m.MemberID, a.name, mm)
+				}
+			}
+			if a.axis.Formula != nil && strings.TrimSpace(*a.axis.Formula) == "" {
+				return fmt.Errorf("rigid member '%s': %s dimension override formula must be non-empty when present (omit the field to use mm or the catalog)", m.MemberID, a.name)
+			}
+			if a.axis.Mm == nil && (a.axis.Formula == nil || strings.TrimSpace(*a.axis.Formula) == "") {
+				return fmt.Errorf("rigid member '%s': %s dimension override must carry mm or formula (an empty axis is the catalog — omit it)", m.MemberID, a.name)
+			}
+		}
 	}
 
 	switch m.BOMRole {
