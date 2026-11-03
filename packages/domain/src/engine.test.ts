@@ -2069,6 +2069,20 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
       expect(evaluatePartFormula('IW', { W: 600, H: 720, D: 560, PW: 600, PH: 720, PD: 560 })).toBe(600);
     });
 
+    it('rejects malformed I/IW tokens fail-closed like the Go parser (#1470 round 1)', () => {
+      // Review round 1: glued tokens must never silently concatenate numbers
+      // ('IWi' → 5640). The Go parser rejects each of these as trailing input
+      // (formula_iw_parity_contract_test.go); TS must reject the same set.
+      const cabinetDims = { W: 564, H: 18, D: 482, PW: 600, PH: 2100, PD: 550, T: 18 };
+      for (const bad of ['IWi', '2IW', 'IWW', 'IW3', 'WIW', 'HIW', 'IWN', '5*I', 'I']) {
+        expect(() => evaluatePartFormula(bad, cabinetDims), bad).toThrow(ValidationError);
+      }
+      // Clean token boundaries keep working on both engines.
+      expect(evaluatePartFormula('PW-IW', cabinetDims)).toBe(36);
+      expect(evaluatePartFormula('-IW', cabinetDims)).toBe(-564);
+      expect(evaluatePartFormula('(IW)*1', cabinetDims)).toBe(564);
+    });
+
     it('throws ValidationError for invalid characters or injection attempts', () => {
       expect(() => evaluatePartFormula('W + alert(1)', dims)).toThrow(ValidationError);
       expect(() => evaluatePartFormula('W; 100', dims)).toThrow(ValidationError);

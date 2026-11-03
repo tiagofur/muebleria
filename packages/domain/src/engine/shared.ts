@@ -115,6 +115,19 @@ export function evaluatePartFormula(
     });
   }
 
+  // #1470 round-1 review: admitting I to the charset must not open a silent
+  // mis-evaluation surface. The Go parser fails closed on any I that is not a
+  // clean IW token (trailing-input / unknown-variable error); without this
+  // guard the substitutor would concatenate numbers instead — 'IWi' → 5640,
+  // '2IW' → 2564. Strip well-bounded IW tokens; any surviving I is malformed.
+  const withoutIwTokens = clean.replace(/(^|[^A-Za-z0-9])IW(?![A-Za-z0-9])/g, '$1');
+  if (/I/.test(withoutIwTokens)) {
+    throw new ValidationError(`La fórmula "${formula}" contiene un token I/IW mal formado.`, {
+      ...contextInfo,
+      field: contextInfo?.field,
+    });
+  }
+
   // Determine parent vs component variables
   const pw = dims.PW !== undefined ? dims.PW : dims.W;
   const ph = dims.PH !== undefined ? dims.PH : dims.H;

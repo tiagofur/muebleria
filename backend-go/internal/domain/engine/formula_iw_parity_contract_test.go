@@ -91,3 +91,22 @@ func TestEvaluatePartFormulaInteriorWidthFallbacks(t *testing.T) {
 		}
 	}
 }
+
+// #1470 round-1 review twin: malformed I/IW tokens must be rejected by BOTH
+// engines. Go already fails closed via the trailing-input / unknown-variable
+// checks in the parser; this test freezes that posture so the TS guard
+// (shared.ts malformed-token check) mirrors an engine property, not a hope.
+// TS twin lives in engine.test.ts 'rejects malformed I/IW tokens...'.
+func TestEvaluatePartFormulaIWTokenBoundaryRejects(t *testing.T) {
+	dims := formulaDims{W: 564, H: 18, D: 482, PW: 600, PH: 2100, PD: 550, T: 18}
+	for _, bad := range []string{"IWi", "2IW", "IWW", "IW3", "WIW", "HIW", "IWN", "5*I", "I"} {
+		if _, err := evaluatePartFormula(bad, dims); err == nil {
+			t.Fatalf("evaluatePartFormula(%q) must be rejected, got nil error", bad)
+		}
+	}
+	for _, good := range []string{"PW-IW", "-IW", "(IW)*1"} {
+		if _, err := evaluatePartFormula(good, dims); err != nil {
+			t.Fatalf("evaluatePartFormula(%q) must be accepted, got: %v", good, err)
+		}
+	}
+}
