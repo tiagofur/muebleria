@@ -122,11 +122,15 @@ module Granete
         end
 
         def entity_min_z(child)
+          # #1464 seguimiento: el borde visual REAL, nunca el origen de la
+          # transformación. Los tableros de la caja llegan rotados (traseras
+          # rotateY 90, laterales rotZ 90) y su origen puede caer por encima o
+          # por debajo del cajón — ordenar cajas por origen emparejaba cada
+          # frente con la caja del cajón equivocado (apertura cruzada).
+          return child.bounds.min.z if child.respond_to?(:bounds) && child.bounds.respond_to?(:min)
           if child.respond_to?(:transformation) && child.transformation.respond_to?(:origin)
             return child.transformation.origin.z
           end
-
-          return child.bounds.min.z if child.respond_to?(:bounds) && child.bounds.respond_to?(:min)
 
           0.0
         rescue StandardError
