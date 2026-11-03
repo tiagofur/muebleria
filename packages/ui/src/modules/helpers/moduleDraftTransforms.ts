@@ -142,6 +142,10 @@ const hardwarePlacementRule = objectRule({
   rotationDeg: optionalRule(objectRule({ x: optionalRule(numberRule), y: optionalRule(numberRule), z: optionalRule(numberRule) })),
   scale: optionalRule(numberRule), partRole: optionalRule(stringRule),
   doorAffinity: optionalRule(objectRule({
+    // Espejo completo del tipo vivo (#1460 fix JD-001): doorSlotIndex y
+    // doorLabel viajan en TODO payload canónico (autoría de vaivén) — sin
+    // ellos, el objectRule de forma cerrada descartaba el draft otra vez.
+    doorSlotIndex: numberRule, doorLabel: stringRule,
     swingSide: enumRule('left', 'right'), accessoryRole: enumRule('hinge', 'handle'), accessoryIndex: numberRule })),
   derivedMachining: optionalRule(objectRule({ parts: arrayRule(objectRule({ ...stringFields('id', 'role'),
     operations: arrayRule(machiningOperationRule) })) })) });

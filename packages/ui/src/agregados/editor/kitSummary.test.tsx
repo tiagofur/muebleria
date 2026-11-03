@@ -257,4 +257,21 @@ describe('Herrajes — posición visible y dimensiones del herraje propio (#1460
     // draft vacío ⇒ PW=0 ⇒ 0 - 99999 = -99999 < 0.
     expect(screen.getByTestId('sec-member-0-dim-width-error')).toBeTruthy();
   });
+
+  it('herraje colgante (id ausente del catálogo) degrada al hint sin crashear — fix JD-002', () => {
+    renderSection(
+      draftWith([
+        {
+          ...ownMember(),
+          source: { kind: 'fixed', fixed: { hardwareId: 'hw-fantasma' } },
+        } as AgregadoRigidMember,
+      ], null),
+    );
+
+    // La tarjeta vive, los controles existen y el hint de dimensiones degrada
+    // al mensaje de «elegí herraje» en vez de TypeError en el render.
+    expect(screen.getByTestId('sec-member-0')).toBeTruthy();
+    expect(screen.getByTestId('sec-member-0-dim-width')).toBeTruthy();
+    expect(screen.getByText(/Elegí un herraje para ver las medidas/)).toBeTruthy();
+  });
 });

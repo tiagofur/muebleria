@@ -627,19 +627,21 @@ export function validateAgregadoRigidMember(
     ];
     for (const [axis, o] of axes) {
       if (!o) continue;
-      if (o.mm !== undefined) {
+      // JSON null = ausente (gemelo Go: puntero nil) — ni crashea ni difiere:
+      // sólo mm/formula PRESENTES se validan; un eje sin nada es error.
+      if (o.mm != null) {
         if (!Number.isFinite(o.mm) || o.mm < 0 || o.mm > 100000.0) {
           throw new Error(
             `rigid member '${m.memberId}': ${axis} dimension override mm must be a finite value in [0, 100000] (got ${o.mm})`,
           );
         }
       }
-      if (o.formula !== undefined && o.formula.trim() === '') {
+      if (o.formula != null && o.formula.trim() === '') {
         throw new Error(
           `rigid member '${m.memberId}': ${axis} dimension override formula must be non-empty when present (omit the field to use mm or the catalog)`,
         );
       }
-      if (o.mm === undefined && (o.formula === undefined || o.formula.trim() === '')) {
+      if (o.mm == null && (o.formula == null || o.formula.trim() === '')) {
         throw new Error(
           `rigid member '${m.memberId}': ${axis} dimension override must carry mm or formula (an empty axis is the catalog — omit it)`,
         );

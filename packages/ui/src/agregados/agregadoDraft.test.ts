@@ -142,6 +142,35 @@ describe('isAgregadoDraft acepta los campos vivos de la receta (#1460)', () => {
     expect(isAgregadoDraft(JSON.parse(JSON.stringify(draft)))).toBe(true);
   });
 
+  it('un placement con doorAffinity canónico (5 campos) valida — fix JD-001', () => {
+    const draft = agregadoToDraft(agregadoConReceta);
+    draft.components = [
+      {
+        componentId: 'comp-puerta',
+        quantity: 1,
+        overrides: {
+          hardwarePlacements: [
+            {
+              hardwareId: 'hw-bisagra',
+              anchorFace: 'front',
+              relativePosition: { xMm: 20, yMm: 90 },
+              doorAffinity: {
+                doorSlotIndex: 0,
+                doorLabel: 'Puerta 1 · Izquierda',
+                swingSide: 'left',
+                accessoryRole: 'hinge',
+                accessoryIndex: 1,
+              },
+            },
+          ],
+        },
+      },
+    ];
+    expect(isAgregadoDraft(draft)).toBe(true);
+    // Round-trip sessionStorage con el payload que produce el engine.
+    expect(isAgregadoDraft(JSON.parse(JSON.stringify(draft)))).toBe(true);
+  });
+
   it('un miembro con dimensionOverrides (mm|fórmula) valida fresco y persistido (#1460 F2)', () => {
     const memberDims = {
       ...member,

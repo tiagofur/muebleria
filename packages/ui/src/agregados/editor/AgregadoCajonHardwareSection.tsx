@@ -680,10 +680,14 @@ export function AgregadoCajonHardwareSection({
                 {(() => {
                   // #1460 F2: dimensiones del herraje — override opcional
                   // Ancho×Alto×Fondo (mm|fórmula) por eje; vacío = catálogo.
-                  const catalogDims = hwId
-                    ? resolveHardwareDimensions(
-                        catalogHardware.find((h) => h.id === hwId)!,
-                      )
+                  // Guard sin aserción (fix JD-002): un herraje colgante no
+                  // puede crashear el render — se degrada al hint, igual que
+                  // el kit colgante tiene su alerta.
+                  const selectedHardware = hwId
+                    ? catalogHardware.find((h) => h.id === hwId)
+                    : undefined;
+                  const catalogDims = selectedHardware
+                    ? resolveHardwareDimensions(selectedHardware)
                     : undefined;
                   const override = m.dimensionOverrides;
                   const axisValue = (axis: 'width' | 'height' | 'depth') => {
