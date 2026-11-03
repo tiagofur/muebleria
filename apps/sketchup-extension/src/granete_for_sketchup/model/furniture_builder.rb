@@ -977,7 +977,12 @@ module Granete
       module NativeLayoutRenderer # rubocop:disable Metrics/ModuleLength
         def render_native_layout(model, furniture_definition, instance_id, native_layout)
           native_layout.boards.each do |board|
-            render_native_board(model, furniture_definition, instance_id, board)
+            render_native_board(model, furniture_definition, instance_id, board,
+                                # #1468: agregado-expanded boards carry the
+                                # assembly link the engine seals on them (#1465);
+                                # the fabricated-component path below keeps its
+                                # own explicit assembly kwargs.
+                                assembly_instance_id: board.assembly_instance_id)
           end
           native_layout.hardware.each do |placement|
             render_native_hardware(model, furniture_definition, instance_id, placement)
