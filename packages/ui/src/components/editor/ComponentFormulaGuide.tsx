@@ -36,7 +36,7 @@ export function ComponentFormulaGuide({
           Variables de fórmulas
         </span>
         <span className="component-geometry__formula-guide-summary">
-          PW · PH · PD · T · i
+          PW · PH · PD · T · i · IW
         </span>
       </button>
       {guideOpen ? (
@@ -62,6 +62,9 @@ export function ComponentFormulaGuide({
             </span>
             <span title="Índice de la copia (0, 1, 2...)">
               <code>i</code>: Índice Copia
+            </span>
+            <span title="Ancho interior del mueble: PW menos el espesor de los dos laterales">
+              <code>IW</code>: Ancho interior (PW−2·T)
             </span>
           </div>
         </div>

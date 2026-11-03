@@ -2056,6 +2056,19 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
       expect(evaluatePartFormula('PH/(N+1)*(i+1)', { ...dims, i: 1 })).toBe(1440);
     });
 
+    it('exposes IW (interior width) derived from the parent and thickness (#1470)', () => {
+      const cabinetDims = { W: 564, H: 18, D: 482, PW: 600, PH: 2100, PD: 550, T: 18 };
+      // Same expectations as the Go twin (formula_iw_parity_contract_test.go):
+      // the frozen shared fixture carries the arithmetic cases.
+      expect(evaluatePartFormula('IW', cabinetDims)).toBe(564);
+      expect(evaluatePartFormula('PW - 2*T', cabinetDims)).toBe(564);
+      // No parent width: IW derives from W.
+      expect(evaluatePartFormula('IW', { W: 564, H: 18, D: 482, T: 18 })).toBe(528);
+      // No thickness (agregado envelope): IW collapses to the parent width —
+      // the same value PW-2*T resolves to there.
+      expect(evaluatePartFormula('IW', { W: 600, H: 720, D: 560, PW: 600, PH: 720, PD: 560 })).toBe(600);
+    });
+
     it('throws ValidationError for invalid characters or injection attempts', () => {
       expect(() => evaluatePartFormula('W + alert(1)', dims)).toThrow(ValidationError);
       expect(() => evaluatePartFormula('W; 100', dims)).toThrow(ValidationError);
@@ -3047,6 +3060,54 @@ describe('3D Component spatial positioning & CAD variables', () => {
     expect(part.y).toBe(0);
     expect(part.z).toBe(100);
     expect(part.rotateY).toBe(90);
+  });
+
+  it('expands IW to parts identical to the explicit PW - 2*T form (#1470)', () => {
+    // Same expectations as the Go twin (authoring golden): the derived IW
+    // variable must expand to byte-identical parts to the form it replaces.
+    const mkStructure = (lengthFormula: string): Structure => ({
+      id: 'st-iw',
+      code: 'EST-IW',
+      name: 'IW Round-trip',
+      externalDims: { width: 600, height: 720, depth: 560 },
+      components: [
+        {
+          componentId: 'c-iw',
+          quantity: 1,
+          overrides: { lengthFormula },
+        },
+      ],
+    });
+    const comp: Component = {
+      id: 'c-iw',
+      code: 'C-IW',
+      name: 'Fondo IW',
+      placement: 'trasera',
+      geometry: {
+        kind: 'rectangular_board',
+        lengthMm: 564,
+        widthMm: 684,
+        thicknessMm: 15,
+        lengthFormula: 'PW - 2*T',
+        widthFormula: 'PH - 2*T',
+      },
+      defaultEdges: MOCK_TEST_EDGES,
+      optionRoles: ['board_base'],
+      active: true,
+    };
+    const catalog = {
+      ...catalogWithComponents(),
+      components: [comp],
+    };
+    const resolve = (lengthFormula: string) =>
+      resolveComposedModule({
+        structure: mkStructure(lengthFormula),
+        componentInstances: [],
+        catalog,
+        dims: { width: 600, height: 720, depth: 560 },
+        optionChoices: { board_base: 'mat-a' },
+      });
+    expect(resolve('IW').boardParts).toEqual(resolve('PW - 2*T').boardParts);
   });
 })
 describe('calcProjectBreakdownWithProfileDemand (#986/#989)', () => {

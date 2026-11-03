@@ -72,6 +72,8 @@ export type { Grain };
 /**
  * Safely evaluates simple math formulas involving W, H, D, T, B, PW, PH, PD, N variables and numbers.
  * B = plinth / toe-kick height (zoclo), mm.
+ * IW = interior width, derived inside the evaluator as PW (or W fallback) − 2*T
+ * (#1470); contexts without T (agregados) resolve IW = PW, same as writing PW-2*T there.
  * HW/HH/HD = hardware effective dimensions (#1453 F1); missing → 0.
  */
 export function evaluatePartFormula(
@@ -103,11 +105,11 @@ export function evaluatePartFormula(
     });
   }
 
-  // Validate allowed characters: digits, decimal point, W/H/D/P/T/B/L/i, operators, whitespace.
+  // Validate allowed characters: digits, decimal point, W/H/D/P/T/B/L/I/i, operators, whitespace.
   // Decimal point is required for literals like "1.5" or "W * 1.5" (half-thickness, margins, etc.).
   const clean = trimmed.replace(/\s+/g, '');
-  if (!/^[0-9.WHDTPBLiN+\-*/()]+$/.test(clean)) {
-    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números (con decimal), W, H, D, P, T, B, L, i, N y operadores (+, -, *, /, paréntesis).`, {
+  if (!/^[0-9.WHDTPBLINi+\-*/()]+$/.test(clean)) {
+    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números (con decimal), W, H, D, P, T, B, L, I, i, N y operadores (+, -, *, /, paréntesis).`, {
       ...contextInfo,
       field: contextInfo?.field,
     });
@@ -119,6 +121,8 @@ export function evaluatePartFormula(
   const pd = dims.PD !== undefined ? dims.PD : dims.D;
   const t = dims.T !== undefined ? dims.T : 0;
   const b = dims.B !== undefined ? dims.B : 0;
+  // Interior width (#1470): derived, never an input — mirrors the Go parser token.
+  const iw = pw - 2 * t;
 
   // Substitute variables (multi-letter tokens before single letters; the
   // two-letter hardware tokens HW/HH/HD must run before H and D so their
@@ -127,6 +131,9 @@ export function evaluatePartFormula(
     .replace(/HW/g, String(dims.HW ?? 0))
     .replace(/HH/g, String(dims.HH ?? 0))
     .replace(/HD/g, String(dims.HD ?? 0))
+    // IW before W (and before its own I reaching nothing else): PW's W must
+    // not consume the interior-width token's tail.
+    .replace(/IW/g, String(iw))
     .replace(/PW/g, String(pw))
     .replace(/PH/g, String(ph))
     .replace(/PD/g, String(pd))

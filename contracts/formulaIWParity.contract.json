@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.formulaIWParity.v1",
+  "comment": [
+    "#1470 — Contrato de paridad TS/Go de la variable derivada IW (ancho interior).",
+    "TS: packages/domain/src/formulaIWParity.contract.test.ts (evaluatePartFormula).",
+    "Go: backend-go/internal/domain/engine/formula_iw_parity_contract_test.go (evaluatePartFormula).",
+    "Regla: expected congelados; si un motor diverge, se alinea el motor — nunca el expected.",
+    "IW = PW − 2*T, derivada DENTRO del evaluador en ambos motores (nunca un input):",
+    "los contextos sin T (agregados) resuelven IW = PW, igual que escribir PW-2*T ahí.",
+    "Los casos usan PW/T explícitos para no depender del fallback PW→W (cubierto en",
+    "los tests gemelos, que distinguen ausencia igual en ambos lenguajes)."
+  ],
+  "dims": { "W": 564, "H": 18, "D": 482, "PW": 600, "PH": 2100, "PD": 550, "T": 18 },
+  "cases": [
+    { "name": "IW evaluates to the interior width", "formula": "IW", "N": 1, "i": 0, "expectedMm": 564 },
+    { "name": "IW equals the explicit PW-2*T form", "formula": "PW - 2*T", "N": 1, "i": 0, "expectedMm": 564 },
+    { "name": "PW-IW splits into the two side thicknesses", "formula": "(PW-IW)/2", "N": 1, "i": 0, "expectedMm": 18 },
+    { "name": "IW accepts decimal scalars", "formula": "IW*1.5", "N": 1, "i": 0, "expectedMm": 846 },
+    { "name": "IW in a denominator rounds half away from zero", "formula": "PW/(PW-IW)", "N": 1, "i": 0, "expectedMm": 17 },
+    { "name": "IW mixes with the copy count N", "formula": "IW/(N+1)", "N": 3, "i": 0, "expectedMm": 141 },
+    { "name": "IW+T re-adds one side", "formula": "IW+T", "N": 1, "i": 0, "expectedMm": 582 }
+  ]
+}
