@@ -99,7 +99,8 @@ func TestEvaluatePartFormulaInteriorWidthFallbacks(t *testing.T) {
 // TS twin lives in engine.test.ts 'rejects malformed I/IW tokens...'.
 func TestEvaluatePartFormulaIWTokenBoundaryRejects(t *testing.T) {
 	dims := formulaDims{W: 564, H: 18, D: 482, PW: 600, PH: 2100, PD: 550, T: 18}
-	for _, bad := range []string{"IWi", "2IW", "IWW", "IW3", "WIW", "HIW", "IWN", "5*I", "I"} {
+	for _, bad := range []string{"IWi", "2IW", "IWW", "IW3", "WIW", "HIW", "IWN", "5*I", "I",
+		"IW.5", "5.IW", ".IW", "IW.IW", "2.IW"} {
 		if _, err := evaluatePartFormula(bad, dims); err == nil {
 			t.Fatalf("evaluatePartFormula(%q) must be rejected, got nil error", bad)
 		}

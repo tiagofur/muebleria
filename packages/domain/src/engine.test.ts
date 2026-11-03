@@ -2074,13 +2074,16 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
       // ('IWi' → 5640). The Go parser rejects each of these as trailing input
       // (formula_iw_parity_contract_test.go); TS must reject the same set.
       const cabinetDims = { W: 564, H: 18, D: 482, PW: 600, PH: 2100, PD: 550, T: 18 };
-      for (const bad of ['IWi', '2IW', 'IWW', 'IW3', 'WIW', 'HIW', 'IWN', '5*I', 'I']) {
+      for (const bad of ['IWi', '2IW', 'IWW', 'IW3', 'WIW', 'HIW', 'IWN', '5*I', 'I', 'IW.5', '5.IW', '.IW', 'IW.IW', '2.IW']) {
         expect(() => evaluatePartFormula(bad, cabinetDims), bad).toThrow(ValidationError);
       }
-      // Clean token boundaries keep working on both engines.
+      // Clean token boundaries keep working on both engines ('.5' without I
+      // stays a legal decimal literal).
       expect(evaluatePartFormula('PW-IW', cabinetDims)).toBe(36);
       expect(evaluatePartFormula('-IW', cabinetDims)).toBe(-564);
       expect(evaluatePartFormula('(IW)*1', cabinetDims)).toBe(564);
+      expect(evaluatePartFormula('IW*1.5', cabinetDims)).toBe(846);
+      expect(evaluatePartFormula('.5', dims)).toBe(1);
     });
 
     it('throws ValidationError for invalid characters or injection attempts', () => {

@@ -119,8 +119,10 @@ export function evaluatePartFormula(
   // mis-evaluation surface. The Go parser fails closed on any I that is not a
   // clean IW token (trailing-input / unknown-variable error); without this
   // guard the substitutor would concatenate numbers instead — 'IWi' → 5640,
-  // '2IW' → 2564. Strip well-bounded IW tokens; any surviving I is malformed.
-  const withoutIwTokens = clean.replace(/(^|[^A-Za-z0-9])IW(?![A-Za-z0-9])/g, '$1');
+  // '2IW' → 2564. '.' counts as glue on both sides (round-2 re-judgment):
+  // substitution would glue through it into a valid decimal — 'IW.5' → 564.5.
+  // Strip well-bounded IW tokens; any surviving I is malformed.
+  const withoutIwTokens = clean.replace(/(^|[^A-Za-z0-9.])IW(?![A-Za-z0-9.])/g, '$1');
   if (/I/.test(withoutIwTokens)) {
     throw new ValidationError(`La fórmula "${formula}" contiene un token I/IW mal formado.`, {
       ...contextInfo,
