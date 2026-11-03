@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"time"
 )
 
@@ -95,6 +96,7 @@ type AgregadoDimensions struct {
 type ModuleAgregadoInstance struct {
 	ID              string              `json:"id,omitempty"`
 	AgregadoID      string              `json:"agregado_id"`
+	OptionRole      string              `json:"option_role,omitempty"`
 	Name            string              `json:"name,omitempty"`
 	Quantity        int                 `json:"quantity"`
 	LayoutDirection string              `json:"layout_direction,omitempty"`
@@ -103,6 +105,66 @@ type ModuleAgregadoInstance struct {
 	Dimensions      *AgregadoDimensions `json:"dimensions,omitempty"`
 	Mirrored        bool                `json:"mirrored,omitempty"`
 	OptionOverrides map[string]string   `json:"option_overrides,omitempty"`
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling to support both snake_case
+// and camelCase (e.g. agregadoId/agregado_id, optionRole/option_role,
+// optionOverrides/option_overrides) seamlessly across contracts and endpoints.
+func (m *ModuleAgregadoInstance) UnmarshalJSON(data []byte) error {
+	type rawInstance struct {
+		ID              string              `json:"id"`
+		AgregadoID      string              `json:"agregado_id"`
+		AgregadoIDCamel string              `json:"agregadoId"`
+		OptionRole      string              `json:"option_role"`
+		OptionRoleCamel string              `json:"optionRole"`
+		Name            string              `json:"name"`
+		Quantity        int                 `json:"quantity"`
+		LayoutDirection string              `json:"layout_direction"`
+		LayoutDirCamel  string              `json:"layoutDirection"`
+		GapMm           float64             `json:"gap_mm"`
+		GapMmCamel      float64             `json:"gapMm"`
+		Position        *AgregadoPosition   `json:"position"`
+		Dimensions      *AgregadoDimensions `json:"dimensions"`
+		Mirrored        bool                `json:"mirrored"`
+		OptionOverrides map[string]string   `json:"option_overrides"`
+		OptionOverCamel map[string]string   `json:"optionOverrides"`
+	}
+	var raw rawInstance
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	m.ID = raw.ID
+	if raw.AgregadoID != "" {
+		m.AgregadoID = raw.AgregadoID
+	} else {
+		m.AgregadoID = raw.AgregadoIDCamel
+	}
+	if raw.OptionRole != "" {
+		m.OptionRole = raw.OptionRole
+	} else {
+		m.OptionRole = raw.OptionRoleCamel
+	}
+	m.Name = raw.Name
+	m.Quantity = raw.Quantity
+	if raw.LayoutDirection != "" {
+		m.LayoutDirection = raw.LayoutDirection
+	} else {
+		m.LayoutDirection = raw.LayoutDirCamel
+	}
+	if raw.GapMm != 0 {
+		m.GapMm = raw.GapMm
+	} else {
+		m.GapMm = raw.GapMmCamel
+	}
+	m.Position = raw.Position
+	m.Dimensions = raw.Dimensions
+	m.Mirrored = raw.Mirrored
+	if raw.OptionOverrides != nil {
+		m.OptionOverrides = raw.OptionOverrides
+	} else {
+		m.OptionOverrides = raw.OptionOverCamel
+	}
+	return nil
 }
 
 // JointDrillingRules mirrors the TS domain shape (F129) — camelCase keys so
