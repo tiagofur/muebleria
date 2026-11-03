@@ -20,7 +20,7 @@ import type { ConnectionFace, ConstructiveRole, JoinerySystemId } from './factor
 
 export type HardwareUnit = 'piece' | 'set' | 'meter';
 
-export type OptionGroupKind = 'board' | 'hardware' | 'edge';
+export type OptionGroupKind = 'board' | 'hardware' | 'edge' | 'agregado';
 
 export type Grain = 0 | 1;
 
@@ -1023,6 +1023,11 @@ export interface Agregado {
 export interface ModuleAgregadoInstance {
   readonly id?: string;
   readonly agregadoId: string;
+  /**
+   * Option-group code (kind `agregado`) when the concrete sub-assembly is chosen
+   * by role (#1472). When omitted, agregadoId is the sole concrete sub-assembly.
+   */
+  readonly optionRole?: string;
   readonly name?: string;
   /** Spatial position (X, Y, Z formulas or mm) inside the parent furniture piece. */
   readonly position?: {

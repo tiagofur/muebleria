@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.agregadoRoleResolution.v1",
+  "comment": [
+    "#1472 — Contrato de paridad TS/Go de resolución de agregado efectivo por rol.",
+    "TS: packages/domain/src/agregados.ts (resolveEffectiveAgregadoId) / test: agregadoRoleResolution.contract.test.ts",
+    "Go: backend-go/internal/domain/engine/option_choices.go (ResolveEffectiveAgregadoID) / test: agregado_role_resolution_contract_test.go",
+    "Precedencia canónica probada en este contrato:",
+    "  1. Override explícito en la instancia para su optionRole (optionOverrides[role])",
+    "  2. Elección efectiva del grupo a nivel de mueble/proyecto (optionChoices[role])",
+    "  3. Fallback al agregadoId base de la instancia (cuando no hay override ni elección en optionChoices, o no hay optionRole)"
+  ],
+  "cases": [
+    {
+      "name": "instance override wins over furniture option choice and fallback",
+      "instance": {
+        "agregadoId": "agr-cajon-telescopico",
+        "optionRole": "CAJA_CAJON",
+        "optionOverrides": { "CAJA_CAJON": "agr-cajon-merivobox-m" },
+        "quantity": 1
+      },
+      "optionChoices": { "CAJA_CAJON": "agr-cajon-tandem" },
+      "expectedAgregadoId": "agr-cajon-merivobox-m"
+    },
+    {
+      "name": "furniture option choice wins when instance has no override",
+      "instance": {
+        "agregadoId": "agr-cajon-telescopico",
+        "optionRole": "CAJA_CAJON",
+        "quantity": 1
+      },
+      "optionChoices": { "CAJA_CAJON": "agr-cajon-tandem" },
+      "expectedAgregadoId": "agr-cajon-tandem"
+    },
+    {
+      "name": "fallback to agregadoId when optionChoices has no entry for role",
+      "instance": {
+        "agregadoId": "agr-cajon-telescopico",
+        "optionRole": "CAJA_CAJON",
+        "quantity": 1
+      },
+      "optionChoices": {},
+      "expectedAgregadoId": "agr-cajon-telescopico"
+    },
+    {
+      "name": "fallback to agregadoId when optionChoices has empty whitespace value",
+      "instance": {
+        "agregadoId": "agr-cajon-telescopico",
+        "optionRole": "CAJA_CAJON",
+        "quantity": 1
+      },
+      "optionChoices": { "CAJA_CAJON": "   " },
+      "expectedAgregadoId": "agr-cajon-telescopico"
+    },
+    {
+      "name": "fallback to agregadoId when instance has no optionRole declared",
+      "instance": {
+        "agregadoId": "agr-puerta-lisa",
+        "quantity": 1
+      },
+      "optionChoices": { "PUERTA_GABINETE": "agr-puerta-shaker" },
+      "expectedAgregadoId": "agr-puerta-lisa"
+    },
+    {
+      "name": "instance override with whitespace is ignored and falls back to optionChoices",
+      "instance": {
+        "agregadoId": "agr-cajon-telescopico",
+        "optionRole": "CAJA_CAJON",
+        "optionOverrides": { "CAJA_CAJON": "  " },
+        "quantity": 1
+      },
+      "optionChoices": { "CAJA_CAJON": "agr-cajon-tandem" },
+      "expectedAgregadoId": "agr-cajon-tandem"
+    },
+    {
+      "name": "irrelevant option role overrides do not affect active role resolution",
+      "instance": {
+        "agregadoId": "agr-cajon-telescopico",
+        "optionRole": "CAJA_CAJON",
+        "optionOverrides": { "JALADERA": "hw-jaladera-barra" },
+        "quantity": 1
+      },
+      "optionChoices": { "CAJA_CAJON": "agr-cajon-tandem" },
+      "expectedAgregadoId": "agr-cajon-tandem"
+    }
+  ]
+}

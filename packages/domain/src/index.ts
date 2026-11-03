@@ -1170,6 +1170,7 @@ export {
   mirrorComponentInstance,
   resolveAgregadoInstance,
   calculateAgregadoSubspaceUnits,
+  resolveEffectiveAgregadoId,
   type SubspaceUnit,
 } from './agregados';
 

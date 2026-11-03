@@ -20,7 +20,30 @@ import type {
   HardwareLine,
   ModuleAgregadoInstance,
   ModuleComponentInstance,
+  OptionChoices,
 } from './types';
+
+/**
+ * Resolves the effective agregado ID for an instance (#1472).
+ * Precedence contract:
+ *  1. Instance optionOverrides for the instance's optionRole
+ *  2. Effective optionChoices for the instance's optionRole (furniture / project level)
+ *  3. Fallback to instance.agregadoId
+ */
+export function resolveEffectiveAgregadoId(
+  instance: ModuleAgregadoInstance,
+  optionChoices?: OptionChoices | null,
+): string {
+  const role = instance.optionRole?.trim();
+  if (role) {
+    const instanceOverride = instance.optionOverrides?.[role]?.trim();
+    if (instanceOverride) return instanceOverride;
+
+    const groupChoice = optionChoices?.[role]?.trim();
+    if (groupChoice) return groupChoice;
+  }
+  return instance.agregadoId;
+}
 
 /**
  * Flips spatial placement across the X axis.

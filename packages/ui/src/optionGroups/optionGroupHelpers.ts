@@ -108,6 +108,7 @@ const KIND_LABELS: Record<OptionGroupKind, string> = {
   board: 'Tablero',
   hardware: 'Herraje',
   edge: 'Canto',
+  agregado: 'Agregado',
 };
 
 export function optionGroupKindLabel(kind: OptionGroupKind): string {
