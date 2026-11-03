@@ -10,7 +10,6 @@ import {
   type ReactNode,
   type SetStateAction,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import type { Agregado, AgregadoRigidMember, Component, Hardware, HardwareLine, ModuleComponentInstance, OptionGroup } from '@granete/domain';
@@ -199,31 +198,8 @@ export function AgregadoEditorForm({
     });
   };
 
-  // #1451: el «+ Añadir herraje» pregunta primero el nivel — la distinción
-  // que el usuario ya hace de forma natural (del agregado / pieza / cantidad).
-  const [hwChooserOpen, setHwChooserOpen] = useState(false);
-  const cajonLevelRef = useRef<HTMLDivElement | null>(null);
-  const cantidadLevelRef = useRef<HTMLDivElement | null>(null);
-  const piezasLevelRef = useRef<HTMLDivElement | null>(null);
-
-  const chooseHardwareLevel = (level: 'cajon' | 'pieza' | 'cantidad') => {
-    setHwChooserOpen(false);
-    if (level === 'cajon') {
-      addAgregadoMember();
-    } else if (level === 'cantidad') {
-      addHardwareLine();
-    }
-    window.requestAnimationFrame(() => {
-      const target =
-        level === 'cajon'
-          ? cajonLevelRef.current
-          : level === 'pieza'
-          ? piezasLevelRef.current
-          : cantidadLevelRef.current;
-      target?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    });
-  };
-
+  // #1462: la sección es el punto de entrada — cada nivel tiene su propio
+  // «+ Añadir» y el chooser global desapareció (un herraje, un hogar, un botón).
   const removeHardwareLine = (idx: number) => {
     setDraft((prev) => ({
       ...prev,
@@ -482,74 +458,23 @@ export function AgregadoEditorForm({
             }
           >
             <div className="agregado-editor__components-list">
-              <div className="agregado-editor__panel-header">
-                <p className="catalog-form__hint">
-                  Cada herraje vive en un nivel: del agregado (anclado al
-                  ensamble entero), por cantidad (insumo sin posición) o de una
-                  pieza (cara + perforaciones). Un herraje tiene un solo nivel y
-                  una sola línea de compra.
-                </p>
-                <button
-                  type="button"
-                  className="btn btn--secondary btn--small"
-                  onClick={() => setHwChooserOpen((open) => !open)}
-                  aria-expanded={hwChooserOpen}
-                  data-testid="agregado-add-hardware"
-                >
-                  <Plus size={14} /> Añadir herraje
-                </button>
-              </div>
-
-              {hwChooserOpen ? (
-                <div
-                  className="agregado-editor__hw-chooser"
-                  role="group"
-                  aria-label="¿Dónde va este herraje?"
-                  data-testid="agregado-hw-chooser"
-                >
-                  <button
-                    type="button"
-                    className="btn btn--secondary btn--small"
-                    onClick={() => chooseHardwareLevel('cajon')}
-                    data-testid="agregado-hw-chooser-cajon"
-                  >
-                    Del agregado — kit o herraje anclado al ensamble
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--secondary btn--small"
-                    onClick={() => chooseHardwareLevel('pieza')}
-                    data-testid="agregado-hw-chooser-pieza"
-                  >
-                    De una pieza — con cara y perforaciones
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--secondary btn--small"
-                    onClick={() => chooseHardwareLevel('cantidad')}
-                    data-testid="agregado-hw-chooser-cantidad"
-                  >
-                    Solo cantidad — insumo sin posición
-                  </button>
-                </div>
-              ) : null}
+              <p className="catalog-form__hint">
+                Un herraje vive en un nivel: del ensamble, por cantidad o en una
+                pieza — una sola línea de compra.
+              </p>
 
               {/* Nivel: Del agregado — rigidMembers fixed del borrador (#1412) */}
               <div
-                ref={cajonLevelRef}
                 className="agregado-editor__hardware-placements"
                 aria-label="Herrajes del agregado"
                 data-testid="agregado-hw-level-cajon"
               >
                 <h4 className="module-editor__section-title">
-                  Del agregado (anclado al ensamble)
+                  Del ensamble (anclado al agregado)
                 </h4>
                 <p className="catalog-form__hint">
-                  El kit de correderas de un cajón, las bisagras de una puerta,
-                  los soportes de un entrepaño: herrajes que pertenecen al
-                  ensamble entero, no a una pieza. Izquierda y derecha son
-                  entradas separadas — nunca un espejo. Se ven en el 3D del
-                  borrador.
+                  Herrajes del ensamble entero, no de una pieza: izquierda y
+                  derecha son entradas separadas — nunca un espejo.
                 </p>
                 <AgregadoCajonHardwareSection
                   draft={draft}
@@ -562,17 +487,28 @@ export function AgregadoEditorForm({
 
               {/* Nivel: Por cantidad — hardwareLines sin posición */}
               <div
-                ref={cantidadLevelRef}
                 className="agregado-editor__hardware-placements"
                 aria-label="Herrajes por cantidad"
                 data-testid="agregado-hw-level-cantidad"
               >
-                <h4 className="module-editor__section-title">
-                  Por cantidad (sin posición)
-                </h4>
+                <div className="agregado-editor__panel-header">
+                  <h4 className="module-editor__section-title">
+                    Por cantidad (sin posición)
+                  </h4>
+                  <div className="agregado-editor__panel-actions">
+                    <button
+                      type="button"
+                      className="btn btn--secondary btn--small"
+                      onClick={addHardwareLine}
+                      data-testid="agregado-hw-cantidad-add"
+                    >
+                      <Plus size={14} /> Añadir insumo
+                    </button>
+                  </div>
+                </div>
                 <p className="catalog-form__hint">
-                  Tornillería, perfiles, insumos que se compran a granel: se
-                  cotizan por cantidad, sin posición 3D ni perforaciones.
+                  Tornillería e insumos a granel: se cotizan por cantidad, sin
+                  posición ni perforaciones.
                 </p>
                 {draft.hardwareLines.length === 0 ? (
                   <div
@@ -741,17 +677,16 @@ export function AgregadoEditorForm({
 
               {/* Nivel: De las piezas — placements con cara y perforaciones */}
               <div
-                ref={piezasLevelRef}
                 className="agregado-editor__hardware-placements"
                 aria-label="Herrajes de las piezas"
                 data-testid="agregado-hw-level-piezas"
               >
                 <h4 className="module-editor__section-title">
-                  De las piezas (con cara y perforaciones)
+                  En una pieza (cara + perforaciones)
                 </h4>
                 <p className="catalog-form__hint">
-                  Cada herraje se ancla a una cara de una pieza: es lo que se ve
-                  en la Vista 3D y la base de las perforaciones.
+                  El herraje se ancla a una cara de la pieza: es lo que se ve en
+                  el 3D y la base de las perforaciones.
                 </p>
                 {draft.components.length === 0 ? (
                   <p className="catalog-empty" data-testid="agregado-hw-placements-empty">

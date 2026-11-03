@@ -15,6 +15,7 @@
  */
 
 import {
+  useRef,
   useState,
   type Dispatch,
   type ReactNode,
@@ -227,10 +228,27 @@ export function AgregadoCajonHardwareSection({
     patchDraft({ rigidMembers: members.filter((_, i) => i !== idx) });
   };
 
-  // Plantilla del taller: guías fijas + correderas móviles, izquierda y
-  // derecha como miembros separados (nunca espejo). Herraje vacío a propósito:
-  // el usuario elige el herraje real en cada tarjeta — sin default encubierto.
-  const [presetConfirm, setPresetConfirm] = useState(false);
+  // #1462: plantillas del taller en UN lugar (menú Plantillas) — el par
+  // izq/der y el riel centrado reemplazan los miembros con confirmación.
+  // Herraje vacío a propósito: el usuario elige el herraje real en cada
+  // tarjeta — sin default encubierto.
+  const [presetConfirm, setPresetConfirm] = useState<'pair' | 'center-rail' | null>(
+    null,
+  );
+  // #1462: <details> no se cierra solo al elegir — el botón cierra el menú.
+  const templatesRef = useRef<HTMLDetailsElement | null>(null);
+  const closeTemplates = () => {
+    if (templatesRef.current) templatesRef.current.open = false;
+  };
+  const requestTemplate = (kind: 'pair' | 'center-rail') => {
+    closeTemplates();
+    if (members.length === 0) {
+      if (kind === 'pair') applyPairPreset();
+      else applyCenterRailPreset();
+      return;
+    }
+    setPresetConfirm(kind);
+  };
   const applyPairPreset = () => {
     const bomRole: AgregadoRigidMember['bomRole'] =
       kitId !== '' ? 'included_in_kit' : 'separately_purchased';
@@ -261,6 +279,25 @@ export function AgregadoCajonHardwareSection({
       ],
     });
   };
+  const applyCenterRailPreset = () => {
+    const bomRole: AgregadoRigidMember['bomRole'] =
+      kitId !== '' ? 'included_in_kit' : 'separately_purchased';
+    const centered: AgregadoRigidMember = {
+      memberId: 'rail_center',
+      role: 'center_rail',
+      source: { kind: 'fixed', fixed: { hardwareId: '' } },
+      // ancla min + PW/2 → el riel cae en el CENTRO real (w/2) y acompaña
+      // el ancho; ref 'center' + PW/2 caería en el borde derecho (w).
+      placement: {
+        x: { ref: 'min', offsetMm: 0, offsetFormula: 'PW/2' },
+        y: { ref: 'min', offsetMm: 0 },
+        z: { ref: 'min', offsetMm: 0 },
+      },
+      bomRole,
+      actorMembership: 'body',
+    };
+    patchDraft({ rigidMembers: [centered] });
+  };
 
   const hardwareItems = catalogHardware.map((h) => ({
     id: h.id,
@@ -276,28 +313,47 @@ export function AgregadoCajonHardwareSection({
           <button
             type="button"
             className="btn btn--secondary btn--small"
-            onClick={() => {
-              if (members.length === 0) {
-                applyPairPreset();
-                return;
-              }
-              setPresetConfirm(true);
-            }}
-            disabled={catalogHardware.length === 0}
-            title="Arma 4 miembros: guías fijas y correderas móviles, izquierda y derecha separadas"
-            data-testid={`${testId}-preset-pair`}
-          >
-            Kit con par izq/der
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--small"
             onClick={onAddMember}
             disabled={catalogHardware.length === 0}
             data-testid={`${testId}-add-member`}
           >
-            <Plus size={14} /> Añadir herraje del agregado
+            <Plus size={14} /> Añadir herraje
           </button>
+          {/* #1462: las plantillas viven acá — un solo lugar, sin copias en
+              Receta. Reemplazan miembros: con contenido piden confirmación. */}
+          <details
+            ref={templatesRef}
+            className="agregado-editor__templates"
+            data-testid={`${testId}-templates`}
+          >
+            <summary className="btn btn--secondary btn--small">Plantillas</summary>
+            <div
+              className="agregado-editor__templates-menu"
+              role="menu"
+              aria-label="Plantillas de herrajes del ensamble"
+            >
+              <button
+                type="button"
+                className="btn btn--secondary btn--small"
+                onClick={() => requestTemplate('pair')}
+                disabled={catalogHardware.length === 0}
+                title="Arma 4 miembros: guías fijas y correderas móviles, izquierda y derecha separadas"
+                data-testid={`${testId}-template-pair`}
+              >
+                Par izq/der (cajón con correderas)
+              </button>
+              <button
+                type="button"
+                className="btn btn--secondary btn--small"
+                onClick={() => requestTemplate('center-rail')}
+                disabled={catalogHardware.length === 0}
+                title="Arma 1 miembro centrado con fórmula (acompaña el ancho)"
+                data-testid={`${testId}-template-center-rail`}
+              >
+                Riel centrado (fórmula PW/2)
+              </button>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -310,14 +366,19 @@ export function AgregadoCajonHardwareSection({
         >
           <span>
             ¿Reemplazar los {members.length} herraje(s) del agregado por la
-            plantilla del kit?
+            plantilla{' '}
+            {presetConfirm === 'center-rail'
+              ? '«riel centrado»'
+              : '«par izq/der»'}
+            ?
           </span>
           <button
             type="button"
             className="btn btn--secondary btn--small"
             onClick={() => {
-              applyPairPreset();
-              setPresetConfirm(false);
+              if (presetConfirm === 'center-rail') applyCenterRailPreset();
+              else applyPairPreset();
+              setPresetConfirm(null);
             }}
             data-testid={`${testId}-preset-confirm-yes`}
           >
@@ -326,7 +387,7 @@ export function AgregadoCajonHardwareSection({
           <button
             type="button"
             className="btn btn--secondary btn--small"
-            onClick={() => setPresetConfirm(false)}
+            onClick={() => setPresetConfirm(null)}
             data-testid={`${testId}-preset-confirm-no`}
           >
             Cancelar
@@ -334,90 +395,82 @@ export function AgregadoCajonHardwareSection({
         </div>
       ) : null}
 
-      {/* #1460: mismo picker que Receta — única superficie para el kit, sólo
-          juegos reales (unit === 'set') y con feedback de sus partes. */}
-      <div className="catalog-form__field">
-        <KitCommercialPicker
-          catalogHardware={catalogHardware}
-          value={kitId}
-          onChange={(hardwareId) =>
-            patchDraft({ commercialKitHardwareId: hardwareId })
-          }
-          label="Kit comercial (el juego que se vende junto)"
-          id={`${testId}-kit`}
-          testId={`${testId}-kit`}
-        />
-      </div>
-
-      {/* #1460 — tarjeta única del kit: los subitems del juego NO se editan
-          acá; viven en Catálogos y el sync los re-deriva. */}
-      {kitId ? (
-        <div
-          className="agregado-editor__item-row agregado-editor__item-row--block"
-          data-testid={`${testId}-kit-card`}
-        >
-          <div className="agregado-editor__item-header">
-            <strong className="agregado-editor__item-title">
-              <span className="catalog-badge catalog-badge--kit">Kit comercial</span>{' '}
-              {kitEntity ? (
-                <span className="eng-detail__mono">
-                  {kitEntity.code} — {kitEntity.name}
-                </span>
-              ) : null}
-            </strong>
-          </div>
-          {kitEntity ? (
-            <>
-              <p className="catalog-form__hint">
-                {kitEntries.length} herraje(s) incluido(s) en el juego · cotiza
-                una vez. Los subitems se administran en Catálogos — el juego
-                manda.
-              </p>
-              {kitEntries.length > 0 ? (
-                <div className="agregado-editor__item-fields">
-                  {kitEntries.map(({ m, idx }) => (
-                    <p
-                      key={m.memberId}
-                      className="catalog-form__hint"
-                      data-testid={`${testId}-kit-member-${idx}`}
-                    >
-                      <span className="eng-detail__mono">{m.memberId}</span>
-                      {' · '}
-                      {hardwareCode(m.source.fixed?.hardwareId ?? '')}
-                      {' · '}
-                      {memberSide(m)}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className="catalog-form__hint">
-                  El juego todavía no sincronizó partes: crealas en Catálogos
-                  (herrajes con «parte de kit»).
-                </p>
-              )}
-              {onEditKit ? (
-                <button
-                  type="button"
-                  className="btn btn--secondary btn--small"
-                  onClick={() => onEditKit(kitId)}
-                  data-testid={`${testId}-kit-card-edit`}
-                >
-                  Editar juego en Catálogos
-                </button>
-              ) : null}
-            </>
-          ) : (
-            <p
-              className="catalog-form__error"
-              role="alert"
-              data-testid={`${testId}-kit-card-missing`}
-            >
-              El juego asignado ya no existe en el catálogo: elegí otro o quitá
-              el kit.
-            </p>
-          )}
+      {/* #1462 — la tarjeta del juego es el ÚNICO hogar del kit: picker,
+          feedback de partes, CTA Catálogos y alerta de kit colgante viven acá
+          (antes: picker suelto + tarjeta, y un segundo picker en Receta). */}
+      <div
+        className="agregado-editor__item-row agregado-editor__item-row--block"
+        data-testid={`${testId}-kit-card`}
+      >
+        <div className="agregado-editor__item-header">
+          <strong className="agregado-editor__item-title">
+            <span className="catalog-badge catalog-badge--kit">Juego comercial</span>{' '}
+            {kitEntity ? (
+              <span className="eng-detail__mono">
+                {kitEntity.code} — {kitEntity.name}
+              </span>
+            ) : null}
+          </strong>
         </div>
-      ) : null}
+        <div className="catalog-form__field">
+          <KitCommercialPicker
+            catalogHardware={catalogHardware}
+            value={kitId}
+            onChange={(hardwareId) =>
+              patchDraft({ commercialKitHardwareId: hardwareId })
+            }
+            label="Kit comercial (el juego que se vende junto)"
+            id={`${testId}-kit`}
+            testId={`${testId}-kit`}
+          />
+        </div>
+        {kitId && kitEntity ? (
+          <>
+            <p className="catalog-form__hint">
+              {kitEntries.length} herraje(s) incluido(s) en el juego · cotiza
+              una vez. Los subitems se administran en Catálogos — el juego
+              manda.
+            </p>
+            {kitEntries.length > 0 ? (
+              <div className="agregado-editor__item-fields">
+                {kitEntries.map(({ m, idx }) => (
+                  <p
+                    key={m.memberId}
+                    className="catalog-form__hint"
+                    data-testid={`${testId}-kit-member-${idx}`}
+                  >
+                    <span className="eng-detail__mono">{m.memberId}</span>
+                    {' · '}
+                    {hardwareCode(m.source.fixed?.hardwareId ?? '')}
+                    {' · '}
+                    {memberSide(m)}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+            {onEditKit ? (
+              <button
+                type="button"
+                className="btn btn--secondary btn--small"
+                onClick={() => onEditKit(kitId)}
+                data-testid={`${testId}-kit-card-edit`}
+              >
+                Editar juego en Catálogos
+              </button>
+            ) : null}
+          </>
+        ) : null}
+        {kitId && !kitEntity ? (
+          <p
+            className="catalog-form__error"
+            role="alert"
+            data-testid={`${testId}-kit-card-missing`}
+          >
+            El juego asignado ya no existe en el catálogo: elegí otro o quitá
+            el kit.
+          </p>
+        ) : null}
+      </div>
 
       {ownEntries.length === 0 ? (
         <p className="catalog-empty" data-testid={`${testId}-empty`}>
