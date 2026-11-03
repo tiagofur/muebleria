@@ -459,7 +459,7 @@ export function AgregadoEditorForm({
           >
             <div className="agregado-editor__components-list">
               <p className="catalog-form__hint">
-                Un herraje vive en un nivel: del ensamble, por cantidad o en una
+                Un herraje vive en un nivel: del agregado, por cantidad o en una
                 pieza — una sola línea de compra.
               </p>
 
@@ -470,7 +470,7 @@ export function AgregadoEditorForm({
                 data-testid="agregado-hw-level-cajon"
               >
                 <h4 className="module-editor__section-title">
-                  Del ensamble (anclado al agregado)
+                  Del agregado (anclado al ensamble)
                 </h4>
                 <p className="catalog-form__hint">
                   Herrajes del ensamble entero, no de una pieza: izquierda y
@@ -682,7 +682,7 @@ export function AgregadoEditorForm({
                 data-testid="agregado-hw-level-piezas"
               >
                 <h4 className="module-editor__section-title">
-                  En una pieza (cara + perforaciones)
+                  De las piezas (con cara y perforaciones)
                 </h4>
                 <p className="catalog-form__hint">
                   El herraje se ancla a una cara de la pieza: es lo que se ve en

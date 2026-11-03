@@ -146,8 +146,10 @@ test.describe.serial('Agregado — autoría de receta en browser real (#1412)', 
 
     await openEditorOnRecipeTab(page);
 
-    // Kit comercial (picker con búsqueda, #1451).
-    await pickCombobox(page, 'agregado-tab-recipe-authoring-kit', new RegExp(KIT_CODE));
+    // #1462: el kit se elige SOLO en la tarjeta «Juego comercial» de Herrajes.
+    await page.getByRole('tab', { name: 'Herrajes' }).click();
+    await pickCombobox(page, 'agregado-cajon-hardware-kit', new RegExp(KIT_CODE));
+    await page.getByRole('tab', { name: 'Receta' }).click();
 
     // Miembro 1: guía izquierda anclada al mínimo (defaults + nombre).
     await authoring(page, 'add-member').click();

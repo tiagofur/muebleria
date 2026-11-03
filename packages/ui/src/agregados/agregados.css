@@ -340,7 +340,7 @@
 
 .agregado-editor__templates-menu {
   position: absolute;
-  z-index: 30;
+  z-index: var(--z-dropdown);
   top: calc(100% + var(--space-2));
   left: 0;
   display: grid;

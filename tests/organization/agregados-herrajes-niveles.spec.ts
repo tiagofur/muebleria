@@ -104,16 +104,17 @@ test.describe.serial('AGREGADOS — pestaña Herrajes por nivel de anclaje (#145
       'Sin piezas en el agregado',
     );
 
-    // El chooser pregunta el nivel; «Del agregado» agrega el primer miembro.
-    await page.getByTestId('agregado-add-hardware').click();
-    await expect(page.getByTestId('agregado-hw-chooser')).toBeVisible();
-    await page.getByTestId('agregado-hw-chooser-cajon').click();
+    // #1462: la sección es el punto de entrada — «+ Añadir herraje» agrega el
+    // primer miembro (sin chooser global).
+    await page.getByTestId('agregado-cajon-hardware-add-member').click();
     await expect(
       page.getByTestId('agregado-cajon-hardware-member-0-identity-error'),
     ).toBeVisible();
 
-    // La plantilla del taller reemplaza con confirmación: 4 miembros izq/der.
-    await page.getByTestId('agregado-cajon-hardware-preset-pair').click();
+    // La plantilla del taller (menú Plantillas) reemplaza con confirmación:
+    // 4 miembros izq/der.
+    await page.getByTestId('agregado-cajon-hardware-templates').click();
+    await page.getByTestId('agregado-cajon-hardware-template-pair').click();
     await page.getByTestId('agregado-cajon-hardware-preset-confirm-yes').click();
     await expect(page.getByTestId('agregado-cajon-hardware-member-3')).toBeVisible();
 
@@ -166,9 +167,9 @@ test.describe.serial('AGREGADOS — pestaña Herrajes por nivel de anclaje (#145
     await expect(page.getByTestId('agregado-editor-page')).toBeVisible();
     await page.getByRole('tab', { name: 'Herrajes' }).click();
 
-    // Nivel «Solo cantidad»: línea sin posición, herraje elegido en picker.
-    await page.getByTestId('agregado-add-hardware').click();
-    await page.getByTestId('agregado-hw-chooser-cantidad').click();
+    // Nivel «Por cantidad»: su propio botón de sección (#1462); línea sin
+    // posición, herraje elegido en picker.
+    await page.getByTestId('agregado-hw-cantidad-add').click();
     await pickHardware(page, 'agregado-hw-0-select');
     await page.getByTestId('agregado-hw-0-qty').fill('8');
 
