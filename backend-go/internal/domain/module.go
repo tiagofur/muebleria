@@ -284,6 +284,25 @@ type Agregado struct {
 	Version int64 `json:"version"`
 }
 
+// UnmarshalJSON implements custom JSON unmarshaling for Agregado to support
+// both camelCase (hardwareLines, rigidMembers, etc.) and snake_case.
+func (a *Agregado) UnmarshalJSON(data []byte) error {
+	type Alias Agregado
+	aux := struct {
+		*Alias
+		HardwareLinesCamel []HardwareLine `json:"hardwareLines"`
+	}{
+		Alias: (*Alias)(a),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if len(aux.HardwareLinesCamel) > 0 {
+		a.HardwareLines = aux.HardwareLinesCamel
+	}
+	return nil
+}
+
 // HardwarePlacement attaches a visible hardware instance to a component face for
 // the 3D preview (Fase 2: visible handles). Distinct from Perforation
 // (CNC/machining — different lifecycle/consumers). Rides the component-instance
@@ -461,6 +480,45 @@ type Component struct {
 	// Version is server-owned optimistic-concurrency state (#443/#448):
 	// writes carry the expected version as If-Match and the server bumps it.
 	Version int64 `json:"version"`
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for Component to support
+// both camelCase (contracts, TS client wire) and snake_case (internal Go/DB).
+func (c *Component) UnmarshalJSON(data []byte) error {
+	type Alias Component
+	aux := struct {
+		*Alias
+		OptionRolesCamel  []string         `json:"optionRoles"`
+		LengthMmCamel     *int             `json:"lengthMm"`
+		WidthMmCamel      *int             `json:"widthMm"`
+		ThicknessMmCamel  *int             `json:"thicknessMm"`
+		GeometryKindCamel string           `json:"geometryKind"`
+		DefaultEdgesCamel []EdgeAssignment `json:"defaultEdges"`
+	}{
+		Alias: (*Alias)(c),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if len(aux.OptionRolesCamel) > 0 {
+		c.OptionRoles = aux.OptionRolesCamel
+	}
+	if aux.LengthMmCamel != nil {
+		c.LengthMm = *aux.LengthMmCamel
+	}
+	if aux.WidthMmCamel != nil {
+		c.WidthMm = *aux.WidthMmCamel
+	}
+	if aux.ThicknessMmCamel != nil {
+		c.ThicknessMm = *aux.ThicknessMmCamel
+	}
+	if aux.GeometryKindCamel != "" {
+		c.GeometryKind = aux.GeometryKindCamel
+	}
+	if len(aux.DefaultEdgesCamel) > 0 {
+		c.DefaultEdges = aux.DefaultEdgesCamel
+	}
+	return nil
 }
 
 // ItemCustomDims is the free per-item dimensions override (F144 / #310), mm.

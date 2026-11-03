@@ -256,7 +256,7 @@ func resolveBomCommon(
 		module.HardwareLines = kept
 	}
 
-	hardware := collectAllHardwareLines(module, catalog)
+	hardware := collectAllHardwareLines(module, catalog, optionChoices)
 	var sides *PlinthSides
 	if baseContext != nil {
 		sides = baseContext.PlinthSides
@@ -403,7 +403,7 @@ func resolveBomFromParts(
 	}, nil
 }
 
-func collectAllHardwareLines(module domain.Module, catalog domain.Catalog) []domain.HardwareLine {
+func collectAllHardwareLines(module domain.Module, catalog domain.Catalog, optionChoices map[string]string) []domain.HardwareLine {
 	lines := make([]domain.HardwareLine, 0, len(module.HardwareLines))
 	lines = append(lines, module.HardwareLines...)
 
@@ -411,7 +411,8 @@ func collectAllHardwareLines(module domain.Module, catalog domain.Catalog) []dom
 	if strings.TrimSpace(module.StructureID) != "" {
 		if st, ok := findStructure(catalog, module.StructureID); ok {
 			for _, inst := range st.Agregados {
-				if agr, ok := findAgregado(catalog, inst.AgregadoID); ok {
+				effectiveID := ResolveEffectiveAgregadoID(inst, optionChoices)
+				if agr, ok := findAgregado(catalog, effectiveID); ok {
 					qty := inst.Quantity
 					if qty <= 0 {
 						qty = 1
@@ -428,7 +429,8 @@ func collectAllHardwareLines(module domain.Module, catalog domain.Catalog) []dom
 
 	// Module Agregados
 	for _, inst := range module.Agregados {
-		if agr, ok := findAgregado(catalog, inst.AgregadoID); ok {
+		effectiveID := ResolveEffectiveAgregadoID(inst, optionChoices)
+		if agr, ok := findAgregado(catalog, effectiveID); ok {
 			qty := inst.Quantity
 			if qty <= 0 {
 				qty = 1
@@ -548,26 +550,32 @@ func expandComposedModulePartsWithDims(
 	// layout.go and TS bom.ts): evaluate sub-space box + units and disambiguate
 	// sibling agregado instances with stable instance tags so part identities
 	// match between BOM, layout and machining evidence without colliding on copy-0.
+	// #1472/#1473: counts and identity keys use the effectiveAgregadoID resolved by role.
 	agregadoInstances := append(append([]domain.ModuleAgregadoInstance{}, structure.Agregados...), module.Agregados...)
 	agregadoInstanceCount := map[string]int{}
 	for _, inst := range agregadoInstances {
-		agregadoInstanceCount[inst.AgregadoID]++
+		effectiveID := ResolveEffectiveAgregadoID(inst, optionChoices)
+		agregadoInstanceCount[effectiveID]++
 	}
 	seenInstanceIDs := map[string]bool{}
 	for _, agrInst := range agregadoInstances {
-		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
+		effectiveAgregadoID := ResolveEffectiveAgregadoID(agrInst, optionChoices)
+		if effectiveAgregadoID == "" {
+			return nil, formulaDims{}, fmt.Errorf("agregado role %q has no selection and instance has no fallback agregadoId", agrInst.OptionRole)
+		}
+		agr, ok := findAgregado(catalog, effectiveAgregadoID)
 		if !ok {
-			continue
+			return nil, formulaDims{}, fmt.Errorf("agregado not found: %s", effectiveAgregadoID)
 		}
 		instanceTag := ""
-		if agregadoInstanceCount[agrInst.AgregadoID] > 1 {
+		if agregadoInstanceCount[effectiveAgregadoID] > 1 {
 			instanceID := strings.TrimSpace(agrInst.ID)
 			if instanceID == "" {
-				return nil, formulaDims{}, fmt.Errorf("repeated agregado %s requires a stable instance id", agrInst.AgregadoID)
+				return nil, formulaDims{}, fmt.Errorf("repeated agregado %s requires a stable instance id", effectiveAgregadoID)
 			}
-			identityKey := agrInst.AgregadoID + "\x00" + instanceID
+			identityKey := effectiveAgregadoID + "\x00" + instanceID
 			if seenInstanceIDs[identityKey] {
-				return nil, formulaDims{}, fmt.Errorf("repeated agregado %s has duplicate instance id %s", agrInst.AgregadoID, instanceID)
+				return nil, formulaDims{}, fmt.Errorf("repeated agregado %s has duplicate instance id %s", effectiveAgregadoID, instanceID)
 			}
 			seenInstanceIDs[identityKey] = true
 			instanceTag = fmt.Sprintf("instance-%s-", instanceID)
@@ -639,7 +647,7 @@ func expandComposedModulePartsWithDims(
 				T:  18,
 				B:  baseClearance,
 			}
-			idPrefix := fmt.Sprintf("agr-%s-%su%d-", agrInst.AgregadoID, instanceTag, unit.index)
+			idPrefix := fmt.Sprintf("agr-%s-%su%d-", effectiveAgregadoID, instanceTag, unit.index)
 			agrParts, err := expandComponentInstances(
 				filterInstancesForBaseMode(agr.Components, catalog, baseMode),
 				catalog, unitDims, idPrefix, optionChoices, baseClearance,

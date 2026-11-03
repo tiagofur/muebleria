@@ -1,0 +1,161 @@
+{
+  "schemaId": "granete.agregadoEngineResolutionParity.v1",
+  "comment": "#1473: Parity contract for symmetric resolution of agregados by role in BOM and Layout. Verifies that when optionRole is set on ModuleAgregadoInstance, both BOM and Layout engines expand the effective selected Agregado, generate matching part IDs, hardware demand, and rigid members.",
+  "catalog": {
+    "structures": [
+      {
+        "id": "st-base",
+        "code": "ST-BASE",
+        "name": "Estructura Base",
+        "widthMm": 600,
+        "heightMm": 720,
+        "depthMm": 560,
+        "active": true,
+        "presets": [
+          { "id": "p1", "widthMm": 600, "heightMm": 720, "depthMm": 560 }
+        ]
+      }
+    ],
+    "agregados": [
+      {
+        "id": "agr-cajon-telescopico",
+        "code": "CAJ-TEL",
+        "name": "Cajón Telescópico",
+        "components": [
+          { "componentId": "comp-frente-tel", "quantity": 1 }
+        ],
+        "hardwareLines": [
+          { "id": "hl-tel-1", "hardwareId": "hw-corredera-tel", "quantity": 1 }
+        ]
+      },
+      {
+        "id": "agr-cajon-tandem",
+        "code": "CAJ-TAN",
+        "name": "Cajón Tandem Oculto",
+        "components": [
+          { "componentId": "comp-frente-tan", "quantity": 1 }
+        ],
+        "hardwareLines": [
+          { "id": "hl-tan-1", "hardwareId": "hw-corredera-tan", "quantity": 1 }
+        ]
+      }
+    ],
+    "components": [
+      {
+        "id": "comp-frente-tel",
+        "code": "FTEL",
+        "name": "Frente Telescópico",
+        "placement": "frente",
+        "geometry": { "kind": "rectangular_board", "lengthMm": 400, "widthMm": 200, "thicknessMm": 18 },
+        "defaultEdges": [
+          { "side": "L1", "enabled": false },
+          { "side": "L2", "enabled": false },
+          { "side": "W1", "enabled": false },
+          { "side": "W2", "enabled": false }
+        ],
+        "optionRoles": ["FRONT"],
+        "active": true
+      },
+      {
+        "id": "comp-frente-tan",
+        "code": "FTAN",
+        "name": "Frente Tandem",
+        "placement": "frente",
+        "geometry": { "kind": "rectangular_board", "lengthMm": 400, "widthMm": 200, "thicknessMm": 18 },
+        "defaultEdges": [
+          { "side": "L1", "enabled": false },
+          { "side": "L2", "enabled": false },
+          { "side": "W1", "enabled": false },
+          { "side": "W2", "enabled": false }
+        ],
+        "optionRoles": ["FRONT"],
+        "active": true
+      }
+    ],
+    "optionGroups": [
+      {
+        "id": "og-front",
+        "code": "FRONT",
+        "name": "Frente",
+        "kind": "board",
+        "required": true,
+        "optionIds": ["mat-18"]
+      },
+      {
+        "id": "og-sistema-cajon",
+        "code": "SISTEMA_CAJON",
+        "name": "Sistema de Cajón",
+        "kind": "agregado",
+        "required": false,
+        "optionIds": ["agr-cajon-telescopico", "agr-cajon-tandem"]
+      }
+    ],
+    "materials": [
+      { "id": "mat-18", "code": "M18", "name": "MDF 18", "thicknessMm": 18, "grain": false, "color": "#ffffff", "active": true }
+    ],
+    "hardware": [
+      { "id": "hw-corredera-tel", "code": "TEL500", "name": "Corredera Telescópica 500mm", "kind": "corredera", "active": true },
+      { "id": "hw-corredera-tan", "code": "TAN500", "name": "Guía Tandem 500mm", "kind": "corredera", "active": true }
+    ]
+  },
+  "scenarios": [
+    {
+      "name": "fallback to default agregadoId when optionChoices does not contain role",
+      "moduleAgregados": [
+        { "id": "inst-cajon", "agregadoId": "agr-cajon-telescopico", "optionRole": "SISTEMA_CAJON", "quantity": 1 }
+      ],
+      "optionChoices": {
+        "FRONT": "mat-18"
+      },
+      "expectedEffectiveAgregadoId": "agr-cajon-telescopico",
+      "expectedPartIds": [
+        "agr-agr-cajon-telescopico-u0-comp-frente-tel-copy-0"
+      ],
+      "expectedHardwareIds": [
+        "hw-corredera-tel"
+      ]
+    },
+    {
+      "name": "resolves tandem when SISTEMA_CAJON choice is provided",
+      "moduleAgregados": [
+        { "id": "inst-cajon", "agregadoId": "agr-cajon-telescopico", "optionRole": "SISTEMA_CAJON", "quantity": 1 }
+      ],
+      "optionChoices": {
+        "FRONT": "mat-18",
+        "SISTEMA_CAJON": "agr-cajon-tandem"
+      },
+      "expectedEffectiveAgregadoId": "agr-cajon-tandem",
+      "expectedPartIds": [
+        "agr-agr-cajon-tandem-u0-comp-frente-tan-copy-0"
+      ],
+      "expectedHardwareIds": [
+        "hw-corredera-tan"
+      ]
+    },
+    {
+      "name": "instance override takes precedence over optionChoices",
+      "moduleAgregados": [
+        {
+          "id": "inst-cajon",
+          "agregadoId": "agr-cajon-telescopico",
+          "optionRole": "SISTEMA_CAJON",
+          "optionOverrides": {
+            "SISTEMA_CAJON": "agr-cajon-tandem"
+          },
+          "quantity": 1
+        }
+      ],
+      "optionChoices": {
+        "FRONT": "mat-18",
+        "SISTEMA_CAJON": "agr-cajon-telescopico"
+      },
+      "expectedEffectiveAgregadoId": "agr-cajon-tandem",
+      "expectedPartIds": [
+        "agr-agr-cajon-tandem-u0-comp-frente-tan-copy-0"
+      ],
+      "expectedHardwareIds": [
+        "hw-corredera-tan"
+      ]
+    }
+  ]
+}

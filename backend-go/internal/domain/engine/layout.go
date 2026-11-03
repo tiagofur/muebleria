@@ -557,14 +557,14 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 	}
 
 	// #670 / #1435: Emit resolved assemblies and their rigid members for SketchUp layout consumption.
-	layout.Assemblies = resolveLayoutAssemblies(module, catalog, dims, baseClearanceForLayout(module, module.BaseMode))
+	layout.Assemblies = resolveLayoutAssemblies(module, catalog, dims, baseClearanceForLayout(module, module.BaseMode), optionChoices)
 
 	return layout, boards, nil
 }
 
 // resolveLayoutAssemblies traverses module & structure agregados, resolves their recipe
 // into rigid members with authoritative poses, and packages them into LayoutAssembly entries.
-func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims LayoutDims, baseClearance int) []LayoutAssembly {
+func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims LayoutDims, baseClearance int, optionChoices map[string]string) []LayoutAssembly {
 	structure, _ := findStructure(catalog, module.StructureID)
 	agregadoInstances := append(append([]domain.ModuleAgregadoInstance{}, structure.Agregados...), module.Agregados...)
 	if len(agregadoInstances) == 0 {
@@ -582,7 +582,11 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 	hardwareDimsLookup := HardwareDimensionsFromCatalog(catalog.Hardware)
 
 	for _, agrInst := range agregadoInstances {
-		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
+		effectiveID := ResolveEffectiveAgregadoID(agrInst, optionChoices)
+		if effectiveID == "" {
+			continue
+		}
+		agr, ok := findAgregado(catalog, effectiveID)
 		if !ok {
 			continue
 		}
@@ -912,21 +916,27 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 	// instance ID — never its array position (#388 exact identity). Single
 	// instances keep the historical prefix so existing part identities do
 	// not churn.
+	// #1472/#1473: counts and identity keys use the effectiveAgregadoID resolved by role.
 	agregadoInstanceCount := map[string]int{}
 	for _, inst := range agregadoInstances {
-		agregadoInstanceCount[inst.AgregadoID]++
+		effectiveID := ResolveEffectiveAgregadoID(inst, optionChoices)
+		agregadoInstanceCount[effectiveID]++
 	}
 	seenInstanceIDs := map[string]bool{}
 	for _, agrInst := range agregadoInstances {
+		effectiveID := ResolveEffectiveAgregadoID(agrInst, optionChoices)
+		if effectiveID == "" {
+			return nil, fmt.Errorf("agregado role %q has no selection and instance has no fallback agregadoId", agrInst.OptionRole)
+		}
 		instanceTag := ""
-		if agregadoInstanceCount[agrInst.AgregadoID] > 1 {
+		if agregadoInstanceCount[effectiveID] > 1 {
 			instanceID := strings.TrimSpace(agrInst.ID)
 			if instanceID == "" {
-				return nil, fmt.Errorf("repeated agregado %s requires a stable instance id", agrInst.AgregadoID)
+				return nil, fmt.Errorf("repeated agregado %s requires a stable instance id", effectiveID)
 			}
-			identityKey := agrInst.AgregadoID + "\x00" + instanceID
+			identityKey := effectiveID + "\x00" + instanceID
 			if seenInstanceIDs[identityKey] {
-				return nil, fmt.Errorf("repeated agregado %s has duplicate instance id %s", agrInst.AgregadoID, instanceID)
+				return nil, fmt.Errorf("repeated agregado %s has duplicate instance id %s", effectiveID, instanceID)
 			}
 			seenInstanceIDs[identityKey] = true
 			instanceTag = fmt.Sprintf("instance-%s-", instanceID)
@@ -1299,9 +1309,13 @@ func pickRotation(compValue int, inst domain.ComponentInstance, placement string
 // instances of the SAME agregado in one module (empty for the single-instance
 // historical prefix).
 func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.Catalog, dims LayoutDims, baseClearance int, baseMode string, optionChoices map[string]string, opts resolveOptions, instanceTag string) ([]layoutBoard, error) {
-	agr, ok := findAgregado(catalog, agrInst.AgregadoID)
+	effectiveID := ResolveEffectiveAgregadoID(agrInst, optionChoices)
+	if effectiveID == "" {
+		return nil, fmt.Errorf("agregado role %q has no selection and instance has no fallback agregadoId", agrInst.OptionRole)
+	}
+	agr, ok := findAgregado(catalog, effectiveID)
 	if !ok {
-		return nil, fmt.Errorf("agregado not found: %s", agrInst.AgregadoID)
+		return nil, fmt.Errorf("agregado not found: %s", effectiveID)
 	}
 
 	// T here is the sub-space box's own context, not a board piece: the
@@ -1421,7 +1435,7 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 		// quote excludes.
 		unitBoards, err := expandLayoutInstances(
 			filterInstancesForBaseMode(agr.Components, catalog, baseMode),
-			catalog, unitDims, fmt.Sprintf("agr-%s-%su%d-", agrInst.AgregadoID, instanceTag, unit.index), baseClearance, optionChoices, opts)
+			catalog, unitDims, fmt.Sprintf("agr-%s-%su%d-", effectiveID, instanceTag, unit.index), baseClearance, optionChoices, opts)
 		if err != nil {
 			return nil, err
 		}

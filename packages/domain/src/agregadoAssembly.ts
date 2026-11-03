@@ -26,7 +26,7 @@ import type {
   OptionChoices,
   Structure,
 } from './types';
-import { calculateAgregadoSubspaceUnits, type SubspaceUnit } from './agregados';
+import { calculateAgregadoSubspaceUnits, resolveEffectiveAgregadoId, type SubspaceUnit } from './agregados';
 import type { HardwareDesignPart } from './hardwareDesignParts';
 import { resolveHardwareDimensions, type EffectiveHardwareDimensions } from './hardwarePlacement';
 import { evaluatePartFormula } from './engine/shared';
@@ -1708,7 +1708,9 @@ export function resolveModuleAgregadoAssemblies(
   }
 
   for (const agrInst of allAgregadoInstances) {
-    const agregado = catalog.agregados?.find((a) => a.id === agrInst.agregadoId);
+    const effectiveId = resolveEffectiveAgregadoId(agrInst, options.optionChoices);
+    if (!effectiveId) continue;
+    const agregado = catalog.agregados?.find((a) => a.id === effectiveId);
     if (!agregado) continue;
 
     // Only process agregados that define a multi-member assembly recipe

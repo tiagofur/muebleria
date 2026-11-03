@@ -45,11 +45,12 @@ func (used *releaseExpansionBudget) components(instances []domain.ComponentInsta
 	return nil
 }
 
-func (used *releaseExpansionBudget) agregados(instances []domain.ModuleAgregadoInstance, catalog domain.Catalog) error {
+func (used *releaseExpansionBudget) agregados(instances []domain.ModuleAgregadoInstance, catalog domain.Catalog, optionChoices map[string]string) error {
 	for _, instance := range instances {
-		agregado, ok := findAgregado(catalog, instance.AgregadoID)
-		if strings.TrimSpace(instance.AgregadoID) == "" || !ok {
-			return fmt.Errorf("agregado not found: %s", instance.AgregadoID)
+		effectiveID := ResolveEffectiveAgregadoID(instance, optionChoices)
+		agregado, ok := findAgregado(catalog, effectiveID)
+		if strings.TrimSpace(effectiveID) == "" || !ok {
+			return fmt.Errorf("agregado not found: %s", effectiveID)
 		}
 		quantity := instance.Quantity
 		if quantity <= 0 {
@@ -71,7 +72,7 @@ func (used *releaseExpansionBudget) agregados(instances []domain.ModuleAgregadoI
 	return nil
 }
 
-func validateReleaseUnitExpansion(module domain.Module, catalog domain.Catalog, collection *releaseExpansionBudget) error {
+func validateReleaseUnitExpansion(module domain.Module, catalog domain.Catalog, collection *releaseExpansionBudget, optionChoices map[string]string) error {
 	var used releaseExpansionBudget
 	if err := used.add(len(module.HardwareLines), 1); err != nil {
 		return err
@@ -102,10 +103,10 @@ func validateReleaseUnitExpansion(module domain.Module, catalog domain.Catalog, 
 	if err := used.components(module.Components, catalog); err != nil {
 		return err
 	}
-	if err := used.agregados(structure.Agregados, catalog); err != nil {
+	if err := used.agregados(structure.Agregados, catalog, optionChoices); err != nil {
 		return err
 	}
-	if err := used.agregados(module.Agregados, catalog); err != nil {
+	if err := used.agregados(module.Agregados, catalog, optionChoices); err != nil {
 		return err
 	}
 	return chargeReleaseCollection(collection, used)

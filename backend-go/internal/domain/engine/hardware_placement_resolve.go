@@ -99,14 +99,16 @@ func consumePlacementOptionRoles(
 		if st, ok := findStructure(catalog, module.StructureID); ok {
 			record(st.Components)
 			for _, agrInst := range st.Agregados {
-				if agr, ok := findAgregado(catalog, agrInst.AgregadoID); ok {
+				effectiveID := ResolveEffectiveAgregadoID(agrInst, choices)
+				if agr, ok := findAgregado(catalog, effectiveID); ok {
 					record(agr.Components)
 				}
 			}
 		}
 	}
 	for _, agrInst := range module.Agregados {
-		if agr, ok := findAgregado(catalog, agrInst.AgregadoID); ok {
+		effectiveID := ResolveEffectiveAgregadoID(agrInst, choices)
+		if agr, ok := findAgregado(catalog, effectiveID); ok {
 			record(agr.Components)
 		}
 	}
