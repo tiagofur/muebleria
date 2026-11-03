@@ -19,7 +19,10 @@ import {
 export type ModuleRolesSource = {
   readonly components?: readonly { readonly componentId: string }[];
   readonly structureId?: string;
-  readonly agregados?: readonly { readonly agregadoId: string }[];
+  readonly agregados?: readonly {
+    readonly agregadoId: string;
+    readonly optionRole?: string;
+  }[];
   readonly hardwareLines?: readonly {
     readonly optionRole: string;
     readonly hardwareId?: string;
@@ -89,6 +92,9 @@ export function usedOptionRolesForModule(
   }
   if (module.agregados) {
     for (const agrInst of module.agregados) {
+      if (agrInst.optionRole?.trim()) {
+        usedRoles.add(agrInst.optionRole.trim());
+      }
       addAgregadoRoles(agrInst.agregadoId);
     }
   }
@@ -99,6 +105,9 @@ export function usedOptionRolesForModule(
         addComponentRoles(inst.componentId);
       }
       for (const agrInst of structure.agregados ?? []) {
+        if (agrInst.optionRole?.trim()) {
+          usedRoles.add(agrInst.optionRole.trim());
+        }
         addAgregadoRoles(agrInst.agregadoId);
       }
     }

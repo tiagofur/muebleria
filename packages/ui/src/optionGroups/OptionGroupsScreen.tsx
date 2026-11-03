@@ -4,6 +4,7 @@
 
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type {
+  Agregado,
   Catalog,
   Component,
   EdgeBand,
@@ -79,6 +80,7 @@ export interface OptionGroupsScreenProps {
   readonly materials: readonly MaterialBoard[];
   readonly edges: readonly EdgeBand[];
   readonly hardware: readonly Hardware[];
+  readonly agregados?: readonly Agregado[];
   /** Used to warn how many modules reference a group before delete. */
   readonly modules?: readonly Module[];
   /** Component catalog — needed to resolve option roles for delete warnings (#5). */
@@ -114,6 +116,7 @@ export function OptionGroupsScreen({
   materials,
   edges,
   hardware,
+  agregados = [],
   modules = [],
   catalogComponents = [],
   catalogStructures = [],
@@ -149,8 +152,8 @@ export function OptionGroupsScreen({
   }, [optionGroups, debouncedSearch]);
 
   const memberCandidates = useMemo(
-    () => membersForKind(draft.kind, { materials, edges, hardware }),
-    [draft.kind, materials, edges, hardware],
+    () => membersForKind(draft.kind, { materials, edges, hardware, agregados }),
+    [draft.kind, materials, edges, hardware, agregados],
   );
 
   const memberNameById = useMemo(() => {
@@ -158,8 +161,9 @@ export function OptionGroupsScreen({
     for (const m of materials) map.set(m.id, `${m.code} — ${m.name}`);
     for (const e of edges) map.set(e.id, `${e.code} — ${e.name}`);
     for (const h of hardware) map.set(h.id, `${h.code} — ${h.name}`);
+    for (const a of agregados) map.set(a.id, `${a.code} — ${a.name}`);
     return map;
-  }, [materials, edges, hardware]);
+  }, [materials, edges, hardware, agregados]);
 
   const closeModal = () => {
     setModalOpen(false);
@@ -187,7 +191,12 @@ export function OptionGroupsScreen({
   };
 
   const setKind = (kind: OptionGroupKind) => {
-    const nextMembers = membersForKind(kind, { materials, edges, hardware });
+    const nextMembers = membersForKind(kind, {
+      materials,
+      edges,
+      hardware,
+      agregados,
+    });
     setDraft((prev) => ({
       ...prev,
       kind,
@@ -537,6 +546,7 @@ export function OptionGroupsScreen({
                   {optionGroupKindLabel('hardware')}
                 </option>
                 <option value="edge">{optionGroupKindLabel('edge')}</option>
+                <option value="agregado">{optionGroupKindLabel('agregado')}</option>
               </select>
             </div>
             <div className="catalog-form__field catalog-form__row-check">

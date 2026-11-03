@@ -135,6 +135,15 @@ export function StructureAgregadoCard({
                 </span>
               )}
 
+              {inst.optionRole && (
+                <span
+                  className="structure-editor__agregado-chip structure-editor__agregado-chip--accent"
+                  title={`Rol de opción: ${inst.optionRole}`}
+                >
+                  Rol: {inst.optionRole}
+                </span>
+              )}
+
               {overrideCount > 0 && (
                 <span
                   className="structure-editor__agregado-chip"
@@ -182,6 +191,40 @@ export function StructureAgregadoCard({
           className="structure-editor__agregado-body"
           data-testid={`structure-agr-body-${idx}`}
         >
+          <fieldset className="structure-editor__agregado-fieldset">
+            <legend className="structure-editor__agregado-legend">
+              <Settings size={14} aria-hidden /> Sistema / Rol de Opciones
+            </legend>
+            <div className="catalog-form__field">
+              <label className="catalog-form__label" htmlFor={`structure-agr-${idx}-role`}>
+                Rol de opción intercambiable (Option Group)
+              </label>
+              <select
+                id={`structure-agr-${idx}-role`}
+                className="catalog-form__input"
+                value={inst.optionRole ?? ''}
+                onChange={(e) =>
+                  onUpdate(idx, {
+                    optionRole: e.target.value.trim() || undefined,
+                  })
+                }
+                data-testid={`structure-agr-${idx}-option-role`}
+              >
+                <option value="">(Sin rol — agregado fijo por defecto)</option>
+                {optionGroups
+                  .filter((g) => g.kind === 'agregado')
+                  .map((g) => (
+                    <option key={g.id} value={g.code}>
+                      [{g.code}] {g.name}
+                    </option>
+                  ))}
+              </select>
+              <span className="catalog-form__hint">
+                Asigna un grupo de opciones de tipo Agregado (ej. PUERTA, SISTEMA_CAJON) para permitir cambiarlo en el mueble o proyecto.
+              </span>
+            </div>
+          </fieldset>
+
           <fieldset className="structure-editor__agregado-fieldset">
             <legend className="structure-editor__agregado-legend">
               <Maximize2 size={14} aria-hidden /> Dimensiones del Hueco / Sub-espacio

@@ -54,6 +54,7 @@ export function optionsForGroup(
     readonly materials: readonly MaterialBoard[];
     readonly edges: readonly EdgeBand[];
     readonly hardware: readonly Hardware[];
+    readonly agregados?: readonly Agregado[];
   },
 ): CatalogMember[] {
   const members = membersForKind(group.kind, catalogs);

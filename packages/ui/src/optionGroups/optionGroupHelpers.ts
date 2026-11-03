@@ -70,17 +70,27 @@ function collectComponentRoles(
 }
 
 /**
- * Collect optionRoles from hardwareLines and component instances of Agregados.
+ * Collect optionRoles from hardwareLines, component instances and optionRole of Agregados.
  */
 function collectAgregadoRoles(
-  agregadoInstances: readonly { readonly agregadoId: string }[] | undefined,
+  agregadoInstances:
+    | readonly {
+        readonly agregadoId: string;
+        readonly optionRole?: string;
+        readonly optionOverrides?: Readonly<Record<string, string>>;
+      }[]
+    | undefined,
   catalogAgregados: readonly Agregado[] | undefined,
   catalogComponents: readonly Component[] | undefined,
   out: Set<string>,
 ): void {
   if (!agregadoInstances || !catalogAgregados) return;
   for (const inst of agregadoInstances) {
-    const agregado = catalogAgregados.find((a) => a.id === inst.agregadoId);
+    if (inst.optionRole?.trim()) {
+      out.add(inst.optionRole.trim());
+    }
+    const effectiveId = inst.agregadoId;
+    const agregado = catalogAgregados.find((a) => a.id === effectiveId);
     if (agregado) {
       if (agregado.hardwareLines) {
         for (const line of agregado.hardwareLines) {
@@ -126,6 +136,7 @@ export function membersForKind(
     readonly materials: readonly MaterialBoard[];
     readonly edges: readonly EdgeBand[];
     readonly hardware: readonly Hardware[];
+    readonly agregados?: readonly Agregado[];
   },
   options?: { readonly includeInactive?: boolean },
 ): CatalogMember[] {
@@ -134,7 +145,14 @@ export function membersForKind(
       ? catalogs.materials
       : kind === 'hardware'
         ? catalogs.hardware.filter((h) => !h.kitHardwareId)
-        : catalogs.edges;
+        : kind === 'agregado'
+          ? (catalogs.agregados ?? []).map((a) => ({
+              id: a.id,
+              code: a.code,
+              name: a.name,
+              active: a.active !== false,
+            }))
+          : catalogs.edges;
   return filterActiveForPicker(source, options).map((item) => ({
     id: item.id,
     code: item.code,
