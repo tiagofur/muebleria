@@ -24,6 +24,44 @@ class DrawerAssemblyLinkContractTest < Minitest::Test
   AGR_ID = '72e3d65f-4734-4a2e-8dee-88324f51477f'
   IDENTITY_BASIS = { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }.freeze
 
+  # Shape mirrors the real resolved layout of MOD-BAJ-3CAJ: drawer box boards
+  # travel as top-level components WITH the assembly link the engine seals
+  # (#1465), rails travel in assemblies[].rigidMembers with explicit
+  # actorMembership, module structure boards carry no link.
+  LAYOUT_BODY = {
+    'furnitureDefinitionId' => '11111111-1111-1111-1111-111111111111',
+    'definitionName' => 'Gabinete Bajo 3 Cajones',
+    'transformContract' => 'granete.local-basis.v1',
+    'dimensionsMm' => [600, 720, 500],
+    'components' => [
+      { 'componentInstanceId' => 'st-costado', 'slotId' => 'lateral_izquierdo',
+        'role' => 'LATERAL', 'name' => 'Costado',
+        'widthMm' => 560, 'thicknessMm' => 18, 'lengthMm' => 684,
+        'localTransform' => { 'translationMm' => [0, 0, 0], 'basis' => IDENTITY_BASIS } },
+      { 'componentInstanceId' => 'agr-cajon-u0-lat-copy-0',
+        'slotId' => 'lateral_izquierdo', 'role' => 'INTERIOR', 'name' => 'Lateral Cajon',
+        'assemblyInstanceId' => ASM_ID,
+        'widthMm' => 450, 'thicknessMm' => 15, 'lengthMm' => 500,
+        'localTransform' => { 'translationMm' => [13, 90, 30], 'basis' => IDENTITY_BASIS } },
+      { 'componentInstanceId' => 'agr-frente-u0', 'slotId' => 'frente_cajon',
+        'role' => 'FRENTE', 'name' => 'Frente Cajon',
+        'widthMm' => 564, 'thicknessMm' => 18, 'lengthMm' => 150,
+        'localTransform' => { 'translationMm' => [0, 500, 30], 'basis' => IDENTITY_BASIS } }
+    ],
+    'assemblies' => [
+      { 'assemblyInstanceId' => ASM_ID, 'agregadoId' => AGR_ID,
+        'placement' => { 'translationMm' => [0, 0, 0], 'basis' => IDENTITY_BASIS },
+        'rigidMembers' => [
+          { 'memberId' => 'fixed_rail_left', 'name' => 'fixed_rail_left',
+            'actorMembership' => 'body', 'dimensionsMm' => [12, 500, 45],
+            'localTransform' => { 'translationMm' => [10, 0, 0], 'basis' => IDENTITY_BASIS } },
+          { 'memberId' => 'moving_rail_left', 'name' => 'moving_rail_left',
+            'actorMembership' => 'actor:drawer', 'dimensionsMm' => [12, 450, 45],
+            'localTransform' => { 'translationMm' => [35, 0, 0], 'basis' => IDENTITY_BASIS } }
+        ] }
+    ]
+  }.freeze
+
   def setup
     SketchupStub.reset!
     @model = Sketchup.active_model
@@ -79,42 +117,4 @@ class DrawerAssemblyLinkContractTest < Minitest::Test
       JSON.parse(JSON.generate(LAYOUT_BODY))
     )
   end
-
-  # Shape mirrors the real resolved layout of MOD-BAJ-3CAJ: drawer box boards
-  # travel as top-level components WITH the assembly link the engine seals
-  # (#1465), rails travel in assemblies[].rigidMembers with explicit
-  # actorMembership, module structure boards carry no link.
-  LAYOUT_BODY = {
-    'furnitureDefinitionId' => '11111111-1111-1111-1111-111111111111',
-    'definitionName' => 'Gabinete Bajo 3 Cajones',
-    'transformContract' => 'granete.local-basis.v1',
-    'dimensionsMm' => [600, 720, 500],
-    'components' => [
-      { 'componentInstanceId' => 'st-costado', 'slotId' => 'lateral_izquierdo',
-        'role' => 'LATERAL', 'name' => 'Costado',
-        'widthMm' => 560, 'thicknessMm' => 18, 'lengthMm' => 684,
-        'localTransform' => { 'translationMm' => [0, 0, 0], 'basis' => IDENTITY_BASIS } },
-      { 'componentInstanceId' => 'agr-cajon-u0-lat-copy-0',
-        'slotId' => 'lateral_izquierdo', 'role' => 'INTERIOR', 'name' => 'Lateral Cajon',
-        'assemblyInstanceId' => ASM_ID,
-        'widthMm' => 450, 'thicknessMm' => 15, 'lengthMm' => 500,
-        'localTransform' => { 'translationMm' => [13, 90, 30], 'basis' => IDENTITY_BASIS } },
-      { 'componentInstanceId' => 'agr-frente-u0', 'slotId' => 'frente_cajon',
-        'role' => 'FRENTE', 'name' => 'Frente Cajon',
-        'widthMm' => 564, 'thicknessMm' => 18, 'lengthMm' => 150,
-        'localTransform' => { 'translationMm' => [0, 500, 30], 'basis' => IDENTITY_BASIS } }
-    ],
-    'assemblies' => [
-      { 'assemblyInstanceId' => ASM_ID, 'agregadoId' => AGR_ID,
-        'placement' => { 'translationMm' => [0, 0, 0], 'basis' => IDENTITY_BASIS },
-        'rigidMembers' => [
-          { 'memberId' => 'fixed_rail_left', 'name' => 'fixed_rail_left',
-            'actorMembership' => 'body', 'dimensionsMm' => [12, 500, 45],
-            'localTransform' => { 'translationMm' => [10, 0, 0], 'basis' => IDENTITY_BASIS } },
-          { 'memberId' => 'moving_rail_left', 'name' => 'moving_rail_left',
-            'actorMembership' => 'actor:drawer', 'dimensionsMm' => [12, 450, 45],
-            'localTransform' => { 'translationMm' => [35, 0, 0], 'basis' => IDENTITY_BASIS } }
-        ] }
-    ]
-  }.freeze
 end
