@@ -120,9 +120,9 @@ test.describe.serial('AGREGADOS — el kit manda + herraje propio paramétrico (
     );
 
     // Miembro con parte del kit ⇒ se resume en la tarjeta única (sin tarjeta
-    // editable para el subitem del juego).
-    await page.getByTestId('agregado-add-hardware').click();
-    await page.getByTestId('agregado-hw-chooser-cajon').click();
+    // editable para el subitem del juego). #1462: la sección es el punto de
+    // entrada — sin chooser global.
+    await page.getByTestId('agregado-cajon-hardware-add-member').click();
     await expect(page.getByTestId('agregado-cajon-hardware-member-0-identity-error')).toBeVisible();
     await pickCombobox(page, 'agregado-cajon-hardware-member-0-hardware', /MOV-I/);
     const kitCard = page.getByTestId('agregado-cajon-hardware-kit-card');
@@ -132,8 +132,7 @@ test.describe.serial('AGREGADOS — el kit manda + herraje propio paramétrico (
     await expect(page.getByTestId('agregado-cajon-hardware-member-0')).toHaveCount(0);
 
     // Herraje propio (fuera del juego): conserva tarjeta editable completa.
-    await page.getByTestId('agregado-add-hardware').click();
-    await page.getByTestId('agregado-hw-chooser-cajon').click();
+    await page.getByTestId('agregado-cajon-hardware-add-member').click();
     await pickCombobox(page, 'agregado-cajon-hardware-member-1-hardware', /TIR-1460/);
     await expect(page.getByTestId('agregado-cajon-hardware-member-1-anchor-y-ref')).toBeVisible();
     await expect(page.getByTestId('agregado-cajon-hardware-member-1-anchor-z-ref')).toBeVisible();

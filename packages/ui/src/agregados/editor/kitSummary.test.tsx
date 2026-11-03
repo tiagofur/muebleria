@@ -127,10 +127,13 @@ describe('Herrajes — tarjeta única del kit (#1460 F1)', () => {
   });
 
   it('con kit y sin herrajes propios el vacío apunta a añadir, no a crear el par', () => {
-    renderSection(draftWith([kitMember('moving_rail_left', 'mov-i')]));
+    renderSection(draftWith([]));
     expect(screen.getByTestId('sec-empty').textContent).toContain(
       'juego comercial cubre',
     );
+    // #1463 review: con kit sin miembros derivados, la tarjeta enseña el
+    // camino (crealas en Catálogos) en vez de «0 incluido(s)» a secas.
+    expect(screen.getByText(/todavía no sincronizó partes/)).toBeTruthy();
   });
 
   it('sin kit el estado vacío mantiene el texto histórico', () => {

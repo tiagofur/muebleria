@@ -591,7 +591,7 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
     return draft;
   };
 
-  it('«Añadir herraje» opens the level chooser and «Del agregado» adds a member without hidden hardware', async () => {
+  it('el «+ Añadir herraje» de la sección Del ensamble agrega un miembro sin default encubierto (#1462)', async () => {
     const user = userEvent.setup();
     const setDraftMock = vi.fn();
     renderForm({
@@ -600,10 +600,10 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
       catalogHardware: hwFixture,
     });
 
-    await user.click(screen.getByTestId('agregado-add-hardware'));
-    expect(screen.getByTestId('agregado-hw-chooser')).toBeTruthy();
-
-    await user.click(screen.getByTestId('agregado-hw-chooser-cajon'));
+    // #1462: la sección es el punto de entrada — sin chooser global.
+    expect(screen.queryByTestId('agregado-add-hardware')).toBeNull();
+    expect(screen.queryByTestId('agregado-hw-chooser')).toBeNull();
+    await user.click(screen.getByTestId('agregado-cajon-hardware-add-member'));
 
     const updater = setDraftMock.mock.calls.at(-1)![0] as (
       prev: AgregadoDraft,
@@ -616,7 +616,7 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
     expect(next.rigidMembers![0]!.bomRole).toBe('separately_purchased');
   });
 
-  it('the chooser adds a bulk line without hidden hardware or role defaults', async () => {
+  it('el «+ Añadir insumo» de Por cantidad agrega la línea sin herraje ni rol (#1462)', async () => {
     const user = userEvent.setup();
     const setDraftMock = vi.fn();
     renderForm({
@@ -625,8 +625,7 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
       catalogHardware: hwFixture,
     });
 
-    await user.click(screen.getByTestId('agregado-add-hardware'));
-    await user.click(screen.getByTestId('agregado-hw-chooser-cantidad'));
+    await user.click(screen.getByTestId('agregado-hw-cantidad-add'));
 
     const updater = setDraftMock.mock.calls.at(-1)![0] as (
       prev: AgregadoDraft,
@@ -661,7 +660,7 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
     expect(screen.getByTestId('agregado-hw-level-piezas')).toBeTruthy();
   });
 
-  it('«Kit con par izq/der» creates 4 separate left/right members (never a mirror)', async () => {
+  it('la plantilla «Par izq/der» crea 4 miembros separados izquierda/derecha (nunca espejo) (#1462)', async () => {
     const user = userEvent.setup();
     const setDraftMock = vi.fn();
     renderForm({
@@ -670,7 +669,14 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
       catalogHardware: hwFixture,
     });
 
-    await user.click(screen.getByTestId('agregado-cajon-hardware-preset-pair'));
+    // #1462: las plantillas viven en el menú de la sección.
+    await user.click(screen.getByTestId('agregado-cajon-hardware-templates'));
+    await user.click(screen.getByTestId('agregado-cajon-hardware-template-pair'));
+    // DropdownMenu común: el menú se cierra al elegir (Esc/click-afuera
+    // incluidos — sugerencia de review #1463).
+    expect(
+      screen.queryByTestId('agregado-cajon-hardware-template-pair'),
+    ).toBeNull();
 
     const updater = setDraftMock.mock.calls.at(-1)![0] as (
       prev: AgregadoDraft,
@@ -694,7 +700,7 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
     );
   });
 
-  it('with existing members the pair preset asks for confirmation first', async () => {
+  it('con miembros existentes la plantilla pide confirmación primero (#1462)', async () => {
     const user = userEvent.setup();
     const setDraftMock = vi.fn();
     renderForm({
@@ -704,7 +710,8 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
       catalogHardware: hwFixture,
     });
 
-    await user.click(screen.getByTestId('agregado-cajon-hardware-preset-pair'));
+    await user.click(screen.getByTestId('agregado-cajon-hardware-templates'));
+    await user.click(screen.getByTestId('agregado-cajon-hardware-template-pair'));
     expect(
       screen.getByTestId('agregado-cajon-hardware-preset-confirm'),
     ).toBeTruthy();
@@ -715,5 +722,31 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
     ) => AgregadoDraft;
     const next = updater(memberDraft());
     expect(next.rigidMembers).toHaveLength(4);
+  });
+
+  it('la plantilla «Riel centrado» arma 1 miembro con fórmula PW/2 (#1462, antes preset de Receta)', async () => {
+    const user = userEvent.setup();
+    const setDraftMock = vi.fn();
+    renderForm({
+      editorTab: 'hardware',
+      setDraft: setDraftMock as unknown as Dispatch<SetStateAction<AgregadoDraft>>,
+      catalogHardware: hwFixture,
+    });
+
+    await user.click(screen.getByTestId('agregado-cajon-hardware-templates'));
+    await user.click(
+      screen.getByTestId('agregado-cajon-hardware-template-center-rail'),
+    );
+
+    const updater = setDraftMock.mock.calls.at(-1)![0] as (
+      prev: AgregadoDraft,
+    ) => AgregadoDraft;
+    const next = updater(doorDraft());
+    expect(next.rigidMembers).toHaveLength(1);
+    expect(next.rigidMembers![0]).toMatchObject({
+      memberId: 'rail_center',
+      actorMembership: 'body',
+      placement: { x: { ref: 'min', offsetMm: 0, offsetFormula: 'PW/2' } },
+    });
   });
 });

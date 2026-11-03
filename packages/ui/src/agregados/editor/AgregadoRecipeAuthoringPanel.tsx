@@ -9,7 +9,7 @@
  */
 
 import {
-  useState, type ChangeEvent, type Dispatch, type ReactNode, type SetStateAction, useRef } from 'react';
+  type ChangeEvent, type Dispatch, type ReactNode, type SetStateAction, useRef } from 'react';
 import type {
   Agregado,
   AgregadoRigidMember,
@@ -19,7 +19,7 @@ import type {
 } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
-import { isKitDerivedMember, KitCommercialPicker, kitPartsOf } from './KitCommercialPicker';
+import { isKitDerivedMember, kitPartsOf } from './KitCommercialPicker';
 import type { AgregadoDraft } from '../agregadoDraft';
 import { AgregadoRecipePanel } from './AgregadoRecipePanel';
 // #1451: vocabulario compartido con el nivel «Del cajón» de Herrajes — una
@@ -65,11 +65,12 @@ export function AgregadoRecipeAuthoringPanel({
   const patchDraft = (patch: Partial<AgregadoDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
 
+  // #1462: defaults unificados con la fábrica de Herrajes (fixed_rail + body)
+  // — antes creaba roles side_left/side_right sin membresía, una segunda voz.
   const addMember = () => {
-    const kit = kitId !== '';
     const member: AgregadoRigidMember = {
       memberId: uniqueMemberId(members),
-      role: members.length === 0 ? 'side_left' : members.length === 1 ? 'side_right' : `rol-${members.length + 1}`,
+      role: 'fixed_rail',
       // #1451: sin default encubierto a catalogHardware[0] — el miembro nace
       // sin herraje y queda inválido-visible hasta que el autor elige.
       source: { kind: 'fixed', fixed: { hardwareId: '' } },
@@ -78,7 +79,8 @@ export function AgregadoRecipeAuthoringPanel({
         y: { ref: 'min', offsetMm: 0 },
         z: { ref: 'min', offsetMm: 0 },
       },
-      bomRole: kit ? 'included_in_kit' : 'separately_purchased',
+      bomRole: kitId !== '' ? 'included_in_kit' : 'separately_purchased',
+      actorMembership: 'body',
     };
     patchDraft({ rigidMembers: [...members, member] });
   };
@@ -87,66 +89,6 @@ export function AgregadoRecipeAuthoringPanel({
     patchDraft({
       rigidMembers: members.map((m, i) => (i === idx ? { ...m, ...patch } : m)),
     });
-  };
-
-  // #1418: presets de receta — un clic arma el esqueleto completo; el usuario
-  // ajusta herrajes y offsets después. El kit existente manda (bomRole).
-  // Con miembros existentes pide confirmación explícita (los reemplaza
-  // completos — #1421 rev, sin pérdida silenciosa de autoría).
-  const [presetConfirm, setPresetConfirm] = useState<'drawer-slides' | 'center-rail' | null>(null);
-  const requestPreset = (kind: 'drawer-slides' | 'center-rail') => {
-    if (members.length === 0) {
-      applyPreset(kind);
-      return;
-    }
-    setPresetConfirm(kind);
-  };
-  const applyPreset = (kind: 'drawer-slides' | 'center-rail') => {
-    // #1451: la plantilla arma la estructura; el herraje lo elige el autor en
-    // cada tarjeta — sin herraje implícito del catálogo.
-    const hardwareId = '';
-    const bomRole: AgregadoRigidMember['bomRole'] = kitId !== '' ? 'included_in_kit' : 'separately_purchased';
-    const base = (id: string, role: string): AgregadoRigidMember => ({
-      memberId: id,
-      role,
-      source: { kind: 'fixed', fixed: { hardwareId } },
-      placement: {
-        x: { ref: 'min', offsetMm: 0 },
-        y: { ref: 'min', offsetMm: 0 },
-        z: { ref: 'min', offsetMm: 0 },
-      },
-      bomRole,
-    });
-    if (kind === 'drawer-slides') {
-      const mk = (id: string, role: string, ref: 'min' | 'max', sign: 1 | -1, membership: string): AgregadoRigidMember => ({
-        ...base(id, role),
-        placement: {
-          x: { ref, offsetMm: sign * 10 },
-          y: { ref: 'min', offsetMm: 0 },
-          z: { ref: 'min', offsetMm: 0 },
-        },
-        actorMembership: membership,
-      });
-      patchDraft({
-        rigidMembers: [
-          mk('fixed_rail_left', 'fixed_rail', 'min', 1, 'body'),
-          mk('fixed_rail_right', 'fixed_rail', 'max', -1, 'body'),
-          mk('moving_rail_left', 'moving_rail', 'min', 1, 'actor:drawer'),
-          mk('moving_rail_right', 'moving_rail', 'max', -1, 'actor:drawer'),
-        ],
-      });
-      return;
-    }
-    const centered: AgregadoRigidMember = {
-      ...base('rail_center', 'center_rail'),
-      // ancla min + PW/2 → el riel cae en el CENTRO real (w/2) y acompaña
-      // el ancho; ref 'center' + PW/2 caería en el borde derecho (w).
-      placement: {
-        ...base('rail_center', 'center_rail').placement,
-        x: { ref: 'min', offsetMm: 0, offsetFormula: 'PW/2' },
-      },
-    };
-    patchDraft({ rigidMembers: [centered] });
   };
 
   const removeMember = (idx: number) => {
@@ -262,49 +204,14 @@ export function AgregadoRecipeAuthoringPanel({
         izquierda y la derecha son miembros separados — nunca un espejo.
       </p>
 
-      {/* Kit comercial — #1460: mismo picker que Herrajes (sólo juegos
-          reales, mismo feedback); una sola voz para el kit. */}
-      <section className="agregado-recipe__section" aria-label="Kit comercial">
-        <h5>Kit comercial</h5>
-        <div className="catalog-form__field">
-          <KitCommercialPicker
-            catalogHardware={catalogHardware}
-            value={kitId}
-            onChange={(hardwareId) =>
-              patchDraft({ commercialKitHardwareId: hardwareId })
-            }
-            label="Herraje que se vende como juego"
-            id={`${testId}-kit`}
-            testId={`${testId}-kit`}
-          />
-        </div>
-      </section>
+      {/* #1462: el kit comercial se elige SOLO en la tarjeta «Juego
+          comercial» de la pestaña Herrajes — un campo, un lugar. */}
 
       {/* Miembros rígidos */}
       <section className="agregado-recipe__section" aria-label="Miembros rígidos">
         <div className="agregado-editor__panel-header">
           <h5>Miembros rígidos ({members.length})</h5>
           <div className="agregado-editor__panel-actions">
-            <button
-              type="button"
-              className="btn btn--secondary btn--small"
-              onClick={() => requestPreset('drawer-slides')}
-              disabled={catalogHardware.length === 0}
-              title="Arma 4 miembros: guías fijas a los costados + correderas móviles del cajón"
-              data-testid={`${testId}-preset-drawer-slides`}
-            >
-              Preset: cajón con correderas
-            </button>
-            <button
-              type="button"
-              className="btn btn--secondary btn--small"
-              onClick={() => requestPreset('center-rail')}
-              disabled={catalogHardware.length === 0}
-              title="Arma 1 miembro centrado con fórmula (acompaña el ancho)"
-              data-testid={`${testId}-preset-center-rail`}
-            >
-              Preset: riel centrado
-            </button>
             <button
               type="button"
               className="btn btn--secondary btn--small"
@@ -316,38 +223,6 @@ export function AgregadoRecipeAuthoringPanel({
             </button>
           </div>
         </div>
-        {presetConfirm ? (
-          <div
-            className="agregado-recipe__preset-confirm"
-            role="alertdialog"
-            aria-label="Confirmar reemplazo de miembros"
-            data-testid={`${testId}-preset-confirm`}
-          >
-            <span>
-              ¿Reemplazar los {members.length} miembro(s) actuales por la
-              plantilla?
-            </span>
-            <button
-              type="button"
-              className="btn btn--secondary btn--small"
-              onClick={() => {
-                applyPreset(presetConfirm);
-                setPresetConfirm(null);
-              }}
-              data-testid={`${testId}-preset-confirm-yes`}
-            >
-              Reemplazar
-            </button>
-            <button
-              type="button"
-              className="btn btn--secondary btn--small"
-              onClick={() => setPresetConfirm(null)}
-              data-testid={`${testId}-preset-confirm-no`}
-            >
-              Cancelar
-            </button>
-          </div>
-        ) : null}
         {members.length === 0 ? (
           <p className="catalog-empty">
             Sin miembros. Un miembro es una parte comprada del ensamble (una

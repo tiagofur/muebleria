@@ -323,18 +323,6 @@
   background: var(--surface-muted);
 }
 
-/* ── Hardware tab: level chooser (#1451) ─────────────────────────── */
-
-.agregado-editor__hw-chooser {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--surface-muted);
-}
-
 /* ── Detail view: hardware grouped by anchor level (#1451) ───────── */
 
 .agregado-detail__hw-group {

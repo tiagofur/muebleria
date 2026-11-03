@@ -105,11 +105,17 @@ test.describe.serial('Agregado — presets y anclas con fórmula (#1418)', () =>
     await page.getByTestId('agregado-detail-edit').waitFor({ state: 'visible', timeout: 20_000 });
     await page.getByTestId('agregado-detail-edit').click();
     await page.getByTestId('agregado-editor-page').waitFor({ state: 'visible' });
-    await page.getByRole('tab', { name: 'Receta' }).click();
 
-    // Kit + preset «cajón con correderas» + herraje por miembro (nacen vacíos).
-    await pickCombobox(page, 'agregado-tab-recipe-authoring-kit', new RegExp(HW_CODE));
-    await page.getByTestId('agregado-tab-recipe-authoring-preset-drawer-slides').click();
+    // #1462: el kit se elige en la tarjeta «Juego comercial» (Herrajes) y las
+    // plantillas viven en el menú Plantillas de Del agregado.
+    await page.getByRole('tab', { name: 'Herrajes' }).click();
+    await pickCombobox(page, 'agregado-cajon-hardware-kit', new RegExp(HW_CODE));
+    await page.getByTestId('agregado-cajon-hardware-templates').click();
+    await page.getByTestId('agregado-cajon-hardware-template-pair').click();
+
+    // Herraje por miembro (nacen vacíos): se elige en Receta, que conserva la
+    // autoría avanzada (origen fijo/variante).
+    await page.getByRole('tab', { name: 'Receta' }).click();
     for (let i = 0; i < 4; i += 1) {
       await pickCombobox(
         page,
@@ -152,13 +158,18 @@ test.describe.serial('Agregado — presets y anclas con fórmula (#1418)', () =>
     await page
       .getByTestId('agregado-tab-recipe-authoring-member-3')
       .waitFor({ state: 'visible', timeout: 20_000 });
-    await page.getByTestId('agregado-tab-recipe-authoring-preset-center-rail').click();
-    // Con miembros existentes el preset pide confirmación (#1422 perfección,
-    // sin pérdida silenciosa de autoría): aceptar el reemplazo.
+    // Plantilla «riel centrado» desde el menú Plantillas (Herrajes) —
+    // reemplaza los miembros con 1 fórmula.
+    await page.getByRole('tab', { name: 'Herrajes' }).click();
+    await page.getByTestId('agregado-cajon-hardware-templates').click();
+    await page.getByTestId('agregado-cajon-hardware-template-center-rail').click();
+    // Con miembros existentes la plantilla pide confirmación (#1422
+    // perfección, sin pérdida silenciosa de autoría): aceptar el reemplazo.
     await page
-      .getByTestId('agregado-tab-recipe-authoring-preset-confirm-yes')
+      .getByTestId('agregado-cajon-hardware-preset-confirm-yes')
       .click({ timeout: 5_000 });
     // El miembro del preset nace sin herraje (#1451): elegirlo antes de guardar.
+    await page.getByRole('tab', { name: 'Receta' }).click();
     await pickCombobox(
       page,
       'agregado-tab-recipe-authoring-member-0-source-hardware',
