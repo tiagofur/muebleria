@@ -96,6 +96,55 @@ class DrawerActorsTest < Minitest::Test
     assert_includes hw_names, 'slide-mov'
   end
 
+  # #1464 seguimiento — el emparejado por Z debe usar el BORDE VISUAL
+  # (bounds), nunca el origen de la transformación: la caja llega con
+  # tableros rotados (traseras rotateY 90) cuyo origen cae por debajo de su
+  # cajón — el orden por origen emparejaba cada frente con la caja equivocada
+  # (apertura cruzada: la caja de arriba salía con el frente de abajo).
+  def rotated_box_child(definition, id, assembly_id:, origin_z:, bounds_min_z:, bounds_max_z:)
+    t = Geom::Transformation.translation(Geom::Vector3d.new(0, 0, origin_z / 25.4))
+    child = new_child(definition, id, transform: t)
+    bb = Geom::BoundingBox.new(50, 15, bounds_max_z - bounds_min_z)
+    bb.min = Geom::Point3d.new(0.0, 0.0, bounds_min_z)
+    bb.max = Geom::Point3d.new(50.0, 15.0, bounds_max_z)
+    child.bounds = bb
+    @store.write(child, child_metadata(id, {
+                                         'entityClass' => 'part',
+                                         'placement' => 'trasera',
+                                         'role' => 'INTERIOR',
+                                         'assemblyInstanceId' => assembly_id
+                                       }, identity_id: id))
+    child
+  end
+
+  def test_pairs_drawers_by_visual_bounds_not_rotated_origins
+    furniture = build_furniture do |definition|
+      # Cajón de abajo: tablero sin rotar — origen = bounds = 30.
+      drawer_front_child(definition, 'front-bottom', pos_z: 30.0)
+      drawer_box_child(definition, 'box-bottom', assembly_id: 'asm-bottom', pos_z: 30.0)
+      slide_rail_child(definition, 'slide-bottom', assembly_id: 'asm-bottom', membership: 'actor:drawer', pos_z: 30.0)
+
+      # Cajón de arriba con tablero ROTADO: origen z=0 (engañoso), bounds 350-500.
+      rotated_box_child(definition, 'box-top-rotated', assembly_id: 'asm-top',
+                        origin_z: 0.0, bounds_min_z: 350.0, bounds_max_z: 500.0)
+      slide_rail_child(definition, 'slide-top', assembly_id: 'asm-top', membership: 'actor:drawer', pos_z: 350.0)
+      drawer_front_child(definition, 'front-top', pos_z: 350.0)
+    end
+
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_equal 2, scanned.drawers.length
+    bottom = scanned.drawers.find { |d| d.components.map(&:name).include?('front-bottom') }
+    top = scanned.drawers.find { |d| d.components.map(&:name).include?('front-top') }
+    refute_nil bottom, 'el frente de abajo debe quedar en un cajón'
+    refute_nil top, 'el frente de arriba debe quedar en un cajón'
+    # El frente de abajo va con la caja de ABAJO, nunca cruzado.
+    assert_includes bottom.components.map(&:name), 'box-bottom'
+    refute_includes bottom.components.map(&:name), 'box-top-rotated'
+    assert_includes top.components.map(&:name), 'box-top-rotated'
+    refute_includes top.components.map(&:name), 'box-bottom'
+  end
+
   def test_pairs_multiple_drawers_by_vertical_z_order
     furniture = build_furniture do |definition|
       # Lower drawer (Z = 30)
@@ -228,8 +277,9 @@ class DrawerActorsTest < Minitest::Test
     child
   end
 
-  def slide_rail_child(definition, id, assembly_id:, membership:)
-    child = new_child(definition, id)
+  def slide_rail_child(definition, id, assembly_id:, membership:, pos_z: nil)
+    t = pos_z ? Geom::Transformation.translation(Geom::Vector3d.new(0, 0, pos_z / 25.4)) : Geom::Transformation.new
+    child = new_child(definition, id, transform: t)
     @store.write(child, child_metadata(id, {
                                          'entityClass' => 'hardware',
                                          'assemblyInstanceId' => assembly_id,
