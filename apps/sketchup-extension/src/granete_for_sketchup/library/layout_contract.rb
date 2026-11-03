@@ -1047,7 +1047,7 @@ module Granete
       # (those cannot recover orientation; see the negative-proof tests) and
       # has NO fallback path: a missing/unknown transform contract or a
       # malformed basis fails loudly so clients never place pieces on a guess.
-      module LayoutContract
+      module LayoutContract # rubocop:disable Metrics/ModuleLength
         SUPPORTED_TRANSFORM_CONTRACT = 'granete.local-basis.v1'
         IDENTITY_KEYS = %w[componentDefinitionId catalogComponentId role optionRole].freeze
         MATERIAL_STRING_KEYS = %w[materialId materialCode materialName materialColorHex
@@ -1088,6 +1088,7 @@ module Granete
                            dimensions_mm: ContractCoercions.optional_triple(body['dimensionsMm'], 'dimensionsMm'))
         end
 
+        # rubocop:disable-next Metrics/AbcSize
         def parse_board(raw)
           raise ContractError, 'Componente de composición inválido' unless raw.is_a?(Hash)
 

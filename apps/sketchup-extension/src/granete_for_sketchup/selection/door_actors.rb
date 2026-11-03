@@ -3,31 +3,30 @@
 module Granete
   module SketchUpExtension
     module Selection
-        # Discovers the opening actors (doors and drawers) of one managed
-        # furniture occurrence from MANAGED METADATA ONLY (#529 / #1377):
-        # - Doors: part entities whose placement slot is 'puerta' or whose role
-        #   names a door.
-        # - Drawers: composed sub-assemblies clustering the drawer front,
-        #   fabricated drawer box components, handles, and slide rails.
-        #
-        # Grouping keys, in order of authority (#1468):
-        #   1. Explicit `assemblyInstanceId` on the child metadata (rails carry
-        #      it from the layout contract; box boards too since the engine
-        #      seals it on agregado-expanded components).
-        #   2. Legacy layouts emit the agregado-expanded drawer box boards as
-        #      top-level components WITHOUT assemblyInstanceId, but the server
-        #      embeds the assembly instance id inside the board's own
-        #      componentInstanceId (`agr-<agrId>-instance-<asmId>-u<idx>-…`).
-        #      Those boards join the rail group whose assemblyInstanceId is a
-        #      substring of their componentInstanceId. Cabinet structure boards
-        #      (`st-…` ids) never match.
-        #
-        # Hardware membership: 'actor:drawer' rides the drawer; 'body' stays
-        # with the furniture body; a MISSING membership (legacy metadata) is
-        # treated as drawer hardware best-effort — a fresh re-sync writes the
-        # explicit membership and the fixed rails stay behind again.
-        #
-        # Never inspects display names or visual geometry for identity.
+      # Discovers the opening actors (doors and drawers) of one managed
+      # furniture occurrence from MANAGED METADATA ONLY (#529 / #1377):
+      # - Doors: part entities whose placement slot is 'puerta' or whose role
+      #   names a door.
+      # - Drawers: composed sub-assemblies clustering the drawer front,
+      #   fabricated drawer box components, handles, and slide rails.
+      #
+      # Grouping keys, in order of authority (#1468):
+      #   1. Explicit `assemblyInstanceId` on the child metadata (rails carry
+      #      it from the layout contract; box boards too since the engine
+      #      seals it on agregado-expanded components).
+      #   2. Legacy layouts emit the agregado-expanded drawer box boards as
+      #      top-level components WITHOUT assemblyInstanceId, but the server
+      #      embeds the assembly instance id inside the board's own
+      #      componentInstanceId (`agr-<agrId>-instance-<asmId>-u<idx>-…`).
+      #      Those boards join the rail group whose assemblyInstanceId is a
+      #      substring of their componentInstanceId. Cabinet structure boards
+      #      (`st-…` ids) never match.
+      #
+      # Hardware membership: 'actor:drawer' rides the drawer; 'body' stays
+      # with the furniture body; a MISSING membership (legacy metadata) is
+      # treated as drawer hardware best-effort — a fresh re-sync writes the
+      # explicit membership and the fixed rails stay behind again.
+      # Never inspects display names or visual geometry for identity.
       #
       # Shared by the Selection::Resolver (publishes opening actors on the
       # furniture payload for the Inspector) and by the InspectorBridge (feeds
