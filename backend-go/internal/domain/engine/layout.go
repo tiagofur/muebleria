@@ -129,6 +129,11 @@ type LayoutComponent struct {
 	LengthMm                    int                        `json:"lengthMm"`
 	WidthMm                     int                        `json:"widthMm"`
 	ThicknessMm                 int                        `json:"thicknessMm"`
+	// #1464: assemblyInstanceId del ensamble dueño de esta pieza cuando el
+	// board nace de un agregado — el mismo id que `assemblies[]`. Sin él el
+	// host no puede agrupar la caja del cajón con su frente y sus rieles
+	// (DoorActors) y la apertura del cajón queda partida.
+	AssemblyInstanceID          string                     `json:"assemblyInstanceId,omitempty"`
 	AuthoringCapability         *LayoutAuthoringCapability `json:"authoringCapability,omitempty"`
 	OptionRole                  string                     `json:"optionRole,omitempty"`
 	MaterialID                  string                     `json:"materialId,omitempty"`
@@ -271,6 +276,10 @@ type layoutBoard struct {
 	// role the opening body modifiers address — the depth-reduction pass
 	// selects its boards by it, never by name. Empty on legacy flat parts.
 	constructiveRole string
+	// assemblyInstanceID (#1464): the owning agregado assembly instance id —
+	// the SAME id the assemblies[] path derives (shared helper), so the host
+	// groups caja + frente + rieles of one drawer together.
+	assemblyInstanceID string
 	x, y, z          float64 // workshop min corner of the AABB
 	rotX, rotY       float64
 	rotZ             float64
@@ -442,6 +451,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			WidthMm:               int(math.Round(board.widthMm)),
 			ThicknessMm:           int(math.Round(board.thicknessMm)),
 			OptionRole:            board.optionRole,
+			AssemblyInstanceID:    board.assemblyInstanceID,
 			MaterialColorHex:      colorForOptionRole(board.optionRole),
 			Notches:               board.notches,
 			Bevels:                board.bevels,
@@ -682,12 +692,7 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 				}
 			}
 
-			instID := agrInst.ID
-			if instID == "" {
-				instID = fmt.Sprintf("asm-%s-%d", agrInst.AgregadoID, unit.index)
-			} else if qty > 1 {
-				instID = fmt.Sprintf("asm-%s-u%d", instID, unit.index)
-			}
+			instID := agregadoAssemblyInstanceID(agrInst, qty, unit.index)
 
 			assemblies = append(assemblies, LayoutAssembly{
 				AssemblyInstanceID: instID,
@@ -706,6 +711,21 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 		}
 	}
 	return assemblies
+}
+
+// #1464: identidad de ensamble compartida por las DOS vías que materializan
+// un agregado — `assemblies[]` (rieles, vía ResolveAgregadoAssembly) y
+// `components[]` (tableros de la caja/frente, vía expandLayoutAgregado). El
+// host agrupa la apertura del cajón por este id: si las vías difieren en un
+// carácter, la caja queda fuera del grupo y el frente abre solo.
+func agregadoAssemblyInstanceID(agrInst domain.ModuleAgregadoInstance, qty int, unitIndex int) string {
+	if agrInst.ID != "" {
+		if qty > 1 {
+			return fmt.Sprintf("asm-%s-u%d", agrInst.ID, unitIndex)
+		}
+		return agrInst.ID
+	}
+	return fmt.Sprintf("asm-%s-%d", agrInst.AgregadoID, unitIndex)
 }
 
 func parseKitPartPlacementLabelGo(label string) (domain.AssemblyAxisRef, float64, float64, float64, bool) {
@@ -1393,6 +1413,9 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 			HeightMm: int(math.Round(unit.h)),
 			DepthMm:  int(math.Round(unit.d)),
 		}
+		// #1464: el MISMO id que la vía de assemblies deriva para esta unidad —
+		// sellado en cada board para que DoorActors agrupe caja+frente+rieles.
+		assemblyInstanceID := agregadoAssemblyInstanceID(agrInst, quantity, unit.index)
 		// #442: agregado components follow the same effective-base-mode
 		// filtering as the BOM so the visual cannot show a zoclo part the
 		// quote excludes.
@@ -1406,6 +1429,7 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 			unitBoards[i].x += unit.x
 			unitBoards[i].y += unit.y
 			unitBoards[i].z += unit.z
+			unitBoards[i].assemblyInstanceID = assemblyInstanceID
 		}
 		boards = append(boards, unitBoards...)
 	}
