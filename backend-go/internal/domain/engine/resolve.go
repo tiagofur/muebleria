@@ -817,7 +817,9 @@ type formulaDims struct {
 	N int
 }
 
-// evaluatePartFormula evaluates simple math with W/H/D/PW/PH/PD/T/B/HW/i/N (TS parity).
+// evaluatePartFormula evaluates simple math with W/H/D/PW/PH/PD/T/B/HW/i/N/IW (TS parity).
+// IW = interior width, derived as parentW − 2*T (#1470); 0-T contexts (agregados)
+// resolve IW = parentW, same as writing PW-2*T there.
 func evaluatePartFormula(formula string, dims formulaDims) (int, error) {
 	trimmed := strings.TrimSpace(formula)
 	if trimmed == "" {
@@ -827,7 +829,7 @@ func evaluatePartFormula(formula string, dims formulaDims) (int, error) {
 	for _, r := range clean {
 		// Allow '.' for decimal literals (e.g. "1.5", "W * 1.5") — parser already handles them.
 		if unicode.IsDigit(r) || r == '.' || r == 'W' || r == 'H' || r == 'D' ||
-			r == 'P' || r == 'T' || r == 'B' || r == 'L' || r == 'i' ||
+			r == 'P' || r == 'T' || r == 'B' || r == 'L' || r == 'I' || r == 'i' ||
 			r == 'N' ||
 			r == '+' || r == '-' || r == '*' || r == '/' || r == '(' || r == ')' {
 			continue
@@ -952,6 +954,12 @@ func (p *formulaParser) parseFactor() (float64, error) {
 		return v, nil
 	}
 	// Multi-char parent vars before single-letter W/H/D (TS substitutes PW before W).
+	// IW is the derived interior width (parentW − 2*T, #1470); checked before the
+	// single-letter letters so its leading I is never consumed (no single I var).
+	if strings.HasPrefix(p.s[p.i:], "IW") {
+		p.i += 2
+		return float64(p.parentW() - 2*p.dims.T), nil
+	}
 	if strings.HasPrefix(p.s[p.i:], "PW") {
 		p.i += 2
 		return float64(p.parentW()), nil

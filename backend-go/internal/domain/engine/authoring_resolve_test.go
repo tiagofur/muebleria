@@ -1837,3 +1837,42 @@ func TestAuthoringResolveExplicitRoleEnforced(t *testing.T) {
 		t.Fatal("hardware with CompatibleRoles=[LATERAL] must be rejected as HARDWARE_INCOMPATIBLE on FRENTE host")
 	}
 }
+
+// #1470 round-trip golden: the derived IW variable must expand to parts
+// identical to the explicit PW - 2*T form it replaces (same board parts, so
+// cut lists and CNC stay byte-equal). The TS twin lives in engine.test.ts.
+func TestInteriorWidthFormulaProducesIdenticalPartsToExplicitForm(t *testing.T) {
+	choices := map[string]string{"FRENTE": "mat-oak18"}
+	withMaterials := func(c domain.Catalog) domain.Catalog {
+		c.Materials = []domain.MaterialBoard{
+			{ID: "mat-oak18", Code: "ROBLE-CLARO", Name: "Roble Claro", ThicknessMm: 18, PreviewColor: "#c4a574", Active: true},
+		}
+		return c
+	}
+
+	module, catalog := authoringCabinetCatalog()
+	reference, err := ResolveFurnitureLayout(module, withMaterials(catalog), nil, choices)
+	if err != nil {
+		t.Fatalf("reference layout: %v", err)
+	}
+
+	moduleIW, catalogIW := authoringCabinetCatalog()
+	swapped := 0
+	for i := range catalogIW.Components {
+		if catalogIW.Components[i].LengthFormula == "PW - 2*T" {
+			catalogIW.Components[i].LengthFormula = "IW"
+			swapped++
+		}
+	}
+	if swapped != 4 { // floor + its top clone + back + shelf
+		t.Fatalf("expected 4 components to swap to IW, got %d", swapped)
+	}
+	iwLayout, err := ResolveFurnitureLayout(moduleIW, withMaterials(catalogIW), nil, choices)
+	if err != nil {
+		t.Fatalf("IW layout: %v", err)
+	}
+
+	if !reflect.DeepEqual(iwLayout.Components, reference.Components) {
+		t.Fatalf("IW round-trip drifted from the explicit PW - 2*T form:\n got %+v\nwant %+v", iwLayout.Components, reference.Components)
+	}
+}
