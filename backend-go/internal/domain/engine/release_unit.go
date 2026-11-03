@@ -183,7 +183,7 @@ func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalo
 	}
 	prepared := ApplyEvaluatedComponentBindings(module, values)
 	prepared = ApplyEvaluatedAgregadoBindings(prepared, values)
-	if err := validateReleaseUnitExpansion(prepared, catalog, collection); err != nil {
+	if err := validateReleaseUnitExpansion(prepared, catalog, collection, item.MaterialChoices); err != nil {
 		return nil, fmt.Errorf("release unit expansion: %w", err)
 	}
 	// #727: publishedDesignAuthority — the item's explicit dimensions are the
@@ -259,7 +259,7 @@ func ConsumedOptionRoles(module domain.Module, choices map[string]string, catalo
 		}
 	}
 	catalogLineIDs := map[string]bool{}
-	for _, line := range collectAllHardwareLines(module, catalog) {
+	for _, line := range collectAllHardwareLines(module, catalog, choices) {
 		catalogLineIDs[line.ID] = true
 		if line.HardwareID == "" {
 			for _, resolved := range bom.HardwareLines {

@@ -17,6 +17,11 @@ import {
 } from './jointDrillingRules';
 import { resolvePartDrilling, type ResolvedPartDrilling } from './partDrillingResolver';
 import { effectiveOptionChoices } from './optionChoices';
+import {
+  calculateAgregadoSubspaceUnits,
+  resolveEffectiveAgregadoId,
+  type SubspaceUnit,
+} from './agregados';
 import type {
   Agregado,
   Catalog,
@@ -24,6 +29,7 @@ import type {
   JointDrillingRules,
   Module,
   ModuleComponentInstance,
+  OptionChoices,
   Project,
   ProjectItem,
   ResolvedBoardPart,
@@ -116,6 +122,7 @@ export function agregadoManualPlacementsForPart(
   structure: Structure | undefined,
   module: Pick<Module, 'agregados'> | undefined,
   catalogAgregados: readonly Agregado[],
+  optionChoices?: OptionChoices,
 ): AgregadoPlacementLookup {
   if (!partId.startsWith('agr-')) return { placements: [] };
 
@@ -125,27 +132,30 @@ export function agregadoManualPlacementsForPart(
   ];
   const countByAgregadoId = new Map<string, number>();
   for (const inst of instances) {
+    const effectiveId = resolveEffectiveAgregadoId(inst, optionChoices);
     countByAgregadoId.set(
-      inst.agregadoId,
-      (countByAgregadoId.get(inst.agregadoId) ?? 0) + 1,
+      effectiveId,
+      (countByAgregadoId.get(effectiveId) ?? 0) + 1,
     );
   }
 
   for (const inst of instances) {
+    const effectiveAgregadoId = resolveEffectiveAgregadoId(inst, optionChoices);
+    if (!effectiveAgregadoId) continue;
     // Mirrors bom.ts instanceTag: only repeated instances disambiguate with
     // the persisted instance id (a repeated instance without one throws in
     // the BOM long before drilling runs).
     const tags =
-      (countByAgregadoId.get(inst.agregadoId) ?? 0) > 1
+      (countByAgregadoId.get(effectiveAgregadoId) ?? 0) > 1
         ? [`instance-${(inst.id ?? '').trim()}-`]
         : [''];
     for (const tag of tags) {
       const units = Math.max(1, inst.quantity);
       for (let unit = 0; unit < units; unit++) {
-        const prefix = `agr-${inst.agregadoId}-${tag}u${unit}-`;
+        const prefix = `agr-${effectiveAgregadoId}-${tag}u${unit}-`;
         if (!partId.startsWith(prefix)) continue;
         const componentId = partId.slice(prefix.length).match(/^(.+)-copy-\d+$/)?.[1];
-        const agregado = catalogAgregados.find((a) => a.id === inst.agregadoId);
+        const agregado = catalogAgregados.find((a) => a.id === effectiveAgregadoId);
         const component = agregado?.components?.find(
           (c) => c.componentId === componentId,
         );
@@ -294,6 +304,7 @@ export function resolveProjectDrilling(
           structure,
           module,
           catalog.agregados ?? [],
+          choicesByKey.get(cacheKey),
         )
       : undefined;
     if (agregadoForPart?.unresolved && !reportedUnresolvedHosts.has(agregadoForPart.unresolved)) {

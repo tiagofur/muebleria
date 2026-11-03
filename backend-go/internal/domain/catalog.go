@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"time"
@@ -72,6 +73,33 @@ type MaterialBoard struct {
 	// Version is server-owned optimistic-concurrency state (#443/#448):
 	// writes carry the expected version as If-Match and the server bumps it.
 	Version int64 `json:"version"`
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for MaterialBoard to support
+// both camelCase (contracts, TS client wire) and snake_case (internal Go/DB).
+func (m *MaterialBoard) UnmarshalJSON(data []byte) error {
+	type Alias MaterialBoard
+	aux := struct {
+		*Alias
+		ThicknessMmCamel *int `json:"thicknessMm"`
+		WidthMmCamel     *int `json:"widthMm"`
+		LengthMmCamel    *int `json:"lengthMm"`
+	}{
+		Alias: (*Alias)(m),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if aux.ThicknessMmCamel != nil {
+		m.ThicknessMm = *aux.ThicknessMmCamel
+	}
+	if aux.WidthMmCamel != nil {
+		m.WidthMm = *aux.WidthMmCamel
+	}
+	if aux.LengthMmCamel != nil {
+		m.LengthMm = *aux.LengthMmCamel
+	}
+	return nil
 }
 
 type EdgeBand struct {
@@ -274,6 +302,37 @@ type HardwareLine struct {
 	// N of #1383/#1384); zero copies drop the line. Empty keeps the line
 	// fixed (module bulk hardware) — existing catalogs change no behavior.
 	ComponentID string `json:"component_id,omitempty"`
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for HardwareLine to support
+// both camelCase (hardwareId, optionRole) and snake_case (hardware_id, option_role).
+func (h *HardwareLine) UnmarshalJSON(data []byte) error {
+	type Alias HardwareLine
+	aux := struct {
+		*Alias
+		HardwareIDCamel string `json:"hardwareId"`
+		OptionRoleCamel string `json:"optionRole"`
+		ComponentIDCamel string `json:"componentId"`
+		DescriptionOverrideCamel string `json:"descriptionOverride"`
+	}{
+		Alias: (*Alias)(h),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if aux.HardwareIDCamel != "" {
+		h.HardwareID = aux.HardwareIDCamel
+	}
+	if aux.OptionRoleCamel != "" {
+		h.OptionRole = aux.OptionRoleCamel
+	}
+	if aux.ComponentIDCamel != "" {
+		h.ComponentID = aux.ComponentIDCamel
+	}
+	if aux.DescriptionOverrideCamel != "" {
+		h.DescriptionOverride = aux.DescriptionOverrideCamel
+	}
+	return nil
 }
 
 // ModuleCategory is a node in a user-defined tree (max depth 3).

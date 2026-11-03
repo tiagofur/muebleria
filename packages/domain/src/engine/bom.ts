@@ -13,6 +13,7 @@ import {
 import {
   calculateAgregadoSubspaceUnits,
   resolveAgregadoInstance,
+  resolveEffectiveAgregadoId,
   type SubspaceUnit,
 } from '../agregados';
 import {
@@ -738,11 +739,13 @@ export function resolveComposedModule(
   // (resolve.go instanceTag): `agr-<id>-instance-<iid>-u<N>-`. Single
   // instances keep the historical tagless prefix. A repeated instance without
   // a stable id is a data-integrity error, never a silent collision.
+  // #1472/#1473: counts and identity keys use the effectiveAgregadoId resolved by role.
   const agregadoInstanceCount = new Map<string, number>();
   for (const agrInst of allAgregadoInstances) {
+    const effectiveId = resolveEffectiveAgregadoId(agrInst, optionChoices);
     agregadoInstanceCount.set(
-      agrInst.agregadoId,
-      (agregadoInstanceCount.get(agrInst.agregadoId) ?? 0) + 1,
+      effectiveId,
+      (agregadoInstanceCount.get(effectiveId) ?? 0) + 1,
     );
   }
   const seenAgregadoInstanceIds = new Set<string>();
@@ -752,34 +755,45 @@ export function resolveComposedModule(
   const PD = dims.depth;
 
   for (const agrInst of allAgregadoInstances) {
-    const agregado = catalogAgregados.find((a) => a.id === agrInst.agregadoId);
+    const effectiveAgregadoId = resolveEffectiveAgregadoId(agrInst, optionChoices);
+    if (!effectiveAgregadoId) {
+      throw new ResolutionError(
+        `Agregado role '${agrInst.optionRole}' has no selection and instance has no fallback agregadoId`,
+        {
+          optionRole: agrInst.optionRole,
+          field: 'agregadoId',
+        },
+      );
+    }
+    const agregado = catalogAgregados.find((a) => a.id === effectiveAgregadoId);
     // R-5: throw loudly when an agregadoId references nothing in the catalog.
     // A silent `continue` here would produce an incomplete BOM without any
     // warning — the worst kind of data-integrity bug (typo → missing pieces).
     if (!agregado) {
       throw new ResolutionError(
-        `Agregado not found: ${agrInst.agregadoId}`,
+        `Agregado not found: ${effectiveAgregadoId}`,
         {
-          agregadoId: agrInst.agregadoId,
+          agregadoId: effectiveAgregadoId,
+          optionRole: agrInst.optionRole,
           field: 'agregadoId',
         },
       );
     }
 
     let instanceTag = '';
-    if ((agregadoInstanceCount.get(agrInst.agregadoId) ?? 0) > 1) {
+    if ((agregadoInstanceCount.get(effectiveAgregadoId) ?? 0) > 1) {
       const instanceId = (agrInst.id ?? '').trim();
       if (!instanceId) {
         throw new ResolutionError(
-          `repeated agregado ${agrInst.agregadoId} requires a stable instance id`,
-          { agregadoId: agrInst.agregadoId, field: 'id' },
+          `repeated agregado ${effectiveAgregadoId} requires a stable instance id`,
+          { agregadoId: effectiveAgregadoId, field: 'id' },
         );
       }
-      const identityKey = `${agrInst.agregadoId}\u0000${instanceId}`;
+      const identityKey = `${effectiveAgregadoId}\u0000${instanceId}`;
       if (seenAgregadoInstanceIds.has(identityKey)) {
         throw new ResolutionError(
-          `repeated agregado ${agrInst.agregadoId} has duplicate instance id ${instanceId}`,
-          { agregadoId: agrInst.agregadoId, field: 'id' },
+          `repeated agregado ${effectiveAgregadoId} has duplicate instance id ${instanceId}`,
+          { agregadoId: effectiveAgregadoId, field: 'id' },
         );
       }
       seenAgregadoInstanceIds.add(identityKey);
@@ -880,7 +894,7 @@ export function resolveComposedModule(
         );
 
     for (const unit of units) {
-      const unitInst = { ...agrInst, quantity: 1 };
+      const unitInst = { ...agrInst, agregadoId: effectiveAgregadoId, quantity: 1 };
       const res = resolveAgregadoInstance(
         unitInst,
         catalogAgregados,
@@ -900,7 +914,7 @@ export function resolveComposedModule(
       const unitParts = expandComponentInstances(
         filteredComponents,
         catalog,
-        `agr-${agrInst.agregadoId}-${instanceTag}u${unit.unitIndex}-`,
+        `agr-${effectiveAgregadoId}-${instanceTag}u${unit.unitIndex}-`,
         { width: unit.width, height: unit.height, depth: unit.depth },
         optionChoices,
         B,
