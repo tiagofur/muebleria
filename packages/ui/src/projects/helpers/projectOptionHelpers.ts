@@ -159,6 +159,7 @@ export function optionLabelForId(
     readonly materials: readonly MaterialBoard[];
     readonly edges: readonly EdgeBand[];
     readonly hardware: readonly Hardware[];
+    readonly agregados?: readonly Agregado[];
   },
 ): string {
   const opt = optionsForGroup(group, catalogs).find((o) => o.id === optionId);

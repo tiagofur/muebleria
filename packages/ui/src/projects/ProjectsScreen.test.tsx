@@ -14,6 +14,7 @@ import { resetRequestCreateKeyConsumers } from '../common/consumeRequestCreateKe
 import type { ProjectDetailQuoteAuthority } from './components/projectDetailContext';
 import { demoExperience } from '../demoExperience';
 import type {
+  Agregado,
   Customer,
   EdgeBand,
   Hardware,
@@ -1601,6 +1602,78 @@ describe('ProjectsScreen F022', () => {
       expect.objectContaining({
         id: 'item-1',
         optionChoices: { FRENTE: 'mat-c' },
+      }),
+    );
+  });
+
+  it('renders and updates agregado option groups at project and item levels (#1475)', async () => {
+    const user = userEvent.setup();
+    const agregadoGroup: OptionGroup = {
+      id: 'og-cajon',
+      code: 'SISTEMA_CAJON',
+      name: 'Sistema de Cajón',
+      kind: 'agregado',
+      required: true,
+      optionIds: ['agr-blum-merivobox', 'agr-telescopico'],
+    };
+    const catalogAgregados: Agregado[] = [
+      { id: 'agr-blum-merivobox', code: 'MERIVOBOX', name: 'Blum Merivobox' },
+      { id: 'agr-telescopico', code: 'TELESCOPICO', name: 'Cajón Telescópico' },
+    ];
+    const moduleWithAgregado: Module = {
+      id: 'mod-cajonero',
+      code: 'CAJONERO',
+      name: 'Cajonero 3 cajones',
+      hardwareLines: [],
+      agregados: [
+        {
+          id: 'inst-1',
+          agregadoId: 'agr-blum-merivobox',
+          optionRole: 'SISTEMA_CAJON',
+          quantity: 3,
+        },
+      ],
+    };
+    const projectsWithAgregado: Project[] = [
+      {
+        ...projects[0]!,
+        items: [
+          {
+            id: 'item-caj',
+            moduleId: 'mod-cajonero',
+            quantity: 1,
+            optionChoices: {},
+          },
+        ],
+      },
+    ];
+
+    const { onUpdateProjectLevelChoices, onUpdateItem } = renderScreen({
+      projects: projectsWithAgregado,
+      modules: [moduleWithAgregado],
+      optionGroups: [agregadoGroup],
+      catalogAgregados,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+
+    // Project-level default choice for agregado group
+    const projectAgregadoSelect = screen.getByTestId('project-level-choice-SISTEMA_CAJON');
+    expect(projectAgregadoSelect).toBeTruthy();
+    await user.selectOptions(projectAgregadoSelect, 'agr-telescopico');
+    expect(onUpdateProjectLevelChoices).toHaveBeenCalledWith('prj-1', {
+      SISTEMA_CAJON: 'agr-telescopico',
+    });
+
+    // Item-level override for agregado group
+    const itemAgregadoSelect = screen.getByTestId('item-choice-item-caj-SISTEMA_CAJON');
+    expect(itemAgregadoSelect).toBeTruthy();
+    await user.selectOptions(itemAgregadoSelect, 'agr-blum-merivobox');
+    expect(onUpdateItem).toHaveBeenCalledWith(
+      'prj-1',
+      expect.objectContaining({
+        id: 'item-caj',
+        optionChoices: { SISTEMA_CAJON: 'agr-blum-merivobox' },
       }),
     );
   });

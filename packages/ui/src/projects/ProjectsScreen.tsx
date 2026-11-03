@@ -766,6 +766,7 @@ export function ProjectsScreen({
           catalogs={state.catalogs}
           catalogComponents={catalogComponents}
           catalogStructures={catalogStructures}
+          catalogAgregados={catalogAgregados}
           customers={customers}
           ownerLabels={ownerLabels}
           quoteAuthority={quoteAuthority}

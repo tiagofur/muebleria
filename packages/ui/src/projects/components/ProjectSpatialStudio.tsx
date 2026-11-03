@@ -1126,8 +1126,9 @@ export function ProjectSpatialStudio({
       materials: catalog.materials,
       edges: catalog.edges,
       hardware: catalog.hardware,
+      agregados: catalog.agregados,
     }),
-    [catalog.materials, catalog.edges, catalog.hardware],
+    [catalog.materials, catalog.edges, catalog.hardware, catalog.agregados],
   );
 
   /** Wall frames in displayed (shifted) space for 3D drag along wall. */

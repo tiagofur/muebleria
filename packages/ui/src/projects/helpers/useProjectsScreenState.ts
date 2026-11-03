@@ -193,8 +193,8 @@ export function useProjectsScreenState({
   const [templatesManagementOpen, setTemplatesManagementOpen] = useState(false);
 
   const catalogs = useMemo(
-    () => ({ materials, edges, hardware }),
-    [materials, edges, hardware],
+    () => ({ materials, edges, hardware, agregados: catalogAgregados }),
+    [materials, edges, hardware, catalogAgregados],
   );
 
   const project3dCatalog = useMemo(

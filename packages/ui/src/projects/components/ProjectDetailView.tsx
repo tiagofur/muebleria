@@ -11,6 +11,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type {
+  Agregado,
   Component,
   Customer,
   ExportIssue,
@@ -96,6 +97,7 @@ export interface ProjectDetailViewProps {
   /** Needed so line pickers resolve INTERIOR/FRENTE from structure components. */
   readonly catalogComponents?: readonly Component[];
   readonly catalogStructures?: readonly Structure[];
+  readonly catalogAgregados?: readonly Agregado[];
   readonly customers: readonly Customer[];
   readonly ownerLabels: Readonly<Record<string, string>>;
   readonly quoteAuthority?: ProjectDetailContextValue['quoteAuthority'];
@@ -784,6 +786,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     catalogs,
     catalogComponents = [],
     catalogStructures = [],
+    catalogAgregados = [],
     customers,
     ownerLabels,
     quoteAuthority,
@@ -897,6 +900,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       catalogs,
       catalogComponents,
       catalogStructures,
+      catalogAgregados,
       customers,
       ownerLabels,
       quoteAuthority,
@@ -1004,6 +1008,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       catalogs,
       catalogComponents,
       catalogStructures,
+      catalogAgregados,
       customers,
       ownerLabels,
       quoteAuthority,
