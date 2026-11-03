@@ -15,7 +15,6 @@
  */
 
 import {
-  useRef,
   useState,
   type Dispatch,
   type ReactNode,
@@ -31,6 +30,7 @@ import type {
 import { evaluatePartFormula, resolveHardwareDimensions } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
+import { DropdownMenu } from '../../common/DropdownMenu';
 import { isKitDerivedMember, KitCommercialPicker, kitPartsOf } from './KitCommercialPicker';
 import type { AgregadoDraft } from '../agregadoDraft';
 
@@ -228,20 +228,13 @@ export function AgregadoCajonHardwareSection({
     patchDraft({ rigidMembers: members.filter((_, i) => i !== idx) });
   };
 
-  // #1462: plantillas del taller en UN lugar (menú Plantillas) — el par
-  // izq/der y el riel centrado reemplazan los miembros con confirmación.
-  // Herraje vacío a propósito: el usuario elige el herraje real en cada
-  // tarjeta — sin default encubierto.
+  // #1462: plantillas del taller en UN lugar — DropdownMenu común (Esc,
+  // click-afuera y flechas resueltos por el componente, sugerencia de review).
+  // Reemplazan miembros: con contenido piden confirmación.
   const [presetConfirm, setPresetConfirm] = useState<'pair' | 'center-rail' | null>(
     null,
   );
-  // #1462: <details> no se cierra solo al elegir — el botón cierra el menú.
-  const templatesRef = useRef<HTMLDetailsElement | null>(null);
-  const closeTemplates = () => {
-    if (templatesRef.current) templatesRef.current.open = false;
-  };
   const requestTemplate = (kind: 'pair' | 'center-rail') => {
-    closeTemplates();
     if (members.length === 0) {
       if (kind === 'pair') applyPairPreset();
       else applyCenterRailPreset();
@@ -319,41 +312,36 @@ export function AgregadoCajonHardwareSection({
           >
             <Plus size={14} /> Añadir herraje
           </button>
-          {/* #1462: las plantillas viven acá — un solo lugar, sin copias en
-              Receta. Reemplazan miembros: con contenido piden confirmación. */}
-          <details
-            ref={templatesRef}
-            className="agregado-editor__templates"
-            data-testid={`${testId}-templates`}
-          >
-            <summary className="btn btn--secondary btn--small">Plantillas</summary>
-            <div
-              className="agregado-editor__templates-menu"
-              role="menu"
-              aria-label="Plantillas de herrajes del ensamble"
-            >
-              <button
-                type="button"
-                className="btn btn--secondary btn--small"
-                onClick={() => requestTemplate('pair')}
-                disabled={catalogHardware.length === 0}
-                title="Arma 4 miembros: guías fijas y correderas móviles, izquierda y derecha separadas"
-                data-testid={`${testId}-template-pair`}
-              >
-                Par izq/der (cajón con correderas)
-              </button>
-              <button
-                type="button"
-                className="btn btn--secondary btn--small"
-                onClick={() => requestTemplate('center-rail')}
-                disabled={catalogHardware.length === 0}
-                title="Arma 1 miembro centrado con fórmula (acompaña el ancho)"
-                data-testid={`${testId}-template-center-rail`}
-              >
-                Riel centrado (fórmula PW/2)
-              </button>
-            </div>
-          </details>
+          {/* #1462/#1463: plantillas en el DropdownMenu común — un solo
+              lugar, sin copias en Receta; deshabilitado sin catálogo. */}
+          <DropdownMenu
+            ariaLabel="Plantillas de herrajes del ensamble"
+            triggerLabel="Plantillas"
+            triggerClassName="btn btn--secondary btn--small"
+            triggerTestId={`${testId}-templates`}
+            disabled={catalogHardware.length === 0}
+            sections={[
+              {
+                id: 'main',
+                items: [
+                  {
+                    id: 'pair',
+                    label: 'Par izq/der (cajón con correderas)',
+                    hint: '4 miembros: guías fijas y correderas móviles, izquierda y derecha separadas',
+                    onSelect: () => requestTemplate('pair'),
+                    testId: `${testId}-template-pair`,
+                  },
+                  {
+                    id: 'center-rail',
+                    label: 'Riel centrado (fórmula PW/2)',
+                    hint: '1 miembro centrado que acompaña el ancho',
+                    onSelect: () => requestTemplate('center-rail'),
+                    testId: `${testId}-template-center-rail`,
+                  },
+                ],
+              },
+            ]}
+          />
         </div>
       </div>
 
@@ -447,7 +435,12 @@ export function AgregadoCajonHardwareSection({
                   </p>
                 ))}
               </div>
-            ) : null}
+            ) : (
+              <p className="catalog-form__hint">
+                El juego todavía no sincronizó partes: crealas en Catálogos
+                (herrajes con «parte de kit»).
+              </p>
+            )}
             {onEditKit ? (
               <button
                 type="button"

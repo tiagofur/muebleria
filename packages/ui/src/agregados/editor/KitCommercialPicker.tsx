@@ -59,7 +59,7 @@ export function KitCommercialPicker({
       <CatalogPicker
         id={id}
         label={label}
-        placeholder="Sin kit (compra por herraje)"
+        placeholder="Elegir juego…"
         searchPlaceholder="Buscar juego…"
         value={value}
         onChange={(hardwareId) => onChange(hardwareId || undefined)}

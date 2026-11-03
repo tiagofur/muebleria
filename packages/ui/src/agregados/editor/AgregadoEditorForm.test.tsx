@@ -672,6 +672,11 @@ describe('AgregadoEditorForm — Herrajes por nivel de anclaje (#1451)', () => {
     // #1462: las plantillas viven en el menú de la sección.
     await user.click(screen.getByTestId('agregado-cajon-hardware-templates'));
     await user.click(screen.getByTestId('agregado-cajon-hardware-template-pair'));
+    // DropdownMenu común: el menú se cierra al elegir (Esc/click-afuera
+    // incluidos — sugerencia de review #1463).
+    expect(
+      screen.queryByTestId('agregado-cajon-hardware-template-pair'),
+    ).toBeNull();
 
     const updater = setDraftMock.mock.calls.at(-1)![0] as (
       prev: AgregadoDraft,

@@ -323,41 +323,6 @@
   background: var(--surface-muted);
 }
 
-/* #1462: menú Plantillas de la sección Del ensamble (details/summary nativo
-   — reemplazó al chooser global y a los presets duplicados de Receta). */
-.agregado-editor__templates {
-  position: relative;
-}
-
-.agregado-editor__templates > summary {
-  list-style: none;
-  cursor: pointer;
-}
-
-.agregado-editor__templates > summary::-webkit-details-marker {
-  display: none;
-}
-
-.agregado-editor__templates-menu {
-  position: absolute;
-  z-index: var(--z-dropdown);
-  top: calc(100% + var(--space-2));
-  left: 0;
-  display: grid;
-  gap: var(--space-2);
-  min-width: 260px;
-  padding: var(--space-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--surface-card, #fff);
-  box-shadow: 0 8px 24px hsl(220 20% 16% / 0.12);
-}
-
-.agregado-editor__templates-menu .btn {
-  justify-content: flex-start;
-  text-align: left;
-}
-
 /* ── Detail view: hardware grouped by anchor level (#1451) ───────── */
 
 .agregado-detail__hw-group {

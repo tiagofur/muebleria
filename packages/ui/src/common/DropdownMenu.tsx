@@ -37,6 +37,8 @@ export type DropdownMenuItem = {
   readonly icon?: ReactNode;
   /** Optional helper text below the label. */
   readonly hint?: string;
+  /** Optional data-testid hook for specs (#1462). */
+  readonly testId?: string;
 };
 
 export type DropdownMenuSection = {
@@ -56,6 +58,8 @@ export type DropdownMenuProps = {
   readonly disabled?: boolean;
   /** Trigger className override; defaults to `.btn` (matches chrome styling). */
   readonly triggerClassName?: string;
+  /** Optional data-testid hook for the trigger button (#1462). */
+  readonly triggerTestId?: string;
   /** Sections of the menu. If a single section without label, pass `[{
    * id: 'main', items: [...] }]`. */
   readonly sections: readonly DropdownMenuSection[];
@@ -79,6 +83,7 @@ export function DropdownMenu({
   triggerIcon,
   disabled = false,
   triggerClassName = 'btn',
+  triggerTestId,
   sections,
   onClose,
 }: DropdownMenuProps): ReactElement {
@@ -188,6 +193,7 @@ export function DropdownMenu({
         aria-controls={open ? menuId : undefined}
         onClick={toggle}
         onKeyDown={onTriggerKeyDown}
+        data-testid={triggerTestId}
       >
         {triggerIcon}
         <span>{triggerLabel}</span>
@@ -227,6 +233,7 @@ export function DropdownMenu({
                       role="menuitem"
                       tabIndex={item.disabled ? -1 : isHighlighted ? 0 : -1}
                       aria-disabled={item.disabled || undefined}
+                      data-testid={item.testId}
                       className={[
                         'dropdown-menu__item',
                         item.disabled ? 'dropdown-menu__item--disabled' : '',
