@@ -58,6 +58,8 @@ export type AgregadoEditorFormProps = {
   readonly recipeAgregado?: Agregado | null;
   /** #1369: abrir el modal «Simular cambio de receta». Ausente ⇒ botón oculto. */
   readonly onSimulateChange?: () => void;
+  /** #1460: abrir el juego comercial del agregado en Catálogos. Ausente ⇒ CTA oculto. */
+  readonly onEditKit?: (kitHardwareId: string) => void;
 };
 
 const TABS: { id: AgregadoEditorTab; label: string }[] = [
@@ -84,6 +86,7 @@ export function AgregadoEditorForm({
   saveFailed = false,
   recipeAgregado,
   onSimulateChange,
+  onEditKit,
 }: AgregadoEditorFormProps): ReactNode {
 
   const hardwareRoles = useMemo(
@@ -553,6 +556,7 @@ export function AgregadoEditorForm({
                   setDraft={setDraft}
                   catalogHardware={catalogHardware}
                   onAddMember={addAgregadoMember}
+                  onEditKit={onEditKit}
                 />
               </div>
 

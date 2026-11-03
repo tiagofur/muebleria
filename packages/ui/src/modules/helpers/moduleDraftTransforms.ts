@@ -130,10 +130,23 @@ const machiningOperationRule = objectRule({
   diameterMm: numberRule, depthMm: optionalRule(numberRule), innerDiameterMm: optionalRule(numberRule),
   xMm: numberRule, yMm: numberRule, face: enumRule('anchor', 'opposite'), label: optionalRule(stringRule) });
 const hardwarePlacementRule = objectRule({
-  ...stringFields('hardwareId'), anchorFace: enumRule('front', 'back', 'left', 'right', 'top', 'bottom'),
-  relativePosition: objectRule({ xMm: numberRule, yMm: numberRule, xFormula: optionalRule(stringRule), yFormula: optionalRule(stringRule) }),
+  // hardwareId es opcional en el dominio: un placement por grupo (#1046) sólo
+  // lleva optionRole — exigirlo descartaba drafts legítimos al restaurar.
+  hardwareId: optionalRule(stringRule), optionRole: optionalRule(stringRule),
+  anchorFace: enumRule('front', 'back', 'left', 'right', 'top', 'bottom'),
+  relativePosition: objectRule({ xMm: numberRule, yMm: numberRule, xFormula: optionalRule(stringRule), yFormula: optionalRule(stringRule),
+    // #1453 F2: referencia panel-side por eje (min/max/center).
+    xRef: optionalRule(enumRule('min', 'max', 'center')), yRef: optionalRule(enumRule('min', 'max', 'center')) }),
+  // #1453 F2: 'mount' | 'center' | 'hole:<opId>' — stringRule cubre el id compuesto.
+  hwAnchor: optionalRule(stringRule),
   rotationDeg: optionalRule(objectRule({ x: optionalRule(numberRule), y: optionalRule(numberRule), z: optionalRule(numberRule) })),
   scale: optionalRule(numberRule), partRole: optionalRule(stringRule),
+  doorAffinity: optionalRule(objectRule({
+    // Espejo completo del tipo vivo (#1460 fix JD-001): doorSlotIndex y
+    // doorLabel viajan en TODO payload canónico (autoría de vaivén) — sin
+    // ellos, el objectRule de forma cerrada descartaba el draft otra vez.
+    doorSlotIndex: numberRule, doorLabel: stringRule,
+    swingSide: enumRule('left', 'right'), accessoryRole: enumRule('hinge', 'handle'), accessoryIndex: numberRule })),
   derivedMachining: optionalRule(objectRule({ parts: arrayRule(objectRule({ ...stringFields('id', 'role'),
     operations: arrayRule(machiningOperationRule) })) })) });
 export const componentInstanceDraftRule: DraftRule = objectRule({

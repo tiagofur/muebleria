@@ -169,7 +169,17 @@ func ResolveAgregadoAssembly(
 				member.MemberID, member.Source.Kind)
 		}
 
-		hwDims := params.HardwareDimensions[hardwareID]
+		// #1460 F2: las fórmulas del miembro (offset y dimensiones) ven las
+		// dimensiones EFECTIVAS — override aplicado sobre el catálogo.
+		hwDims, err := resolveMemberEffectiveDimensions(
+			member.MemberID,
+			member.DimensionOverrides,
+			params.HardwareDimensions[hardwareID],
+			params.WidthMm, params.DepthMm, params.HeightMm,
+		)
+		if err != nil {
+			return domain.ResolvedAssembly{}, err
+		}
 		xCoord, err := calculateAxisPlacementCoord("x", member.Placement.X, params.WidthMm, hwDims)
 		if err != nil {
 			return domain.ResolvedAssembly{}, fmt.Errorf("member %s: %w", member.MemberID, err)
@@ -198,7 +208,7 @@ func ResolveAgregadoAssembly(
 			}
 		}
 
-		resolvedRigidMembers = append(resolvedRigidMembers, domain.ResolvedRigidMember{
+		resolvedMember := domain.ResolvedRigidMember{
 			MemberID:   member.MemberID,
 			Role:       member.Role,
 			HardwareID: hardwareID,
@@ -208,7 +218,13 @@ func ResolveAgregadoAssembly(
 			},
 			BOMRole:         member.BOMRole,
 			ActorMembership: member.ActorMembership,
-		})
+		}
+		// #1460 F2: sólo con override — payloads legacy byte-idénticos.
+		if member.DimensionOverrides != nil {
+			dims := hwDims
+			resolvedMember.ResolvedDimensions = &dims
+		}
+		resolvedRigidMembers = append(resolvedRigidMembers, resolvedMember)
 	}
 
 	// 6. Resolve Fabricated Components (Sole authority: Agregado.Components - R8)
@@ -513,6 +529,85 @@ func selectAssemblyVariant(
 		HardwareID:         chosen.HardwareID,
 		NominalDimensionMm: chosen.NominalDimensionMm,
 	}, nil
+}
+
+// #1460 F2: merge de DimensionOverrides sobre las dims de catálogo del
+// herraje del miembro. La fórmula (env: PW/PH/PD del envelope + HW/HH/HD de
+// catálogo) reemplaza al mm; el evaluador compartido redondea a mm entero
+// (mitad lejos de cero) para que TS y Go resuelvan idéntico. Fail-closed:
+// negativo, no finito o fuera de cota es error de autoría, nunca un guess.
+func resolveMemberEffectiveDimensions(
+	memberID string,
+	override *domain.HardwareDimensionOverride,
+	catalog domain.HardwareDimensions,
+	widthMm, depthMm, heightMm float64,
+) (domain.HardwareDimensions, error) {
+	base := catalog
+	if override == nil {
+		return base, nil
+	}
+	resolveAxis := func(label string, axis *domain.HardwareDimensionOverrideAxis, catalogMm, envelopeMm float64) (float64, error) {
+		if axis == nil {
+			return catalogMm, nil
+		}
+		hasFormula := axis.Formula != nil && strings.TrimSpace(*axis.Formula) != ""
+		if !hasFormula && axis.Mm == nil {
+			return catalogMm, nil
+		}
+		if hasFormula {
+			// Strip ALL whitespace before evaluating (TS strips \s+ — parity).
+			formula := strings.Map(func(r rune) rune {
+				if unicode.IsSpace(r) {
+					return -1
+				}
+				return r
+			}, strings.TrimSpace(*axis.Formula))
+			dims := formulaDims{
+				W:  int(math.Round(widthMm)),
+				H:  int(math.Round(heightMm)),
+				D:  int(math.Round(depthMm)),
+				PW: int(math.Round(widthMm)),
+				PH: int(math.Round(heightMm)),
+				PD: int(math.Round(depthMm)),
+				HW: int(math.Round(base.WidthMm)),
+				HH: int(math.Round(base.HeightMm)),
+				HD: int(math.Round(base.DepthMm)),
+			}
+			evaluated, err := evaluatePartFormula(formula, dims)
+			if err != nil {
+				return 0, fmt.Errorf("member %s %s dimension override formula: %w", memberID, label, err)
+			}
+			v := float64(evaluated)
+			if v < 0 {
+				return 0, fmt.Errorf("member %s %s dimension override evaluates invalid: %v (must be a finite value ≥ 0 mm)", memberID, label, v)
+			}
+			if math.Abs(v) > 100000.0 {
+				return 0, fmt.Errorf("member %s %s dimension override evaluates out of bounds: %v (must be ≤ 100000 mm)", memberID, label, v)
+			}
+			return v, nil
+		}
+		mm := *axis.Mm
+		if math.IsNaN(mm) || math.IsInf(mm, 0) || mm < 0 {
+			return 0, fmt.Errorf("member %s %s dimension override invalid: %v (must be a finite value ≥ 0 mm)", memberID, label, mm)
+		}
+		if mm > 100000.0 {
+			return 0, fmt.Errorf("member %s %s dimension override out of bounds: %v (must be ≤ 100000 mm)", memberID, label, mm)
+		}
+		return mm, nil
+	}
+	width, err := resolveAxis("width", override.Width, base.WidthMm, widthMm)
+	if err != nil {
+		return domain.HardwareDimensions{}, err
+	}
+	height, err := resolveAxis("height", override.Height, base.HeightMm, heightMm)
+	if err != nil {
+		return domain.HardwareDimensions{}, err
+	}
+	depth, err := resolveAxis("depth", override.Depth, base.DepthMm, depthMm)
+	if err != nil {
+		return domain.HardwareDimensions{}, err
+	}
+	return domain.HardwareDimensions{WidthMm: width, HeightMm: height, DepthMm: depth}, nil
 }
 
 func calculateAxisPlacementCoord(axisName string, p domain.AssemblyAxisPlacement, dimensionMm float64, hwDims domain.HardwareDimensions) (float64, error) {

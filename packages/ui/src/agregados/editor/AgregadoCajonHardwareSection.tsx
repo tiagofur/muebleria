@@ -22,12 +22,15 @@ import {
 } from 'react';
 import type {
   AgregadoRigidMember,
+  AssemblyAxisPlacement,
   AssemblyAxisRef,
   Hardware,
   RigidMemberBOMRole,
 } from '@granete/domain';
+import { evaluatePartFormula, resolveHardwareDimensions } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
+import { isKitDerivedMember, KitCommercialPicker, kitPartsOf } from './KitCommercialPicker';
 import type { AgregadoDraft } from '../agregadoDraft';
 
 export type AgregadoCajonHardwareSectionProps = {
@@ -36,6 +39,8 @@ export type AgregadoCajonHardwareSectionProps = {
   readonly catalogHardware: readonly Hardware[];
   /** Fábrica de miembro del form (la comparte el chooser «+ Añadir herraje»). */
   readonly onAddMember: () => void;
+  /** #1460: abrir el juego comercial en Catálogos. Ausente ⇒ CTA oculto. */
+  readonly onEditKit?: (kitHardwareId: string) => void;
   readonly testId?: string;
 };
 
@@ -63,10 +68,52 @@ const SIDE_REFS: { value: AssemblyAxisRef; label: string }[] = [
   { value: 'max', label: 'Borde derecho' },
 ];
 
+const AXIS_REFS: { value: AssemblyAxisRef; label: string }[] = [
+  { value: 'min', label: 'Mínimo' },
+  { value: 'center', label: 'Centro' },
+  { value: 'max', label: 'Máximo' },
+];
+
+/** #1460 F2: ejes del override de dimensiones con su vocabulario. */
+const DIMENSION_AXES: readonly [
+  'width' | 'height' | 'depth',
+  string,
+][] = [
+  ['width', 'Ancho'],
+  ['height', 'Alto'],
+  ['depth', 'Fondo'],
+];
+
 function membershipKind(m: AgregadoRigidMember): 'none' | 'body' | 'actor' {
   if (m.actorMembership === 'body') return 'body';
   if (m.actorMembership !== undefined && m.actorMembership.startsWith('actor:')) return 'actor';
   return 'none';
+}
+
+/**
+ * #1418: vacío → 0 sin fórmula; número → mm; lo demás es fórmula acotada
+ * (PW/PH/PD + HW/HH/HD). Mismo parseo en Herrajes y Receta para que ambas
+ * superficies no pisen datos.
+ */
+function parseAxisOffset(
+  raw: string,
+  current: AssemblyAxisPlacement,
+): AssemblyAxisPlacement {
+  const isPlainNumber = raw.trim() !== '' && !Number.isNaN(Number(raw));
+  return {
+    ...current,
+    offsetMm: isPlainNumber ? Number(raw) : raw.trim() === '' ? 0 : current.offsetMm,
+    offsetFormula: isPlainNumber || raw.trim() === '' ? undefined : raw,
+  };
+}
+
+/** #1460 F2: mm|fórmula por eje del override de dimensiones; vacío = catálogo. */
+function parseDimensionAxis(
+  raw: string,
+): { mm: number } | { formula: string } | undefined {
+  if (raw.trim() === '') return undefined;
+  const isPlainNumber = !Number.isNaN(Number(raw));
+  return isPlainNumber ? { mm: Number(raw) } : { formula: raw };
 }
 
 export function AgregadoCajonHardwareSection({
@@ -74,10 +121,98 @@ export function AgregadoCajonHardwareSection({
   setDraft,
   catalogHardware,
   onAddMember,
+  onEditKit,
   testId = 'agregado-cajon-hardware',
 }: AgregadoCajonHardwareSectionProps): ReactNode {
   const members = draft.rigidMembers ?? [];
   const kitId = draft.commercialKitHardwareId ?? '';
+  // #1460: resumen de pendientes — «Kit con par izq/der» deja 4 tarjetas con
+  // herraje vacío a propósito; el fail-closed por tarjeta no cambia, pero el
+  // estado se narra como pendiente y no como catástrofe.
+  const pendingCount = members.filter(
+    (m) =>
+      m.source.kind === 'fixed' &&
+      !(m.source.fixed?.hardwareId ?? '').trim(),
+  ).length;
+
+  // #1460: el kit manda. Los miembros cuya parte pertenece al juego seleccionado
+  // se muestran en UNA tarjeta resumen de solo lectura; lo añadido a mano
+  // conserva su tarjeta editable. Los índices originales viajan para que
+  // update/remove sigan apuntando al array del draft.
+  const kitEntity = kitId
+    ? catalogHardware.find((h) => h.id === kitId)
+    : undefined;
+  const kitPartIds = new Set(
+    kitPartsOf(catalogHardware, kitId).map((h) => h.id),
+  );
+  const memberEntries = members.map((m, idx) => ({ m, idx }));
+  const ownEntries = memberEntries.filter(
+    ({ m }) => !isKitDerivedMember(m, kitPartIds),
+  );
+  const kitEntries = memberEntries.filter(({ m }) =>
+    isKitDerivedMember(m, kitPartIds),
+  );
+  const hardwareCode = (hardwareId: string): string =>
+    catalogHardware.find((h) => h.id === hardwareId)?.code ?? hardwareId;
+  const memberSide = (m: AgregadoRigidMember): string => {
+    if (m.placement.x.ref === 'center') return 'centrado';
+    return m.placement.x.ref === 'max' ? 'derecha' : 'izquierda';
+  };
+
+  // #1460 F2: override de dimensiones por eje — vacío quita el eje (catálogo);
+  // sin ejes activos el override desaparece (payload legacy byte-idéntico).
+  const setDimensionAxis = (
+    idx: number,
+    axis: 'width' | 'height' | 'depth',
+    raw: string,
+  ) => {
+    const member = members[idx];
+    if (!member) return;
+    const axisValue = parseDimensionAxis(raw);
+    const merged = {
+      ...(member.dimensionOverrides ?? {}),
+      [axis]: axisValue,
+    };
+    const cleaned = Object.fromEntries(
+      Object.entries(merged).filter(([, v]) => v !== undefined),
+    );
+    updateMember(idx, {
+      dimensionOverrides: Object.keys(cleaned).length
+        ? (cleaned as AgregadoRigidMember['dimensionOverrides'])
+        : undefined,
+    });
+  };
+
+  // Error en vivo de la fórmula de dimensiones: mismo entorno que el resolve
+  // (envelope = medidas del agregado; HW/HH/HD = dims de catálogo). El resolve
+  // sigue siendo la autoridad — esto anticipa el fail-closed, no lo reemplaza.
+  const dimensionFormulaError = (
+    m: AgregadoRigidMember,
+    catalog: { widthMm: number; heightMm: number; depthMm: number } | undefined,
+    formula: string,
+  ): string | null => {
+    try {
+      const evaluated = evaluatePartFormula(
+        formula,
+        {
+          W: draft.widthMm,
+          H: draft.heightMm,
+          D: draft.depthMm,
+          PW: draft.widthMm,
+          PH: draft.heightMm,
+          PD: draft.depthMm,
+          HW: catalog?.widthMm ?? 0,
+          HH: catalog?.heightMm ?? 0,
+          HD: catalog?.depthMm ?? 0,
+        },
+        { structureCode: 'agregado', partDescription: m.memberId, field: 'length' },
+      );
+      if (evaluated < 0) return 'La fórmula evalúa negativo: la medida no puede ser negativa.';
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Fórmula inválida.';
+    }
+  };
 
   const patchDraft = (patch: Partial<AgregadoDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -199,42 +334,112 @@ export function AgregadoCajonHardwareSection({
         </div>
       ) : null}
 
+      {/* #1460: mismo picker que Receta — única superficie para el kit, sólo
+          juegos reales (unit === 'set') y con feedback de sus partes. */}
       <div className="catalog-form__field">
-        <label className="catalog-form__label" htmlFor={`${testId}-kit`}>
-          Kit comercial (el juego que se vende junto)
-        </label>
-        <select
-          id={`${testId}-kit`}
-          className="catalog-form__select"
+        <KitCommercialPicker
+          catalogHardware={catalogHardware}
           value={kitId}
-          onChange={(e) =>
-            patchDraft({ commercialKitHardwareId: e.target.value || undefined })
+          onChange={(hardwareId) =>
+            patchDraft({ commercialKitHardwareId: hardwareId })
           }
-          data-testid={`${testId}-kit`}
-        >
-          <option value="">Sin kit (compra por herraje)</option>
-          {catalogHardware.map((h) => (
-            <option key={h.id} value={h.id}>
-              {h.code} — {h.name}
-            </option>
-          ))}
-        </select>
-        <p className="catalog-form__hint">
-          Los herrajes «incluido en el juego» no generan línea de compra propia:
-          el kit cotiza una vez.
-        </p>
+          label="Kit comercial (el juego que se vende junto)"
+          id={`${testId}-kit`}
+          testId={`${testId}-kit`}
+        />
       </div>
 
-      {members.length === 0 ? (
+      {/* #1460 — tarjeta única del kit: los subitems del juego NO se editan
+          acá; viven en Catálogos y el sync los re-deriva. */}
+      {kitId ? (
+        <div
+          className="agregado-editor__item-row agregado-editor__item-row--block"
+          data-testid={`${testId}-kit-card`}
+        >
+          <div className="agregado-editor__item-header">
+            <strong className="agregado-editor__item-title">
+              <span className="catalog-badge catalog-badge--kit">Kit comercial</span>{' '}
+              {kitEntity ? (
+                <span className="eng-detail__mono">
+                  {kitEntity.code} — {kitEntity.name}
+                </span>
+              ) : null}
+            </strong>
+          </div>
+          {kitEntity ? (
+            <>
+              <p className="catalog-form__hint">
+                {kitEntries.length} herraje(s) incluido(s) en el juego · cotiza
+                una vez. Los subitems se administran en Catálogos — el juego
+                manda.
+              </p>
+              {kitEntries.length > 0 ? (
+                <div className="agregado-editor__item-fields">
+                  {kitEntries.map(({ m, idx }) => (
+                    <p
+                      key={m.memberId}
+                      className="catalog-form__hint"
+                      data-testid={`${testId}-kit-member-${idx}`}
+                    >
+                      <span className="eng-detail__mono">{m.memberId}</span>
+                      {' · '}
+                      {hardwareCode(m.source.fixed?.hardwareId ?? '')}
+                      {' · '}
+                      {memberSide(m)}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="catalog-form__hint">
+                  El juego todavía no sincronizó partes: crealas en Catálogos
+                  (herrajes con «parte de kit»).
+                </p>
+              )}
+              {onEditKit ? (
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--small"
+                  onClick={() => onEditKit(kitId)}
+                  data-testid={`${testId}-kit-card-edit`}
+                >
+                  Editar juego en Catálogos
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <p
+              className="catalog-form__error"
+              role="alert"
+              data-testid={`${testId}-kit-card-missing`}
+            >
+              El juego asignado ya no existe en el catálogo: elegí otro o quitá
+              el kit.
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {ownEntries.length === 0 ? (
         <p className="catalog-empty" data-testid={`${testId}-empty`}>
-          Sin herrajes del agregado. El kit de correderas de un cajón, las
-          bisagras de una puerta o un riel central van acá: se anclan a la caja
-          del ensamble — no a una pieza —, se ven en el 3D y viajan como
-          revisión al guardar.
+          {kitId
+            ? 'El juego comercial cubre los herrajes del ensamble. Si necesitás otro herraje anclado al agregado, añadilo con «Añadir herraje del agregado».'
+            : 'Sin herrajes del agregado. El kit de correderas de un cajón, las bisagras de una puerta o un riel central van acá: se anclan a la caja del ensamble — no a una pieza —, se ven en el 3D y viajan como revisión al guardar.'}
         </p>
       ) : (
         <ul className="agregado-editor__item-list">
-          {members.map((m, idx) => {
+          {pendingCount > 0 ? (
+            <li>
+              <p
+                className="catalog-form__hint"
+                role="status"
+                data-testid={`${testId}-pending-summary`}
+              >
+                Pendiente: {pendingCount} de {ownEntries.length} sin herraje —
+                el guardado espera la receta completa.
+              </p>
+            </li>
+          ) : null}
+          {ownEntries.map(({ m, idx }) => {
             const sideLabel = (ref: AssemblyAxisRef): string =>
               SIDE_REFS.find((r) => r.value === ref)?.label ?? ref;
             if (m.source.kind === 'variant') {
@@ -311,76 +516,88 @@ export function AgregadoCajonHardwareSection({
                       </p>
                     ) : null}
                   </div>
-                  <div className="catalog-form__field">
-                    <label
-                      className="catalog-form__label"
-                      htmlFor={`${testId}-member-${idx}-lado`}
-                    >
-                      Desde
-                    </label>
-                    <select
-                      id={`${testId}-member-${idx}-lado`}
-                      className="catalog-form__select"
-                      value={m.placement.x.ref}
-                      onChange={(e) =>
-                        updateMember(idx, {
-                          placement: {
-                            ...m.placement,
-                            x: {
-                              ...m.placement.x,
-                              ref: e.target.value as AssemblyAxisRef,
-                            },
-                          },
-                        })
-                      }
-                      data-testid={`${testId}-member-${idx}-lado`}
-                    >
-                      {SIDE_REFS.map((r) => (
-                        <option key={r.value} value={r.value}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="catalog-form__field">
-                    <label
-                      className="catalog-form__label"
-                      htmlFor={`${testId}-member-${idx}-offset-x`}
-                    >
-                      Desplazamiento (mm)
-                    </label>
-                    <input
-                      id={`${testId}-member-${idx}-offset-x`}
-                      type="text"
-                      className="catalog-form__input"
-                      value={m.placement.x.offsetFormula ?? String(m.placement.x.offsetMm)}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        // Vacío → 0 sin fórmula; número → mm; lo demás es
-                        // fórmula acotada (#1418: PW/PH/PD). Mismo parseo que
-                        // Receta para que ambas superficies no pisen datos.
-                        const isPlainNumber =
-                          raw.trim() !== '' && !Number.isNaN(Number(raw));
-                        updateMember(idx, {
-                          placement: {
-                            ...m.placement,
-                            x: {
-                              ...m.placement.x,
-                              offsetMm: isPlainNumber
-                                ? Number(raw)
-                                : raw.trim() === ''
-                                ? 0
-                                : m.placement.x.offsetMm,
-                              offsetFormula:
-                                isPlainNumber || raw.trim() === '' ? undefined : raw,
-                            },
-                          },
-                        });
-                      }}
-                      placeholder="ej. 10 ó PW/2 - 100"
-                      data-testid={`${testId}-member-${idx}-offset-x`}
-                    />
-                  </div>
+                  {/* #1460 F2: posición SIEMPRE visible — X/Y/Z «desde» +
+                      desplazamiento mm|fórmula. Sin excavar en colapsables. */}
+                  {(['x', 'y', 'z'] as const).map((axis) => (
+                    <div className="catalog-form__field" key={axis}>
+                      <label
+                        className="catalog-form__label"
+                        htmlFor={`${testId}-member-${idx}-anchor-${axis}-offset`}
+                      >
+                        {axisLabel(axis)}
+                      </label>
+                      <div className="agregado-recipe__axis">
+                        <select
+                          className="catalog-form__select"
+                          value={m.placement[axis].ref}
+                          onChange={(e) =>
+                            updateMember(idx, {
+                              placement: {
+                                ...m.placement,
+                                [axis]: {
+                                  ...m.placement[axis],
+                                  ref: e.target.value as AssemblyAxisRef,
+                                },
+                              },
+                            })
+                          }
+                          aria-label={`${axisLabel(axis)} referencia`}
+                          data-testid={`${testId}-member-${idx}-anchor-${axis}-ref`}
+                        >
+                          {(axis === 'x' ? SIDE_REFS : AXIS_REFS).map((r) => (
+                            <option key={r.value} value={r.value}>
+                              {r.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          id={`${testId}-member-${idx}-anchor-${axis}-offset`}
+                          type="text"
+                          className="catalog-form__input"
+                          value={
+                            m.placement[axis].offsetFormula ??
+                            String(m.placement[axis].offsetMm)
+                          }
+                          onChange={(e) =>
+                            updateMember(idx, {
+                              placement: {
+                                ...m.placement,
+                                [axis]: parseAxisOffset(
+                                  e.target.value,
+                                  m.placement[axis],
+                                ),
+                              },
+                            })
+                          }
+                          placeholder="mm ó fórmula"
+                          aria-label={`${axisLabel(axis)} offset mm o fórmula`}
+                          data-testid={`${testId}-member-${idx}-anchor-${axis}-offset`}
+                        />
+                        {axis === 'x' ? (
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--small"
+                            title="Centra en el ancho: X desde mínimo + PW/2 (acompaña el ancho)"
+                            onClick={() =>
+                              updateMember(idx, {
+                                placement: {
+                                  ...m.placement,
+                                  x: {
+                                    ref: 'min',
+                                    offsetMm: 0,
+                                    offsetFormula: 'PW/2',
+                                  },
+                                },
+                              })
+                            }
+                            data-testid={`${testId}-member-${idx}-center-x`}
+                          >
+                            Centrar
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
                   <div className="catalog-form__field">
                     <label
                       className="catalog-form__label"
@@ -460,76 +677,125 @@ export function AgregadoCajonHardwareSection({
                   </div>
                 </div>
 
-                <details className="agregado-recipe__advanced">
-                  <summary>Anclaje fino e identidad</summary>
-                  <div className="agregado-editor__item-fields agregado-editor__item-fields--grid">
-                    {(['y', 'z'] as const).map((axis) => (
-                      <div className="catalog-form__field" key={axis}>
-                        <label
-                          className="catalog-form__label"
-                          htmlFor={`${testId}-member-${idx}-anchor-${axis}`}
-                        >
-                          {axisLabel(axis)}
-                        </label>
-                        <div className="agregado-recipe__axis">
-                          <select
-                            className="catalog-form__select"
-                            value={m.placement[axis].ref}
-                            onChange={(e) =>
-                              updateMember(idx, {
-                                placement: {
-                                  ...m.placement,
-                                  [axis]: {
-                                    ...m.placement[axis],
-                                    ref: e.target.value as AssemblyAxisRef,
-                                  },
-                                },
-                              })
-                            }
-                            aria-label={`${axisLabel(axis)} referencia`}
-                            data-testid={`${testId}-member-${idx}-anchor-${axis}-ref`}
-                          >
-                            <option value="min">Mínimo</option>
-                            <option value="center">Centro</option>
-                            <option value="max">Máximo</option>
-                          </select>
-                          <input
-                            id={`${testId}-member-${idx}-anchor-${axis}`}
-                            type="text"
-                            className="catalog-form__input"
-                            value={
-                              m.placement[axis].offsetFormula ??
-                              String(m.placement[axis].offsetMm)
-                            }
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const isPlainNumber =
-                                raw.trim() !== '' && !Number.isNaN(Number(raw));
-                              updateMember(idx, {
-                                placement: {
-                                  ...m.placement,
-                                  [axis]: {
-                                    ...m.placement[axis],
-                                    offsetMm: isPlainNumber
-                                      ? Number(raw)
-                                      : raw.trim() === ''
-                                      ? 0
-                                      : m.placement[axis].offsetMm,
-                                    offsetFormula:
-                                      isPlainNumber || raw.trim() === ''
-                                        ? undefined
-                                        : raw,
-                                  },
-                                },
-                              });
-                            }}
-                            placeholder="mm"
-                            aria-label={`${axisLabel(axis)} offset mm o fórmula`}
-                            data-testid={`${testId}-member-${idx}-anchor-${axis}-offset`}
-                          />
-                        </div>
+                {(() => {
+                  // #1460 F2: dimensiones del herraje — override opcional
+                  // Ancho×Alto×Fondo (mm|fórmula) por eje; vacío = catálogo.
+                  // Guard sin aserción (fix JD-002): un herraje colgante no
+                  // puede crashear el render — se degrada al hint, igual que
+                  // el kit colgante tiene su alerta.
+                  const selectedHardware = hwId
+                    ? catalogHardware.find((h) => h.id === hwId)
+                    : undefined;
+                  const catalogDims = selectedHardware
+                    ? resolveHardwareDimensions(selectedHardware)
+                    : undefined;
+                  const override = m.dimensionOverrides;
+                  const axisValue = (axis: 'width' | 'height' | 'depth') => {
+                    const o = override?.[axis];
+                    if (!o) return '';
+                    return o.formula ?? String(o.mm);
+                  };
+                  const effectiveMm = (
+                    axis: 'width' | 'height' | 'depth',
+                  ): number | null => {
+                    const o = override?.[axis];
+                    if (!o) return catalogDims ? catalogDims[`${axis}Mm` as const] : null;
+                    if (o.formula && catalogDims) {
+                      try {
+                        return evaluatePartFormula(
+                          o.formula,
+                          {
+                            W: draft.widthMm,
+                            H: draft.heightMm,
+                            D: draft.depthMm,
+                            PW: draft.widthMm,
+                            PH: draft.heightMm,
+                            PD: draft.depthMm,
+                            HW: catalogDims.widthMm,
+                            HH: catalogDims.heightMm,
+                            HD: catalogDims.depthMm,
+                          },
+                          { structureCode: 'agregado', partDescription: m.memberId, field: 'length' },
+                        );
+                      } catch {
+                        return null;
+                      }
+                    }
+                    return o.mm ?? null;
+                  };
+                  return (
+                    <div className="catalog-form__field">
+                      <span className="catalog-form__label">
+                        Dimensiones del herraje (mm o fórmula)
+                      </span>
+                      <div className="agregado-editor__item-fields agregado-editor__item-fields--grid">
+                        {DIMENSION_AXES.map(([axis, label]) => {
+                          const formula = override?.[axis]?.formula;
+                          const error =
+                            formula && catalogDims
+                              ? dimensionFormulaError(m, catalogDims, formula)
+                              : null;
+                          return (
+                            <div className="catalog-form__field" key={axis}>
+                              <label
+                                className="catalog-form__label"
+                                htmlFor={`${testId}-member-${idx}-dim-${axis}`}
+                              >
+                                {label}
+                              </label>
+                              <input
+                                id={`${testId}-member-${idx}-dim-${axis}`}
+                                type="text"
+                                className="catalog-form__input"
+                                value={axisValue(axis)}
+                                onChange={(e) =>
+                                  setDimensionAxis(idx, axis, e.target.value)
+                                }
+                                placeholder={
+                                  catalogDims
+                                    ? `${catalogDims[`${axis}Mm` as const]} (catálogo)`
+                                    : 'catálogo'
+                                }
+                                data-testid={`${testId}-member-${idx}-dim-${axis}`}
+                              />
+                              {error ? (
+                                <p
+                                  className="catalog-form__error"
+                                  role="alert"
+                                  data-testid={`${testId}-member-${idx}-dim-${axis}-error`}
+                                >
+                                  {error}
+                                </p>
+                              ) : null}
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
+                      <p className="catalog-form__hint">
+                        {catalogDims
+                          ? `Catálogo: ${catalogDims.widthMm}×${catalogDims.heightMm}×${catalogDims.depthMm} mm — vacío usa el catálogo; la fórmula ve PW/PH/PD y HW/HH/HD.`
+                          : 'Elegí un herraje para ver las medidas del catálogo.'}
+                      </p>
+                      {override ? (
+                        <p
+                          className="catalog-form__hint"
+                          data-testid={`${testId}-member-${idx}-dims-effective`}
+                        >
+                          Efectivo con las medidas del agregado:{' '}
+                          {DIMENSION_AXES.map(([axis]) => {
+                            const v = effectiveMm(axis);
+                            return v === null ? '—' : String(v);
+                          }).join('×')}{' '}
+                          mm.
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })()}
+
+                <details className="agregado-recipe__advanced">
+                  <summary>Identidad avanzada</summary>
+                  <div className="agregado-editor__item-fields agregado-editor__item-fields--grid">
                     <div className="catalog-form__field">
                       <label
                         className="catalog-form__label"

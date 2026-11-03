@@ -65,6 +65,9 @@ export function createEmptyAgregadoDraft(): AgregadoDraft {
 const axisPlacementDraftRule = objectRule({
   ref: stringRule,
   offsetMm: numberRule,
+  // #1418: la fórmula reemplaza al offset numérico — un draft con fórmula
+  // que fallara acá reseteaba TODO el borrador en el restore de sesión.
+  offsetFormula: optionalRule(stringRule),
 });
 
 const anchorRuleDraftRule = objectRule({
@@ -80,6 +83,19 @@ const anchorRuleDraftRule = objectRule({
   ),
 });
 
+// #1460 F2: override de dimensiones por eje — mm|fórmula, ambos opcionales
+// dentro del eje; el eje entero es opcional.
+const dimensionOverrideAxisDraftRule = objectRule({
+  mm: optionalRule(numberRule),
+  formula: optionalRule(stringRule),
+});
+
+const dimensionOverrideDraftRule = objectRule({
+  width: optionalRule(dimensionOverrideAxisDraftRule),
+  height: optionalRule(dimensionOverrideAxisDraftRule),
+  depth: optionalRule(dimensionOverrideAxisDraftRule),
+});
+
 const rigidMemberDraftRule = objectRule({
   ...stringFields('memberId', 'role'),
   actorMembership: optionalRule(stringRule),
@@ -90,6 +106,7 @@ const rigidMemberDraftRule = objectRule({
   }),
   placement: anchorRuleDraftRule,
   bomRole: stringRule,
+  dimensionOverrides: optionalRule(dimensionOverrideDraftRule),
 });
 
 const variantSetDraftRule = objectRule({

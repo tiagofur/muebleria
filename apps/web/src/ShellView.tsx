@@ -2414,6 +2414,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           catalogMaterials={materials}
           catalogEdges={edges}
           resolveImageUrl={resolveMediaUrl}
+          onEditKit={(kitHardwareId) => {
+            onEntitySelectionChange('hardware', kitHardwareId);
+            onNavigate('hardware');
+          }}
         />
       ) : null}
       {navId === 'quotes' && projectFurnitureRoute ? (

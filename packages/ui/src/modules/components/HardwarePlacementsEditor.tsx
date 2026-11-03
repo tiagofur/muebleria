@@ -93,11 +93,12 @@ export function HardwarePlacementsEditor({
   };
 
   const add = () => {
-    const firstHw = catalogHardware[0];
+    // #1460: sin default encubierto — la fila nace sin identidad y el error
+    // visible obliga a elegir (mismo patrón #1451 de los otros dos niveles).
     onChange([
       ...placements,
       {
-        hardwareId: firstHw?.id ?? '',
+        hardwareId: '',
         anchorFace: 'front',
         relativePosition: { xMm: 50, yMm: 50 },
       },

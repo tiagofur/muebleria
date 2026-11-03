@@ -58,7 +58,7 @@ describe('HardwarePlacementsEditor', () => {
     ).toContain('Sin herrajes posicionados');
   });
 
-  it('adds a placement with sensible defaults (front, 50/50)', async () => {
+  it('adds a placement with sensible defaults (front, 50/50) and no hidden hardware (#1460)', async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
@@ -80,6 +80,12 @@ describe('HardwarePlacementsEditor', () => {
       (screen.getByTestId('instance-hardware-placement-0-y') as HTMLInputElement)
         .value,
     ).toBe('50');
+    // Sin default encubierto: la fila nace sin identidad y el error visible
+    // obliga a elegir (patrón #1451).
+    const identity = screen.getByTestId(
+      'instance-hardware-placement-0-identity-error',
+    );
+    expect(identity.textContent).toContain('Sin identidad');
   });
 
   it('updates X (mm) on the first placement', async () => {

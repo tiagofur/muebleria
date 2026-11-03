@@ -1,0 +1,66 @@
+{
+  "schemaId": "granete.agregado-member-dimension-override.v1",
+  "_comment": "#1460 F2 — paridad TS↔Go del override de dimensiones por miembro rígido. El MISMO fixture lo consumen packages/domain/src/agregadoMemberDimensionOverride.contract.test.ts y backend-go/internal/domain/engine/agregado_member_dimension_override_contract_test.go. Envelope 500×500×720; herraje de catálogo 450×45×13. La fórmula de un eje reemplaza al mm; el entorno ve PW/PH/PD (envelope) y HW/HH/HD (dims DE CATÁLOGO); el offsetFormula del placement ve las dims EFECTIVAS (override aplicado). Member sin override ⇒ resolvedDimensions ausente.",
+  "params": { "widthMm": 500, "depthMm": 500, "heightMm": 720 },
+  "hardwareDimensions": { "corr-test": { "widthMm": 450, "heightMm": 45, "depthMm": 13 } },
+  "agregado": {
+    "id": "agr-paridad-dims",
+    "rigidMembers": [
+      {
+        "memberId": "rail-mm",
+        "role": "rail",
+        "source": { "kind": "fixed", "fixed": { "hardwareId": "corr-test" } },
+        "placement": {
+          "x": { "ref": "center", "offsetMm": 0 },
+          "y": { "ref": "min", "offsetMm": 0 },
+          "z": { "ref": "min", "offsetMm": 0 }
+        },
+        "bomRole": "separately_purchased",
+        "dimensionOverrides": {
+          "width": { "mm": 500 },
+          "depth": { "formula": "PD / 10" }
+        }
+      },
+      {
+        "memberId": "rail-formula",
+        "role": "rail",
+        "source": { "kind": "fixed", "fixed": { "hardwareId": "corr-test" } },
+        "placement": {
+          "x": { "ref": "min", "offsetMm": 0, "offsetFormula": "HW" },
+          "y": { "ref": "min", "offsetMm": 0 },
+          "z": { "ref": "min", "offsetMm": 0 }
+        },
+        "bomRole": "separately_purchased",
+        "dimensionOverrides": {
+          "width": { "formula": "PW - 100" },
+          "height": { "formula": "HH" }
+        }
+      },
+      {
+        "memberId": "rail-legacy",
+        "role": "rail",
+        "source": { "kind": "fixed", "fixed": { "hardwareId": "corr-test" } },
+        "placement": {
+          "x": { "ref": "min", "offsetMm": 0, "offsetFormula": "HD" },
+          "y": { "ref": "min", "offsetMm": 0 },
+          "z": { "ref": "min", "offsetMm": 0 }
+        },
+        "bomRole": "separately_purchased"
+      }
+    ]
+  },
+  "expected": {
+    "rail-mm": {
+      "translationMm": [250, 0, 0],
+      "resolvedDimensions": { "widthMm": 500, "heightMm": 45, "depthMm": 50 }
+    },
+    "rail-formula": {
+      "translationMm": [400, 0, 0],
+      "resolvedDimensions": { "widthMm": 400, "heightMm": 45, "depthMm": 13 }
+    },
+    "rail-legacy": {
+      "translationMm": [13, 0, 0],
+      "resolvedDimensions": null
+    }
+  }
+}

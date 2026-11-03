@@ -246,6 +246,34 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
       expect(() => validateAgregadoRigidMember(validMember, true)).not.toThrow();
     });
 
+    it('JSON null en un eje del override cuenta como ausente (gemelo Go nil) — fix JD-003', () => {
+      const mmNull = {
+        ...validMember,
+        dimensionOverrides: {
+          width: { mm: null, formula: 'PW/2' } as unknown as { formula: string },
+        },
+      };
+      expect(() => validateAgregadoRigidMember(mmNull, true)).not.toThrow();
+
+      const formulaNull = {
+        ...validMember,
+        dimensionOverrides: {
+          width: { mm: 500, formula: null } as unknown as { mm: number },
+        },
+      };
+      expect(() => validateAgregadoRigidMember(formulaNull, true)).not.toThrow();
+
+      const ambosNull = {
+        ...validMember,
+        dimensionOverrides: {
+          width: { mm: null, formula: null } as unknown as { formula: string },
+        },
+      };
+      expect(() => validateAgregadoRigidMember(ambosNull, true)).toThrow(
+        /must carry mm or formula/,
+      );
+    });
+
     it('rejects included_in_kit when no commercial kit is configured', () => {
       expect(() => validateAgregadoRigidMember(validMember, false)).toThrow(
         /bomRole 'included_in_kit' is invalid when no commercialKitHardwareId is configured/,

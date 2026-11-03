@@ -97,3 +97,96 @@ describe('agregadoDraft recipe round-trip (#1412)', () => {
     expect(back.code).toBe('VIEJO');
   });
 });
+
+describe('isAgregadoDraft acepta los campos vivos de la receta (#1460)', () => {
+  it('un miembro con offsetFormula valida fresco y persistido (antes F5 reseteaba el borrador)', () => {
+    const memberConFormula = {
+      ...member,
+      placement: {
+        x: { ref: 'center' as const, offsetMm: 0, offsetFormula: 'PW/2' },
+        y: { ref: 'min' as const, offsetMm: 0 },
+        z: { ref: 'min' as const, offsetMm: 0, offsetFormula: 'PH - 37' },
+      },
+    };
+    const draft = agregadoToDraft({
+      ...agregadoConReceta,
+      rigidMembers: [memberConFormula],
+    });
+    expect(isAgregadoDraft(draft)).toBe(true);
+    // Round-trip sessionStorage: lo que se persiste debe revalidar igual.
+    expect(isAgregadoDraft(JSON.parse(JSON.stringify(draft)))).toBe(true);
+
+    const back = draftToAgregado('agr-1', draft);
+    expect(back.rigidMembers?.[0]?.placement.x.offsetFormula).toBe('PW/2');
+  });
+
+  it('un placement F2 (optionRole, xRef/yRef, hwAnchor) valida dentro del borrador', () => {
+    const draft = agregadoToDraft(agregadoConReceta);
+    draft.components = [
+      {
+        componentId: 'comp-frente',
+        quantity: 1,
+        overrides: {
+          hardwarePlacements: [
+            {
+              optionRole: 'TIRADOR',
+              anchorFace: 'front',
+              relativePosition: { xMm: 0, yMm: 18, xRef: 'center', yRef: 'max' },
+              hwAnchor: 'center',
+            },
+          ],
+        },
+      },
+    ];
+    expect(isAgregadoDraft(draft)).toBe(true);
+    expect(isAgregadoDraft(JSON.parse(JSON.stringify(draft)))).toBe(true);
+  });
+
+  it('un placement con doorAffinity canónico (5 campos) valida — fix JD-001', () => {
+    const draft = agregadoToDraft(agregadoConReceta);
+    draft.components = [
+      {
+        componentId: 'comp-puerta',
+        quantity: 1,
+        overrides: {
+          hardwarePlacements: [
+            {
+              hardwareId: 'hw-bisagra',
+              anchorFace: 'front',
+              relativePosition: { xMm: 20, yMm: 90 },
+              doorAffinity: {
+                doorSlotIndex: 0,
+                doorLabel: 'Puerta 1 · Izquierda',
+                swingSide: 'left',
+                accessoryRole: 'hinge',
+                accessoryIndex: 1,
+              },
+            },
+          ],
+        },
+      },
+    ];
+    expect(isAgregadoDraft(draft)).toBe(true);
+    // Round-trip sessionStorage con el payload que produce el engine.
+    expect(isAgregadoDraft(JSON.parse(JSON.stringify(draft)))).toBe(true);
+  });
+
+  it('un miembro con dimensionOverrides (mm|fórmula) valida fresco y persistido (#1460 F2)', () => {
+    const memberDims = {
+      ...member,
+      dimensionOverrides: { width: { mm: 500 }, depth: { formula: 'PD/10' } },
+    };
+    const draft = agregadoToDraft({
+      ...agregadoConReceta,
+      rigidMembers: [memberDims],
+    });
+    expect(isAgregadoDraft(draft)).toBe(true);
+    expect(isAgregadoDraft(JSON.parse(JSON.stringify(draft)))).toBe(true);
+
+    const back = draftToAgregado('agr-1', draft);
+    expect(back.rigidMembers?.[0]?.dimensionOverrides).toEqual({
+      width: { mm: 500 },
+      depth: { formula: 'PD/10' },
+    });
+  });
+});

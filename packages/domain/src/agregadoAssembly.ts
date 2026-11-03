@@ -87,6 +87,25 @@ export interface RigidMemberSource {
   readonly variant?: VariantHardwareSource;
 }
 
+/** #1460 F2: un eje del override de dimensiones de un miembro — mm directo o fórmula acotada. */
+export interface HardwareDimensionOverrideAxis {
+  readonly mm?: number;
+  readonly formula?: string;
+}
+
+/**
+ * #1460 F2: override opcional de dimensiones del herraje de un miembro rígido.
+ * Eje ausente (o sin mm ni fórmula) = la dimensión del catálogo. La fórmula
+ * REEMPLAZA al mm cuando ambos están presentes (mismo contrato que
+ * offsetFormula/offsetMm); su entorno ve el envelope del ensamble (PW/PH/PD)
+ * y las dimensiones de catálogo del herraje (HW/HH/HD).
+ */
+export interface HardwareDimensionOverride {
+  readonly width?: HardwareDimensionOverrideAxis;
+  readonly height?: HardwareDimensionOverrideAxis;
+  readonly depth?: HardwareDimensionOverrideAxis;
+}
+
 export interface AgregadoRigidMember {
   readonly memberId: string;
   readonly role: string;
@@ -95,6 +114,8 @@ export interface AgregadoRigidMember {
   readonly bomRole: RigidMemberBOMRole;
   /** #1376: Actor membership for presentation kinematics ('body' | 'actor:<id>' | undefined). */
   readonly actorMembership?: string;
+  /** #1460 F2: override de dimensiones del herraje (Ancho×Alto×Fondo, mm|fórmula). */
+  readonly dimensionOverrides?: HardwareDimensionOverride;
 }
 
 export type DimensionRuleSource =
@@ -175,6 +196,12 @@ export interface ResolvedRigidMember {
    * visual pins. Absent = monolithic member (legacy behavior).
    */
   readonly designParts?: readonly HardwareDesignPart[];
+  /**
+   * #1460 F2: dimensiones efectivas del herraje tras aplicar
+   * dimensionOverrides (merge sobre el catálogo). Presente SOLO cuando el
+   * miembro declara override — los payloads sin override quedan byte-idénticos.
+   */
+  readonly resolvedDimensions?: EffectiveHardwareDimensions;
 }
 
 export interface AssemblyBOMItem {
@@ -587,6 +614,41 @@ export function validateAgregadoRigidMember(
   validateRigidMemberSource(m.source);
   validateAssemblyAnchorRule(m.placement);
 
+  // #1460 F2: estructura del override de dimensiones — fail-closed en
+  // definición; la sintaxis de la fórmula la valida el resolve (evaluador).
+  if (m.dimensionOverrides) {
+    const axes: readonly [
+      string,
+      HardwareDimensionOverrideAxis | undefined,
+    ][] = [
+      ['width', m.dimensionOverrides.width],
+      ['height', m.dimensionOverrides.height],
+      ['depth', m.dimensionOverrides.depth],
+    ];
+    for (const [axis, o] of axes) {
+      if (!o) continue;
+      // JSON null = ausente (gemelo Go: puntero nil) — ni crashea ni difiere:
+      // sólo mm/formula PRESENTES se validan; un eje sin nada es error.
+      if (o.mm != null) {
+        if (!Number.isFinite(o.mm) || o.mm < 0 || o.mm > 100000.0) {
+          throw new Error(
+            `rigid member '${m.memberId}': ${axis} dimension override mm must be a finite value in [0, 100000] (got ${o.mm})`,
+          );
+        }
+      }
+      if (o.formula != null && o.formula.trim() === '') {
+        throw new Error(
+          `rigid member '${m.memberId}': ${axis} dimension override formula must be non-empty when present (omit the field to use mm or the catalog)`,
+        );
+      }
+      if (o.mm == null && (o.formula == null || o.formula.trim() === '')) {
+        throw new Error(
+          `rigid member '${m.memberId}': ${axis} dimension override must carry mm or formula (an empty axis is the catalog — omit it)`,
+        );
+      }
+    }
+  }
+
   switch (m.bomRole) {
     case 'included_in_kit':
       if (!hasCommercialKit) {
@@ -807,6 +869,82 @@ function calculateAxisPlacementCoord(
   return base + p.offsetMm;
 }
 
+/**
+ * #1460 F2: merge de dimensionOverrides sobre las dimensiones de catálogo del
+ * herraje del miembro. La fórmula (entorno: PW/PH/PD del envelope + HW/HH/HD
+ * de catálogo) reemplaza al mm; el evaluador compartido redondea a mm entero
+ * (mitad lejos de cero) para que TS y Go resuelvan idéntico. Fail-closed:
+ * negativo, no finito o fuera de cota es error de autoría, nunca un guess.
+ */
+function resolveMemberEffectiveDimensions(
+  memberId: string,
+  override: HardwareDimensionOverride | undefined,
+  catalog: EffectiveHardwareDimensions | undefined,
+  envelope: { widthMm: number; depthMm: number; heightMm: number },
+): EffectiveHardwareDimensions {
+  const base = catalog ?? { widthMm: 0, heightMm: 0, depthMm: 0 };
+  if (!override) return base;
+  const resolveAxis = (
+    label: 'width' | 'height' | 'depth',
+    axis: HardwareDimensionOverrideAxis | undefined,
+    catalogMm: number,
+    envelopeMm: number,
+  ): number => {
+    if (!axis) return catalogMm;
+    const hasFormula = axis.formula != null && axis.formula.trim() !== '';
+    if (!hasFormula && axis.mm == null) return catalogMm;
+    if (hasFormula) {
+      const evaluated = evaluatePartFormula(
+        axis.formula as string,
+        {
+          W: envelope.widthMm,
+          H: envelope.heightMm,
+          D: envelope.depthMm,
+          PW: envelope.widthMm,
+          PH: envelope.heightMm,
+          PD: envelope.depthMm,
+          HW: base.widthMm,
+          HH: base.heightMm,
+          HD: base.depthMm,
+        },
+        {
+          structureCode: 'agregado',
+          partDescription: memberId,
+          field: 'length',
+        },
+      );
+      if (!Number.isFinite(evaluated) || evaluated < 0) {
+        throw new Error(
+          `member '${memberId}' ${label} dimension override evaluates invalid: ${evaluated} (must be a finite value ≥ 0 mm)`,
+        );
+      }
+      if (Math.abs(evaluated) > 100000.0) {
+        throw new Error(
+          `member '${memberId}' ${label} dimension override evaluates out of bounds: ${evaluated} (must be ≤ 100000 mm)`,
+        );
+      }
+      return evaluated;
+    }
+    const mm = axis.mm as number;
+    if (!Number.isFinite(mm) || mm < 0) {
+      throw new Error(
+        `member '${memberId}' ${label} dimension override invalid: ${mm} (must be a finite value ≥ 0 mm)`,
+      );
+    }
+    if (mm > 100000.0) {
+      throw new Error(
+        `member '${memberId}' ${label} dimension override out of bounds: ${mm} (must be ≤ 100000 mm)`,
+      );
+    }
+    return mm;
+  };
+  return {
+    widthMm: resolveAxis('width', override.width, base.widthMm, envelope.widthMm),
+    heightMm: resolveAxis('height', override.height, base.heightMm, envelope.heightMm),
+    depthMm: resolveAxis('depth', override.depth, base.depthMm, envelope.depthMm),
+  };
+}
+
 export function resolveAgregadoAssembly(
   agregado: AgregadoAssemblyInput,
   params: AssemblyResolutionParams,
@@ -904,9 +1042,17 @@ export function resolveAgregadoAssembly(
         hardwareId = variant.hardwareId;
       }
 
-      const xCoord = calculateAxisPlacementCoord('x', member.placement.x, params.widthMm, params.hardwareDimensions?.[hardwareId]);
-      const yCoord = calculateAxisPlacementCoord('y', member.placement.y, params.depthMm, params.hardwareDimensions?.[hardwareId]);
-      const zCoord = calculateAxisPlacementCoord('z', member.placement.z, params.heightMm, params.hardwareDimensions?.[hardwareId]);
+      // #1460 F2: las fórmulas del miembro (offset y dimensiones) ven las
+      // dimensiones EFECTIVAS — override aplicado sobre el catálogo.
+      const memberDims = resolveMemberEffectiveDimensions(
+        member.memberId,
+        member.dimensionOverrides,
+        params.hardwareDimensions?.[hardwareId],
+        { widthMm: params.widthMm, depthMm: params.depthMm, heightMm: params.heightMm },
+      );
+      const xCoord = calculateAxisPlacementCoord('x', member.placement.x, params.widthMm, memberDims);
+      const yCoord = calculateAxisPlacementCoord('y', member.placement.y, params.depthMm, memberDims);
+      const zCoord = calculateAxisPlacementCoord('z', member.placement.z, params.heightMm, memberDims);
 
       const basis = member.placement.rotationDeg
         ? deriveHardwareBasisFromEuler(member.placement.rotationDeg)
@@ -922,6 +1068,8 @@ export function resolveAgregadoAssembly(
         },
         bomRole: member.bomRole,
         actorMembership: member.actorMembership,
+        // Sólo con override: los payloads legacy quedan byte-idénticos.
+        ...(member.dimensionOverrides ? { resolvedDimensions: memberDims } : {}),
       });
     }
   }
