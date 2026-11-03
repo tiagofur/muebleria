@@ -65,6 +65,37 @@ class DrawerActorsTest < Minitest::Test
     refute_includes hw_names, 'slide-fix-l'
   end
 
+  # #1464 — el shape que partió la apertura: el frente modelado como agregado
+  # propio (AGR-FRE-CAJ) llega con SU propio assemblyInstanceId (su ensamble no
+  # emite rieles), la caja lleva el id del ensamble de rieles, y los rieles
+  # móviles van actor:drawer en ese mismo ensamble. El agrupado debe producir
+  # UN cajón con frente + caja + riel móvil + jaladera (la jaladera sigue al
+  # frente por hostComponentInstanceId), nunca frentes que abran solos.
+  def test_front_as_own_assembly_groups_with_rail_assembly_drawer
+    furniture = build_furniture do |definition|
+      # Frente: placement frente_cajon + SU propio assemblyInstanceId (#1464).
+      drawer_front_child(definition, 'front-own-asm', pos_z: 30.0, assembly_id: 'asm-front-1')
+      handle_child(definition, 'handle-front', host: 'front-own-asm')
+
+      # Caja del cajón: ensamble de rieles 'asm-drawer-1'.
+      drawer_box_child(definition, 'box-lat-l', assembly_id: 'asm-drawer-1', pos_z: 30.0)
+      drawer_box_child(definition, 'box-bottom', assembly_id: 'asm-drawer-1', pos_z: 30.0)
+      slide_rail_child(definition, 'slide-mov', assembly_id: 'asm-drawer-1', membership: 'actor:drawer')
+    end
+
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_equal 1, scanned.drawers.length
+    drawer = scanned.drawers.first
+    names = drawer.components.map(&:name)
+    assert_includes names, 'front-own-asm'
+    assert_includes names, 'box-lat-l'
+    assert_includes names, 'box-bottom'
+    hw_names = drawer.hardware.map(&:name)
+    assert_includes hw_names, 'handle-front'
+    assert_includes hw_names, 'slide-mov'
+  end
+
   def test_pairs_multiple_drawers_by_vertical_z_order
     furniture = build_furniture do |definition|
       # Lower drawer (Z = 30)
@@ -169,14 +200,19 @@ class DrawerActorsTest < Minitest::Test
     child
   end
 
-  def drawer_front_child(definition, id, pos_z: 0.0)
+  def drawer_front_child(definition, id, pos_z: 0.0, assembly_id: nil)
     t = Geom::Transformation.translation(Geom::Vector3d.new(0, 0, pos_z / 25.4))
     child = new_child(definition, id, transform: t)
-    @store.write(child, child_metadata(id, {
-                                         'entityClass' => 'part',
-                                         'placement' => 'frente_cajon',
-                                         'role' => 'FRENTES'
-                                       }, identity_id: id))
+    meta = {
+      'entityClass' => 'part',
+      'placement' => 'frente_cajon',
+      'role' => 'FRENTES'
+    }
+    # #1464: el frente como agregado propio (AGR-FRE-CAJ) viaja con SU propio
+    # assemblyInstanceId — DrawerActors lo toma como frente (early return) y
+    # nunca como caja del ensamble de rieles.
+    meta['assemblyInstanceId'] = assembly_id if assembly_id
+    @store.write(child, child_metadata(id, meta, identity_id: id))
     child
   end
 
