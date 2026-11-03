@@ -127,9 +127,7 @@ module Granete
           # rotateY 90, laterales rotZ 90) y su origen puede caer por encima o
           # por debajo del cajón — ordenar cajas por origen emparejaba cada
           # frente con la caja del cajón equivocado (apertura cruzada).
-          if child.respond_to?(:bounds) && child.bounds.respond_to?(:min)
-            return child.bounds.min.z
-          end
+          return child.bounds.min.z if child.respond_to?(:bounds) && child.bounds.respond_to?(:min)
           if child.respond_to?(:transformation) && child.transformation.respond_to?(:origin)
             return child.transformation.origin.z
           end

@@ -126,7 +126,7 @@ class DrawerActorsTest < Minitest::Test
 
       # Cajón de arriba con tablero ROTADO: origen z=0 (engañoso), bounds 350-500.
       rotated_box_child(definition, 'box-top-rotated', assembly_id: 'asm-top',
-                        origin_z: 0.0, bounds_min_z: 350.0, bounds_max_z: 500.0)
+                                                       origin_z: 0.0, bounds_min_z: 350.0, bounds_max_z: 500.0)
       slide_rail_child(definition, 'slide-top', assembly_id: 'asm-top', membership: 'actor:drawer', pos_z: 350.0)
       drawer_front_child(definition, 'front-top', pos_z: 350.0)
     end
