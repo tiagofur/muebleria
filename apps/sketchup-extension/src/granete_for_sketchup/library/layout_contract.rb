@@ -24,11 +24,13 @@ module Granete
       # catalogComponentId is the optional, separately-namespaced catalog
       # reference — the two identities never alias each other.
       class LayoutBoardTransform
-        attr_reader :component_instance_id, :slot_id, :name, :authoring_capability
+        attr_reader :component_instance_id, :slot_id, :name, :authoring_capability,
+                    :assembly_instance_id
 
         # rubocop:disable-next Metrics/ParameterLists
         def initialize(component_instance_id:, slot_id:, name:, dims:, local_transform:,
-                       identity: {}, material: {}, aabb: {}, authoring_capability: nil, notches: [], bevels: [])
+                       identity: {}, material: {}, aabb: {}, authoring_capability: nil, notches: [], bevels: [],
+                       assembly_instance_id: nil)
           @component_instance_id = component_instance_id
           @slot_id = slot_id
           @name = name
@@ -40,6 +42,11 @@ module Granete
           @authoring_capability = authoring_capability
           @notches = notches
           @bevels = bevels
+          # #1468: agregado-expanded boards carry the assembly link the server
+          # seals on them (#1465). It groups the drawer box with its
+          # assembly's moving hardware in DoorActors; nil = module structure
+          # board (never joins a drawer).
+          @assembly_instance_id = assembly_instance_id
         end
 
         # #1287 / §13.3: the opening's declared subtraction boxes in this
@@ -316,7 +323,11 @@ module Granete
             local_transform: local_transform,
             preparation_state: preparation_state,
             mount_frame: mount_frame,
-            is_historical: is_historical
+            is_historical: is_historical,
+            # actor_membership MUST ride super(): LayoutHardwarePlacement#initialize
+            # assigns @actor_membership from its own kwarg AFTER the subclass body
+            # — omitting it here silently nullifies the parsed membership (#1377/#1468).
+            actor_membership: actor_membership
           )
         end
       end
@@ -1036,7 +1047,7 @@ module Granete
       # (those cannot recover orientation; see the negative-proof tests) and
       # has NO fallback path: a missing/unknown transform contract or a
       # malformed basis fails loudly so clients never place pieces on a guess.
-      module LayoutContract
+      module LayoutContract # rubocop:disable Metrics/ModuleLength
         SUPPORTED_TRANSFORM_CONTRACT = 'granete.local-basis.v1'
         IDENTITY_KEYS = %w[componentDefinitionId catalogComponentId role optionRole].freeze
         MATERIAL_STRING_KEYS = %w[materialId materialCode materialName materialColorHex
@@ -1077,6 +1088,7 @@ module Granete
                            dimensions_mm: ContractCoercions.optional_triple(body['dimensionsMm'], 'dimensionsMm'))
         end
 
+        # rubocop:disable-next Metrics/AbcSize
         def parse_board(raw)
           raise ContractError, 'Componente de composición inválido' unless raw.is_a?(Hash)
 
@@ -1107,7 +1119,10 @@ module Granete
             aabb: parse_aabb_fields(raw, id),
             authoring_capability: parse_authoring_capability(raw['authoringCapability'], id),
             notches: NotchContractParsing.parse(raw['notches'], id),
-            bevels: BevelContractParsing.parse(raw['bevels'], id)
+            bevels: BevelContractParsing.parse(raw['bevels'], id),
+            assembly_instance_id: ContractCoercions.optional_opaque_string(
+              raw['assemblyInstanceId'], "assemblyInstanceId de #{id}"
+            )
           )
         end
 

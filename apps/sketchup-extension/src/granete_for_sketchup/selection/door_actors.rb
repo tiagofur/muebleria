@@ -8,9 +8,24 @@ module Granete
       # - Doors: part entities whose placement slot is 'puerta' or whose role
       #   names a door.
       # - Drawers: composed sub-assemblies clustering the drawer front,
-      #   fabricated drawer box components (assemblyInstanceId), handles,
-      #   and moving slide rails (actorMembership 'actor:drawer'). Fixed rails
-      #   (actorMembership 'body') stay with the furniture body.
+      #   fabricated drawer box components, handles, and slide rails.
+      #
+      # Grouping keys, in order of authority (#1468):
+      #   1. Explicit `assemblyInstanceId` on the child metadata (rails carry
+      #      it from the layout contract; box boards too since the engine
+      #      seals it on agregado-expanded components).
+      #   2. Legacy layouts emit the agregado-expanded drawer box boards as
+      #      top-level components WITHOUT assemblyInstanceId, but the server
+      #      embeds the assembly instance id inside the board's own
+      #      componentInstanceId (`agr-<agrId>-instance-<asmId>-u<idx>-…`).
+      #      Those boards join the rail group whose assemblyInstanceId is a
+      #      substring of their componentInstanceId. Cabinet structure boards
+      #      (`st-…` ids) never match.
+      #
+      # Hardware membership: 'actor:drawer' rides the drawer; 'body' stays
+      # with the furniture body; a MISSING membership (legacy metadata) is
+      # treated as drawer hardware best-effort — a fresh re-sync writes the
+      # explicit membership and the fixed rails stay behind again.
       # Never inspects display names or visual geometry for identity.
       #
       # Shared by the Selection::Resolver (publishes opening actors on the
@@ -38,7 +53,8 @@ module Granete
           doors = []
           hardware_by_host = Hash.new { |h, k| h[k] = [] }
           drawer_fronts = []
-          drawer_boxes = Hash.new { |h, k| h[k] = { components: [], hardware: [], min_z: Float::INFINITY } }
+          drawer_groups = Hash.new { |h, k| h[k] = { components: [], hardware: [], min_z: Float::INFINITY } }
+          unassigned_box_boards = []
 
           has_children = furniture_entity.respond_to?(:definition) &&
                          furniture_entity.definition.respond_to?(:entities)
@@ -50,10 +66,12 @@ module Granete
             meta = read_metadata(metadata_store, child)
             next unless meta
 
-            categorize(meta, child, doors, hardware_by_host, drawer_fronts, drawer_boxes)
+            categorize(meta, child, doors, hardware_by_host, drawer_fronts,
+                       drawer_groups, unassigned_box_boards)
           end
 
-          drawers = build_drawers(drawer_fronts, drawer_boxes, hardware_by_host)
+          assign_legacy_box_boards(drawer_groups, unassigned_box_boards)
+          drawers = build_drawers(drawer_fronts, drawer_groups, hardware_by_host)
           DoorActorSet.new(doors, hardware_by_host, drawers)
         end
 
@@ -63,7 +81,8 @@ module Granete
           nil
         end
 
-        def categorize(meta, child, doors, hardware_by_host, drawer_fronts, drawer_boxes)
+        def categorize(meta, child, doors, hardware_by_host, drawer_fronts,
+                       drawer_groups, unassigned_box_boards)
           intent = meta['intent'] || {}
           identity = meta['identity'] || {}
           child_id = identity['instanceRef'] || identity['componentInstanceId'] || identity['hardwarePlacementId']
@@ -71,23 +90,28 @@ module Granete
           assembly_id = intent['assemblyInstanceId'] || identity['assemblyInstanceId']
 
           if entity_class == 'hardware'
-            categorize_hardware(intent, identity, child, hardware_by_host, drawer_boxes, assembly_id)
+            categorize_hardware(intent, identity, child, hardware_by_host,
+                                drawer_groups, assembly_id)
           else
-            categorize_component(
-              intent, child_id, child, doors, hardware_by_host, drawer_fronts, drawer_boxes, assembly_id
-            )
+            categorize_component(intent, child_id, child, doors, hardware_by_host,
+                                 drawer_fronts, drawer_groups, unassigned_box_boards,
+                                 assembly_id)
           end
         end
 
-        def categorize_hardware(intent, identity, child, hardware_by_host, drawer_boxes, assembly_id)
+        def categorize_hardware(intent, identity, child, hardware_by_host,
+                                drawer_groups, assembly_id)
           membership = (intent['actorMembership'] || identity['actorMembership']).to_s.strip
           return if membership == 'body'
 
-          if membership == 'actor:drawer' && assembly_id
-            box = drawer_boxes[assembly_id]
-            box[:hardware] << child
-            z = entity_min_z(child)
-            box[:min_z] = [box[:min_z], z].min
+          # #1468: moving slide rails ride the drawer's assembly group. Legacy
+          # metadata without an explicit membership but WITH an assembly id is
+          # grouped best-effort (a fresh re-sync restores the explicit
+          # membership and fixed rails stay behind again).
+          if assembly_id && (membership == 'actor:drawer' || membership.empty?)
+            group = drawer_groups[assembly_id]
+            group[:hardware] << child
+            group[:min_z] = [group[:min_z], entity_min_z(child)].min
             return
           end
 
@@ -96,7 +120,8 @@ module Granete
         end
 
         def categorize_component(intent, child_id, child, doors, hardware_by_host,
-                                 drawer_fronts, drawer_boxes, assembly_id)
+                                 drawer_fronts, drawer_groups, unassigned_box_boards,
+                                 assembly_id)
           role = (intent['role'] || intent['semanticRole'] || '').to_s.downcase
           placement = (intent['placement'] || '').to_s.downcase
 
@@ -111,14 +136,22 @@ module Granete
             return
           end
 
-          record_drawer_box_part(drawer_boxes, assembly_id, child) if assembly_id
+          # Drawer box board: explicit assembly id when present; otherwise
+          # deferred — the assembly instance id may be embedded in the board's
+          # own componentInstanceId by the server contract (legacy layouts).
+          return unless assembly_id || child_id
+
+          if assembly_id
+            record_drawer_box_part(drawer_groups, assembly_id, child)
+          else
+            unassigned_box_boards << { entity: child, component_id: child_id.to_s, min_z: entity_min_z(child) }
+          end
         end
 
-        def record_drawer_box_part(drawer_boxes, assembly_id, child)
-          box = drawer_boxes[assembly_id]
-          box[:components] << child
-          z = entity_min_z(child)
-          box[:min_z] = [box[:min_z], z].min
+        def record_drawer_box_part(drawer_groups, assembly_id, child)
+          group = drawer_groups[assembly_id]
+          group[:components] << child
+          group[:min_z] = [group[:min_z], entity_min_z(child)].min
         end
 
         def entity_min_z(child)
@@ -137,32 +170,52 @@ module Granete
           0.0
         end
 
-        def build_drawers(drawer_fronts, drawer_boxes, hardware_by_host)
-          sorted_fronts = drawer_fronts.sort_by { |f| [f[:min_z], f[:id].to_s] }
-          sorted_boxes = drawer_boxes.values.sort_by { |b| [b[:min_z], b[:components].first&.name.to_s] }
+        # Legacy layouts (#1468): asigna cada pieza de caja sin
+        # assemblyInstanceId al grupo cuyo assemblyInstanceId está embebido
+        # en su componentInstanceId (contrato de ids del server:
+        # agr-<agrId>-instance-<asmId>-u<idx>-…). Piezas que no casan con
+        # ningún grupo (estructura del mueble, ids `st-…`) quedan fuera —
+        # fail-closed, nunca se adivina.
+        def assign_legacy_box_boards(drawer_groups, unassigned_box_boards)
+          return if unassigned_box_boards.empty? || drawer_groups.empty?
 
-          count = [sorted_fronts.size, sorted_boxes.size].max
-          return [] if count.zero?
+          unassigned_box_boards.each do |record|
+            group = drawer_groups.find do |asm_id, _|
+              record[:component_id].to_s.include?(asm_id)
+            end
+            next unless group
 
-          Array.new(count) do |i|
-            build_single_drawer(i, count, sorted_fronts[i], sorted_boxes[i], hardware_by_host)
+            group[1][:components] << record[:entity]
+            group[1][:min_z] = [group[1][:min_z], record[:min_z]].min
           end
         end
 
-        def build_single_drawer(idx, total, front_info, box_info, hardware_by_host)
+        def build_drawers(drawer_fronts, drawer_groups, hardware_by_host)
+          sorted_fronts = drawer_fronts.sort_by { |f| [f[:min_z], f[:id].to_s] }
+          sorted_groups = drawer_groups.values.sort_by { |g| [g[:min_z], g[:components].first&.name.to_s] }
+
+          count = [sorted_fronts.size, sorted_groups.size].max
+          return [] if count.zero?
+
+          Array.new(count) do |i|
+            build_single_drawer(i, count, sorted_fronts[i], sorted_groups[i], hardware_by_host)
+          end
+        end
+
+        def build_single_drawer(idx, total, front_info, group_info, hardware_by_host)
           components = []
           components << front_info[:entity] if front_info
-          components.concat(box_info[:components]) if box_info
+          components.concat(group_info[:components]) if group_info
 
           hardware = []
           hardware.concat(hardware_by_host[front_info[:id]]) if front_info && front_info[:id]
-          hardware.concat(box_info[:hardware]) if box_info
+          hardware.concat(group_info[:hardware]) if group_info
 
           label = total == 1 ? 'Cajón' : "Cajón #{idx + 1}"
           min_z = if front_info
                     front_info[:min_z]
-                  elsif box_info
-                    box_info[:min_z]
+                  elsif group_info
+                    group_info[:min_z]
                   else
                     0.0
                   end
