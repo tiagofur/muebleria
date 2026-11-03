@@ -8,6 +8,7 @@
 
 import { createContext, useContext, type ReactNode } from 'react';
 import type {
+  Agregado,
   Component,
   Customer,
   EdgeBand,
@@ -41,6 +42,7 @@ export interface ProjectDetailCatalogs {
   readonly materials: readonly MaterialBoard[];
   readonly edges: readonly EdgeBand[];
   readonly hardware: readonly Hardware[];
+  readonly agregados?: readonly Agregado[];
 }
 
 export type ProjectDetailQuoteAuthority =
@@ -197,6 +199,7 @@ export interface ProjectDetailContextValue {
    */
   readonly catalogComponents: readonly Component[];
   readonly catalogStructures: readonly Structure[];
+  readonly catalogAgregados?: readonly Agregado[];
   readonly customers: readonly Customer[];
   readonly ownerLabels: Readonly<Record<string, string>>;
   readonly quoteAuthority?: ProjectDetailQuoteAuthority;

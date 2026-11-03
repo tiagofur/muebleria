@@ -291,7 +291,7 @@ function collectUsedOptionRoles(
   catalogAgregados?: readonly Agregado[],
 ): Set<string> {
   const usedRoles = new Set<string>();
-  for (const line of module.hardwareLines) {
+  for (const line of module.hardwareLines ?? []) {
     if (line.hardwareId) continue;
     if (line.optionRole?.trim()) usedRoles.add(line.optionRole.trim());
   }

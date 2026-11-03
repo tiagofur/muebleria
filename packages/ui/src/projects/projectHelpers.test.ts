@@ -551,6 +551,61 @@ describe('OPT-04 / PRJ-03 option pickers', () => {
     };
     expect(optionsForGroup(emptyGroup, catalogs)).toEqual([]);
   });
+
+  it('optionsForGroup resolves agregado option groups (#1475)', () => {
+    const agregadoGroup: OptionGroup = {
+      id: 'og-cajon',
+      code: 'SISTEMA_CAJON',
+      name: 'Sistema de Cajón',
+      kind: 'agregado',
+      required: true,
+      optionIds: ['agr-blum-merivobox', 'agr-telescopico'],
+    };
+    const catalogsWithAgregados = {
+      ...catalogs,
+      agregados: [
+        { id: 'agr-blum-merivobox', code: 'MERIVOBOX', name: 'Blum Merivobox' },
+        { id: 'agr-telescopico', code: 'TELESCOPICO', name: 'Cajón Guía Telescópica' },
+        { id: 'agr-tandem', code: 'TANDEM', name: 'Blum Tandem Oculta' },
+      ],
+    };
+    const opts = optionsForGroup(agregadoGroup, catalogsWithAgregados);
+    expect(opts).toHaveLength(2);
+    expect(opts.map((o) => o.code)).toEqual(['MERIVOBOX', 'TELESCOPICO']);
+  });
+
+  it('groupsForModuleItem discovers agregado option groups from module and structures (#1475)', () => {
+    const agregadoGroup: OptionGroup = {
+      id: 'og-cajon',
+      code: 'SISTEMA_CAJON',
+      name: 'Sistema de Cajón',
+      kind: 'agregado',
+      required: true,
+      optionIds: ['agr-1'],
+    };
+    const modWithAgregado: Module = {
+      id: 'mod-cajonero',
+      code: 'CAJ-1',
+      name: 'Cajonero',
+      hardwareLines: [],
+      agregados: [
+        {
+          id: 'inst-1',
+          agregadoId: 'agr-1',
+          optionRole: 'SISTEMA_CAJON',
+          quantity: 3,
+        },
+      ],
+    };
+    const result = groupsForModuleItem(
+      modWithAgregado,
+      [...groups, agregadoGroup],
+      undefined,
+      undefined,
+      [{ id: 'agr-1', code: 'A1', name: 'Agregado 1' }],
+    );
+    expect(result.some((g) => g.code === 'SISTEMA_CAJON')).toBe(true);
+  });
 });
 
 describe('PRJ-09 / PRJ-10 item choices', () => {

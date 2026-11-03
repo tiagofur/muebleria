@@ -36,6 +36,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
     catalogs,
     catalogComponents,
     catalogStructures,
+    catalogAgregados,
     itemHandlers,
     removeConfirm,
     viewer3D,
@@ -561,7 +562,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
               optionGroups,
               catalogComponents,
               catalogStructures,
-              undefined,
+              catalogAgregados,
               item.baseMode,
             );
 
