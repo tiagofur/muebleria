@@ -2091,6 +2091,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           materials={materials}
           edges={edges}
           hardware={hardware}
+          agregados={agregados}
           modules={modules}
           catalogComponents={components}
           catalogStructures={structures}

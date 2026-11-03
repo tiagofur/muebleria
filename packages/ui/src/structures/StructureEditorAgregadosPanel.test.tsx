@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Agregado } from '@granete/domain';
+import type { Agregado, OptionGroup } from '@granete/domain';
 import { StructureEditorAgregadosPanel } from './components/StructureEditorAgregadosPanel';
 import { emptyStructureDraft, type StructureDraft } from './structureDraft';
 
@@ -28,9 +28,13 @@ const mockAgregados: Agregado[] = [
 function TestHarness({
   initialDraft = emptyStructureDraft(),
   onDraftChange,
+  catalogAgregados = mockAgregados,
+  optionGroups,
 }: {
   readonly initialDraft?: StructureDraft;
   readonly onDraftChange?: (d: StructureDraft) => void;
+  readonly catalogAgregados?: readonly Agregado[];
+  readonly optionGroups?: readonly OptionGroup[];
 }) {
   const [draft, setDraft] = useState<StructureDraft>(initialDraft);
 
@@ -48,7 +52,8 @@ function TestHarness({
     <StructureEditorAgregadosPanel
       draft={draft}
       setDraft={handleSetDraft}
-      catalogAgregados={mockAgregados}
+      catalogAgregados={catalogAgregados}
+      optionGroups={optionGroups}
     />
   );
 }
@@ -145,6 +150,50 @@ describe('StructureEditorAgregadosPanel', () => {
     // Second click confirms removal
     fireEvent.click(removeBtn);
     expect(currentDraft.agregados).toHaveLength(0);
+  });
+
+  it('renders optionRole selector for interchangeable agregado and updates draft on select (#1474)', () => {
+    const optionGroups: OptionGroup[] = [
+      {
+        id: 'og-puerta',
+        code: 'PUERTA_GABINETE',
+        name: 'Puerta de Gabinete',
+        kind: 'agregado',
+        required: true,
+        optionIds: ['agr-door'],
+      },
+    ];
+
+    let currentDraft: StructureDraft = {
+      ...emptyStructureDraft(),
+      agregados: [
+        {
+          id: 'inst-1',
+          agregadoId: 'agr-door',
+          quantity: 1,
+        },
+      ],
+    };
+
+    render(
+      <TestHarness
+        catalogAgregados={[{ id: 'agr-door', code: 'PUE', name: 'Puerta Lisa' }]}
+        optionGroups={optionGroups}
+        initialDraft={currentDraft}
+        onDraftChange={(d) => {
+          currentDraft = d;
+        }}
+      />,
+    );
+
+    const roleSelect = screen.getByTestId('structure-agr-0-option-role');
+    expect(roleSelect).toBeDefined();
+    fireEvent.change(roleSelect, { target: { value: 'PUERTA_GABINETE' } });
+    expect(currentDraft.agregados[0]!.optionRole).toBe('PUERTA_GABINETE');
+
+    // Deselect to clear
+    fireEvent.change(roleSelect, { target: { value: '' } });
+    expect(currentDraft.agregados[0]!.optionRole).toBeUndefined();
   });
 
   it('renders optionOverrides dropdowns and updates draft optionOverrides on select', () => {

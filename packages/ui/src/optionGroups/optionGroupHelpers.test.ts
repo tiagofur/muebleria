@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  Agregado,
   EdgeBand,
   Hardware,
   MaterialBoard,
@@ -130,6 +131,18 @@ describe('membersForKind (OPT-02)', () => {
   it('returns only edges for edge kind', () => {
     const members = membersForKind('edge', { materials, edges, hardware });
     expect(members.map((m) => m.id)).toEqual(['e1']);
+  });
+
+  it('returns active agregados for agregado kind (#1474)', () => {
+    const agregados: Agregado[] = [
+      { id: 'agr-1', code: 'A1', name: 'Agregado 1', active: true },
+      { id: 'agr-2', code: 'A2', name: 'Agregado 2 Inactivo', active: false },
+    ];
+    const members = membersForKind('agregado', { materials, edges, hardware, agregados });
+    expect(members.map((m) => m.id)).toEqual(['agr-1']);
+
+    const allMembers = membersForKind('agregado', { materials, edges, hardware, agregados }, { includeInactive: true });
+    expect(allMembers.map((m) => m.id)).toEqual(['agr-1', 'agr-2']);
   });
 
   it('can include inactive when requested', () => {
