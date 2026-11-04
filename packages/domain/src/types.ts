@@ -605,8 +605,17 @@ export interface JointDrillingRules {
  * units with different proportions (e.g. depth ~560 for inferiors, ~320 for
  * superiors, height ~2100 for altos). Project measure defaults are keyed by
  * this type. Unset on a Module defaults to `'inferior'` for legacy fixtures.
+ * `panel` (#1496): pure termination panel — one dim is the material thickness.
  */
-export type FurnitureType = 'inferior' | 'superior' | 'alto';
+export type FurnitureType = 'inferior' | 'superior' | 'alto' | 'panel';
+
+/**
+ * Which of the three module dims is the panel's own thickness (#1496).
+ * Only meaningful when furnitureType === 'panel'. Empty/undefined = not a panel
+ * axis. The dim is DERIVED at resolve time from the FRENTE material thickness;
+ * the authored number is only a display fallback.
+ */
+export type PanelThicknessDim = 'width' | 'height' | 'depth';
 
 /**
  * How the floor cabinet meets the floor (zoclo / patas).
@@ -637,6 +646,12 @@ export interface Module {
   readonly externalDims?: ExternalDims;
   /** Fundamental furniture type for project measure defaults (#109). */
   readonly furnitureType?: FurnitureType;
+  /**
+   * For `panel` furnitureType (#1496): which external dim (width/height/depth)
+   * is the panel's thickness, derived from the FRENTE material at resolve time.
+   * Undefined/empty = not declared (behaves as a normal module).
+   */
+  readonly panelThicknessDim?: PanelThicknessDim;
   /**
    * Floor base treatment (zoclo board / strip / legs). Omit → none.
    */

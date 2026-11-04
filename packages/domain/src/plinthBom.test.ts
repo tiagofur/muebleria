@@ -290,10 +290,12 @@ function bajoModule(overrides: Partial<Module> = {}): Module {
 describe('F087 — zócalo como terminación automática', () => {
   const baseChoices = { INTERIOR: 'mat-body', FRENTE: 'mat-front' };
 
-  it('defaultBaseModeForFurnitureType: piso → melamina, superior → none', () => {
+  it('defaultBaseModeForFurnitureType: piso → melamina, superior/panel → none', () => {
     expect(defaultBaseModeForFurnitureType('inferior')).toBe('plinth_board');
     expect(defaultBaseModeForFurnitureType('alto')).toBe('plinth_board');
     expect(defaultBaseModeForFurnitureType('superior')).toBe('none');
+    // #1496: un panel de terminación nunca lleva zócalo.
+    expect(defaultBaseModeForFurnitureType('panel')).toBe('none');
     expect(defaultBaseModeForFurnitureType(undefined)).toBe('plinth_board');
   });
 

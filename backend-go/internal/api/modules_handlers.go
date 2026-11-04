@@ -55,6 +55,26 @@ func (s *Server) validateModuleHardwareLines(w http.ResponseWriter, r *http.Requ
 	return true
 }
 
+// validateModulePanelFields rejects module writes with an invalid #1496 panel
+// declaration: panelThicknessDim must be a known axis and only makes sense on
+// furnitureType "panel" (a declared axis on a non-panel module is a drafting
+// error we fail closed instead of persisting as dead data).
+func (s *Server) validateModulePanelFields(w http.ResponseWriter, m *domain.Module) bool {
+	switch m.PanelThicknessDim {
+	case "", "width", "height", "depth":
+	default:
+		respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeBadRequest,
+			"La dimensión de espesor del panel debe ser width, height o depth.", nil)
+		return false
+	}
+	if m.PanelThicknessDim != "" && m.FurnitureType != "panel" {
+		respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeBadRequest,
+			"La dimensión de espesor sólo aplica a muebles de tipo panel.", nil)
+		return false
+	}
+	return true
+}
+
 func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -75,7 +95,7 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 		}
 		// #1436: a fixed hardware line cannot point at a kit design part —
 		// the part is not purchasable on its own (the kit travels together).
-		if !s.validateModuleHardwareLines(w, r, &m) {
+		if !s.validateModuleHardwareLines(w, r, &m) || !s.validateModulePanelFields(w, &m) {
 			return
 		}
 		err := s.Store.CreateModule(r.Context(), &m)
@@ -142,7 +162,7 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// #1436: same fail-closed guard as create on replace.
-		if !s.validateModuleHardwareLines(w, r, &m) {
+		if !s.validateModuleHardwareLines(w, r, &m) || !s.validateModulePanelFields(w, &m) {
 			return
 		}
 		// cur doubles as the media-cleanup snapshot for the replaced file.

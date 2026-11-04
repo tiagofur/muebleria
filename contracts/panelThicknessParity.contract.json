@@ -1,0 +1,319 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.panelThicknessParity.v1",
+  "comment": [
+    "#1496 — Contrato de paridad TS/Go del tipo de mueble panel:",
+    "el eje declarado (panelThicknessDim) se reemplaza por el espesor del",
+    "material FRENTE elegido ANTES de expandir piezas (bounding + fórmulas PW/PH/PD).",
+    "TS: packages/domain/src/panelThicknessParity.contract.test.ts (resolveBom).",
+    "Go: backend-go/internal/domain/engine/panelThicknessParityContract_test.go (ResolveBomWithContext).",
+    "Regla: expected congelados; si un motor diverge, se alinea el motor — nunca el expected.",
+    "La pieza «sensor» (largo = PW) existe sólo para hacer observable el ancho derivado",
+    "en el BOM: los paneles reales no consumen su propio eje de espesor en piezas.",
+    "Cubre: eje width con FRENTE 15 y 18, sin elección FRENTE (conserva el número",
+    "autoreado — nunca error), y passthrough exacto de un panel sin eje declarado."
+  ],
+  "catalog": {
+    "materials": [
+      {
+        "id": "mat-front-15",
+        "code": "TAB-F-15",
+        "name": "Melamina Frente 15",
+        "widthMm": 1000,
+        "lengthMm": 1000,
+        "thicknessMm": 15,
+        "grainDefault": false,
+        "boardPrice": 100,
+        "wastePercent": 0,
+        "costPerM2": 100,
+        "defaultEdgeBandId": "edge-pvc",
+        "active": true
+      },
+      {
+        "id": "mat-front-18",
+        "code": "TAB-F-18",
+        "name": "Melamina Frente 18",
+        "widthMm": 1000,
+        "lengthMm": 1000,
+        "thicknessMm": 18,
+        "grainDefault": false,
+        "boardPrice": 120,
+        "wastePercent": 0,
+        "costPerM2": 120,
+        "defaultEdgeBandId": "edge-pvc",
+        "active": true
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge-pvc",
+        "code": "PVC-08",
+        "name": "Canto PVC 0.8",
+        "costPerMl": 2,
+        "thicknessMm": 0.8,
+        "active": true
+      }
+    ],
+    "hardware": [],
+    "optionGroups": [
+      {
+        "id": "og-frente",
+        "code": "FRENTE",
+        "name": "Frente",
+        "kind": "board",
+        "required": false,
+        "optionIds": [
+          "mat-front-15",
+          "mat-front-18"
+        ]
+      },
+      {
+        "id": "og-interior",
+        "code": "INTERIOR",
+        "name": "Interior",
+        "kind": "board",
+        "required": true,
+        "optionIds": [
+          "mat-front-15",
+          "mat-front-18"
+        ]
+      }
+    ],
+    "structures": [
+      {
+        "id": "st-panel-cost",
+        "code": "EST-TER-COST",
+        "name": "Cuerpo panel costado",
+        "externalDims": {
+          "width": 15,
+          "height": 720,
+          "depth": 560
+        },
+        "components": [
+          {
+            "componentId": "comp-sensor",
+            "quantity": 1
+          }
+        ],
+        "active": true
+      }
+    ],
+    "components": [
+      {
+        "id": "comp-sensor",
+        "code": "SENSOR-PW",
+        "name": "Sensor PW",
+        "placement": "interno",
+        "geometry": {
+          "kind": "rectangular_board",
+          "lengthMm": 15,
+          "widthMm": 60,
+          "thicknessMm": 15,
+          "lengthFormula": "PW",
+          "widthFormula": "PD - 500"
+        },
+        "defaultEdges": [
+          {
+            "side": "L1",
+            "enabled": false
+          },
+          {
+            "side": "L2",
+            "enabled": false
+          },
+          {
+            "side": "W1",
+            "enabled": false
+          },
+          {
+            "side": "W2",
+            "enabled": false
+          }
+        ],
+        "optionRoles": [
+          "INTERIOR"
+        ],
+        "active": true
+      }
+    ],
+    "agregados": [],
+    "modules": [
+      {
+        "id": "m-panel-cost",
+        "code": "TER-COST-P",
+        "name": "Panel costado (eje ancho)",
+        "structureId": "st-panel-cost",
+        "furnitureType": "panel",
+        "panelThicknessDim": "width",
+        "externalDims": {
+          "width": 15,
+          "height": 720,
+          "depth": 560
+        },
+        "presets": [],
+        "components": [],
+        "hardwareLines": [],
+        "active": true
+      },
+      {
+        "id": "m-panel-no-axis",
+        "code": "TER-COST-NA",
+        "name": "Panel sin eje declarado",
+        "structureId": "st-panel-cost",
+        "furnitureType": "panel",
+        "externalDims": {
+          "width": 15,
+          "height": 720,
+          "depth": 560
+        },
+        "presets": [],
+        "components": [],
+        "hardwareLines": [],
+        "active": true
+      },
+      {
+        "id": "m-panel-zoclo",
+        "code": "TER-COST-Z",
+        "name": "Panel costado con zoclo",
+        "structureId": "st-panel-cost",
+        "furnitureType": "panel",
+        "panelThicknessDim": "width",
+        "externalDims": {
+          "width": 15,
+          "height": 720,
+          "depth": 560
+        },
+        "baseMode": "plinth_board",
+        "presets": [],
+        "components": [],
+        "hardwareLines": [],
+        "active": true
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "axis-width-frente-15",
+      "description": "Eje width + FRENTE 15mm: el ancho resuelto (y el sensor PW) salen del material.",
+      "moduleId": "m-panel-cost",
+      "optionChoicesOverride": {
+        "FRENTE": "mat-front-15",
+        "INTERIOR": "mat-front-15"
+      },
+      "expected": {
+        "parts": [
+          {
+            "description": "Sensor PW",
+            "lengthMm": 15,
+            "widthMm": 60,
+            "quantity": 1,
+            "optionRole": "INTERIOR",
+            "edges": [],
+            "materialId": "mat-front-15"
+          }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "axis-width-frente-18",
+      "description": "Eje width + FRENTE 18mm: mismo catálogo, ancho derivado 18 sin tocar el mueble.",
+      "moduleId": "m-panel-cost",
+      "optionChoicesOverride": {
+        "FRENTE": "mat-front-18",
+        "INTERIOR": "mat-front-18"
+      },
+      "expected": {
+        "parts": [
+          {
+            "description": "Sensor PW",
+            "lengthMm": 18,
+            "widthMm": 60,
+            "quantity": 1,
+            "optionRole": "INTERIOR",
+            "edges": [],
+            "materialId": "mat-front-18"
+          }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "axis-width-no-choice",
+      "description": "Sin elección FRENTE: se conserva el número autoreado (15) — degradación, nunca error.",
+      "moduleId": "m-panel-cost",
+      "optionChoicesOverride": {
+        "INTERIOR": "mat-front-15"
+      },
+      "expected": {
+        "parts": [
+          {
+            "description": "Sensor PW",
+            "lengthMm": 15,
+            "widthMm": 60,
+            "quantity": 1,
+            "optionRole": "INTERIOR",
+            "edges": [],
+            "materialId": "mat-front-15"
+          }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "no-axis-passthrough",
+      "description": "Panel SIN eje declarado: las dims pasan intactas aunque el material sea 18.",
+      "moduleId": "m-panel-no-axis",
+      "optionChoicesOverride": {
+        "FRENTE": "mat-front-18",
+        "INTERIOR": "mat-front-18"
+      },
+      "expected": {
+        "parts": [
+          {
+            "description": "Sensor PW",
+            "lengthMm": 15,
+            "widthMm": 60,
+            "quantity": 1,
+            "optionRole": "INTERIOR",
+            "edges": [],
+            "materialId": "mat-front-18"
+          }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "axis-width-frente-18-with-plinth",
+      "description": "Eje width + FRENTE 18 + baseMode plinth_board: el zócalo sintetizado (ZOCLO-AUTO) sale con el ancho DERIVADO (18) como largo — el tratamiento de base consume las dims derivadas, no las autoreadas; su material hereda FRENTE.",
+      "moduleId": "m-panel-zoclo",
+      "optionChoicesOverride": {
+        "FRENTE": "mat-front-18",
+        "INTERIOR": "mat-front-18"
+      },
+      "expected": {
+        "parts": [
+          {
+            "description": "Sensor PW",
+            "lengthMm": 18,
+            "widthMm": 60,
+            "quantity": 1,
+            "optionRole": "INTERIOR",
+            "edges": [],
+            "materialId": "mat-front-18"
+          },
+          {
+            "description": "Zócalo (melamina)",
+            "lengthMm": 18,
+            "widthMm": 100,
+            "quantity": 1,
+            "optionRole": "ZOCLO",
+            "edges": ["L1"],
+            "materialId": "mat-front-18"
+          }
+        ],
+        "hardware": []
+      }
+    }
+  ]
+}

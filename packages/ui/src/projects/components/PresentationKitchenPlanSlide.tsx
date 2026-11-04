@@ -32,6 +32,7 @@ import {
   resolvePlacement2D,
   resolvePlanBounds,
   type ResolvedPlacement2D,
+  type PlanPanelThicknessContext,
 } from '../kitchenPlanHelpers';
 
 export type PresentationKitchenPlanSlideProps = {
@@ -45,6 +46,8 @@ export type PresentationKitchenPlanSlideProps = {
   readonly onSelectedSpaceIdChange?: (spaceId: string) => void;
   /** Optional: leave presentation and open Proyectar. */
   readonly onGoToProyectar?: () => void;
+  /** #1496: materiales del catálogo para derivar el espesor del panel en el plano. */
+  readonly panelThickness?: PlanPanelThicknessContext;
 };
 
 type SpacePlanModel = {
@@ -101,10 +104,12 @@ function SpacePlanSvg({
   space,
   project,
   modules,
+  panelThickness,
 }: {
   readonly space: SpacePlanModel;
   readonly project: Project;
   readonly modules: readonly Module[];
+  readonly panelThickness?: PlanPanelThicknessContext;
 }): ReactNode {
   const frames = useMemo(
     () => resolveWallFrames(space.walls),
@@ -118,9 +123,9 @@ function SpacePlanSvg({
         project.items.find((i) => i.id === p.itemId) ??
         placeholderItem(p.itemId);
       const mod = modules.find((m) => m.id === item.moduleId);
-      const w = moduleWidth(item, modules);
-      const d = moduleDepth(item, modules);
-      const h = moduleHeight(item, modules);
+      const w = moduleWidth(item, modules, panelThickness);
+      const d = moduleDepth(item, modules, panelThickness);
+      const h = moduleHeight(item, modules, panelThickness);
       const label = itemLabel(p.itemId, p.instanceIndex, project, modules);
       const shortCode = mod?.code ?? label.split('—')[0]?.trim() ?? '';
       const wall = frames.find((f) => f.id === p.wallId);
@@ -138,7 +143,7 @@ function SpacePlanSvg({
       if (r) list.push(r);
     }
     return list;
-  }, [space.placements, frames, project.items, modules]);
+  }, [space.placements, frames, project.items, modules, panelThickness]);
 
   const bounds = useMemo(
     () => resolvePlanBounds({ wallFrames: frames, placements: resolvedPlacements }),
@@ -342,6 +347,7 @@ export function PresentationKitchenPlanSlide({
   selectedSpaceId: controlledSpaceId,
   onSelectedSpaceIdChange,
   onGoToProyectar,
+  panelThickness,
 }: PresentationKitchenPlanSlideProps): ReactNode {
   const layout = useMemo(() => {
     const raw = project.kitchenLayout ?? emptyKitchenLayout();
@@ -378,8 +384,8 @@ export function PresentationKitchenPlanSlide({
   const showLocalTabs = multiSpace && !isControlled;
 
   const fps = useMemo(
-    () => allFootprints(project, modules),
-    [project, modules],
+    () => allFootprints(project, modules, panelThickness),
+    [project, modules, panelThickness],
   );
   const placedKeys = useMemo(() => countPlacedKeys(spaces), [spaces]);
   const unplacedCount = fps.filter(
@@ -446,6 +452,7 @@ export function PresentationKitchenPlanSlide({
         space={selectedSpace}
         project={project}
         modules={modules}
+        panelThickness={panelThickness}
       />
       </div>
     </div>

@@ -249,6 +249,10 @@ export function ProductionOrderViewsPanel({
           onSelectedSpaceIdChange={
             activeSpaceId ? setViewsSpaceId : undefined
           }
+          panelThickness={{
+            materials: catalog.materials,
+            projectLevelChoices: project.projectLevelChoices,
+          }}
         />
       </section>
 

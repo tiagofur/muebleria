@@ -2683,6 +2683,15 @@ const (
 	CatalogFurnitureTypeInferior CatalogFurnitureType = "inferior"
 	CatalogFurnitureTypeSuperior CatalogFurnitureType = "superior"
 	CatalogFurnitureTypeAlto     CatalogFurnitureType = "alto"
+	CatalogFurnitureTypePanel    CatalogFurnitureType = "panel"
+)
+
+type CatalogPanelThicknessAxis string
+
+const (
+	CatalogPanelThicknessAxisWidth  CatalogPanelThicknessAxis = "width"
+	CatalogPanelThicknessAxisHeight CatalogPanelThicknessAxis = "height"
+	CatalogPanelThicknessAxisDepth  CatalogPanelThicknessAxis = "depth"
 )
 
 type CatalogBaseMode string
@@ -2937,6 +2946,7 @@ type CatalogModule struct {
 	CategoryId           *string                        `json:"categoryId,omitempty"`
 	StructureID          *string                        `json:"structure_id,omitempty"`
 	FurnitureType        *CatalogFurnitureType          `json:"furniture_type,omitempty"`
+	PanelThicknessDim    *CatalogPanelThicknessAxis     `json:"panel_thickness_dim,omitempty"`
 	BaseMode             *CatalogBaseMode               `json:"base_mode,omitempty"`
 	BaseClearanceMm      *int64                         `json:"base_clearance_mm,omitempty"`
 	Presets              []CatalogDimensionPreset       `json:"presets,omitempty"`
@@ -3030,6 +3040,7 @@ type CatalogModuleWrite struct {
 	CategoryId           *string                        `json:"categoryId,omitempty"`
 	StructureID          *string                        `json:"structure_id,omitempty"`
 	FurnitureType        *string                        `json:"furniture_type,omitempty"`
+	PanelThicknessDim    *string                        `json:"panel_thickness_dim,omitempty"`
 	BaseMode             *string                        `json:"base_mode,omitempty"`
 	BaseClearanceMm      *int64                         `json:"base_clearance_mm,omitempty"`
 	Presets              []CatalogDimensionPreset       `json:"presets,omitempty"`

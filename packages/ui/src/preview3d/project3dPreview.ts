@@ -121,6 +121,8 @@ function dimsForModule(
   measurePresetId: string | undefined,
   structures: Module3DCatalogInput['structures'],
   customDims?: ProjectItem['customDims'],
+  /** #1496: contexto para derivar el eje del espesor del panel. */
+  panelCtx?: Parameters<typeof resolveItemDims>[3],
 ): { width: number; height: number; depth: number } {
   // F144: single-source dims (customDims → preset → module/structure).
   const structure = module.structureId
@@ -130,6 +132,7 @@ function dimsForModule(
     { customDims, measurePresetId },
     module,
     structure,
+    panelCtx,
   );
   return {
     width: resolved.width,
@@ -168,13 +171,6 @@ function resolveItemBom(
     item.measurePresetId?.trim() ||
     defaultMeasurePresetId(module) ||
     undefined;
-  const dims = dimsForModule(
-    module,
-    measurePresetId,
-    catalogInput.structures,
-    item.customDims,
-  );
-
   const defaults = defaultOptionChoicesForModule(
     module,
     catalogInput.optionGroups,
@@ -187,6 +183,16 @@ function resolveItemBom(
     ...(project.projectLevelChoices ?? {}),
     ...item.optionChoices,
   };
+
+  // #1496: dims del panel con el eje derivado del material de frentes —
+  // mismas choices que verá el BOM del preview (defaults + proyecto + ítem).
+  const dims = dimsForModule(
+    module,
+    measurePresetId,
+    catalogInput.structures,
+    item.customDims,
+    { optionChoices: choices, materials: catalogInput.materials },
+  );
 
   const catalog: Catalog = {
     materials: catalogInput.materials,

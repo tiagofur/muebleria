@@ -10,6 +10,7 @@ import { ResolutionError, ValidationError } from '../errors';
 import {
   resolveModuleMeasurePreset,
 } from '../measurePresets';
+import { applyPanelThicknessDim } from '../itemDims';
 import {
   calculateAgregadoSubspaceUnits,
   resolveAgregadoInstance,
@@ -1075,11 +1076,15 @@ export function resolveBom(
       );
     }
 
+    // #1496 — panel: el eje del espesor sale del material de frentes, no del
+    // número autoreado (misma regla que el espejo Go en resolveBomCommon).
+    const panelDims = applyPanelThicknessDim(module, dims, optionChoices, catalog);
+
     const composed = resolveComposedModule({
       structure,
       componentInstances: module.components ?? [],
       catalog,
-      dims,
+      dims: panelDims,
       optionChoices,
       module,
       baseContext,
@@ -1124,14 +1129,17 @@ export function resolveBom(
 
     // Synthesize the base parts the mode needs, then apply mode rules
     // (zoclo strip ml, legs qty) over composed + module hardware.
+    // #1496: base treatment rides the DERIVED dims (panel axis already
+    // replaced) — mirror of Go resolveBomCommon, which feeds the
+    // expandComposedModulePartsWithDims dims into applyBaseTreatment.
     const treatment = applyBaseTreatment(
       module.code,
       allParts,
       [...composedHardware, ...bandedHardware],
       resolveBaseModeWithContext(module, baseContext),
       resolveBaseClearanceWithContext(module, baseContext),
-      dims.width,
-      dims.depth,
+      panelDims.width,
+      panelDims.depth,
       baseContext?.plinthSides,
       optionChoices,
       baseContext?.plinthRun,

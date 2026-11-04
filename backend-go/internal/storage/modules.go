@@ -15,7 +15,7 @@ import (
 func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error) {
 	query := `
 		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, category_id,
-		       furniture_type, base_mode, base_clearance_mm, image_url, structure_id, agregados, parameter_definitions, version
+		       furniture_type, panel_thickness_dim, base_mode, base_clearance_mm, image_url, structure_id, agregados, parameter_definitions, version
 		FROM modules
 		WHERE organization_id = $1
 		ORDER BY name ASC, id ASC;
@@ -33,6 +33,7 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		var notes *string
 		var categoryID *string
 		var furnitureType *string
+		var panelThicknessDim *string
 		var baseMode *string
 		var baseClearanceMm *int
 		var imageURL *string
@@ -40,7 +41,7 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		var agrsRaw []byte
 		var parameterDefinitionsRaw []byte
 		err := rows.Scan(&m.ID, &m.Code, &m.Name, &w, &h, &d, &notes, &categoryID,
-			&furnitureType, &baseMode, &baseClearanceMm, &imageURL, &structureID, &agrsRaw, &parameterDefinitionsRaw, &m.Version)
+			&furnitureType, &panelThicknessDim, &baseMode, &baseClearanceMm, &imageURL, &structureID, &agrsRaw, &parameterDefinitionsRaw, &m.Version)
 		if err != nil {
 			return nil, err
 		}
@@ -61,6 +62,9 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		}
 		if furnitureType != nil {
 			m.FurnitureType = *furnitureType
+		}
+		if panelThicknessDim != nil {
+			m.PanelThicknessDim = *panelThicknessDim
 		}
 		if baseMode != nil {
 			m.BaseMode = *baseMode
@@ -200,7 +204,7 @@ func (s *PostgresStore) listAllModulePresets(ctx context.Context) (map[string][]
 }
 
 func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.Module, error) {
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions, created_at, updated_at, version FROM modules WHERE id = $1 AND organization_id = $2`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, panel_thickness_dim, base_mode, base_clearance_mm, agregados, parameter_definitions, created_at, updated_at, version FROM modules WHERE id = $1 AND organization_id = $2`
 	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var m domain.Module
 	var w, h, d *int
@@ -209,11 +213,12 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	var imageURL *string
 	var structureID *string
 	var furnitureType *string
+	var panelThicknessDim *string
 	var baseMode *string
 	var baseClearanceMm *int
 	var agrsRaw []byte
 	var parameterDefinitionsRaw []byte
-	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm, &agrsRaw, &parameterDefinitionsRaw, &m.CreatedAt, &m.UpdatedAt, &m.Version)
+	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &panelThicknessDim, &baseMode, &baseClearanceMm, &agrsRaw, &parameterDefinitionsRaw, &m.CreatedAt, &m.UpdatedAt, &m.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -240,6 +245,9 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	}
 	if furnitureType != nil {
 		m.FurnitureType = *furnitureType
+	}
+	if panelThicknessDim != nil {
+		m.PanelThicknessDim = *panelThicknessDim
 	}
 	if baseMode != nil {
 		m.BaseMode = *baseMode
@@ -407,20 +415,20 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 
 	if idToInsert != "" {
 		queryInsert = `
-			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions, organization_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, panel_thickness_dim, base_mode, base_clearance_mm, agregados, parameter_definitions, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 			RETURNING created_at, updated_at, version;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, OrgFromCtx(ctx)).
+		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.PanelThicknessDim, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, OrgFromCtx(ctx)).
 			Scan(&m.CreatedAt, &m.UpdatedAt, &m.Version)
 		m.ID = idToInsert
 	} else {
 		queryInsert = `
-			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions, organization_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, panel_thickness_dim, base_mode, base_clearance_mm, agregados, parameter_definitions, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 			RETURNING id, created_at, updated_at, version;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, OrgFromCtx(ctx)).
+		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.PanelThicknessDim, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, OrgFromCtx(ctx)).
 			Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt, &m.Version)
 	}
 
@@ -591,11 +599,11 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, expectedVer
 
 	query := `
 		UPDATE modules
-		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, furniture_type = $11, base_mode = $12, base_clearance_mm = $13, agregados = $14, parameter_definitions = $15, updated_at = CURRENT_TIMESTAMP, version = version + 1
-		WHERE id = $16 AND organization_id = $17 AND version = $18
+		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, furniture_type = $11, panel_thickness_dim = $12, base_mode = $13, base_clearance_mm = $14, agregados = $15, parameter_definitions = $16, updated_at = CURRENT_TIMESTAMP, version = version + 1
+		WHERE id = $17 AND organization_id = $18 AND version = $19
 		RETURNING updated_at, version;
 	`
-	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, id, OrgFromCtx(ctx), expectedVersion).Scan(&m.UpdatedAt, &m.Version)
+	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.PanelThicknessDim, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, id, OrgFromCtx(ctx), expectedVersion).Scan(&m.UpdatedAt, &m.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Missing row and stale version both surface as ErrNoRows here;

@@ -533,6 +533,10 @@ func expandComposedModulePartsWithDims(
 			dims = formulaDims{W: customDims.WidthMm, H: customDims.HeightMm, D: customDims.DepthMm}
 		}
 	}
+	// #1496 — panel: el eje del espesor sale del material de frentes
+	// (espejo exacto de TS applyPanelThicknessDim en engine/bom.ts).
+	dims = applyPanelThicknessDims(module, dims, optionChoices, catalog)
+
 	if err := validateStructureDims(structure, dims); err != nil {
 		return nil, formulaDims{}, err
 	}
@@ -1127,4 +1131,52 @@ func CalcHardwareLineCost(
 	return HardwareLineCost{
 		HardwareCost: line.Quantity * float64(qtyMultiplier) * hw.CostPerUnit,
 	}, nil
+}
+
+// applyPanelThicknessDims (#1496): for furnitureType "panel" with a declared
+// axis, replace that dim with the FRENTE material thickness resolved from the
+// item's option choices. Without a resolvable material the incoming dim is
+// preserved (authored number = display fallback, never an error). Mirrors TS
+// applyPanelThicknessDim (packages/domain/src/itemDims.ts).
+func applyPanelThicknessDims(
+	module domain.Module,
+	dims formulaDims,
+	optionChoices map[string]string,
+	catalog domain.Catalog,
+) formulaDims {
+	if module.FurnitureType != "panel" {
+		return dims
+	}
+	axis := module.PanelThicknessDim
+	if axis != "width" && axis != "height" && axis != "depth" {
+		return dims
+	}
+	role := "FRENTE"
+	choiceID := resolveBoardOptionChoiceID(role, optionChoices)
+	if choiceID == "" {
+		return dims
+	}
+	var thickness int
+	found := false
+	for i := range catalog.Materials {
+		if catalog.Materials[i].ID == choiceID {
+			t := catalog.Materials[i].ThicknessMm
+			if t > 0 {
+				thickness, found = t, true
+			}
+			break
+		}
+	}
+	if !found {
+		return dims
+	}
+	switch axis {
+	case "width":
+		dims.W = thickness
+	case "height":
+		dims.H = thickness
+	case "depth":
+		dims.D = thickness
+	}
+	return dims
 }

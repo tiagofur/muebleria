@@ -39,6 +39,7 @@ export type {
   Structure,
   StructureRevision,
   FurnitureType,
+  PanelThicknessDim,
   DimensionPreset,
   ComponentPlacement,
   ComponentGeometry,
@@ -257,6 +258,9 @@ export {
   moduleAcceptsCustomDims,
   resolveItemDims,
   validateItemCustomDims,
+  applyPanelThicknessDim,
+  panelThicknessAxis,
+  type PanelDimsContext,
 } from './itemDims';
 export type {
   CustomDimsIssue,

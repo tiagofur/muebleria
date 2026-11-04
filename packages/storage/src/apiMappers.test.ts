@@ -498,6 +498,41 @@ describe('apiMappers', () => {
     expect(round.baseClearanceMm).toBe(120);
   });
 
+  it('round-trips panel furnitureType + panelThicknessDim (#1496)', () => {
+    const mod: Module = {
+      id: 'mod-panel',
+      code: 'TER-COST',
+      name: 'Panel Costado',
+      furnitureType: 'panel',
+      panelThicknessDim: 'width',
+      externalDims: { width: 15, height: 720, depth: 560 },
+      hardwareLines: [],
+    };
+    const api = moduleToApi(mod);
+    expect(api.furniture_type).toBe('panel');
+    expect(api.panel_thickness_dim).toBe('width');
+    const round = moduleFromApi(api as Record<string, unknown>);
+    expect(round.furnitureType).toBe('panel');
+    expect(round.panelThicknessDim).toBe('width');
+
+    // Eje desconocido → no declarado (fail-closed del mapper)
+    const invalid = moduleFromApi({
+      ...mod,
+      id: 'mod-panel-2',
+      panel_thickness_dim: 'diagonal',
+    } as unknown as Record<string, unknown>);
+    expect(invalid.panelThicknessDim).toBeUndefined();
+
+    // Sin eje → campo ausente, no ''
+    const noAxis = moduleFromApi({
+      ...mod,
+      id: 'mod-panel-3',
+      panel_thickness_dim: '',
+    } as unknown as Record<string, unknown>);
+    expect(noAxis.panelThicknessDim).toBeUndefined();
+    expect(moduleToApi(noAxis).panel_thickness_dim).toBe('');
+  });
+
   it('round-trips module furnitureType (snake + camel read) (#109)', () => {
     const mod: Module = {
       id: 'mod1',

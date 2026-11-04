@@ -48,6 +48,7 @@ import {
   emptyKitchenLayout,
   MIN_WALL_LENGTH_MM,
   moduleAcceptsCustomDims,
+  panelThicknessAxis,
   nudgeSelectionCommand,
   parsePlacementKey,
   ensureKitchenSpaces,
@@ -418,9 +419,13 @@ function listEntryMeta(
 function resolveItemDims(
   item: ProjectItem,
   module: Module | undefined,
+  /** #1496: materiales del catálogo para derivar el eje del espesor del panel. */
+  materials?: Module3DCatalogInput['materials'],
+  projectLevelChoices?: Project['projectLevelChoices'],
 ): { width: number; height: number; depth: number } {
   if (!module) return { width: 600, height: 720, depth: 560 };
-  // F144: fuente única de dims (a medida → preset → módulo).
+  // F144: fuente única de dims (a medida → preset → módulo); #1496 panel
+  // deriva su eje del material de frentes con el contexto disponible.
   const resolved = domainResolveItemDims(
     {
       customDims: item.customDims,
@@ -428,6 +433,8 @@ function resolveItemDims(
         item.measurePresetId?.trim() || defaultMeasurePresetId(module) || undefined,
     },
     module,
+    undefined,
+    materials ? { optionChoices: item.optionChoices, projectLevelChoices, materials } : undefined,
   );
   if (resolved.source === 'fallback') return { width: 600, height: 720, depth: 560 };
   return { width: resolved.width, height: resolved.height, depth: resolved.depth };
@@ -998,9 +1005,9 @@ export function ProjectSpatialStudio({
   const selectedDims = useMemo(
     () =>
       selectedItem
-        ? resolveItemDims(selectedItem, selectedModule)
+        ? resolveItemDims(selectedItem, selectedModule, catalog.materials, project.projectLevelChoices)
         : null,
-    [selectedItem, selectedModule],
+    [selectedItem, selectedModule, catalog.materials, project.projectLevelChoices],
   );
 
   /**
@@ -2306,7 +2313,7 @@ export function ProjectSpatialStudio({
         ? modules.find((m) => m.id === item2.moduleId)
         : moduleHint;
       const dims2 = item2
-        ? resolveItemDims(item2, mod2)
+        ? resolveItemDims(item2, mod2, catalog.materials, project.projectLevelChoices)
         : moduleHint
           ? moduleDefaultDims(moduleHint)
           : { width: 600, height: 720, depth: 560 };
@@ -2374,7 +2381,7 @@ export function ProjectSpatialStudio({
       ? modules.find((m) => m.id === item.moduleId)
       : moduleHint;
     const dims = item
-      ? resolveItemDims(item, mod)
+      ? resolveItemDims(item, mod, catalog.materials, project.projectLevelChoices)
       : moduleHint
         ? moduleDefaultDims(moduleHint)
         : null;
@@ -3635,7 +3642,7 @@ export function ProjectSpatialStudio({
                                             )
                                           : undefined;
                                         const dims = item
-                                          ? resolveItemDims(item, mod)
+                                          ? resolveItemDims(item, mod, catalog.materials, project.projectLevelChoices)
                                           : { width: 600, height: 720, depth: 560 };
                                         const payload = encodeUnplacedDrag({
                                           itemId: f.itemId,
@@ -5486,19 +5493,33 @@ export function ProjectSpatialStudio({
                                   : 'depth'
                             ] ?? 0;
                           const issues = dimDraftIssues;
+                          // #1496: el eje del espesor de un panel sale del
+                          // material de frentes — bloqueado, no editable.
+                          const isThicknessAxis =
+                            selectedModule != null &&
+                            panelThicknessAxis(selectedModule) ===
+                              dimKey.replace('Mm', '');
+                          const axisValue = isThicknessAxis
+                            ? (current ?? effective)
+                            : null;
                           return (
                             <label
                               key={dimKey}
                               className="spatial-studio__dims-cell"
                             >
-                              <span>{dimLabel}</span>
+                              <span>
+                                {dimLabel}
+                                {isThicknessAxis ? ' · material de frentes' : ''}
+                              </span>
                               <input
                                 type="number"
                                 min={1}
                                 step={10}
                                 key={`dim-${dimKey}-${current ?? effective}`}
                                 defaultValue={current ?? effective}
-                                disabled={!canEdit || !onUpdateItem}
+                                disabled={
+                                  isThicknessAxis || !canEdit || !onUpdateItem
+                                }
                                 aria-invalid={issues.some((i) => i.field === dimKey) || undefined}
                                 onBlur={(e) => {
                                   const v = Number(e.target.value);
@@ -5509,6 +5530,7 @@ export function ProjectSpatialStudio({
                                   if (e.key === 'Enter') e.currentTarget.blur();
                                 }}
                                 data-testid={`spatial-studio-dim-${dimKey}`}
+                                data-panel-axis={isThicknessAxis ? axisValue : undefined}
                               />
                             </label>
                           );

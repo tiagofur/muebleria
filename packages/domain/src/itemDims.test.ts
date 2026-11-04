@@ -114,3 +114,93 @@ describe('validateItemCustomDims', () => {
     ).toEqual(['widthMm']);
   });
 });
+
+describe('#1496 panel thickness dim', () => {
+  const panelMod = moduleOf({
+    structureId: 's1',
+    furnitureType: 'panel',
+    panelThicknessDim: 'width',
+    externalDims: { width: 15, height: 720, depth: 560 },
+  });
+  const mats = [
+    { id: 'mat-15', thicknessMm: 15 },
+    { id: 'mat-18', thicknessMm: 18 },
+  ];
+
+  it('resolveItemDims deriva el eje del material FRENTE del ítem', () => {
+    const dims = resolveItemDims(itemOf({}), panelMod, undefined, {
+      optionChoices: { FRENTE: 'mat-18' },
+      materials: mats,
+    });
+    expect(dims.width).toBe(18);
+    expect(dims.height).toBe(720);
+    expect(dims.depth).toBe(560);
+  });
+
+  it('resolveItemDims sin elección FRENTE conserva el número autoreado', () => {
+    const dims = resolveItemDims(itemOf({}), panelMod, undefined, {
+      optionChoices: {},
+      materials: mats,
+    });
+    expect(dims.width).toBe(15);
+  });
+
+  it('resolveItemDims sin panelCtx no deriva (callers legacy intactos)', () => {
+    const dims = resolveItemDims(itemOf({}), panelMod);
+    expect(dims.width).toBe(15);
+  });
+
+  it('resolveItemDims hereda FRENTE del proyecto por clave (no fallback todo-el-objeto)', () => {
+    // El ítem sólo elige INTERIOR: el merge canónico (effectiveOptionChoices)
+    // mantiene el FRENTE del proyecto → el eje se deriva de mat-18. El
+    // fallback todo-el-objeto viejo perdía FRENTE y conservaba 15.
+    const dims = resolveItemDims(
+      itemOf({ optionChoices: { INTERIOR: 'mat-15' } }),
+      panelMod,
+      undefined,
+      {
+        optionChoices: { INTERIOR: 'mat-15' },
+        projectLevelChoices: { FRENTE: 'mat-18' },
+        materials: mats,
+      },
+    );
+    expect(dims.width).toBe(18);
+    expect(dims.height).toBe(720);
+    expect(dims.depth).toBe(560);
+  });
+
+  it('resolveItemDims sin ninguna elección conserva el número autoreado', () => {
+    const dims = resolveItemDims(itemOf({}), panelMod, undefined, {
+      materials: mats,
+    });
+    expect(dims.width).toBe(15);
+  });
+
+  it('validateItemCustomDims ignora el eje del panel y valida los otros dos ejes', () => {
+    // El eje del espesor sale del material de frentes (el resolver lo
+    // reemplaza): el número autoreado de ese eje no se valida. Los otros dos
+    // ejes válidos → sin issues.
+    const issues = validateItemCustomDims(panelMod, {
+      widthMm: 18,
+      heightMm: 800,
+      depthMm: 560,
+    });
+    expect(issues).toEqual([]);
+  });
+
+  it('validateItemCustomDims sigue cazando violaciones fuera del eje del panel', () => {
+    const issues = validateItemCustomDims(panelMod, {
+      widthMm: 18,
+      heightMm: 40000,
+      depthMm: 560,
+    });
+    expect(issues.map((i) => i.field)).toEqual(['heightMm']);
+  });
+
+  it('validateItemCustomDims ignora el eje en módulos no-panel', () => {
+    const normal = moduleOf({ structureId: 's1', furnitureType: 'superior' });
+    expect(
+      validateItemCustomDims(normal, { widthMm: 600, heightMm: 800, depthMm: 560 }),
+    ).toEqual([]);
+  });
+});

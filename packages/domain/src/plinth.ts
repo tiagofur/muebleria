@@ -199,12 +199,15 @@ export function applyBaseModeToHardwareLines(
 /**
  * Base treatment a new project line gets when it is added (F087).
  * Floor units (inferior / despensa-alto) get a melamine plinth inheriting the
- * front finish; wall units get none. The user can change it per item later.
+ * front finish; wall units get none. Panels (#1496) never get a base — the
+ * panel IS a plain board. The user can change it per item later.
  */
 export function defaultBaseModeForFurnitureType(
   furnitureType?: FurnitureType,
 ): ModuleBaseMode {
-  return furnitureType === 'superior' ? 'none' : 'plinth_board';
+  return furnitureType === 'superior' || furnitureType === 'panel'
+    ? 'none'
+    : 'plinth_board';
 }
 
 /** Base-mode + height context an engine receives for a quote line (F087). */
