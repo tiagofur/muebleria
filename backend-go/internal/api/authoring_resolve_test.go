@@ -44,16 +44,11 @@ func authoringStubServer(t *testing.T) (*Server, string) {
 	fullCatalog.Materials = materials
 	fullCatalog.Edges = []domain.EdgeBand{{ID: "edge-white", Active: true}, {ID: "edge-inactive", Active: false}}
 	fullCatalog.Hardware = append(fullCatalog.Hardware, domain.Hardware{ID: "hw-inactive", Active: false})
-	fullCatalog.Agregados = []domain.Agregado{
-		{ID: "agr-cajon-active", Code: "CAJON-STD", Name: "Cajón Estándar", Active: true},
-		{ID: "agr-inactive", Code: "CAJON-INACTIVO", Name: "Cajón Inactivo", Active: false},
-	}
 	fullCatalog.OptionGroups = []domain.OptionGroup{
 		{Code: "FRENTE", Kind: "board", OptionIDs: []string{"mat-oak18"}},
 		{Code: "INTERIOR", Kind: "board", OptionIDs: []string{"mat-white18"}},
 		{Code: "BISAGRA", Kind: "hardware", OptionIDs: []string{"hw-hinge", "hw-inactive"}},
 		{Code: "EDGE", Kind: "edge", OptionIDs: []string{"edge-white", "edge-inactive"}},
-		{Code: "CAJON", Kind: "agregado", OptionIDs: []string{"agr-cajon-active", "agr-inactive"}},
 	}
 	server.Store = &stubStore{
 		getUserByEmail:     u,
@@ -62,7 +57,7 @@ func authoringStubServer(t *testing.T) (*Server, string) {
 		listModules:        []domain.Module{*module},
 		listStructures:     catalog.Structures,
 		listComponents:     catalog.Components,
-		listAgregados:      fullCatalog.Agregados,
+		listAgregados:      catalog.Agregados,
 		listHardwares:      catalog.Hardware,
 		listMaterials:      materials,
 	}
@@ -1278,6 +1273,18 @@ func TestAuthoringResolveMinimalSnapshotCarriesExactMaterialMetadata(t *testing.
 
 func TestAuthoringResolveRejectsInvalidCatalogOptions(t *testing.T) {
 	server, token := authoringStubServer(t)
+	store := server.Store.(*stubStore)
+	cat := *store.catalogOverride
+	cat.Agregados = append([]domain.Agregado(nil), cat.Agregados...)
+	cat.Agregados = append(cat.Agregados,
+		domain.Agregado{ID: "agr-cajon-active", Code: "CAJON-STD", Name: "Cajón Estándar", Active: true},
+		domain.Agregado{ID: "agr-inactive", Code: "CAJON-INACTIVO", Name: "Cajón Inactivo", Active: false},
+	)
+	cat.OptionGroups = append([]domain.OptionGroup(nil), cat.OptionGroups...)
+	cat.OptionGroups = append(cat.OptionGroups, domain.OptionGroup{
+		Code: "CAJON", Kind: "agregado", OptionIDs: []string{"agr-cajon-active", "agr-inactive"},
+	})
+	store.catalogOverride = &cat
 	revision := authoringCatalogRevision(t, server)
 	for _, tc := range []struct {
 		name, role, id string
@@ -1308,6 +1315,17 @@ func TestAuthoringResolveRejectsInvalidCatalogOptions(t *testing.T) {
 
 func TestAuthoringResolveAgregadoOptionChoice(t *testing.T) {
 	server, token := authoringStubServer(t)
+	store := server.Store.(*stubStore)
+	cat := *store.catalogOverride
+	cat.Agregados = append([]domain.Agregado(nil), cat.Agregados...)
+	cat.Agregados = append(cat.Agregados,
+		domain.Agregado{ID: "agr-cajon-active", Code: "CAJON-STD", Name: "Cajón Estándar", Active: true},
+	)
+	cat.OptionGroups = append([]domain.OptionGroup(nil), cat.OptionGroups...)
+	cat.OptionGroups = append(cat.OptionGroups, domain.OptionGroup{
+		Code: "CAJON", Kind: "agregado", OptionIDs: []string{"agr-cajon-active"},
+	})
+	store.catalogOverride = &cat
 	revision := authoringCatalogRevision(t, server)
 	choices := map[string]string{
 		"INTERIOR": "mat-white18",

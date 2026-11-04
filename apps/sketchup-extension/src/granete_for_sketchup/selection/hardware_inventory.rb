@@ -84,6 +84,25 @@ module Granete
         # payload: { 'code' => code, 'chosenHardwareId' => id, 'count' => n }.
         def groups_for_furniture(metadata_store, entity, definition_roles: [], item_choices: {})
           placed = scan_placed_groups(metadata_store, entity)
+
+          # Match placed agregados with definition agregado roles (#1482):
+          Array(definition_roles).each do |role|
+            next unless role.is_a?(Hash)
+
+            code = role['code'].to_s.strip
+            next if code.empty? || placed.key?(code)
+
+            allowed = Array(role['optionIds'])
+            matched_key = allowed.map { |id| "__agr__#{id}" }.find { |k| placed.key?(k) }
+            if matched_key
+              agr_info = placed[matched_key]
+              placed[code] = {
+                'chosenHardwareId' => agr_info['chosenHardwareId'],
+                'count' => agr_info['instances'] ? agr_info['instances'].size : 1
+              }
+            end
+          end
+
           out = role_group_rows(Array(definition_roles), placed, item_choices)
           out.concat(placed_only_rows(placed, out.map { |row| row['code'] }))
         end
@@ -100,14 +119,25 @@ module Granete
             next unless child_meta
 
             intent = child_meta['intent'] || {}
-            next unless intent['entityClass'] == 'hardware'
+            identity = child_meta['identity'] || {}
 
-            code = intent['optionRole'].to_s.strip
-            hardware_id = intent['hardwareDefinitionId'].to_s.strip
-            next if code.empty? || hardware_id.empty?
+            # Hardware children (entityClass == 'hardware')
+            if intent['entityClass'] == 'hardware'
+              code = intent['optionRole'].to_s.strip
+              hardware_id = intent['hardwareDefinitionId'].to_s.strip
+              if !code.empty? && !hardware_id.empty?
+                group = (placed[code] ||= { 'chosenHardwareId' => hardware_id, 'count' => 0 })
+                group['count'] += 1
+              end
+            end
 
-            group = (placed[code] ||= { 'chosenHardwareId' => hardware_id, 'count' => 0 })
-            group['count'] += 1
+            # Agregado assembly children (#1482): carry agregadoId and assemblyInstanceId
+            agr_id = (intent['agregadoId'] || identity['agregadoId']).to_s.strip
+            asm_id = (intent['assemblyInstanceId'] || identity['assemblyInstanceId']).to_s.strip
+            if !agr_id.empty? && !asm_id.empty?
+              agr_group = (placed["__agr__#{agr_id}"] ||= { 'chosenHardwareId' => agr_id, 'instances' => {} })
+              agr_group['instances'][asm_id] = true
+            end
           end
           placed
         end
@@ -137,7 +167,7 @@ module Granete
         # manual roles) stay visible, sorted by code — fail-visible, never
         # silently dropped from the card.
         def placed_only_rows(placed, listed_codes)
-          (placed.keys - listed_codes).sort.map do |code|
+          (placed.keys - listed_codes).reject { |k| k.start_with?('__') }.sort.map do |code|
             { 'code' => code,
               'chosenHardwareId' => placed[code]['chosenHardwareId'],
               'count' => placed[code]['count'] }
