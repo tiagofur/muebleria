@@ -2915,6 +2915,7 @@ type CatalogAgregadoDimensions struct {
 type CatalogAgregadoInstance struct {
 	ID              *string                    `json:"id,omitempty"`
 	AgregadoID      string                     `json:"agregado_id"`
+	OptionRole      *string                    `json:"option_role,omitempty"`
 	Name            *string                    `json:"name,omitempty"`
 	Quantity        int64                      `json:"quantity"`
 	LayoutDirection *string                    `json:"layout_direction,omitempty"`

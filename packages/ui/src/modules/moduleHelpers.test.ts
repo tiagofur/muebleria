@@ -642,4 +642,25 @@ describe('#1404 hardware line component link', () => {
       }),
     ).toBe(false);
   });
+
+  it('isModuleDraft and draftToModule preserve optionRole on agregado instances (#1482)', () => {
+    const draft = moduleToDraft({
+      id: 'm-agr',
+      code: 'MOD-AGR',
+      name: 'Mueble con rol de agregado',
+      hardwareLines: [],
+      agregados: [
+        {
+          id: 'inst-1',
+          agregadoId: 'agr-caj',
+          optionRole: 'SISTEMA_CAJON',
+          quantity: 2,
+        },
+      ],
+    });
+    expect(isModuleDraft(draft)).toBe(true);
+    const mod = draftToModule('m-agr', draft);
+    expect(mod.agregados).toHaveLength(1);
+    expect(mod.agregados![0]!.optionRole).toBe('SISTEMA_CAJON');
+  });
 });

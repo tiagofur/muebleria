@@ -605,6 +605,9 @@
       // The working draft choice wins over the scanned chosen so a pending
       // pick repaints immediately; both are the same map the Apply sends.
       var chosenId = inspectorMaterialChoices[group.code] || group.chosenHardwareId;
+      if (!chosenId && def && Array.isArray(def.optionIds) && def.optionIds.length > 0) {
+        chosenId = def.optionIds[0];
+      }
       var chosen = chosenId ? hardwareDefinitionById(chosenId) : null;
       var membersKnown = def && Array.isArray(def.optionIds) && def.optionIds.length > 0;
       // #1178-inspector: same visual pattern as Materiales del Taller — the

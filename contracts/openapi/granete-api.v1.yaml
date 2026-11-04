@@ -17844,6 +17844,9 @@
           "agregado_id": {
             "type": "string"
           },
+          "option_role": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },

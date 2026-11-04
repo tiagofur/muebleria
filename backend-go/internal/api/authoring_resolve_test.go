@@ -1273,6 +1273,18 @@ func TestAuthoringResolveMinimalSnapshotCarriesExactMaterialMetadata(t *testing.
 
 func TestAuthoringResolveRejectsInvalidCatalogOptions(t *testing.T) {
 	server, token := authoringStubServer(t)
+	store := server.Store.(*stubStore)
+	cat := *store.catalogOverride
+	cat.Agregados = append([]domain.Agregado(nil), cat.Agregados...)
+	cat.Agregados = append(cat.Agregados,
+		domain.Agregado{ID: "agr-cajon-active", Code: "CAJON-STD", Name: "Cajón Estándar", Active: true},
+		domain.Agregado{ID: "agr-inactive", Code: "CAJON-INACTIVO", Name: "Cajón Inactivo", Active: false},
+	)
+	cat.OptionGroups = append([]domain.OptionGroup(nil), cat.OptionGroups...)
+	cat.OptionGroups = append(cat.OptionGroups, domain.OptionGroup{
+		Code: "CAJON", Kind: "agregado", OptionIDs: []string{"agr-cajon-active", "agr-inactive"},
+	})
+	store.catalogOverride = &cat
 	revision := authoringCatalogRevision(t, server)
 	for _, tc := range []struct {
 		name, role, id string
@@ -1285,6 +1297,8 @@ func TestAuthoringResolveRejectsInvalidCatalogOptions(t *testing.T) {
 		{"hardware inactive", "BISAGRA", "hw-inactive"},
 		{"edge wrong kind", "EDGE", "hw-hinge"},
 		{"edge inactive", "EDGE", "edge-inactive"},
+		{"agregado wrong kind", "CAJON", "mat-oak18"},
+		{"agregado inactive", "CAJON", "agr-inactive"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(revision, authoringResolveFurniture{
@@ -1296,6 +1310,44 @@ func TestAuthoringResolveRejectsInvalidCatalogOptions(t *testing.T) {
 			}
 			assertIssueCode(t, rec.Body.Bytes(), "MATERIAL_CHOICE_INVALID")
 		})
+	}
+}
+
+func TestAuthoringResolveAgregadoOptionChoice(t *testing.T) {
+	server, token := authoringStubServer(t)
+	store := server.Store.(*stubStore)
+	cat := *store.catalogOverride
+	cat.Agregados = append([]domain.Agregado(nil), cat.Agregados...)
+	cat.Agregados = append(cat.Agregados,
+		domain.Agregado{ID: "agr-cajon-active", Code: "CAJON-STD", Name: "Cajón Estándar", Active: true},
+	)
+	cat.OptionGroups = append([]domain.OptionGroup(nil), cat.OptionGroups...)
+	cat.OptionGroups = append(cat.OptionGroups, domain.OptionGroup{
+		Code: "CAJON", Kind: "agregado", OptionIDs: []string{"agr-cajon-active"},
+	})
+	store.catalogOverride = &cat
+	revision := authoringCatalogRevision(t, server)
+	choices := map[string]string{
+		"INTERIOR": "mat-white18",
+		"CAJON":    "agr-cajon-active",
+	}
+	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(revision, authoringResolveFurniture{
+		FurnitureDefinitionID: authoringFixtureModuleID,
+		MaterialChoices:       choices,
+	}))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST resolve status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		NormalizedSnapshot struct {
+			MaterialChoices map[string]string `json:"materialChoices"`
+		} `json:"normalizedSnapshot"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.NormalizedSnapshot.MaterialChoices["CAJON"] != "agr-cajon-active" {
+		t.Fatalf("normalized CAJON = %q, want %q", response.NormalizedSnapshot.MaterialChoices["CAJON"], "agr-cajon-active")
 	}
 }
 

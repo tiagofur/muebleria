@@ -114,6 +114,16 @@
         }
       }
     });
+    // #1482: agregado option groups (drawers, doors) default to design default or first curated option
+    (def && def.agregadoRoles ? def.agregadoRoles : []).forEach(function (r) {
+      if (r && r.code && Array.isArray(r.optionIds) && r.optionIds.length > 0) {
+        if (designDefaults[r.code] && r.optionIds.indexOf(designDefaults[r.code]) !== -1) {
+          choices[r.code] = designDefaults[r.code];
+        } else {
+          choices[r.code] = r.optionIds[0];
+        }
+      }
+    });
     return choices;
   }
 

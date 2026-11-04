@@ -92,6 +92,7 @@ module Granete
         selection/selection_context
         selection/door_actors
         selection/hardware_inventory
+        selection/hardware_option_groups
         selection/capability_policy
         selection/resolver
         selection/batch_context
