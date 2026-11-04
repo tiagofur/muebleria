@@ -6,6 +6,7 @@
 
 import type {
   Module,
+  OptionChoices,
   Project,
   ProjectItem,
   FurnitureType,
@@ -13,15 +14,33 @@ import type {
 import {
   defaultMeasurePresetId,
   resolveItemDims,
+  type PanelDimsContext,
 } from '@granete/domain';
+
+/**
+ * #1496: contexto para derivar el eje del espesor de un panel en el plano.
+ * Opcional — sin él, el número autoreado queda (misma degradación que el motor).
+ */
+export type PlanPanelThicknessContext = {
+  readonly materials: readonly { readonly id: string; readonly thicknessMm: number }[];
+  readonly projectLevelChoices?: OptionChoices;
+};
+
+function panelCtx(
+  ctx: PlanPanelThicknessContext | undefined,
+  item: ProjectItem,
+): PanelDimsContext | undefined {
+  return ctx ? { materials: ctx.materials, projectLevelChoices: ctx.projectLevelChoices, optionChoices: item.optionChoices } : undefined;
+}
 
 function moduleDims(
   item: ProjectItem,
   modules: readonly Module[],
+  thickness?: PlanPanelThicknessContext,
 ): { width: number; height: number; depth: number } {
   const mod = modules.find((m) => m.id === item.moduleId);
   if (!mod) return { width: 600, height: 720, depth: 560 };
-  // F144: single-source dims (customDims → preset → module).
+  // F144: single-source dims (customDims → preset → module); #1496 panel deriva su eje.
   const resolved = resolveItemDims(
     {
       customDims: item.customDims,
@@ -29,6 +48,8 @@ function moduleDims(
         item.measurePresetId?.trim() || defaultMeasurePresetId(mod) || undefined,
     },
     mod,
+    undefined,
+    panelCtx(thickness, item),
   );
   if (resolved.source !== 'fallback') {
     return { width: resolved.width, height: resolved.height, depth: resolved.depth };
@@ -40,35 +61,39 @@ function moduleDims(
 export function moduleWidth(
   item: ProjectItem,
   modules: readonly Module[],
+  thickness?: PlanPanelThicknessContext,
 ): number {
-  return moduleDims(item, modules).width;
+  return moduleDims(item, modules, thickness).width;
 }
 
 /** Resolve depth (mm) for plan footprints. */
 export function moduleDepth(
   item: ProjectItem,
   modules: readonly Module[],
+  thickness?: PlanPanelThicknessContext,
 ): number {
-  return moduleDims(item, modules).depth;
+  return moduleDims(item, modules, thickness).depth;
 }
 
 /** Resolve height (mm) for plan footprints. */
 export function moduleHeight(
   item: ProjectItem,
   modules: readonly Module[],
+  thickness?: PlanPanelThicknessContext,
 ): number {
-  return moduleDims(item, modules).height;
+  return moduleDims(item, modules, thickness).height;
 }
 
 /** Compute all footprints (instances) for a project's items. */
 export function allFootprints(
   project: Project,
   modules: readonly Module[],
+  thickness?: PlanPanelThicknessContext,
 ): { itemId: string; instanceIndex: number; width: number; height: number; depth: number }[] {
   const out: { itemId: string; instanceIndex: number; width: number; height: number; depth: number }[] = [];
   for (const item of project.items) {
     // F144: moduleDims ya resuelve customDims → preset → module.
-    const { width: w, height: h, depth: d } = moduleDims(item, modules);
+    const { width: w, height: h, depth: d } = moduleDims(item, modules, thickness);
     const qty = Math.max(1, item.quantity);
     for (let i = 0; i < qty; i++) {
       out.push({ itemId: item.id, instanceIndex: i, width: w, height: h, depth: d });

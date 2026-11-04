@@ -490,6 +490,10 @@ export function ProjectPresentationMode({
                 selectedSpaceId={presentationSpaceId}
                 onSelectedSpaceIdChange={setPresentationSpaceId}
                 onGoToProyectar={onGoToProyectar}
+                panelThickness={{
+                  materials: catalog.materials,
+                  projectLevelChoices: project.projectLevelChoices,
+                }}
               />
             </section>
           </div>

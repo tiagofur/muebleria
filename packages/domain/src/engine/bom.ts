@@ -10,6 +10,7 @@ import { ResolutionError, ValidationError } from '../errors';
 import {
   resolveModuleMeasurePreset,
 } from '../measurePresets';
+import { applyPanelThicknessDim } from '../itemDims';
 import {
   calculateAgregadoSubspaceUnits,
   resolveAgregadoInstance,
@@ -1042,11 +1043,15 @@ export function resolveBom(
       );
     }
 
+    // #1496 — panel: el eje del espesor sale del material de frentes, no del
+    // número autoreado (misma regla que el espejo Go en resolveBomCommon).
+    const panelDims = applyPanelThicknessDim(module, dims, optionChoices, catalog);
+
     const composed = resolveComposedModule({
       structure,
       componentInstances: module.components ?? [],
       catalog,
-      dims,
+      dims: panelDims,
       optionChoices,
       module,
       baseContext,

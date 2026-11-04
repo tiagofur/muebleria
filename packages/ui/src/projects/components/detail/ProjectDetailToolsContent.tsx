@@ -104,6 +104,10 @@ export function ProjectDetailToolsContent({
               ? (layout) => onUpdateKitchenLayout(project.id, layout)
               : () => {}
           }
+          panelThickness={{
+            materials: catalogs.materials,
+            projectLevelChoices: project.projectLevelChoices,
+          }}
         />
       ) : null}
 

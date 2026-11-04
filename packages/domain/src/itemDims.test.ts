@@ -114,3 +114,56 @@ describe('validateItemCustomDims', () => {
     ).toEqual(['widthMm']);
   });
 });
+
+describe('#1496 panel thickness dim', () => {
+  const panelMod = moduleOf({
+    structureId: 's1',
+    furnitureType: 'panel',
+    panelThicknessDim: 'width',
+    externalDims: { width: 15, height: 720, depth: 560 },
+  });
+  const mats = [
+    { id: 'mat-15', thicknessMm: 15 },
+    { id: 'mat-18', thicknessMm: 18 },
+  ];
+
+  it('resolveItemDims deriva el eje del material FRENTE del ítem', () => {
+    const dims = resolveItemDims(itemOf({}), panelMod, undefined, {
+      optionChoices: { FRENTE: 'mat-18' },
+      materials: mats,
+    });
+    expect(dims.width).toBe(18);
+    expect(dims.height).toBe(720);
+    expect(dims.depth).toBe(560);
+  });
+
+  it('resolveItemDims sin elección FRENTE conserva el número autoreado', () => {
+    const dims = resolveItemDims(itemOf({}), panelMod, undefined, {
+      optionChoices: {},
+      materials: mats,
+    });
+    expect(dims.width).toBe(15);
+  });
+
+  it('resolveItemDims sin panelCtx no deriva (callers legacy intactos)', () => {
+    const dims = resolveItemDims(itemOf({}), panelMod);
+    expect(dims.width).toBe(15);
+  });
+
+  it('validateItemCustomDims rechaza cualquier customDims de un panel (el eje viaja en ellas)', () => {
+    const issues = validateItemCustomDims(panelMod, {
+      widthMm: 18,
+      heightMm: 800,
+      depthMm: 560,
+    });
+    expect(issues.map((i) => i.field)).toEqual(['widthMm']);
+    expect(issues[0]!.message).toContain('material de frentes');
+  });
+
+  it('validateItemCustomDims ignora el eje en módulos no-panel', () => {
+    const normal = moduleOf({ structureId: 's1', furnitureType: 'superior' });
+    expect(
+      validateItemCustomDims(normal, { widthMm: 600, heightMm: 800, depthMm: 560 }),
+    ).toEqual([]);
+  });
+});

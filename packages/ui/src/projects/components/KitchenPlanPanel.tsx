@@ -37,6 +37,7 @@ import {
   resolvePlacement2D,
   resolvePlanBounds,
   type ResolvedPlacement2D,
+  type PlanPanelThicknessContext,
 } from '../kitchenPlanHelpers';
 import './kitchenPlan.css';
 
@@ -53,6 +54,8 @@ export type KitchenPlanPanelProps = {
   readonly modules: readonly Module[];
   readonly canEdit: boolean;
   readonly onChange: (layout: ProjectKitchenLayout) => void;
+  /** #1496: materiales del catálogo para derivar el espesor del panel en el plano. */
+  readonly panelThickness?: PlanPanelThicknessContext;
 };
 
 function newId(): string {
@@ -67,14 +70,15 @@ export function KitchenPlanPanel({
   modules,
   canEdit,
   onChange,
+  panelThickness,
 }: KitchenPlanPanelProps): ReactNode {
   const layout = useMemo(
     () => pruneKitchenLayout(project.kitchenLayout ?? emptyKitchenLayout(), project.items),
     [project.kitchenLayout, project.items],
   );
   const footprints = useMemo(
-    () => allFootprints(project, modules),
-    [project, modules],
+    () => allFootprints(project, modules, panelThickness),
+    [project, modules, panelThickness],
   );
   const frames = useMemo(() => resolveWallFrames(layout.walls), [layout.walls]);
   const warnings = useMemo(
@@ -204,9 +208,9 @@ export function KitchenPlanPanel({
         optionChoices: {},
       };
       const mod = modules.find((m) => m.id === item.moduleId);
-      const w = moduleWidth(item, modules);
-      const d = moduleDepth(item, modules);
-      const h = moduleHeight(item, modules);
+      const w = moduleWidth(item, modules, panelThickness);
+      const d = moduleDepth(item, modules, panelThickness);
+      const h = moduleHeight(item, modules, panelThickness);
       const label = itemLabel(p.itemId, p.instanceIndex, project, modules);
       const shortCode = mod?.code ?? label.split('—')[0]?.trim() ?? '';
       const wall = frames.find((f) => f.id === p.wallId);
@@ -329,6 +333,7 @@ export function KitchenPlanPanel({
             optionChoices: {},
           },
           modules,
+          panelThickness,
         );
         peerEdges.push(p.offsetMm);            // left edge of peer
         peerEdges.push(p.offsetMm + peerW);    // right edge of peer

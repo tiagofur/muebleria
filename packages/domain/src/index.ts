@@ -258,6 +258,9 @@ export {
   moduleAcceptsCustomDims,
   resolveItemDims,
   validateItemCustomDims,
+  applyPanelThicknessDim,
+  panelThicknessAxis,
+  type PanelDimsContext,
 } from './itemDims';
 export type {
   CustomDimsIssue,

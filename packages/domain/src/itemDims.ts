@@ -8,9 +8,13 @@
  */
 
 import { resolveModuleMeasurePreset } from './measurePresets';
+import { resolveBoardOptionChoiceId } from './plinth';
 import type {
+  Catalog,
   ItemCustomDims,
   Module,
+  OptionChoices,
+  PanelThicknessDim,
   ProjectItem,
   Structure,
 } from './types';
@@ -27,6 +31,49 @@ export const CUSTOM_DIMS_BOUNDS = {
 /** A composed (parametric) module can honor free dims; fixed modules cannot. */
 export function moduleAcceptsCustomDims(module: Module): boolean {
   return Boolean(module.structureId);
+}
+
+/**
+ * #1496 — the panel's thickness axis, when declared on a `panel`-type module.
+ * Undefined for every other module (or a panel without a declared axis).
+ */
+export function panelThicknessAxis(
+  module: Pick<Module, 'furnitureType' | 'panelThicknessDim'>,
+): PanelThicknessDim | undefined {
+  return module.furnitureType === 'panel' ? module.panelThicknessDim : undefined;
+}
+
+/**
+ * #1496 — replace the panel's thickness axis with the FRENTE material
+ * thickness resolved from the item's option choices. Without a material
+ * choice (or a missing material) the incoming dim is preserved — the
+ * authored number is a display fallback, never an error. Plain modules
+ * pass through untouched.
+ *
+ * Parity: backend-go internal/domain/engine resolveBomCommon applies the
+ * same rule (contracts/panelThicknessParity.contract.json).
+ */
+export function applyPanelThicknessDim(
+  module: Pick<Module, 'furnitureType' | 'panelThicknessDim'>,
+  dims: { width: number; height: number; depth: number },
+  optionChoices: OptionChoices | undefined,
+  catalog: Pick<Catalog, 'materials'> | undefined,
+): { width: number; height: number; depth: number } {
+  const axis = panelThicknessAxis(module);
+  if (!axis) return dims;
+  const choiceId = optionChoices
+    ? resolveBoardOptionChoiceId('FRENTE', optionChoices)
+    : undefined;
+  const material = choiceId
+    ? catalog?.materials?.find((m) => m.id === choiceId)
+    : undefined;
+  const thickness = material?.thicknessMm;
+  if (!thickness || thickness <= 0) return dims;
+  return axis === 'width'
+    ? { ...dims, width: thickness }
+    : axis === 'height'
+      ? { ...dims, height: thickness }
+      : { ...dims, depth: thickness };
 }
 
 export type CustomDimsIssue = {
@@ -47,6 +94,21 @@ export function validateItemCustomDims(
     issues.push({
       field: 'module',
       message: `“${module.name}” no es paramétrico: usá sus medidas comerciales.`,
+    });
+    return issues;
+  }
+  // #1496: el eje del espesor de un panel nunca se escribe a mano — sale del
+  // material de frentes. Fail-closed: la UI lo bloquea y la API lo rechaza.
+  const axis = panelThicknessAxis(module);
+  if (axis && dims[`${axis}Mm` as 'widthMm' | 'heightMm' | 'depthMm'] !== undefined) {
+    const labels: Record<PanelThicknessDim, string> = {
+      width: 'El ancho',
+      height: 'El alto',
+      depth: 'La profundidad',
+    };
+    issues.push({
+      field: `${axis}Mm` as 'widthMm' | 'heightMm' | 'depthMm',
+      message: `${labels[axis]} es el espesor del panel: sale del material de frentes y no se escribe a mano.`,
     });
     return issues;
   }
@@ -81,23 +143,51 @@ export type ItemDims = {
 const FALLBACK_DIMS: ItemDims = { width: 600, height: 720, depth: 560, source: 'fallback' };
 
 /**
+ * Material context to derive a panel's thickness dim (#1496). Optional:
+ * without it the authored number stands (same degradation as the engine).
+ */
+export type PanelDimsContext = {
+  readonly optionChoices?: OptionChoices;
+  readonly projectLevelChoices?: OptionChoices;
+  readonly materials?: readonly { readonly id: string; readonly thicknessMm: number }[];
+};
+
+/**
  * Single source of truth for a quote line's W/H/D (mm): item customDims win
  * over the commercial preset, then module/structure externalDims. Preset
  * resolution errors (stale preset id) fall through to module dims instead of
  * throwing — callers render what the catalog can still resolve.
+ * When `panelCtx` is present and the module is a panel with a declared axis
+ * (#1496), the axis dim is replaced by the FRENTE material thickness —
+ * regardless of the source (custom dims on the axis are already rejected).
  */
 export function resolveItemDims(
   item: Pick<ProjectItem, 'customDims' | 'measurePresetId'>,
   module: Module | undefined,
   structure?: Pick<Structure, 'externalDims'> | undefined,
+  panelCtx?: PanelDimsContext,
 ): ItemDims {
+  const derive = (dims: ItemDims): ItemDims => {
+    if (!module || !panelCtx) return dims;
+    const effectiveChoices =
+      panelCtx.optionChoices && Object.keys(panelCtx.optionChoices).length > 0
+        ? panelCtx.optionChoices
+        : panelCtx.projectLevelChoices;
+    const derived = applyPanelThicknessDim(
+      module,
+      dims,
+      effectiveChoices,
+      panelCtx.materials ? { materials: panelCtx.materials as Catalog['materials'] } : undefined,
+    );
+    return { ...dims, ...derived };
+  };
   if (item.customDims) {
-    return {
+    return derive({
       width: item.customDims.widthMm,
       height: item.customDims.heightMm,
       depth: item.customDims.depthMm,
       source: 'custom',
-    };
+    });
   }
   if (module) {
     try {
@@ -106,32 +196,32 @@ export function resolveItemDims(
         item.measurePresetId?.trim() || undefined,
       );
       if (preset) {
-        return {
+        return derive({
           width: preset.width,
           height: preset.height,
           depth: preset.depth,
           source: 'preset',
-        };
+        });
       }
     } catch {
       /* stale/missing preset id → fall through to module dims */
     }
     if (module.externalDims) {
-      return {
+      return derive({
         width: module.externalDims.width,
         height: module.externalDims.height,
         depth: module.externalDims.depth,
         source: 'module',
-      };
+      });
     }
     if (structure?.externalDims) {
-      return {
+      return derive({
         width: structure.externalDims.width,
         height: structure.externalDims.height,
         depth: structure.externalDims.depth,
         source: 'module',
-      };
+      });
     }
   }
-  return FALLBACK_DIMS;
+  return derive(FALLBACK_DIMS);
 }
