@@ -357,11 +357,12 @@
 }
 
 .catalog-form__row > .catalog-form__field--narrow {
-  flex: 0 1 6.25rem;
+  flex: 0 1 100px;
 }
 
+/* Same value/unit as agregados.css — the two global sheets must not drift. */
 .catalog-form__field--narrow {
-  max-width: 6.25rem;
+  max-width: 100px;
 }
 
 .catalog-form__fieldset {
