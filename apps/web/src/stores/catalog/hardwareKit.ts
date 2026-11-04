@@ -84,7 +84,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           unit: 'set',
           costPerUnit: plan.kit.costPerUnit,
           active: true,
-          notes: 'Juego comercial creado por el asistente de juego de herraje (#1416).',
+          notes: 'Juego comercial creado por el asistente de juego de herraje.',
         });
         createdCodes.push(plan.kit.code);
       }

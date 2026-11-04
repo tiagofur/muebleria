@@ -250,7 +250,7 @@ export function HardwareKitWizardModal({
       open={open}
       onClose={handleClose}
       title="Juego de herraje"
-      size="md"
+      size="lg"
       dataTestId="hardware-kit-wizard"
       footer={
         phase === 'done' ? (
@@ -328,54 +328,58 @@ export function HardwareKitWizardModal({
 
           <fieldset className="catalog-form__section" data-testid="hardware-kit-wizard-identity">
             <legend className="catalog-form__section-title">Juego comercial</legend>
-            <div className="catalog-form__field">
-              <label htmlFor="kit-code">Código del juego</label>
-              <input
-                id="kit-code"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                autoComplete="off"
-                required
-                data-testid="hardware-kit-wizard-code"
-              />
+            <div className="catalog-form__row">
+              <div className="catalog-form__field">
+                <label htmlFor="kit-code">Código del juego</label>
+                <input
+                  id="kit-code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  autoComplete="off"
+                  required
+                  data-testid="hardware-kit-wizard-code"
+                />
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="kit-name">Nombre</label>
+                <input
+                  id="kit-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  data-testid="hardware-kit-wizard-name"
+                />
+              </div>
             </div>
-            <div className="catalog-form__field">
-              <label htmlFor="kit-name">Nombre</label>
-              <input
-                id="kit-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                data-testid="hardware-kit-wizard-name"
-              />
-            </div>
-            <div className="catalog-form__field">
-              <label htmlFor="kit-price">Precio por juego</label>
-              <input
-                id="kit-price"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                inputMode="decimal"
-                required
-                data-testid="hardware-kit-wizard-price"
-              />
-            </div>
-            <div className="catalog-form__field">
-              <label htmlFor="kit-agregado-code">Código del ensamble (opcional)</label>
-              <input
-                id="kit-agregado-code"
-                value={agregadoCode}
-                onChange={(e) => setAgregadoCode(e.target.value)}
-                placeholder={
-                  code.trim()
-                    ? template.agregadoLabelEs === 'Cajón'
-                      ? `${code.trim()}-CAJON`
-                      : `${code.trim()}-${template.agregadoLabelEs.toUpperCase()}`
-                    : 'Se deriva del tipo de juego'
-                }
-                autoComplete="off"
-                data-testid="hardware-kit-wizard-agregado-code"
-              />
+            <div className="catalog-form__row">
+              <div className="catalog-form__field">
+                <label htmlFor="kit-price">Precio por juego</label>
+                <input
+                  id="kit-price"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  inputMode="decimal"
+                  required
+                  data-testid="hardware-kit-wizard-price"
+                />
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="kit-agregado-code">Código del ensamble (opcional)</label>
+                <input
+                  id="kit-agregado-code"
+                  value={agregadoCode}
+                  onChange={(e) => setAgregadoCode(e.target.value)}
+                  placeholder={
+                    code.trim()
+                      ? template.agregadoLabelEs === 'Cajón'
+                        ? `${code.trim()}-CAJON`
+                        : `${code.trim()}-${template.agregadoLabelEs.toUpperCase()}`
+                      : 'Se deriva del tipo de juego'
+                  }
+                  autoComplete="off"
+                  data-testid="hardware-kit-wizard-agregado-code"
+                />
+              </div>
             </div>
           </fieldset>
 
@@ -433,59 +437,61 @@ export function HardwareKitWizardModal({
 
           <fieldset className="catalog-form__section" data-testid="hardware-kit-wizard-dims">
             <legend className="catalog-form__section-title">Ensamble de referencia</legend>
-            <div className="catalog-form__field">
-              <label htmlFor="kit-width">Ancho (mm)</label>
-              <input
-                id="kit-width"
-                value={width}
-                onChange={(e) => setWidth(e.target.value)}
-                inputMode="numeric"
-                data-testid="hardware-kit-wizard-width"
-              />
-            </div>
-            <div className="catalog-form__field">
-              <label htmlFor="kit-height">Alto (mm)</label>
-              <input
-                id="kit-height"
-                value={height}
-                onChange={(e) => setHeight(e.target.value)}
-                inputMode="numeric"
-                data-testid="hardware-kit-wizard-height"
-              />
-            </div>
-            <div className="catalog-form__field">
-              <label htmlFor="kit-depth">Profundidad (mm)</label>
-              <input
-                id="kit-depth"
-                value={depth}
-                onChange={(e) => setDepth(e.target.value)}
-                inputMode="numeric"
-                data-testid="hardware-kit-wizard-depth"
-              />
+            <div className="catalog-form__row">
+              <div className="catalog-form__field">
+                <label htmlFor="kit-width">Ancho (mm)</label>
+                <input
+                  id="kit-width"
+                  value={width}
+                  onChange={(e) => setWidth(e.target.value)}
+                  inputMode="numeric"
+                  data-testid="hardware-kit-wizard-width"
+                />
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="kit-height">Alto (mm)</label>
+                <input
+                  id="kit-height"
+                  value={height}
+                  onChange={(e) => setHeight(e.target.value)}
+                  inputMode="numeric"
+                  data-testid="hardware-kit-wizard-height"
+                />
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="kit-depth">Profundidad (mm)</label>
+                <input
+                  id="kit-depth"
+                  value={depth}
+                  onChange={(e) => setDepth(e.target.value)}
+                  inputMode="numeric"
+                  data-testid="hardware-kit-wizard-depth"
+                />
+              </div>
             </div>
             {templateId === 'drawer-slides' ? (
-            <>
-            <div className="catalog-form__field">
-              <label htmlFor="kit-fixed-offset">Separación de guías fijas (mm)</label>
-              <input
-                id="kit-fixed-offset"
-                value={fixedOffset}
-                onChange={(e) => setFixedOffset(e.target.value)}
-                inputMode="numeric"
-                data-testid="hardware-kit-wizard-fixed-offset"
-              />
-            </div>
-            <div className="catalog-form__field">
-              <label htmlFor="kit-moving-offset">Separación de correderas móviles (mm)</label>
-              <input
-                id="kit-moving-offset"
-                value={movingOffset}
-                onChange={(e) => setMovingOffset(e.target.value)}
-                inputMode="numeric"
-                data-testid="hardware-kit-wizard-moving-offset"
-              />
-            </div>
-            </>
+              <div className="catalog-form__row">
+                <div className="catalog-form__field">
+                  <label htmlFor="kit-fixed-offset">Separación de guías fijas (mm)</label>
+                  <input
+                    id="kit-fixed-offset"
+                    value={fixedOffset}
+                    onChange={(e) => setFixedOffset(e.target.value)}
+                    inputMode="numeric"
+                    data-testid="hardware-kit-wizard-fixed-offset"
+                  />
+                </div>
+                <div className="catalog-form__field">
+                  <label htmlFor="kit-moving-offset">Separación de correderas móviles (mm)</label>
+                  <input
+                    id="kit-moving-offset"
+                    value={movingOffset}
+                    onChange={(e) => setMovingOffset(e.target.value)}
+                    inputMode="numeric"
+                    data-testid="hardware-kit-wizard-moving-offset"
+                  />
+                </div>
+              </div>
             ) : null}
           </fieldset>
 
@@ -524,22 +530,20 @@ export function HardwareKitWizardModal({
 
           {preview ? (
             <div
-              className="catalog-form__section"
+              className="catalog-hw-wizard__preview"
               data-testid="hardware-kit-wizard-preview"
               aria-live="polite"
             >
               <p className="catalog-form__section-title">Se va a crear</p>
-              <ul>
-                <li>
-                  Kit <strong>{preview.kit.code}</strong> (1 juego
-                  {preview.kit.exists ? ' — ya existe, se reutiliza' : ''}) +{' '}
-                  {template.agregadoLabelEs.toLowerCase()}{' '}
-                  <strong>{preview.agregado.code}</strong> con{' '}
-                  {preview.designs.length}{' '}
-                  {preview.designs.length === 1 ? 'pieza' : 'piezas'}:{' '}
-                  {preview.designs.map((d) => d.code).join(', ')}.
-                </li>
-              </ul>
+              <p className="catalog-hw-wizard__preview-summary">
+                Kit <strong>{preview.kit.code}</strong> (1 juego
+                {preview.kit.exists ? ' — ya existe, se reutiliza' : ''}) +{' '}
+                {template.agregadoLabelEs.toLowerCase()}{' '}
+                <strong>{preview.agregado.code}</strong> con{' '}
+                {preview.designs.length}{' '}
+                {preview.designs.length === 1 ? 'pieza' : 'piezas'}:{' '}
+                {preview.designs.map((d) => d.code).join(', ')}.
+              </p>
               {preview.blockedCode ? (
                 <p className="catalog-form__error" role="alert">
                   El ensamble «{preview.blockedCode}» ya existe: cambiale el código

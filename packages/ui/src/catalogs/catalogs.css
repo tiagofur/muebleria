@@ -1337,6 +1337,82 @@
   flex: 1 1 auto;
 }
 
+/* Parte del juego DENTRO del formulario del kit (#1491): tarjeta de 2 filas
+   (identidad + apertura/posición siempre visibles). No reutiliza la grilla
+   auto 1fr auto de .catalog-kit-part-card: esa es de la LISTA (foto | campos
+   | acciones) y en el modal dejaba los controles aplastados a la derecha con
+   un vacío enorme a la izquierda. */
+.catalog-hw-part {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
+  min-width: 0;
+}
+
+.catalog-hw-part__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.catalog-hw-part__head .catalog-kit-part-row__name {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.catalog-hw-part__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.catalog-hw-part__config {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.catalog-hw-part__config > .catalog-form__field {
+  flex: 1 1 7rem;
+}
+
+/* «Al abrir» lleva las opciones más largas del vocabulario — crece el doble
+   (modificador explícito: el orden del DOM no debe decidir el énfasis). */
+.catalog-hw-part__config > .catalog-hw-part__field--actor {
+  flex: 2 1 13rem;
+}
+
+.catalog-hw-part__config .catalog-form__field > span {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* Foto del herraje (#1491): preview + acciones apiladas junto a la imagen,
+   en lugar del input nativo suelto. */
+.catalog-hw-photo__controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+/* Wizard de juego (#1491): la vista previa «Se va a crear» se lee como
+   resultado, no como un párrafo más del formulario. */
+.catalog-hw-wizard__preview {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.catalog-hw-wizard__preview-summary {
+  margin: var(--space-2) 0 0;
+}
+
 /* #1422 owner: el bloque de partes del kit ocupa la FILA COMPLETA del grid
    del detalle expandido — sin él, los cards anidados desbordan su celda
    (~9.5rem) y se encima del resto de los campos. */

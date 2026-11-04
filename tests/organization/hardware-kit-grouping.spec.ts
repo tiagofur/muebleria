@@ -155,4 +155,36 @@ test.describe.serial('Herrajes — agrupación kit↔partes (#1422 slice 1)', ()
     expect(edited?.kit_hardware_id).toBe(KIT_ID);
     expect(edited?.name).toContain('editada');
   });
+
+  // #1491: los controles de apertura y posición de cada parte viven DENTRO
+  // del modal del juego, siempre visibles, y persisten por el mismo Guardar.
+  test('editor del juego: apertura y posición de una parte editable desde el modal', async ({ page }) => {
+    test.setTimeout(120_000);
+    await loginOwner(page);
+
+    await page.goto('/hardware');
+    await page.getByLabel('Buscar herrajes').fill(KIT_CODE);
+    await page.getByRole('button', { name: `Editar ${KIT_CODE}` }).first().click({ force: true });
+    const modal = page.getByTestId('hardware-form-modal');
+    await modal.waitFor({ state: 'visible' });
+
+    // Las 4 partes con su fila de controles a la vista.
+    for (const code of PART_CODES) {
+      await expect(page.getByTestId(`hardware-form-kit-part-${code}`)).toBeVisible();
+    }
+
+    // Cambiar el offset Y de la parte móvil izquierda y guardar.
+    const movI = `${KIT_CODE}-MOV-I`;
+    await expect(page.getByTestId(`hardware-form-kit-part-actor-${movI}`)).toHaveValue('actor:drawer');
+    await page.getByTestId(`hardware-form-kit-part-yoffset-${movI}`).fill('12');
+    await page.getByTestId('hardware-form-submit-btn').click();
+    await expect(modal).toBeHidden({ timeout: 20_000 });
+
+    // Readback: reabrir el juego muestra el valor persistido.
+    await page.getByRole('button', { name: `Editar ${KIT_CODE}` }).first().click({ force: true });
+    await modal.waitFor({ state: 'visible' });
+    await expect(page.getByTestId(`hardware-form-kit-part-yoffset-${movI}`)).toHaveValue('12');
+    await page.getByTestId('hardware-form-submit-btn').click();
+    await expect(modal).toBeHidden({ timeout: 20_000 });
+  });
 });
