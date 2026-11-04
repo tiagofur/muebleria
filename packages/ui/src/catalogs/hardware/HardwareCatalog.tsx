@@ -20,6 +20,7 @@ import type {
 import {
   ValidationError,
   countMachiningOperations,
+  ensureAgregadoKitParts,
   formatKitPartPlacementLabel,
   validateMachiningProfile,
   suggestDuplicateCode,
@@ -192,6 +193,17 @@ export function HardwareCatalog({
         }
       }
     }
+    // #1493: kits declarados por VARIANTE (una altura Blum MERIVOBOX = un kit)
+    // también ligan la receta al kit.
+    for (const a of agregados) {
+      for (const vs of a.variantSets ?? []) {
+        for (const v of vs.variants ?? []) {
+          if (v.commercialKitHardwareId && !map.has(v.commercialKitHardwareId)) {
+            map.set(v.commercialKitHardwareId, a);
+          }
+        }
+      }
+    }
     return map;
   }, [agregados, kitById]);
 
@@ -253,7 +265,12 @@ export function HardwareCatalog({
     if (!onUpdateAgregado) return;
     const recipe = designByKit.get(kitId);
     if (!recipe) return;
-    const synced = syncAgregadoWithKitParts(recipe, updatedParts);
+    // #1493: kit ligado por variante ⇒ sync ADITIVO (el espejo destructivo
+    // borraría las partes de los otros kits de la receta).
+    const synced =
+      recipe.commercialKitHardwareId === kitId
+        ? syncAgregadoWithKitParts(recipe, updatedParts)
+        : ensureAgregadoKitParts(recipe, updatedParts);
     void onUpdateAgregado(synced);
   };
 
