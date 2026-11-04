@@ -33,6 +33,8 @@ import {
   resolvePlacementHardwareId,
   resolveItemDims,
   resolveModuleAgregadoAssemblies,
+  resolveModuleAgregadoAssembliesDetailed,
+  type ModuleAssemblyRejection,
   baseContextForItem,
   type BaseResolutionContext,
   type PlinthSides,
@@ -90,6 +92,8 @@ export type ProjectModule3DInstance = {
   readonly resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
   readonly resolvedAssemblies?: readonly ResolvedModuleAssembly[];
   readonly assemblies?: readonly ProjectedAssembly[];
+  /** #1493 slice 2: bahías sin ensamble (aviso visible en la UI). */
+  readonly assemblyRejections?: readonly ModuleAssemblyRejection[];
   readonly error: string | null;
 };
 
@@ -108,6 +112,8 @@ export type Project3DPreviewResult = {
   readonly unplacedCount: number;
   /** Resolved wall frames when layoutMode is kitchen (shifted to +X/+Y). */
   readonly walls: readonly ResolvedWallFrame[];
+  /** #1493 slice 2: rechazos de ensamble agregados de todos los módulos. */
+  readonly assemblyRejections: readonly ModuleAssemblyRejection[];
 };
 
 function dimsForModule(
@@ -146,6 +152,8 @@ function resolveItemBom(
   resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
   resolvedAssemblies?: readonly ResolvedModuleAssembly[];
   assemblies?: readonly ProjectedAssembly[];
+  /** #1493 slice 2: bahías que NO emitieron ensamble — la UI muestra el aviso. */
+  assemblyRejections?: readonly ModuleAssemblyRejection[];
   width: number;
   height: number;
   depth: number;
@@ -213,7 +221,7 @@ function resolveItemBom(
     ? catalogInput.materials.find((m) => m.id === plinthMaterialId)
     : undefined;
 
-  const resolvedAssemblies = resolveModuleAgregadoAssemblies(
+  const detailed = resolveModuleAgregadoAssembliesDetailed(
     module,
     dims,
     catalogInput,
@@ -222,6 +230,7 @@ function resolveItemBom(
       visualAssetLookup: options.visualAssetLookup,
     },
   );
+  const resolvedAssemblies = detailed.assemblies;
   const assemblies = projectModuleAssembliesFor3D(resolvedAssemblies, {
     availableAssets: options.availableAssets,
   });
@@ -242,6 +251,9 @@ function resolveItemBom(
       ),
       resolvedAssemblies,
       assemblies,
+      // #1493 slice 2: rechazos explícitos por bahía — el preview nunca
+      // omite un cajón sin decirlo (sólo viajan cuando existen).
+      ...(detailed.rejections.length > 0 ? { assemblyRejections: detailed.rejections } : {}),
       ...dims,
       baseMode,
       baseClearanceMm,
@@ -263,6 +275,9 @@ function resolveItemBom(
       resolvedHardwarePlacements: [],
       resolvedAssemblies: [],
       assemblies: [],
+      // #1493 slice 2: aunque el BOM falle, los rechazos del ensamble ya se
+      // resolvieron — se superficen igual (nunca ocultar una bahía).
+      ...(detailed.rejections.length > 0 ? { assemblyRejections: detailed.rejections } : {}),
       ...dims,
       baseMode,
       baseClearanceMm,
@@ -718,6 +733,47 @@ export type ResolveProject3DOptions = {
 };
 
 /**
+ * #1493 slice 2: copy español para un rechazo de ensamble — el aviso del
+ * visor 3D nombra la bahía, la causa y qué revisar. Data-driven: el código del
+ * agregado viene del rechazo, nunca un mapeo duro de herrajes.
+ */
+export function describeAssemblyRejection(rej: ModuleAssemblyRejection): string {
+  const bay = rej.bayHeightMm ? ` (bahía de ${rej.bayHeightMm} mm)` : '';
+  const who = rej.agregadoCode || rej.agregadoId;
+  switch (rej.reason) {
+    case 'variant_not_found':
+      return `${who}: ninguna altura de cajón cabe en la bahía${bay} — revisá las dimensiones del mueble o la receta del agregado.`;
+    case 'ambiguous_kit':
+      return `${who}: dos juegos comerciales declarados entre las variantes seleccionadas — corregí la receta del agregado.`;
+    case 'definition_invalid':
+      return `${who}: la receta del ensamble es inválida — corregila en Catálogos${rej.detail ? ` (${rej.detail})` : ''}.`;
+    default:
+      return `${who}: el ensamble no se pudo resolver${bay} — revisá la receta${rej.detail ? ` (${rej.detail})` : ''}.`;
+  }
+}
+
+/**
+ * #1493 slice 2: etiquetas de cajón por altura resuelta a partir de
+ * selectedVariants — el nombre viene del herraje de la variante en el
+ * catálogo (data-driven, nunca un mapeo duro de marcas). `[]` cuando el
+ * módulo no tiene ensambles con variantes.
+ */
+export function drawerHeightLabels(
+  resolvedAssemblies: readonly ResolvedModuleAssembly[] | undefined,
+  hardwareById: ReadonlyMap<string, { readonly name: string; readonly code: string }>,
+): string[] {
+  const labels: string[] = [];
+  for (const assembly of resolvedAssemblies ?? []) {
+    const variants = assembly.resolvedAssembly?.selectedVariants ?? [];
+    for (const sv of variants) {
+      const hw = hardwareById.get(sv.hardwareId);
+      labels.push(hw ? `${hw.name} (${hw.code})` : sv.hardwareId);
+    }
+  }
+  return labels;
+}
+
+/**
  * Build a linear run of cabinets from a project quote.
  */
 export function resolveProject3DPreview(
@@ -737,6 +793,7 @@ export function resolveProject3DPreview(
     resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
     resolvedAssemblies?: readonly ResolvedModuleAssembly[];
     assemblies?: readonly ProjectedAssembly[];
+    assemblyRejections?: readonly ModuleAssemblyRejection[];
     width: number;
     height: number;
     depth: number;
@@ -778,6 +835,7 @@ export function resolveProject3DPreview(
       resolvedHardwarePlacements: resolved.resolvedHardwarePlacements,
       resolvedAssemblies: resolved.resolvedAssemblies,
       assemblies: resolved.assemblies,
+      assemblyRejections: resolved.assemblyRejections,
       width: resolved.width,
       height: resolved.height,
       depth: resolved.depth,
@@ -889,6 +947,7 @@ export function resolveProject3DPreview(
           resolvedHardwarePlacements: row?.resolvedHardwarePlacements ?? [],
           resolvedAssemblies: row?.resolvedAssemblies,
           assemblies: row?.assemblies,
+          assemblyRejections: row?.assemblyRejections,
           error: row?.error ?? null,
         };
       },
@@ -979,6 +1038,7 @@ export function resolveProject3DPreview(
           resolvedHardwarePlacements: row.resolvedHardwarePlacements,
           resolvedAssemblies: row.resolvedAssemblies,
           assemblies: row.assemblies,
+          assemblyRejections: row.assemblyRejections,
           error: row.error,
         };
       });
@@ -1034,6 +1094,7 @@ export function resolveProject3DPreview(
         resolvedHardwarePlacements: row.resolvedHardwarePlacements,
         resolvedAssemblies: row.resolvedAssemblies,
         assemblies: row.assemblies,
+        assemblyRejections: row.assemblyRejections,
         error: row.error,
       };
     });
@@ -1069,6 +1130,7 @@ export function resolveProject3DPreview(
     placedCount,
     unplacedCount,
     walls,
+    assemblyRejections: rows.flatMap((row) => row.assemblyRejections ?? []),
     empty,
     errors,
   };

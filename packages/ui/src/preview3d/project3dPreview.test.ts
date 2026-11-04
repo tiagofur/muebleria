@@ -1012,3 +1012,153 @@ describe('resolveProject3DPreview — base treatment (F087)', () => {
     expect(mod.plinthMaterialId).toBeUndefined();
   });
 });
+
+describe('resolveProject3DPreview — #1493 slice 2 assemblyRejections', () => {
+  const heightVariants = [
+    { nominalDimensionMm: 85.5, hardwareId: 'hw-mbox-n', commercialKitHardwareId: 'kit-mbox-n' },
+    { nominalDimensionMm: 108, hardwareId: 'hw-mbox-m', commercialKitHardwareId: 'kit-mbox-m' },
+    { nominalDimensionMm: 146, hardwareId: 'hw-mbox-k', commercialKitHardwareId: 'kit-mbox-k' },
+    { nominalDimensionMm: 209, hardwareId: 'hw-mbox-e', commercialKitHardwareId: 'kit-mbox-e' },
+  ];
+
+  const heightAgregado = {
+    id: 'agr-mbox-alturas',
+    code: 'MERIVOBOX-ALTURAS',
+    name: 'MERIVOBOX por altura',
+    variantSets: [{ id: 'height-variants', dimension: 'height', variants: heightVariants }],
+    rigidMembers: (['min', 'max'] as const).map((ref, i) => ({
+      memberId: `side-${i === 0 ? 'left' : 'right'}`,
+      role: `drawer_side_${i === 0 ? 'left' : 'right'}`,
+      source: { kind: 'variant', variant: { variantSetId: 'height-variants' } },
+      placement: {
+        x: { ref, offsetMm: 0 },
+        y: { ref: 'min', offsetMm: 0 },
+        z: { ref: 'min', offsetMm: 0 },
+      },
+      bomRole: 'included_in_kit',
+    })),
+    components: [
+      {
+        componentId: 'comp-back-1493',
+        quantity: 1,
+        overrides: {
+          widthRule: { source: 'assembly_width', offsetMm: -58 },
+          lengthRule: { source: 'selected_variant', variantSetId: 'height-variants', offsetMm: -25 },
+        },
+      },
+    ],
+  } as unknown as Agregado;
+
+  const compBack: Component = {
+    id: 'comp-back-1493',
+    code: 'COMP-BACK-1493',
+    name: 'Trasera MERIVOBOX',
+    placement: 'interior_fondo',
+    geometry: { kind: 'rectangular_board', lengthMm: 500, widthMm: 184, thicknessMm: 16 },
+    // Material binding: reutiliza el grupo INTERIOR del fixture base (mat-a).
+    optionRoles: ['INTERIOR'],
+    defaultEdges: [
+      { side: 'L1', enabled: true },
+      { side: 'L2', enabled: true },
+      { side: 'W1', enabled: true },
+      { side: 'W2', enabled: true },
+    ],
+    active: true,
+  } as unknown as Component;
+
+  const hardware1493 = heightVariants.map((v) => ({
+    id: v.hardwareId,
+    code: v.hardwareId,
+    name: `MERIVOBOX ${v.hardwareId.slice(-1).toUpperCase()}`,
+    unit: 'piece',
+    costPerUnit: 1,
+    active: true,
+  })) as unknown as Hardware[];
+
+  const modC: Module = {
+    id: 'm-c',
+    code: 'MOD-C',
+    name: 'Cajonera imposible',
+    structureId: 'st1',
+    components: [],
+    hardwareLines: [],
+    externalDims: { width: 600, height: 280, depth: 560 },
+    agregados: [
+      {
+        id: 'inst-imposible',
+        agregadoId: 'agr-mbox-alturas',
+        quantity: 1,
+        dimensions: { heightFormula: '60' },
+      },
+    ],
+  } as unknown as Module;
+
+  const modD: Module = {
+    id: 'm-d',
+    code: 'MOD-D',
+    name: 'Cajonera válida',
+    structureId: 'st1',
+    components: [],
+    hardwareLines: [],
+    externalDims: { width: 600, height: 280, depth: 560 },
+    agregados: [
+      {
+        id: 'inst-ok',
+        agregadoId: 'agr-mbox-alturas',
+        quantity: 1,
+      },
+    ],
+  } as unknown as Module;
+
+  const catalog1493 = {
+    ...catalog,
+    agregados: [heightAgregado],
+    hardware: hardware1493,
+    components: [...catalog.components, compBack],
+    modules: [modC, modD],
+  };
+
+  const project1493: Project = {
+    ...project,
+    items: [
+      {
+        id: 'it-c',
+        moduleId: 'm-c',
+        quantity: 1,
+        optionChoices: {},
+      },
+      {
+        id: 'it-d',
+        moduleId: 'm-d',
+        quantity: 1,
+        optionChoices: {},
+      },
+    ],
+  };
+
+  it('propaga el rechazo de la bahía imposible al resultado del proyecto', () => {
+    const preview = resolveProject3DPreview(project1493, catalog1493);
+    expect(preview.assemblyRejections).toHaveLength(1);
+    const rej = preview.assemblyRejections[0]!;
+    expect(rej.reason).toBe('variant_not_found');
+    expect(rej.assemblyInstanceId).toBe('inst-imposible');
+    expect(rej.agregadoCode).toBe('MERIVOBOX-ALTURAS');
+    expect(rej.bayHeightMm).toBe(60);
+    expect(rej.fittingNominals).toEqual([85.5, 108, 146, 209]);
+    // La bahía del módulo válido sí emitió ensamble.
+    const modDInstance = preview.modules.find((m) => m.itemId === 'it-d')!;
+    expect(modDInstance.assemblies!.length).toBeGreaterThan(0);
+  });
+
+  it('el ensamble válido expone selectedVariants para la etiqueta por cajón', () => {
+    const preview = resolveProject3DPreview(project1493, catalog1493, {
+      itemId: 'it-d',
+    });
+    expect(preview.assemblyRejections).toHaveLength(0);
+    const instance = preview.modules[0]!;
+    const svs = instance.resolvedAssemblies![0]!.resolvedAssembly!.selectedVariants;
+    expect(svs).toHaveLength(1);
+    expect(svs[0]!.nominalDimensionMm).toBe(209);
+    expect(svs[0]!.hardwareId).toBe('hw-mbox-e');
+  });
+});

@@ -265,10 +265,16 @@ export function HardwareCatalog({
     if (!onUpdateAgregado) return;
     const recipe = designByKit.get(kitId);
     if (!recipe) return;
-    // #1493: kit ligado por variante ⇒ sync ADITIVO (el espejo destructivo
-    // borraría las partes de los otros kits de la receta).
+    // #1493: kit ligado por variante ⇒ sync ADITIVO. Review #1494 slice 2:
+    // el mismo guard mixto del store — si la receta TAMBIÉN declara kits por
+    // variante, el espejo destructivo del kit a nivel agregado borraría en
+    // silencio las partes de los otros kits; en esa combinación manda el
+    // sync aditivo.
+    const declaresAnyVariantKit = (recipe.variantSets ?? []).some((vs) =>
+      (vs.variants ?? []).some((v) => (v.commercialKitHardwareId ?? '').trim() !== ''),
+    );
     const synced =
-      recipe.commercialKitHardwareId === kitId
+      recipe.commercialKitHardwareId === kitId && !declaresAnyVariantKit
         ? syncAgregadoWithKitParts(recipe, updatedParts)
         : ensureAgregadoKitParts(recipe, updatedParts);
     void onUpdateAgregado(synced);

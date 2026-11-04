@@ -19640,6 +19640,95 @@
             "items": {
               "$ref": "#/components/schemas/LayoutHardware"
             }
+          },
+          "assemblies": {
+            "type": "array",
+            "description": "Resolved parametric assemblies (#670-D). #1493: each entry names the commercial variant selected in THIS bay (selectedVariants), e.g. the Blum MERIVOBOX drawer height N/M/K/E.",
+            "items": {
+              "type": "object",
+              "required": [
+                "assemblyInstanceId",
+                "agregadoId"
+              ],
+              "properties": {
+                "assemblyInstanceId": {
+                  "type": "string"
+                },
+                "agregadoId": {
+                  "type": "string"
+                },
+                "selectedVariants": {
+                  "type": "array",
+                  "description": "#1493: commercial variant chosen per variant set in this bay (kit and dimensions derive from it).",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "variantSetId",
+                      "hardwareId",
+                      "nominalDimensionMm"
+                    ],
+                    "properties": {
+                      "variantSetId": {
+                        "type": "string"
+                      },
+                      "hardwareId": {
+                        "type": "string"
+                      },
+                      "nominalDimensionMm": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "assemblyRejections": {
+            "type": "array",
+            "description": "#1493: bays/instances that did NOT emit an assembly, with the exact reason — the layout never drops a drawer silently. Clients must surface these to the user.",
+            "items": {
+              "type": "object",
+              "required": [
+                "assemblyInstanceId",
+                "agregadoId",
+                "reason"
+              ],
+              "properties": {
+                "assemblyInstanceId": {
+                  "type": "string"
+                },
+                "agregadoId": {
+                  "type": "string"
+                },
+                "agregadoCode": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "definition_invalid",
+                    "variant_not_found",
+                    "ambiguous_kit",
+                    "resolve_failed"
+                  ]
+                },
+                "variantSetId": {
+                  "type": "string"
+                },
+                "bayHeightMm": {
+                  "type": "number"
+                },
+                "fittingNominals": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "detail": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },

@@ -49,6 +49,7 @@ import {
   projectResolvedAssemblyFor3D,
   resolveAgregadoAssembly,
   resolveModuleAgregadoAssemblies,
+  resolveModuleAgregadoAssembliesDetailed,
 } from '@granete/domain';
 import {
   assemblyPoseToThree,
@@ -497,14 +498,22 @@ describe('Granete #670-C: Proyección de Assemblies en Proyectar 3D / WebGL', ()
         } as unknown as Component,
       ],
     };
-    expect(() =>
-      resolveModuleAgregadoAssemblies(
+    // #1493 slice 2: el fail-closed ya no rompe el preview — la bahía sin
+    // espesor autoritativo se omite y queda como RECHAZO explícito con el
+    // mismo diagnóstico (contrato espejo del guard Go).
+    const { assemblies: rejectedBayAssemblies, rejections: thicknessRejections } =
+      resolveModuleAgregadoAssembliesDetailed(
         fixtureModule,
         { width: 600, height: 720, depth: 550 },
         invalidCompInput,
         { optionChoices: {} },
-      ),
-    ).toThrow(/Authoritative thicknessMm not found for fabricated component 'comp-bottom-panel'/);
+      );
+    expect(rejectedBayAssemblies).toHaveLength(0);
+    expect(thicknessRejections).toHaveLength(1);
+    expect(thicknessRejections[0]!.reason).toBe('resolve_failed');
+    expect(thicknessRejections[0]!.detail).toMatch(
+      /Authoritative thicknessMm not found for fabricated component 'comp-bottom-panel'/,
+    );
   });
 
   // Gate 5 / Point 5: Gate de doble normalización (MountFrame no-identidad aplicado exactamente 1 vez)

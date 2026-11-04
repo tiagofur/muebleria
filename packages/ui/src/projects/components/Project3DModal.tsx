@@ -18,7 +18,11 @@ import {
   type MaterialSurfaceMode,
 } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
-import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
+import {
+  describeAssemblyRejection,
+  drawerHeightLabels,
+  resolveProject3DPreview,
+} from '../../preview3d/project3dPreview';
 import '../../common/furniture3dViewer.css';
 
 export type Project3DModalProps = {
@@ -66,6 +70,19 @@ export function Project3DModal({
       unplacedPolicy: hasKitchenWalls ? 'hide' : 'tail',
     });
   }, [project, catalog, focus?.item.id]);
+
+  // #1493 slice 2: etiqueta de cajón por altura resuelta — data-driven del
+  // catálogo (el nombre del herraje de la variante), nunca un mapeo duro.
+  const drawerLabelsLine = useMemo(() => {
+    if (!preview) return '';
+    const hardwareById = new Map(catalog.hardware.map((h) => [h.id, h]));
+    const parts: string[] = [];
+    for (const m of preview.modules) {
+      const labels = drawerHeightLabels(m.resolvedAssemblies, hardwareById);
+      if (labels.length > 0) parts.push(`${m.label}: ${labels.join(' · ')}`);
+    }
+    return parts.join(' — ');
+  }, [preview, catalog.hardware]);
 
   const sceneWalls = useMemo(
     () =>
@@ -149,6 +166,12 @@ export function Project3DModal({
             </p>
           ) : null}
 
+          {drawerLabelsLine ? (
+            <p className="catalog-form__hint" data-testid="project-3d-drawer-heights">
+              Cajones por altura: {drawerLabelsLine}
+            </p>
+          ) : null}
+
           <div className="viewer-3d-chrome">
             <label className="furniture-3d-viewer__check">
               <input
@@ -185,6 +208,26 @@ export function Project3DModal({
                 <li key={err}>{err}</li>
               ))}
             </ul>
+          ) : null}
+
+          {preview.assemblyRejections.length > 0 ? (
+            <div
+              className="catalog-form__warning"
+              role="alert"
+              data-testid="project-3d-assembly-rejections"
+            >
+              <p>
+                Cajones que <strong>no se dibujaron</strong> — el espacio no
+                alcanza o la receta tiene un problema:
+              </p>
+              <ul>
+                {preview.assemblyRejections.map((rej) => (
+                  <li key={`${rej.assemblyInstanceId}:${rej.reason}`}>
+                    {describeAssemblyRejection(rej)}
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
 
           {preview.empty ? (
