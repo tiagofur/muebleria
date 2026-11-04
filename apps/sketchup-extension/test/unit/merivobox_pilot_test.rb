@@ -310,6 +310,42 @@ class MerivoboxPilotTest < Minitest::Test
                     1e-9
   end
 
+  # #1493: las alturas Blum MERIVOBOX N/M/K/E viven en la sección `heights`
+  # del fixture canónico compartido (Go/TS/UI). El plugin consume el layout ya
+  # resuelto por el backend, así que su garantía es de guardia: el contrato que
+  # alimentará las bahías debe seguir íntegro y coherente.
+  def test_1493_heights_contract_guard
+    repo_root = File.expand_path('../../../..', __dir__)
+    canonical = JSON.parse(File.read(File.join(repo_root, 'contracts', 'fixtures', 'merivobox-pilot-canonical.json')))
+    heights = canonical['heights']
+
+    codes = heights['nominals'].map { |n| n['code'] }
+    assert_equal %w[N M K E], codes, 'el fixture declara las alturas en orden ascendente de KH'
+    assert_equal 4, heights['nominals'].map { |n| n['hardwareId'] }.uniq.size,
+                 'cada altura necesita su herraje propio'
+    assert_equal 4, heights['nominals'].map { |n| n['kitHardwareId'] }.uniq.size,
+                 'cada altura necesita su juego comercial propio'
+
+    # Trasera Blum real: KH mín − 25 (60.5/83/121/184 mm).
+    heights['nominals'].each do |n|
+      assert_in_delta n['backMm'], n['khMinMm'] + heights['backOffsetMm'], 1e-9,
+                      "trasera de la altura #{n['code']} inconsistente con KH mín − 25"
+    end
+
+    valid = heights['nominals'].map { |n| n['code'] } + ['rejected']
+    heights['boundaries'].each do |b|
+      assert valid.include?(b['expected']),
+             "boundary #{b['spaceMm']}mm referencia un código desconocido: #{b['expected']}"
+    end
+
+    three = heights['moduleThreeDrawers']
+    assert_equal ['E', 'M', 'M'], three['expectedByBay'],
+                 'la cajonera 3 cajones resuelve E abajo y M arriba'
+    assert three['galeriaMemberOnlyInBay'] < three['expectedByBay'].size
+    assert_equal 'E', three['expectedByBay'][three['galeriaMemberOnlyInBay']],
+                 'la galería del kit-E sólo existe en la bahía que resolvió E'
+  end
+
   private
 
   def compute_transform_determinant(trans)
