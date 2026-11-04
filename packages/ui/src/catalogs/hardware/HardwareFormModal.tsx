@@ -295,7 +295,7 @@ export function HardwareFormModal({
 
                   {onUpdateKitPartConfig ? (
                     <div className="catalog-form__row catalog-hw-part__config">
-                      <label className="catalog-form__field">
+                      <label className="catalog-form__field catalog-hw-part__field--actor">
                         <span>Al abrir</span>
                         <select
                           className="select select--sm"

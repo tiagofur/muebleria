@@ -175,7 +175,7 @@ test.describe.serial('Herrajes — agrupación kit↔partes (#1422 slice 1)', ()
 
     // Cambiar el offset Y de la parte móvil izquierda y guardar.
     const movI = `${KIT_CODE}-MOV-I`;
-    await expect(page.getByTestId(`hardware-form-kit-part-actor-${movI}`)).toContainText('Móvil');
+    await expect(page.getByTestId(`hardware-form-kit-part-actor-${movI}`)).toHaveValue('actor:drawer');
     await page.getByTestId(`hardware-form-kit-part-yoffset-${movI}`).fill('12');
     await page.getByTestId('hardware-form-submit-btn').click();
     await expect(modal).toBeHidden({ timeout: 20_000 });
