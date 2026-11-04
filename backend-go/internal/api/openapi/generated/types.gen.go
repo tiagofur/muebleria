@@ -3311,6 +3311,8 @@ type FurnitureDefinitionLayout struct {
 	DimensionsMm          []int64           `json:"dimensionsMm"`
 	Components            []LayoutComponent `json:"components"`
 	Hardware              []LayoutHardware  `json:"hardware"`
+	Assemblies            []map[string]any  `json:"assemblies,omitempty"`
+	AssemblyRejections    []map[string]any  `json:"assemblyRejections,omitempty"`
 }
 
 type LayoutTransform struct {
