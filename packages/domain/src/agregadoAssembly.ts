@@ -116,6 +116,14 @@ export interface AgregadoRigidMember {
   readonly actorMembership?: string;
   /** #1460 F2: override de dimensiones del herraje (Ancho×Alto×Fondo, mm|fórmula). */
   readonly dimensionOverrides?: HardwareDimensionOverride;
+  /**
+   * #1429 slice A: rol de placement de la pieza EXTERNA del módulo que este
+   * miembro fija ('lateral_izquierdo' | 'lateral_derecho' | 'frente_cajon').
+   * Declarado ⇒ el perfil de mecanizado de catálogo del herraje taladra esa
+   * pieza en el resolve (congelado Go; el preview TS llega con el puerto del
+   * resolver espacial). Ausente ⇒ el miembro no taladra fuera del agregado.
+   */
+  readonly hostPlacement?: string;
 }
 
 export type DimensionRuleSource =
@@ -612,6 +620,19 @@ export function validateAgregadoRigidMember(
     );
   }
   validateRigidMemberSource(m.source);
+  // #1429 slice A: vocabulario cerrado de anfitriones externos + fuente fija
+  // (gemelo Go de ValidateAgregadoRigidMember).
+  const hostPlacement = (m.hostPlacement ?? '').trim();
+  if (hostPlacement) {
+    if (m.source.kind !== 'fixed') {
+      throw new Error(`rigid member '${m.memberId}': hostPlacement requires a fixed hardware source`);
+    }
+    if (hostPlacement !== 'lateral_izquierdo' && hostPlacement !== 'lateral_derecho' && hostPlacement !== 'frente_cajon') {
+      throw new Error(
+        `rigid member '${m.memberId}': hostPlacement '${hostPlacement}' is outside the supported vocabulary (lateral_izquierdo, lateral_derecho, frente_cajon)`,
+      );
+    }
+  }
   validateAssemblyAnchorRule(m.placement);
 
   // #1460 F2: estructura del override de dimensiones — fail-closed en

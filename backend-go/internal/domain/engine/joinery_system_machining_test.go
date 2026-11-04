@@ -87,7 +87,7 @@ func TestConnectionFaceGateBlocksUndeclaredAnchorFace(t *testing.T) {
 	_, issues := deriveAuthoringMachining(
 		boardMapValues(boards),
 		[]AuthoringRelationship{shelfSupportRelationship()},
-		nil, catalog, nil, nil,
+    nil, catalog, nil, nil, nil,
 	)
 	found := false
 	for _, issue := range issues {
@@ -111,7 +111,7 @@ func TestConnectionFaceGateBlocksUndeclaredAnchorFace(t *testing.T) {
 	_, issues = deriveAuthoringMachining(
 		boardMapValues(boards),
 		[]AuthoringRelationship{rel},
-		nil, catalog, nil, nil,
+    nil, catalog, nil, nil, nil,
 	)
 	found = false
 	for _, issue := range issues {

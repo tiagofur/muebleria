@@ -218,6 +218,7 @@ func ResolveAgregadoAssembly(
 			},
 			BOMRole:         member.BOMRole,
 			ActorMembership: member.ActorMembership,
+			HostPlacement:   member.HostPlacement, // #1429 slice A: declared external host rides to the machining derivation.
 		}
 		// #1460 F2: sólo con override — payloads legacy byte-idénticos.
 		if member.DimensionOverrides != nil {
