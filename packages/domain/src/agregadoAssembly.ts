@@ -1065,6 +1065,21 @@ export function selectAgregadoVariants(
 }
 
 /**
+ * #1493 (review slice 2): error tipado para la ambigüedad de kits — el
+ * resolver de módulo lo clasifica con `instanceof` en vez de substring del
+ * mensaje, así un cambio futuro del literal no degrada silenciosamente a
+ * `resolve_failed`.
+ */
+export class AmbiguousCommercialKitError extends Error {
+  readonly kits: readonly string[];
+  constructor(kits: readonly string[], message: string) {
+    super(message);
+    this.name = 'AmbiguousCommercialKitError';
+    this.kits = kits;
+  }
+}
+
+/**
  * #1493: kit comercial que gobierna una selección de variantes resuelta. Una
  * variante puede declarar su propio commercialKitHardwareId (un kit por
  * altura de cajón); si las variantes seleccionadas declaran kits, el kit de
@@ -1101,7 +1116,8 @@ export function effectiveKitHardwareId(
 
   if (distinctKits.length > 1) {
     const owners = distinctKits.map((kit) => `'${kit}' (set '${kitOwner.get(kit)}')`);
-    throw new Error(
+    throw new AmbiguousCommercialKitError(
+      distinctKits,
       `ambiguous commercial kit: selected variants declare ${distinctKits.length} distinct kits: ${owners.join(', ')}`,
     );
   }
@@ -2044,7 +2060,7 @@ export function resolveModuleAgregadoAssembliesDetailed(
               variantSetId: err.variantSetId,
               fittingNominals: err.availableNominals,
             };
-          } else if (err instanceof Error && err.message.includes('ambiguous commercial kit')) {
+          } else if (err instanceof AmbiguousCommercialKitError) {
             rejection = { ...rejection, reason: 'ambiguous_kit' };
           }
           rejections.push(rejection);

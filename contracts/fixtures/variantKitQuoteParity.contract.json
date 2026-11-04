@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.variantKitQuoteParity.v1",
+  "comment": "#1493 slice 3 — el kit comercial de la variante se cotiza POR BAHÍA (1×kit-E + 2×kit-M en la cajonera 3 cajones ½+¼+¼). Autoridad numérica única para Go (ResolveBomWithContext) y TS (resolveBom): ambos lados CONSTRUYEN la receta desde ESTOS números (patrón del pilot canónico — nada de altura/kit duplicado en código). Las recetas legacy (kit a nivel agregado, sin kits de variante) no generan líneas de kit — byte-idénticas.",
+  "heights": [
+    { "code": "N", "nominalDimensionMm": 85.5, "hardwareId": "hw-mbox-n", "kitHardwareId": "kit-mbox-n" },
+    { "code": "M", "nominalDimensionMm": 108, "hardwareId": "hw-mbox-m", "kitHardwareId": "kit-mbox-m" },
+    { "code": "K", "nominalDimensionMm": 146, "hardwareId": "hw-mbox-k", "kitHardwareId": "kit-mbox-k" },
+    { "code": "E", "nominalDimensionMm": 209, "hardwareId": "hw-mbox-e", "kitHardwareId": "kit-mbox-e" }
+  ],
+  "module": {
+    "widthMm": 600,
+    "heightMm": 560,
+    "depthMm": 500,
+    "bottomFraction": 0.5,
+    "topCount": 2
+  },
+  "expectedKitLines": [
+    { "instanceId": "inst-bajo", "unitIndex": 0, "hardwareId": "kit-mbox-e", "quantity": 1 },
+    { "instanceId": "inst-alto", "unitIndex": 0, "hardwareId": "kit-mbox-m", "quantity": 1 },
+    { "instanceId": "inst-alto", "unitIndex": 1, "hardwareId": "kit-mbox-m", "quantity": 1 }
+  ]
+}

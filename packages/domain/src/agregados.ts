@@ -98,6 +98,12 @@ export function resolveAgregadoInstance(
   // catálogo). La banda de la puerta-agregado usa la MISMA política que
   // cotiza el servidor; omitida = escalera de librería.
   hingeDemandPolicy?: HingeDemandPolicy,
+  // #1493 slice 3: kit comercial EFECTIVO de ESTA bahía (resuelto por el
+  // caller con selectAgregadoVariants + effectiveKitHardwareId contra las
+  // dimensiones de la unidad). Presente ⇒ la cotización emite la línea del
+  // kit (1 por bahía) salvo que la receta ya autorice una línea bulk que
+  // resuelva al mismo kit. Ausente ⇒ sin líneas nuevas (legacy idéntico).
+  commercialKitHardwareId?: string,
 ): {
   readonly components: readonly ModuleComponentInstance[];
   readonly hardwareLines: readonly HardwareLine[];
@@ -221,10 +227,27 @@ export function resolveAgregadoInstance(
     }),
   );
 
+  // #1493 slice 3: la línea del kit comercial por bahía — sólo cuando el
+  // caller resolvió el kit efectivo de la variante y la receta no autoriza
+  // ya una línea bulk que resuelva al mismo kit (la autoría manda).
+  const resolvedBulkIds = new Set(bulkHardwareLines.map((h) => h.hardwareId));
+  const kitLines: HardwareLine[] =
+    commercialKitHardwareId && !resolvedBulkIds.has(commercialKitHardwareId)
+      ? [
+          {
+            id: `kit-agr-${instanceKey}${unitSuffix}`,
+            quantity: 1,
+            optionRole: 'COMMERCIAL_KIT',
+            hardwareId: commercialKitHardwareId,
+          },
+        ]
+      : [];
+
   const hardwareLines = [
     ...bulkHardwareLines,
     ...placementHardwareLines,
     ...bandHardwareLines,
+    ...kitLines,
   ];
 
   return { components, hardwareLines };

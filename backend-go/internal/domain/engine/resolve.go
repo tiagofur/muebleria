@@ -183,6 +183,7 @@ func resolveBomCommon(
 
 	var rawParts []domain.BoardPart
 	widthMm, depthMm := 600, 560
+	var moduleDims formulaDims
 	if strings.TrimSpace(module.StructureID) != "" {
 		composed, dims, err := expandComposedModulePartsWithDims(module, catalog, authority, measurePresetID, structureRevisionPin, customDims, optionChoices, baseMode, baseClearance)
 		if err != nil {
@@ -190,6 +191,7 @@ func resolveBomCommon(
 		}
 		rawParts = composed
 		widthMm, depthMm = dims.W, dims.D
+		moduleDims = dims
 	} else {
 		rawParts = module.BoardParts
 		// TS parity (resolveBom non-composed dimsFallback): external dims if
@@ -199,6 +201,9 @@ func resolveBomCommon(
 		}
 		if module.DepthMm > 0 {
 			depthMm = module.DepthMm
+		}
+		if module.HeightMm > 0 {
+			moduleDims = formulaDims{W: widthMm, H: module.HeightMm, D: depthMm}
 		}
 	}
 
@@ -257,6 +262,11 @@ func resolveBomCommon(
 	}
 
 	hardware := collectAllHardwareLines(module, catalog, optionChoices)
+	// #1493 slice 3: el kit comercial de la variante se cotiza por bahía —
+	// las recetas legacy (sin kits de variante) no aportan líneas nuevas.
+	if moduleDims.W > 0 && moduleDims.H > 0 && moduleDims.D > 0 {
+		hardware = append(hardware, collectVariantKitHardwareLines(module, catalog, optionChoices, moduleDims, baseClearance)...)
+	}
 	var sides *PlinthSides
 	if baseContext != nil {
 		sides = baseContext.PlinthSides

@@ -17,6 +17,11 @@ import {
   type SubspaceUnit,
 } from '../agregados';
 import {
+  effectiveKitHardwareId,
+  selectAgregadoVariants,
+  type AgregadoAssemblyInput,
+} from '../agregadoAssembly';
+import {
   applyBaseTreatment,
   filterComponentInstancesForBaseMode,
   resolveBaseClearanceWithContext,
@@ -894,6 +899,33 @@ export function resolveComposedModule(
         );
 
     for (const unit of units) {
+      // #1493 slice 3: el kit comercial de la variante se resuelve POR BAHÍA
+      // contra las dimensiones de la unidad (una altura = un kit). Una bahía
+      // donde nada cabe no aporta kit — el layout la rechaza visiblemente.
+      const unitAgregado = catalogAgregados.find((a) => a.id === effectiveAgregadoId);
+      // Gate idéntico al Go (agregadoDeclaresVariantKit): sólo recetas que
+      // DECLARAN kits por variante generan líneas — las legacy con sets sin
+      // kits no caen al fallback del agregado (byte-idénticas).
+      const declaresVariantKit = (unitAgregado?.variantSets ?? []).some((vs) =>
+        (vs.variants ?? []).some((v) => (v.commercialKitHardwareId ?? '').trim() !== ''),
+      );
+      let unitKitId: string | undefined;
+      if (unitAgregado && declaresVariantKit) {
+        try {
+          const selected = selectAgregadoVariants(
+            unitAgregado as unknown as AgregadoAssemblyInput,
+            { widthMm: unit.width, depthMm: unit.depth, heightMm: unit.height, hardwareDimensions: {} },
+          );
+          const kit = effectiveKitHardwareId(
+            unitAgregado as unknown as AgregadoAssemblyInput,
+            selected,
+          );
+          if (kit) unitKitId = kit;
+        } catch {
+          unitKitId = undefined;
+        }
+      }
+
       const unitInst = { ...agrInst, agregadoId: effectiveAgregadoId, quantity: 1 };
       const res = resolveAgregadoInstance(
         unitInst,
@@ -902,6 +934,7 @@ export function resolveComposedModule(
         // Item 2: las puertas-agregado compran con la MISMA banda de
         // fábrica que el servidor cotiza.
         catalog.constructionPolicy?.doorHingeDemand,
+        unitKitId,
       );
       agregadosHardware.push(...res.hardwareLines);
 

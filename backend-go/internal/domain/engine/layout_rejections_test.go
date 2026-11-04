@@ -124,6 +124,45 @@ func TestLayoutAssemblyRejections_1493(t *testing.T) {
 		}
 	})
 
+	t.Run("dos kits declarados entre las seleccionadas produce rechazo ambiguous_kit", func(t *testing.T) {
+		// Review slice 2 (minor 2): la ambigüedad a nivel LAYOUT — el set de
+		// altura declara kit por variante y el set de ancho declara OTRO kit.
+		ambiguous := buildHeightsAgregadoFromContract(c)
+		allHeights := map[float64]string{}
+		for _, n := range c.Nominals {
+			allHeights[n.KhMinMm] = n.KitHardwareID
+		}
+		// Reemplaza la receta por una que declara kits en TODAS las alturas y
+		// añade un set de ancho con kit distinto.
+		variants := make([]domain.ProductVariant, 0, len(c.Nominals))
+		for _, n := range c.Nominals {
+			variants = append(variants, domain.ProductVariant{
+				NominalDimensionMm:      n.KhMinMm,
+				HardwareID:              n.HardwareID,
+				CommercialKitHardwareID: n.KitHardwareID,
+			})
+		}
+		ambiguous.VariantSets = []domain.AgregadoVariantSet{
+			{ID: c.VariantSetID, Dimension: "height", Variants: variants},
+			{ID: "width-variants", Dimension: "width", Variants: []domain.ProductVariant{
+				{NominalDimensionMm: 500, HardwareID: "hw-mbox-w500", CommercialKitHardwareID: "kit-mbox-otro"},
+			}},
+		}
+		ambiguousCatalog := domain.Catalog{Agregados: []domain.Agregado{ambiguous}}
+		layout, err := engine.ResolveFurnitureLayout(newModule(280, domain.ModuleAgregadoInstance{
+			ID: "agr-inst-ambiguo", AgregadoID: ambiguous.ID, Quantity: 1,
+		}), ambiguousCatalog, nil, nil)
+		if err != nil {
+			t.Fatalf("resolve layout: %v", err)
+		}
+		if len(layout.Assemblies) != 0 {
+			t.Fatalf("expected no assemblies, got %d", len(layout.Assemblies))
+		}
+		if len(layout.AssemblyRejections) != 1 || layout.AssemblyRejections[0].Reason != "ambiguous_kit" {
+			t.Fatalf("expected 1 ambiguous_kit rejection, got %+v", layout.AssemblyRejections)
+		}
+	})
+
 	t.Run("receta inválida produce rechazo definition_invalid una vez por instancia", func(t *testing.T) {
 		broken := buildHeightsAgregadoFromContract(c)
 		broken.RigidMembers = append(broken.RigidMembers, domain.AgregadoRigidMember{
