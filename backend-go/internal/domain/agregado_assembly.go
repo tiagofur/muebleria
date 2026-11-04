@@ -100,13 +100,22 @@ type HardwareDimensionOverride struct {
 
 // AgregadoRigidMember defines an autonomous bought rigid hardware component inside an Agregado recipe.
 type AgregadoRigidMember struct {
-	MemberID           string                     `json:"memberId"`
-	Role               string                     `json:"role"` // e.g. "side_left", "side_right", "runner_left", "runner_right"
-	Source             RigidMemberSource          `json:"source"`
-	Placement          AssemblyAnchorRule         `json:"placement"`
-	BOMRole            RigidMemberBOMRole         `json:"bomRole"`
-	ActorMembership    string                     `json:"actorMembership,omitempty"`    // #1376: "body" | "actor:<id>" | ""
+	MemberID        string            `json:"memberId"`
+	Role            string            `json:"role"` // e.g. "side_left", "side_right", "runner_left", "runner_right"
+	Source          RigidMemberSource `json:"source"`
+	Placement       AssemblyAnchorRule `json:"placement"`
+	BOMRole         RigidMemberBOMRole `json:"bomRole"`
+	ActorMembership string             `json:"actorMembership,omitempty"`    // #1376: "body" | "actor:<id>" | ""
 	DimensionOverrides *HardwareDimensionOverride `json:"dimensionOverrides,omitempty"` // #1460 F2: Ancho×Alto×Fondo mm|fórmula.
+	// HostPlacement (#1429 slice A): the placement-vocabulary role of the
+	// EXTERNAL module board this member's hardware fastens to (e.g.
+	// "lateral_izquierdo" for a fixed guide, "frente_cajon" for a moving
+	// rail). Declared ⇒ the hardware's catalog machining profile drills that
+	// host board's face at derive time; absent ⇒ the member drills nothing
+	// outside the agregado (the historical behavior). Empty for members whose
+	// host lives inside the agregado (those go through component placements,
+	// F131).
+	HostPlacement string `json:"hostPlacement,omitempty"`
 }
 
 // DimensionRuleSource defines the authoritative source for recalculating fabricated board dimensions.
@@ -183,6 +192,11 @@ type ResolvedRigidMember struct {
 	PreparationState *string                 `json:"preparationState,omitempty"`
 	MountFrame       *HardwareMountFrame     `json:"mountFrame,omitempty"`
 	ActorMembership  string                  `json:"actorMembership,omitempty"` // #1376: "body" | "actor:<id>" | ""
+	// HostPlacement (#1429 slice A): the declared external module-board role
+	// copied from the recipe member so the machining derivation can project
+	// the hardware's catalog profile onto that board. Empty = no external
+	// host (the historical behavior).
+	HostPlacement    string                  `json:"hostPlacement,omitempty"`
 	DesignParts      []HardwareDesignPart    `json:"designParts,omitempty"`     // #1417: parts of the member's hardware (by SKP component name).
 	// #1460 F2: dimensiones efectivas tras aplicar DimensionOverrides (merge
 	// sobre catálogo). Sólo con override — payloads legacy byte-idénticos.
@@ -652,6 +666,20 @@ func ValidateAgregadoRigidMember(m AgregadoRigidMember, hasCommercialKit bool) e
 	}
 	if err := ValidateRigidMemberSource(m.Source); err != nil {
 		return fmt.Errorf("rigid member '%s': %w", m.MemberID, err)
+	}
+	// #1429 slice A: a declared external host is a fixed-source member whose
+	// hostPlacement names a managed placement role. The closed v1 vocabulary
+	// keeps the projection's datum contract explicit per role — widening it is
+	// a contract change, never a silent passthrough.
+	if hp := strings.TrimSpace(m.HostPlacement); hp != "" {
+		if m.Source.Kind != RigidMemberSourceFixed {
+			return fmt.Errorf("rigid member '%s': hostPlacement requires a fixed hardware source", m.MemberID)
+		}
+		switch ComponentPlacement(hp) {
+		case PlacementLateralIzquierdo, PlacementLateralDerecho, PlacementFrenteCajon:
+		default:
+			return fmt.Errorf("rigid member '%s': hostPlacement %q is outside the supported vocabulary (lateral_izquierdo, lateral_derecho, frente_cajon)", m.MemberID, hp)
+		}
 	}
 	if err := ValidateAssemblyAnchorRule(m.Placement); err != nil {
 		return fmt.Errorf("rigid member '%s': %w", m.MemberID, err)

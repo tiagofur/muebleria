@@ -289,7 +289,8 @@ export type ResolvedMachiningOperationV1 = {
   readonly provenance:
     | { readonly sourceKind: 'relationship'; readonly relationshipId: string; readonly catalogRuleId?: string;
         readonly recipeRevision?: string; readonly technicalProfileId?: string; readonly technicalProfileRevision?: string }
-    | { readonly sourceKind: 'manualHardwarePlacement'; readonly hardwarePlacementId: string };
+    | { readonly sourceKind: 'manualHardwarePlacement'; readonly hardwarePlacementId: string }
+    | { readonly sourceKind: 'assemblyMemberHost'; readonly assemblyInstanceId: string; readonly memberId: string };
   readonly holes: readonly ResolveHoleV1[];
 };
 
@@ -1299,6 +1300,14 @@ function isValidProvenance(value: unknown): boolean {
   }
   if (provenance.sourceKind === 'manualHardwarePlacement') {
     return isBoundedString(provenance.hardwarePlacementId) && provenance.relationshipId === undefined && provenance.catalogRuleId === undefined;
+  }
+  // #1429 slice A: rigid members declaring an external host (hostPlacement)
+  // drill that module board with their hardware's catalog machining profile —
+  // the provenance names the assembly instance and recipe member.
+  if (provenance.sourceKind === 'assemblyMemberHost') {
+    return isBoundedString(provenance.assemblyInstanceId) && isBoundedString(provenance.memberId) &&
+      provenance.relationshipId === undefined && provenance.hardwarePlacementId === undefined &&
+      provenance.technicalProfileId === undefined;
   }
   // #1302 / §13.3: routing operations derive from the pinned opening profile
   // — the provenance names the profile and grip boundary, nothing else.

@@ -144,11 +144,11 @@ type ResolveRoutingBevel struct {
 }
 
 // ResolvedMachiningProvenance carries exactly one source variant
-// (relationship | manualHardwarePlacement | openingProfile); the wire shape
-// matches the TS discriminated union of the same name. Recipe operations pin
-// the versioned technical identity (#874 J2-B): a recipe or profile revision
-// bump moves the manufacturing fingerprint even when the geometry is
-// identical.
+// (relationship | manualHardwarePlacement | openingProfile |
+// assemblyMemberHost); the wire shape matches the TS discriminated union of
+// the same name. Recipe operations pin the versioned technical identity
+// (#874 J2-B): a recipe or profile revision bump moves the manufacturing
+// fingerprint even when the geometry is identical.
 type ResolvedMachiningProvenance struct {
 	SourceKind               string `json:"sourceKind"`
 	RelationshipID           string `json:"relationshipId,omitempty"`
@@ -158,6 +158,11 @@ type ResolvedMachiningProvenance struct {
 	TechnicalProfileID       string `json:"technicalProfileId,omitempty"`
 	TechnicalProfileRevision string `json:"technicalProfileRevision,omitempty"`
 	HardwarePlacementID      string `json:"hardwarePlacementId,omitempty"`
+	// AssemblyMemberHost provenance (#1429 slice A): the agregado assembly
+	// instance and recipe member whose hardware machining profile drilled the
+	// external host board, so a frozen program names the exact member.
+	AssemblyInstanceID string `json:"assemblyInstanceId,omitempty"`
+	MemberID           string `json:"memberId,omitempty"`
 	// OpeningProfile provenance (#1302 / §13.3): the pinned opening profile
 	// and grip boundary the routing cut derives from, so a frozen routing
 	// program can always name the profile definition it came from.
@@ -187,6 +192,12 @@ func (p ResolvedMachiningProvenance) canonical() map[string]any {
 	}
 	if p.HardwarePlacementID != "" {
 		m["hardwarePlacementId"] = p.HardwarePlacementID
+	}
+	if p.AssemblyInstanceID != "" {
+		m["assemblyInstanceId"] = p.AssemblyInstanceID
+	}
+	if p.MemberID != "" {
+		m["memberId"] = p.MemberID
 	}
 	if p.OpeningProfileID != "" {
 		m["openingProfileId"] = p.OpeningProfileID
@@ -378,6 +389,9 @@ func deriveAuthoringMachining(
 	// #1219: the factory construction policy — the system ladder's factory
 	// rung. nil = every family inherits.
 	policy *FactoryConstructionPolicy,
+	// #1429 slice A: the resolved agregado assemblies whose members may
+	// declare external hosts (hostPlacement → external board drilling).
+	assemblies []LayoutAssembly,
 ) (AuthoringMachining, []domain.ContractIssue) {
 	issues := []domain.ContractIssue{}
 	operations := []ResolvedMachiningOperation{}
@@ -442,6 +456,9 @@ func deriveAuthoringMachining(
 	for _, placement := range placements {
 		deriveManualPlacementMachining(placement, catalog, &operations, &issues)
 	}
+	// #1429 slice A: rigid members declaring an external host (hostPlacement)
+	// drill that module board with their hardware's catalog machining profile.
+	deriveMemberHostMachining(assemblies, boards, catalog, &operations, &issues)
 	// #1302 / §13.3: the opening's declared side notches become routing
 	// operations derived from the SAME resolved subtraction boxes the visible
 	// geometry consumes — one definition, never a second geometric

@@ -141,7 +141,7 @@ module Granete
       # Fail-closed on shape violations: ambiguous provenance, unknown hole
       # faces or a broken fingerprint never parse into a usable result.
       module AuthoringResolveWireParsing
-        PROVENANCE_SOURCE_KINDS = %w[relationship manualHardwarePlacement openingProfile].freeze
+        PROVENANCE_SOURCE_KINDS = %w[relationship manualHardwarePlacement openingProfile assemblyMemberHost].freeze
         HOLE_FACES = %w[front back left right top bottom].freeze
         HOLE_KEYS = %w[face xMm yMm diameterMm depthMm type].freeze
 
@@ -182,19 +182,23 @@ module Granete
         # identity keys and unknown keys fail.
         PROVENANCE_KEYS = %w[relationshipId jointPlacementId hardwarePlacementId catalogRuleId familyId
                              recipeRevision technicalProfileId technicalProfileRevision sourceKind
-                             openingProfileId boundary].freeze
+                             openingProfileId boundary assemblyInstanceId memberId].freeze
 
         PROVENANCE_REQUIRED_KEYS = {
           'relationship' => %w[relationshipId],
           'manualHardwarePlacement' => %w[hardwarePlacementId],
-          'openingProfile' => %w[openingProfileId boundary]
+          'openingProfile' => %w[openingProfileId boundary],
+          # #1429 slice A: el miembro rígido que declara anfitrión externo nombra
+          # el ensamble y el miembro cuya receta taladró la pieza.
+          'assemblyMemberHost' => %w[assemblyInstanceId memberId]
         }.freeze
 
         PROVENANCE_ALLOWED_KEYS = {
           'relationship' => %w[sourceKind relationshipId catalogRuleId familyId
                                recipeRevision technicalProfileId technicalProfileRevision],
           'manualHardwarePlacement' => %w[sourceKind hardwarePlacementId],
-          'openingProfile' => %w[sourceKind openingProfileId boundary]
+          'openingProfile' => %w[sourceKind openingProfileId boundary],
+          'assemblyMemberHost' => %w[sourceKind assemblyInstanceId memberId]
         }.freeze
 
         def provenance(raw, context)
