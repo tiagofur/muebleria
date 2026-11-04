@@ -223,7 +223,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	// the catalog list must serve the real optimistic-concurrency token so
 	// clients seed their version cache from one read (a served 0 would be a
 	// value the CHECK >= 1 column can never hold).
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions, version FROM modules WHERE organization_id = $1 ORDER BY name ASC, id ASC`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, panel_thickness_dim, base_mode, base_clearance_mm, agregados, parameter_definitions, version FROM modules WHERE organization_id = $1 ORDER BY name ASC, id ASC`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return cat, fmt.Errorf("error query modules: %w", err)
@@ -238,11 +238,12 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		var imageURL *string
 		var structureID *string
 		var furnitureType *string
+		var panelThicknessDim *string
 		var baseMode *string
 		var baseClearanceMm *int
 		var agrsRaw []byte
 		var parameterDefinitionsRaw []byte
-		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm, &agrsRaw, &parameterDefinitionsRaw, &m.Version)
+		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &panelThicknessDim, &baseMode, &baseClearanceMm, &agrsRaw, &parameterDefinitionsRaw, &m.Version)
 		if err != nil {
 			return cat, err
 		}
@@ -269,6 +270,9 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		}
 		if furnitureType != nil {
 			m.FurnitureType = *furnitureType
+		}
+		if panelThicknessDim != nil {
+			m.PanelThicknessDim = *panelThicknessDim
 		}
 		if baseMode != nil {
 			m.BaseMode = *baseMode

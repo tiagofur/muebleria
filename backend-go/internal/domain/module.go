@@ -33,9 +33,14 @@ type Module struct {
 	// Empty for legacy/flat modules.
 	StructureID string `json:"structure_id,omitempty"`
 	// FurnitureType is the fundamental furniture type for project measure
-	// defaults (#109 / H14): "inferior" | "superior" | "alto". Empty = inferior
-	// (legacy default).
+	// defaults (#109 / H14): "inferior" | "superior" | "alto" | "panel".
+	// Empty = inferior (legacy default). "panel" (#1496) marks a pure
+	// termination panel whose thin dim is the FRENTE material thickness.
 	FurnitureType string `json:"furniture_type,omitempty"`
+	// PanelThicknessDim (#1496): for FurnitureType "panel", which external dim
+	// is the panel's thickness: "width" | "height" | "depth". Empty = not
+	// declared (behaves as a normal module). Derived at resolve time.
+	PanelThicknessDim string `json:"panel_thickness_dim,omitempty"`
 	// BaseMode: none | plinth_board | plinth_strip | legs (zoclo / patas).
 	// Empty = none.
 	BaseMode string `json:"base_mode,omitempty"`

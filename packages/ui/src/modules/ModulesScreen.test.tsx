@@ -538,6 +538,34 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(draft.furnitureType).toBe('superior');
   });
 
+  it('panel type shows the thickness-dim select and persists the axis (#1496)', async () => {
+    const user = userEvent.setup();
+    const { onCreate } = renderScreen();
+
+    await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
+    await screen.findByTestId('module-editor-page');
+
+    // El selector de eje NO existe para tipos no-panel.
+    const select = screen.getByTestId('module-furniture-type') as HTMLSelectElement;
+    expect(screen.queryByTestId('module-thickness-dim')).toBeNull();
+
+    await user.type(screen.getByLabelText('Código'), 'MOD-TER-X');
+    await user.type(screen.getByLabelText('Nombre'), 'Panel Test');
+    await user.selectOptions(select, 'panel');
+
+    const axis = await screen.findByTestId('module-thickness-dim') as HTMLSelectElement;
+    expect(axis.value).toBe(''); // sin declaración previa
+    await user.selectOptions(axis, 'width');
+
+    await user.click(screen.getByRole('button', { name: /^Guardar/i }));
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenCalledTimes(1);
+    });
+    const draft = onCreate.mock.calls[0]![0];
+    expect(draft.furnitureType).toBe('panel');
+    expect(draft.panelThicknessDim).toBe('width');
+  });
+
   it('general panel exposes baseMode + B and persists on save', async () => {
     const user = userEvent.setup();
     const { onCreate } = renderScreen();

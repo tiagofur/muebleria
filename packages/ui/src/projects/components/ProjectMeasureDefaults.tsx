@@ -14,6 +14,7 @@ const TYPE_LABELS: Record<FurnitureType, string> = {
   inferior: 'Inferiores (gabinetes)',
   superior: 'Superiores (alacenas)',
   alto: 'Altos (despensas)',
+  panel: 'Paneles de terminación',
 };
 
 export const ProjectMeasureDefaults = memo(function ProjectMeasureDefaults(): ReactNode {

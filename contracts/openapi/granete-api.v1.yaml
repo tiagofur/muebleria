@@ -17134,7 +17134,17 @@
         "enum": [
           "inferior",
           "superior",
-          "alto"
+          "alto",
+          "panel"
+        ]
+      },
+      "CatalogPanelThicknessAxis": {
+        "type": "string",
+        "description": "#1496 — for furnitureType 'panel': which external dim is the panel's thickness, derived from the FRENTE material at resolve time. The read projection omits unset values.",
+        "enum": [
+          "width",
+          "height",
+          "depth"
         ]
       },
       "CatalogBaseMode": {
@@ -17914,6 +17924,9 @@
           "furniture_type": {
             "$ref": "#/components/schemas/CatalogFurnitureType"
           },
+          "panel_thickness_dim": {
+            "$ref": "#/components/schemas/CatalogPanelThicknessAxis"
+          },
           "base_mode": {
             "$ref": "#/components/schemas/CatalogBaseMode"
           },
@@ -18404,6 +18417,10 @@
           "furniture_type": {
             "type": "string",
             "description": "Empty string = unset (legacy); the read projection omits unset values."
+          },
+          "panel_thickness_dim": {
+            "type": "string",
+            "description": "#1496 — 'width' | 'height' | 'depth' when furniture_type is 'panel'; empty string = unset (legacy). The read projection omits unset values."
           },
           "base_mode": {
             "type": "string",

@@ -127,6 +127,8 @@ export function furnitureTypeLabel(type: FurnitureType | undefined): string {
       return 'Superior';
     case 'alto':
       return 'Alto';
+    case 'panel':
+      return 'Panel';
   }
 }
 

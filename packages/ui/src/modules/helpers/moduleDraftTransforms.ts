@@ -14,6 +14,7 @@ import type {
   Module,
   ModuleAgregadoInstance,
   ModuleBaseMode,
+  PanelThicknessDim,
 } from '@granete/domain';
 import {
   isModuleBaseMode,
@@ -93,6 +94,12 @@ export type ModuleDraft = {
   categoryId: string;
   /** Fundamental furniture type for project measure defaults (#109). */
   furnitureType: FurnitureType;
+  /**
+   * #1496: for furnitureType 'panel' — which external dim is the panel's
+   * thickness (derived from the FRENTE material at resolve time).
+   * Empty string = not declared.
+   */
+  panelThicknessDim: PanelThicknessDim | '';
   /**
    * Floor base: none | plinth_board | plinth_strip | legs.
    * Empty string treated as none.
@@ -175,7 +182,7 @@ const parameterDefinitionRefRule: DraftRule = (value) =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const moduleDraftRule = objectRule({
   ...stringFields('code', 'name', 'notes', 'categoryId', 'baseClearanceMm', 'externalWidth', 'externalHeight', 'externalDepth', 'baseLaborCost', 'imageUrl', 'structureId'),
-  furnitureType: enumRule('inferior', 'superior', 'alto'), baseMode: enumRule('', 'none', 'plinth_board', 'plinth_strip', 'legs'),
+  furnitureType: enumRule('inferior', 'superior', 'alto', 'panel'), panelThicknessDim: enumRule('', 'width', 'height', 'depth'), baseMode: enumRule('', 'none', 'plinth_board', 'plinth_strip', 'legs'),
   hardwareLines: arrayRule(hardwareLineDraftRule), components: arrayRule(componentInstanceDraftRule),
   agregados: arrayRule(agregadoInstanceDraftRule), presets: arrayRule(presetRule),
   parameterDefinitions: arrayRule(parameterDefinitionRefRule) });
@@ -190,6 +197,7 @@ export function emptyModuleDraft(): ModuleDraft {
     notes: '',
     categoryId: '',
     furnitureType: 'inferior',
+    panelThicknessDim: '',
     baseMode: '',
     baseClearanceMm: '',
     externalWidth: '',
@@ -305,6 +313,25 @@ export function hardwareLineToDraft(line: HardwareLine): HardwareLineDraft {
   };
 }
 
+/**
+ * #1496: pre-sugerencia del eje del espesor — la dimensión base más delgada
+ * (para un costado 15×720×560 es el ancho). El valor declarado explícito
+ * siempre gana; sin medidas base no hay sugerencia.
+ */
+function suggestPanelThicknessDim(
+  dims: Module['externalDims'],
+): PanelThicknessDim | '' {
+  if (!dims) return '';
+  const candidates: Array<[PanelThicknessDim, number]> = [
+    ['width', dims.width],
+    ['height', dims.height],
+    ['depth', dims.depth],
+  ];
+  const present = candidates.filter(([, mm]) => mm > 0);
+  if (present.length === 0) return '';
+  return present.reduce((best, cur) => (cur[1] < best[1] ? cur : best))[0];
+}
+
 export function moduleToDraft(mod: Module): ModuleDraft {
   return {
     code: mod.code,
@@ -312,6 +339,11 @@ export function moduleToDraft(mod: Module): ModuleDraft {
     notes: mod.notes ?? '',
     categoryId: mod.categoryId ?? '',
     furnitureType: mod.furnitureType ?? 'inferior',
+    panelThicknessDim:
+      mod.furnitureType === 'panel'
+        ? (mod.panelThicknessDim ??
+          suggestPanelThicknessDim(mod.externalDims))
+        : '',
     baseMode: mod.baseMode && isModuleBaseMode(mod.baseMode) ? mod.baseMode : '',
     baseClearanceMm:
       mod.baseClearanceMm !== undefined ? String(mod.baseClearanceMm) : '',
@@ -371,6 +403,10 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
     notes: optionalNotes(draft.notes),
     categoryId: draft.categoryId.trim() || undefined,
     furnitureType: draft.furnitureType,
+    // #1496: el eje sólo viaja cuando el tipo es panel — evita datos muertos.
+    ...(draft.furnitureType === 'panel' && draft.panelThicknessDim
+      ? { panelThicknessDim: draft.panelThicknessDim }
+      : {}),
     baseMode,
     ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
     baseLaborCost: parseOptionalNumber(draft.baseLaborCost),

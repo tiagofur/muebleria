@@ -39,6 +39,7 @@ export type {
   Structure,
   StructureRevision,
   FurnitureType,
+  PanelThicknessDim,
   DimensionPreset,
   ComponentPlacement,
   ComponentGeometry,

@@ -891,6 +891,7 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     categoryId: m.categoryId ?? '',
     structure_id: m.structureId ?? '',
     furniture_type: m.furnitureType ?? '',
+    panel_thickness_dim: m.panelThicknessDim ?? '',
     base_mode: m.baseMode ?? '',
     base_clearance_mm:
       m.baseClearanceMm === undefined ? null : m.baseClearanceMm,
@@ -910,7 +911,9 @@ export function moduleToApi(m: Module): Record<string, unknown> {
   };
 }
 
-const FURNITURE_TYPES = new Set(['inferior', 'superior', 'alto']);
+const FURNITURE_TYPES = new Set(['inferior', 'superior', 'alto', 'panel']);
+// #1496: eje de espesor del panel — vacío o desconocido = no declarado.
+const PANEL_THICKNESS_DIMS = new Set(['width', 'height', 'depth']);
 
 export function moduleFromApi(raw: Record<string, unknown>): Module {
   const lines = raw.hardware_lines ?? raw.hardwareLines;
@@ -923,6 +926,10 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
   const furnitureTypeRaw = str(raw.furniture_type ?? raw.furnitureType);
   const furnitureType = FURNITURE_TYPES.has(furnitureTypeRaw)
     ? (furnitureTypeRaw as Module['furnitureType'])
+    : undefined;
+  const panelThicknessDimRaw = str(raw.panel_thickness_dim ?? raw.panelThicknessDim);
+  const panelThicknessDim = PANEL_THICKNESS_DIMS.has(panelThicknessDimRaw)
+    ? (panelThicknessDimRaw as Module['panelThicknessDim'])
     : undefined;
   const baseModeRaw = str(raw.base_mode ?? raw.baseMode);
   const baseMode = BASE_MODES.has(baseModeRaw)
@@ -951,6 +958,7 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
     categoryId: categoryId || undefined,
     structureId: structureId || undefined,
     furnitureType,
+    ...(panelThicknessDim === undefined ? {} : { panelThicknessDim }),
     baseMode,
     ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
     components: Array.isArray(componentsRaw)

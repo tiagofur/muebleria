@@ -8,6 +8,7 @@ import type {
   Module,
   Project,
   ProjectItem,
+  FurnitureType,
 } from '@granete/domain';
 import {
   defaultMeasurePresetId,
@@ -157,7 +158,7 @@ export type ResolvedPlacement2D = {
   readonly label: string;
   readonly shortCode: string;
   readonly elevation: 'floor' | 'wall';
-  readonly furnitureType?: 'inferior' | 'superior' | 'alto';
+  readonly furnitureType?: FurnitureType;
   readonly category: PlacementVisualCategory;
   readonly isFree: boolean;
   readonly widthMm: number;
@@ -204,7 +205,7 @@ export function resolvePlacement2D(params: {
   readonly widthMm: number;
   readonly depthMm: number;
   readonly heightMm?: number;
-  readonly furnitureType?: 'inferior' | 'superior' | 'alto';
+  readonly furnitureType?: FurnitureType;
   readonly label?: string;
   readonly shortCode?: string;
 }): ResolvedPlacement2D | null {
