@@ -34,6 +34,35 @@
     "variantB": { "nominalDepthMm": 500, "hardwareId": "hw-merivobox-500" },
     "commercialKitHardwareId": "kit-merivobox-m"
   },
+  "heights": {
+    "comment": "#1493 alturas Blum MERIVOBOX N/M/K/E — autoridad numérica única para Go, TS y la UI. Nominal de variante = KH mín (espacio interior mínimo en mueble) con clearance 0; la trasera de madera sale con la fórmula uniforme selected_variant - 25 (60.5/83/121/184 mm, Blum KA-160/24-ES). La altura E (cacerolera) lleva su propio kit con galería; su tercer taladro frontal (+128 mm) vive en las hardwarePlacements del herraje E, nunca en piezas fijas.",
+    "variantSetId": "height-variants",
+    "clearanceMm": 0.0,
+    "backOffsetMm": -25.0,
+    "nominals": [
+      { "code": "N", "khMinMm": 85.5, "hardwareId": "hw-mbox-n", "kitHardwareId": "kit-mbox-n", "backMm": 60.5 },
+      { "code": "M", "khMinMm": 108.0, "hardwareId": "hw-mbox-m", "kitHardwareId": "kit-mbox-m", "backMm": 83.0 },
+      { "code": "K", "khMinMm": 146.0, "hardwareId": "hw-mbox-k", "kitHardwareId": "kit-mbox-k", "backMm": 121.0 },
+      { "code": "E", "khMinMm": 209.0, "hardwareId": "hw-mbox-e", "kitHardwareId": "kit-mbox-e", "backMm": 184.0, "kitExtraPartCodes": ["KIT-MBX-E-GALERIA"] }
+    ],
+    "boundaries": [
+      { "spaceMm": 85.0, "expected": "rejected" },
+      { "spaceMm": 85.5, "expected": "N" },
+      { "spaceMm": 107.9, "expected": "N" },
+      { "spaceMm": 108.0, "expected": "M" },
+      { "spaceMm": 200.0, "expected": "K" },
+      { "spaceMm": 209.0, "expected": "E" },
+      { "spaceMm": 300.0, "expected": "E" }
+    ],
+    "moduleThreeDrawers": {
+      "comment": "Cajonera 3 cajones: bahía inferior = mitad del mueble (resuelve E), superiores = qty 2 vertical sobre la otra mitad (cada una resuelve M). Números: mueble 560 mm de alto sin techo/base comidos — 280 abajo alcanza E, 140 por cajón superior alcanza M pero no K.",
+      "moduleHeightMm": 560.0,
+      "expectedByBay": ["E", "M", "M"],
+      "expectedKitByBay": ["kit-mbox-e", "kit-mbox-m", "kit-mbox-m"],
+      "expectedBackByBay": [184.0, 83.0, 83.0],
+      "galeriaMemberOnlyInBay": 0
+    }
+  },
   "expectedFabricatedMm": {
     "w600Nl450": {
       "bottom": { "widthMm": 512, "lengthMm": 434, "thicknessMm": 16 },

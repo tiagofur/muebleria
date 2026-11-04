@@ -449,10 +449,15 @@ func TestResolveFurnitureLayoutAgregadoKitGuard(t *testing.T) {
 			RelativePosition: domain.HardwareRelPosition{XMm: 50, YMm: 50},
 		})
 		agr := catalog.Agregados[len(catalog.Agregados)-1]
-		if !agregadoBoardsPlaceKitHardware(agr, catalog, nil) {
+		// #1493: el kit efectivo llega del llamador (variante o agregado).
+		kitID := ""
+		if agr.CommercialKitHardwareID != nil {
+			kitID = *agr.CommercialKitHardwareID
+		}
+		if !agregadoBoardsPlaceKitHardware(agr, catalog, nil, kitID) {
 			t.Fatalf("unresolved role must keep the conservative skip")
 		}
-		if agregadoBoardsPlaceKitHardware(domain.Agregado{}, catalog, nil) {
+		if agregadoBoardsPlaceKitHardware(domain.Agregado{}, catalog, nil, kitID) {
 			t.Fatalf("no placements must not skip the assembly")
 		}
 	})

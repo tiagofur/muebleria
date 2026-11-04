@@ -152,6 +152,12 @@ func (r AssemblyDimensionRule) EffectiveMultiplier() float64 {
 type ProductVariant struct {
 	NominalDimensionMm float64 `json:"nominalDimensionMm"` // e.g. 450.0, 500.0, 550.0
 	HardwareID         string  `json:"hardwareId"`         // Catalog Hardware.ID with exact 3D Asset & MountFrame
+	// #1493: kit comercial propio de la variante (opcional). Cuando la
+	// variante seleccionada lo declara, sustituye al kit del agregado en el
+	// BOM y en la materialización de partes del kit (ej. una altura Blum
+	// MERIVOBOX N/M/K/E = un kit distinto; la altura E lleva su galería).
+	// Ausente ⇒ fallback al commercialKitHardwareId del agregado.
+	CommercialKitHardwareID string `json:"commercialKitHardwareId,omitempty"`
 }
 
 // AgregadoVariantSet groups discrete commercial sizes available for a specific dimension.
@@ -755,6 +761,9 @@ func ValidateAgregadoVariantSet(vs AgregadoVariantSet) error {
 		if strings.TrimSpace(v.HardwareID) == "" {
 			return fmt.Errorf("variant set '%s' variant %d: hardwareId must be non-empty", vs.ID, i)
 		}
+		if v.CommercialKitHardwareID != "" && strings.TrimSpace(v.CommercialKitHardwareID) == "" {
+			return fmt.Errorf("variant set '%s' variant %d: commercialKitHardwareId cannot be whitespace (omit the field to use the agregado-level kit)", vs.ID, i)
+		}
 	}
 	return nil
 }
@@ -810,6 +819,24 @@ func ValidateAgregadoAssemblyDefinition(agregado Agregado) error {
 		}
 	}
 
+	// #1493: una variante puede aportar el kit comercial por altura, así que
+	// un miembro included_in_kit también es válido cuando ALGUNA variante
+	// declara kit. La selección exacta se exige en resolve (fail-closed): si
+	// la variante efectiva no declara kit y el agregado tampoco, resolve
+	// rechaza en lugar de omitir el BOM en silencio.
+	hasVariantKit := false
+	for _, vs := range agregado.VariantSets {
+		for _, v := range vs.Variants {
+			if strings.TrimSpace(v.CommercialKitHardwareID) != "" {
+				hasVariantKit = true
+				break
+			}
+		}
+		if hasVariantKit {
+			break
+		}
+	}
+
 	// 2. Validate CompatibilityRules
 	seenRuleSets := make(map[string]bool)
 	for _, rule := range agregado.CompatibilityRules {
@@ -841,7 +868,7 @@ func ValidateAgregadoAssemblyDefinition(agregado Agregado) error {
 			return fmt.Errorf("duplicate memberId '%s' in assembly definition", m.MemberID)
 		}
 		seenMemberIDs[m.MemberID] = true
-		if err := ValidateAgregadoRigidMember(m, hasKit); err != nil {
+		if err := ValidateAgregadoRigidMember(m, hasKit || hasVariantKit); err != nil {
 			return err
 		}
 		if m.Source.Kind == RigidMemberSourceVariant {
