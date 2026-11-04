@@ -285,12 +285,12 @@ func TestMerivoboxHeightsPerBayKitSync_1493(t *testing.T) {
 				if bay == galeriaBay && !present {
 					t.Errorf("bay %d: expected galería %s in the E bay", bay, extraHw)
 				}
-			if bay != galeriaBay && present {
-				t.Errorf("bay %d (%s): galería %s must not appear outside the E bay", bay, wantCode, extraHw)
+				if bay != galeriaBay && present {
+					t.Errorf("bay %d (%s): galería %s must not appear outside the E bay", bay, wantCode, extraHw)
+				}
 			}
 		}
 	}
-}
 
 }
 
