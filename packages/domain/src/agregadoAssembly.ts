@@ -1709,6 +1709,33 @@ export interface ResolvedModuleAssembly {
   readonly isHistorical: boolean;
 }
 
+/**
+ * #1493 slice 2: razón de rechazo de una bahía/instancia de agregado —
+ * espejo exacto del wire contract Go (LayoutAssemblyRejection). Machine
+ * strings; la UI las mapea a copy español.
+ */
+export type AssemblyRejectionReason =
+  | 'definition_invalid'
+  | 'variant_not_found'
+  | 'ambiguous_kit'
+  | 'resolve_failed';
+
+export interface ModuleAssemblyRejection {
+  readonly assemblyInstanceId: string;
+  readonly agregadoId: string;
+  readonly agregadoCode?: string;
+  readonly reason: AssemblyRejectionReason;
+  readonly variantSetId?: string;
+  readonly bayHeightMm?: number;
+  readonly fittingNominals?: readonly number[];
+  readonly detail?: string;
+}
+
+export interface ResolvedModuleAssemblies {
+  readonly assemblies: readonly ResolvedModuleAssembly[];
+  readonly rejections: readonly ModuleAssemblyRejection[];
+}
+
 export interface ResolveModuleAgregadoAssembliesOptions {
   readonly optionChoices?: OptionChoices;
   readonly visualAssetLookup?: VisualAssetLookup;
@@ -1794,7 +1821,7 @@ export function enrichFabricatedComponentsWithAuthority(
  * 3. Live visual pins: Attaches visual assets from catalog (#668) so live rigid members carry renderStatus = 'exact'.
  * 4. Historical snapshots: Passthrough without recipe re-evaluation or current catalog lookup.
  */
-export function resolveModuleAgregadoAssemblies(
+export function resolveModuleAgregadoAssembliesDetailed(
   module: Module,
   moduleDims: { width: number; height: number; depth: number },
   catalog: {
@@ -1805,13 +1832,13 @@ export function resolveModuleAgregadoAssemblies(
     readonly hardware?: readonly Hardware[];
   },
   options: ResolveModuleAgregadoAssembliesOptions = {},
-): readonly ResolvedModuleAssembly[] {
+): ResolvedModuleAssemblies {
   const structure = catalog.structures?.find((s) => s.id === module.structureId);
   const allAgregadoInstances = [
     ...(structure?.agregados ?? []),
     ...(module.agregados ?? []),
   ];
-  if (allAgregadoInstances.length === 0) return [];
+  if (allAgregadoInstances.length === 0) return { assemblies: [], rejections: [] };
 
   const PW = moduleDims.width;
   const PH = moduleDims.height;
@@ -1819,6 +1846,10 @@ export function resolveModuleAgregadoAssemblies(
   const parentDims = { PW, PH, PD, W: PW, H: PH, D: PD };
 
   const out: ResolvedModuleAssembly[] = [];
+  // #1493 slice 2: el preview nunca vuelve a romper por una bahía — cada
+  // unidad/instancia que no emite ensamble queda como rechazo explícito
+  // (espejo del guard Go en el wire contract).
+  const rejections: ModuleAssemblyRejection[] = [];
   const visualLookup =
     options.visualAssetLookup ?? createCatalogVisualAssetLookup(catalog.hardware);
   // #1453 F1: member offset formulas see HW/HH/HD from the catalog — same
@@ -1840,6 +1871,21 @@ export function resolveModuleAgregadoAssemblies(
       agregado.rigidMembers && agregado.rigidMembers.length > 0,
     );
     if (!isAssembly) continue;
+
+    // #1493 slice 2: la definición se valida UNA vez por instancia (sugerencia
+    // del review del slice 1, espejo del guard Go).
+    try {
+      validateAgregadoAssemblyDefinition(agregado);
+    } catch (err) {
+      rejections.push({
+        assemblyInstanceId: agrInst.id ?? '',
+        agregadoId: agregado.id,
+        agregadoCode: agregado.code,
+        reason: 'definition_invalid',
+        detail: err instanceof Error ? err.message : String(err),
+      });
+      continue;
+    }
 
     const rawW = agrInst.dimensions?.widthFormula
       ? evaluatePartFormula(agrInst.dimensions.widthFormula, parentDims, {
@@ -1956,30 +2002,54 @@ export function resolveModuleAgregadoAssemblies(
           isHistorical: true,
         });
       } else {
-        const resolved = resolveAgregadoAssembly(agregado, {
-          widthMm: unit.width,
-          depthMm: unit.depth,
-          heightMm: unit.height,
-          hardwareDimensions,
-        });
+        let pinned: ResolvedAssembly;
+        try {
+          const resolved = resolveAgregadoAssembly(agregado, {
+            widthMm: unit.width,
+            depthMm: unit.depth,
+            heightMm: unit.height,
+            hardwareDimensions,
+          });
 
-        const enrichedFabricated = enrichFabricatedComponentsWithAuthority(
-          resolved.fabricatedComponents,
-          catalog,
-          options.optionChoices,
-        );
+          const enrichedFabricated = enrichFabricatedComponentsWithAuthority(
+            resolved.fabricatedComponents,
+            catalog,
+            options.optionChoices,
+          );
 
-        // #1417: attach design parts from the catalog hardware (same flow as pins).
-        const withParts = attachHardwareDesignParts(resolved, catalog.hardware);
+          // #1417: attach design parts from the catalog hardware (same flow as pins).
+          const withParts = attachHardwareDesignParts(resolved, catalog.hardware);
 
-        // Attach visual pins (R2)
-        const pinned = attachVisualPins(
-          {
-            ...withParts,
-            fabricatedComponents: enrichedFabricated,
-          },
-          visualLookup,
-        );
+          // Attach visual pins (R2)
+          pinned = attachVisualPins(
+            {
+              ...withParts,
+              fabricatedComponents: enrichedFabricated,
+            },
+            visualLookup,
+          );
+        } catch (err) {
+          let rejection: ModuleAssemblyRejection = {
+            assemblyInstanceId,
+            agregadoId: agrInst.agregadoId,
+            agregadoCode: agregado.code,
+            reason: 'resolve_failed',
+            bayHeightMm: unit.height,
+            detail: err instanceof Error ? err.message : String(err),
+          };
+          if (err instanceof AssemblyVariantNotFoundError) {
+            rejection = {
+              ...rejection,
+              reason: 'variant_not_found',
+              variantSetId: err.variantSetId,
+              fittingNominals: err.availableNominals,
+            };
+          } else if (err instanceof Error && err.message.includes('ambiguous commercial kit')) {
+            rejection = { ...rejection, reason: 'ambiguous_kit' };
+          }
+          rejections.push(rejection);
+          continue;
+        }
 
         out.push({
           assemblyInstanceId,
@@ -1992,7 +2062,28 @@ export function resolveModuleAgregadoAssemblies(
     }
   }
 
-  return out;
+  return { assemblies: out, rejections };
+}
+
+/**
+ * Wrapper compatible con el contrato histórico: sólo los ensambles emitidos.
+ * #1493 slice 2 — ya NO propaga throws de una bahía: los rechazos quedan en
+ * `resolveModuleAgregadoAssembliesDetailed().rejections` (el preview usa la
+ * variante detailed para mostrarlos).
+ */
+export function resolveModuleAgregadoAssemblies(
+  module: Module,
+  moduleDims: { width: number; height: number; depth: number },
+  catalog: {
+    readonly structures?: readonly Structure[];
+    readonly agregados?: readonly Agregado[];
+    readonly components?: readonly Component[];
+    readonly materials?: readonly MaterialBoard[];
+    readonly hardware?: readonly Hardware[];
+  },
+  options: ResolveModuleAgregadoAssembliesOptions = {},
+): readonly ResolvedModuleAssembly[] {
+  return resolveModuleAgregadoAssembliesDetailed(module, moduleDims, catalog, options).assemblies;
 }
 
 /**
