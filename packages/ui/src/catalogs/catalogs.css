@@ -341,6 +341,56 @@
   min-width: 8rem;
 }
 
+/** Side-by-side form row (opening/hardware profiles): fields share the
+    width, narrow fields keep a fixed control width. */
+.catalog-form__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.catalog-form__row > .catalog-form__field {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.catalog-form__row > .catalog-form__field--narrow {
+  flex: 0 1 6.25rem;
+}
+
+.catalog-form__field--narrow {
+  max-width: 6.25rem;
+}
+
+.catalog-form__fieldset {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  margin: 0;
+  min-width: 0;
+}
+
+/* The fieldset stays display:block — a flex fieldset detaches the legend
+   from the border. Rhythm comes from sibling margins instead of gap. */
+.catalog-form__fieldset > legend {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  padding: 0 var(--space-1);
+}
+
+.catalog-form__fieldset > * + * {
+  margin-top: var(--density-form-gap);
+}
+
+.catalog-form__check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .catalog-form__error {
   margin: 0;
   padding: var(--space-2) 0.65rem;
