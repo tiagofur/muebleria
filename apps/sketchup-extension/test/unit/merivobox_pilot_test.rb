@@ -339,7 +339,7 @@ class MerivoboxPilotTest < Minitest::Test
     end
 
     three = heights['moduleThreeDrawers']
-    assert_equal ['E', 'M', 'M'], three['expectedByBay'],
+    assert_equal %w[E M M], three['expectedByBay'],
                  'la cajonera 3 cajones resuelve E abajo y M arriba'
     assert three['galeriaMemberOnlyInBay'] < three['expectedByBay'].size
     assert_equal 'E', three['expectedByBay'][three['galeriaMemberOnlyInBay']],
