@@ -149,6 +149,14 @@ export interface AssemblyDimensionRule {
 export interface ProductVariant {
   readonly nominalDimensionMm: number;
   readonly hardwareId: string;
+  /**
+   * #1493: kit comercial propio de la variante (opcional). Cuando la variante
+   * seleccionada lo declara, sustituye al kit del agregado en el BOM y en la
+   * materialización de partes del kit (ej. una altura Blum MERIVOBOX N/M/K/E
+   * = un kit distinto; la altura E lleva su galería). Ausente ⇒ fallback al
+   * commercialKitHardwareId del agregado.
+   */
+  readonly commercialKitHardwareId?: string;
 }
 
 export interface AgregadoVariantSet {
@@ -711,6 +719,11 @@ export function validateAgregadoVariantSet(vs: AgregadoVariantSet): void {
     if (!v.hardwareId.trim()) {
       throw new Error(`variant set '${vs.id}' variant ${i}: hardwareId must be non-empty`);
     }
+    if (v.commercialKitHardwareId !== undefined && v.commercialKitHardwareId.trim() === '') {
+      throw new Error(
+        `variant set '${vs.id}' variant ${i}: commercialKitHardwareId cannot be whitespace (omit the field to use the agregado-level kit)`,
+      );
+    }
   }
 }
 
@@ -778,6 +791,15 @@ export function validateAgregadoAssemblyDefinition(agregado: AgregadoAssemblyInp
     }
   }
 
+  // #1493: una variante puede aportar el kit comercial por altura, así que un
+  // miembro included_in_kit también es válido cuando ALGUNA variante declara
+  // kit. La selección exacta se exige en resolve (fail-closed): si la variante
+  // efectiva no declara kit y el agregado tampoco, resolve rechaza en lugar
+  // de omitir el BOM en silencio.
+  const hasVariantKit = (agregado.variantSets ?? []).some((vs) =>
+    (vs.variants ?? []).some((v) => v.commercialKitHardwareId !== undefined && v.commercialKitHardwareId.trim() !== ''),
+  );
+
   // 2. Compatibility rules
   const seenRuleSets = new Set<string>();
   if (agregado.compatibilityRules) {
@@ -809,7 +831,7 @@ export function validateAgregadoAssemblyDefinition(agregado: AgregadoAssemblyInp
         throw new Error(`duplicate memberId '${m.memberId}' in assembly definition`);
       }
       seenMemberIds.add(m.memberId);
-      validateAgregadoRigidMember(m, hasKit);
+      validateAgregadoRigidMember(m, hasKit || hasVariantKit);
       if (m.source.kind === 'variant' && m.source.variant) {
         if (!seenVariantSets.has(m.source.variant.variantSetId)) {
           throw new Error(`rigid member '${m.memberId}' references non-existent variantSetId '${m.source.variant.variantSetId}'`);
@@ -966,26 +988,18 @@ function resolveMemberEffectiveDimensions(
   };
 }
 
-export function resolveAgregadoAssembly(
+/**
+ * #1493: selección determinista de una variante por cada variant set del
+ * agregado (max_fitting por defecto, exact por regla de compatibilidad).
+ * Extraída de resolveAgregadoAssembly para que el motor de layout pueda
+ * pre-seleccionar variantes POR BAHÍA de cajón antes de sincronizar las
+ * partes del kit — el kit comercial puede venir de la variante (una altura
+ * Blum MERIVOBOX N/M/K/E = un kit distinto).
+ */
+export function selectAgregadoVariants(
   agregado: AgregadoAssemblyInput,
   params: AssemblyResolutionParams,
-): ResolvedAssembly {
-  validateAgregadoAssemblyDefinition(agregado);
-
-  if (!Number.isFinite(params.widthMm) || params.widthMm <= 0) {
-    throw new Error(`invalid width: ${params.widthMm} mm (must be finite and positive)`);
-  }
-  if (!Number.isFinite(params.depthMm) || params.depthMm <= 0) {
-    throw new Error(`invalid depth: ${params.depthMm} mm (must be finite and positive)`);
-  }
-  if (!Number.isFinite(params.heightMm) || params.heightMm <= 0) {
-    throw new Error(`invalid height: ${params.heightMm} mm (must be finite and positive)`);
-  }
-
-  // Variant resolution
-  const selectedVariantsMap = new Map<string, SelectedAssemblyVariant>();
-  const selectedVariantsList: SelectedAssemblyVariant[] = [];
-
+): SelectedAssemblyVariant[] {
   const compatRules = new Map<string, AssemblyCompatibilityRule>();
   if (agregado.compatibilityRules) {
     for (const r of agregado.compatibilityRules) {
@@ -993,6 +1007,7 @@ export function resolveAgregadoAssembly(
     }
   }
 
+  const selectedVariantsList: SelectedAssemblyVariant[] = [];
   if (agregado.variantSets) {
     for (const vs of agregado.variantSets) {
       const rule = compatRules.get(vs.id) ?? {
@@ -1038,14 +1053,86 @@ export function resolveAgregadoAssembly(
         );
       }
 
-      const selected: SelectedAssemblyVariant = {
+      selectedVariantsList.push({
         variantSetId: vs.id,
         hardwareId: chosen.hardwareId,
         nominalDimensionMm: chosen.nominalDimensionMm,
-      };
-      selectedVariantsMap.set(vs.id, selected);
-      selectedVariantsList.push(selected);
+      });
     }
+  }
+
+  return selectedVariantsList;
+}
+
+/**
+ * #1493: kit comercial que gobierna una selección de variantes resuelta. Una
+ * variante puede declarar su propio commercialKitHardwareId (un kit por
+ * altura de cajón); si las variantes seleccionadas declaran kits, el kit de
+ * variante gana sobre el del agregado. Dos o más kits DISTINTOS declarados es
+ * ambiguo y falla cerrado; sin declaración cae al kit del agregado ('' cuando
+ * la receta no declara ninguno). El kit de una variante NO seleccionada se
+ * ignora — la selección es la única verdad comercial de esta resolución.
+ */
+export function effectiveKitHardwareId(
+  agregado: AgregadoAssemblyInput,
+  selected: readonly SelectedAssemblyVariant[],
+): string {
+  const variantsBySet = new Map<string, readonly ProductVariant[]>();
+  for (const vs of agregado.variantSets ?? []) {
+    variantsBySet.set(vs.id, vs.variants ?? []);
+  }
+
+  const kitOwner = new Map<string, string>(); // kit -> primer variantSetId que lo declaró
+  const distinctKits: string[] = [];
+  for (const sv of selected) {
+    let kit = '';
+    for (const v of variantsBySet.get(sv.variantSetId) ?? []) {
+      if (v.nominalDimensionMm === sv.nominalDimensionMm) {
+        kit = (v.commercialKitHardwareId ?? '').trim();
+        break;
+      }
+    }
+    if (!kit) continue;
+    if (!kitOwner.has(kit)) {
+      kitOwner.set(kit, sv.variantSetId);
+      distinctKits.push(kit);
+    }
+  }
+
+  if (distinctKits.length > 1) {
+    const owners = distinctKits.map((kit) => `'${kit}' (set '${kitOwner.get(kit)}')`);
+    throw new Error(
+      `ambiguous commercial kit: selected variants declare ${distinctKits.length} distinct kits: ${owners.join(', ')}`,
+    );
+  }
+  if (distinctKits.length === 1) {
+    return distinctKits[0]!;
+  }
+  return agregado.commercialKitHardwareId?.trim() ?? '';
+}
+
+export function resolveAgregadoAssembly(
+  agregado: AgregadoAssemblyInput,
+  params: AssemblyResolutionParams,
+): ResolvedAssembly {
+  validateAgregadoAssemblyDefinition(agregado);
+
+  if (!Number.isFinite(params.widthMm) || params.widthMm <= 0) {
+    throw new Error(`invalid width: ${params.widthMm} mm (must be finite and positive)`);
+  }
+  if (!Number.isFinite(params.depthMm) || params.depthMm <= 0) {
+    throw new Error(`invalid depth: ${params.depthMm} mm (must be finite and positive)`);
+  }
+  if (!Number.isFinite(params.heightMm) || params.heightMm <= 0) {
+    throw new Error(`invalid height: ${params.heightMm} mm (must be finite and positive)`);
+  }
+
+  // Variant resolution — #1493: delega en selectAgregadoVariants, el mismo
+  // contrato determinista que el layout usa por bahía de cajón.
+  const selectedVariantsMap = new Map<string, SelectedAssemblyVariant>();
+  const selectedVariantsList = selectAgregadoVariants(agregado, params);
+  for (const sv of selectedVariantsList) {
+    selectedVariantsMap.set(sv.variantSetId, sv);
   }
 
   // Rigid members resolution (zero scaling, det = +1)
@@ -1138,11 +1225,23 @@ export function resolveAgregadoAssembly(
     }
   }
 
-  // BOM Generation
+  // BOM Generation — #1493: el kit efectivo puede venir de la variante
+  // seleccionada (una altura de cajón = un kit). Fallback: kit del agregado.
+  const effectiveKit = effectiveKitHardwareId(agregado, selectedVariantsList);
+  if (!effectiveKit) {
+    for (const m of resolvedRigidMembers) {
+      if (m.bomRole === 'included_in_kit') {
+        throw new Error(
+          `member '${m.memberId}' has bomRole 'included_in_kit' but no effective commercial kit is declared (agregado level or on the selected variant)`,
+        );
+      }
+    }
+  }
+
   const bomItems: AssemblyBOMItem[] = [];
-  if (agregado.commercialKitHardwareId && agregado.commercialKitHardwareId.trim()) {
+  if (effectiveKit) {
     bomItems.push({
-      hardwareId: agregado.commercialKitHardwareId,
+      hardwareId: effectiveKit,
       quantity: 1,
       role: 'commercial_kit',
       notes: `Commercial kit for assembly ${agregado.id}`,
@@ -1173,7 +1272,9 @@ export function resolveAgregadoAssembly(
 
   return {
     agregadoId: agregado.id,
-    commercialKitHardwareId: agregado.commercialKitHardwareId,
+    // #1493: kit EFECTIVO (variante o agregado); legacy sin kits de variante
+    // ⇒ valor idéntico al anterior.
+    commercialKitHardwareId: effectiveKit || undefined,
     resolvedDimensionsMm: [params.widthMm, params.depthMm, params.heightMm],
     selectedVariants: selectedVariantsList,
     rigidMembers: resolvedRigidMembers,
