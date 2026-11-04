@@ -76,6 +76,11 @@ type workshopFurnitureDefinition struct {
 	// furniture can ALWAYS be inserted with an explicit choice. Mirror of
 	// materialRoles; members carry active hardware only, no pricing.
 	HardwareRoles []workshopHardwareRole `json:"hardwareRoles,omitempty"`
+	// AgregadoRoles lists the kind=agregado option groups the definition's
+	// composition consumes (#1482): the plugin's pre-insert configurator
+	// and inspector offer one selector per role (e.g. CAJON, PUERTA) so sub-assemblies
+	// can be chosen or switched before insertion or in the inspector.
+	AgregadoRoles []workshopAgregadoRole `json:"agregadoRoles,omitempty"`
 }
 
 // workshopMaterialRole is one board role of a definition's composition with
@@ -91,6 +96,15 @@ type workshopMaterialRole struct {
 // with its active member hardware for the plugin's pre-insert selector
 // (#1144). Deliberately cost-free: commercial truth resolves server-side.
 type workshopHardwareRole struct {
+	Code      string   `json:"code"`
+	Name      string   `json:"name"`
+	Required  bool     `json:"required"`
+	OptionIDs []string `json:"optionIds"`
+}
+
+// workshopAgregadoRole is one sub-assembly (agregado) option group a definition consumes,
+// with its active member agregados for the plugin's pre-insert selector and inspector (#1482).
+type workshopAgregadoRole struct {
 	Code      string   `json:"code"`
 	Name      string   `json:"name"`
 	Required  bool     `json:"required"`
@@ -159,11 +173,25 @@ type workshopFurnitureCatalog struct {
 	// catalog instead of the packaged demo fallback. No costs: pricing stays
 	// server-side (estimate/preflight); the plugin never re-derives it.
 	Hardware []workshopHardwareCatalogEntry `json:"hardware"`
-	// OptionGroups carries the kind=hardware option groups (#1046): the
+	// Agregados carries the workshop's active sub-assemblies (#1482) so the
+	// plugin's group selectors for drawers/doors list the REAL catalog.
+	Agregados []workshopAgregadoCatalogEntry `json:"agregados,omitempty"`
+	// OptionGroups carries the kind=hardware and kind=agregado option groups (#1046, #1482): the
 	// members a furniture's role-based placements choose from. Material-kind
 	// groups stay out — board roles already ride each definition's
 	// materialRoles.
 	OptionGroups []workshopOptionGroup `json:"optionGroups"`
+}
+
+// workshopAgregadoCatalogEntry is one active sub-assembly definition as the
+// plugin consumes it (#1482). Deliberately cost-free: technical and pricing
+// truth resolve server-side.
+type workshopAgregadoCatalogEntry struct {
+	ID          string `json:"id"`
+	Code        string `json:"code"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Active      bool   `json:"active"`
 }
 
 // workshopHardwareCatalogEntry is one active hardware definition as the
@@ -238,6 +266,7 @@ func buildWorkshopFurnitureCatalogValidated(modules []domain.Module, categories 
 		Presets:            []workshopFurniturePreset{},
 		Materials:          buildWorkshopMaterials(composition.Materials),
 		Hardware:           buildWorkshopHardwareEntries(composition.Hardware),
+		Agregados:          buildWorkshopAgregadoEntries(composition.Agregados),
 		OptionGroups:       buildWorkshopHardwareOptionGroups(composition.OptionGroups),
 	}
 
@@ -315,6 +344,7 @@ func buildWorkshopFurnitureCatalogValidated(modules []domain.Module, categories 
 		// hardware) can never depend on the layout succeeding.
 		definition.MaterialRoles = buildMaterialRoles(m, composition)
 		definition.HardwareRoles = buildHardwareRoles(m, composition)
+		definition.AgregadoRoles = buildAgregadoRoles(m, composition)
 
 		catalog.Definitions[m.ID] = definition
 
@@ -404,13 +434,39 @@ func buildWorkshopHardwareEntries(hardwares []domain.Hardware) []workshopHardwar
 	return out
 }
 
-// buildWorkshopHardwareOptionGroups projects ONLY the kind=hardware option
-// groups (#1046 S3), deterministically ordered (code, then id) because the
+// buildWorkshopAgregadoEntries projects the workshop's active sub-assemblies
+// (#1482), deterministically ordered (code, then id) because the slice feeds
+// the content-addressed revisionId.
+func buildWorkshopAgregadoEntries(agregados []domain.Agregado) []workshopAgregadoCatalogEntry {
+	out := make([]workshopAgregadoCatalogEntry, 0, len(agregados))
+	for _, a := range agregados {
+		if !a.Active {
+			continue
+		}
+		out = append(out, workshopAgregadoCatalogEntry{
+			ID:          a.ID,
+			Code:        a.Code,
+			Name:        a.Name,
+			Description: a.Description,
+			Active:      true,
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Code != out[j].Code {
+			return out[i].Code < out[j].Code
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+// buildWorkshopHardwareOptionGroups projects the kind=hardware and kind=agregado option
+// groups (#1046 S3, #1482), deterministically ordered (code, then id) because the
 // slice feeds the content-addressed revisionId.
 func buildWorkshopHardwareOptionGroups(groups []domain.OptionGroup) []workshopOptionGroup {
 	out := make([]workshopOptionGroup, 0, len(groups))
 	for _, g := range groups {
-		if g.Kind != "hardware" {
+		if g.Kind != "hardware" && g.Kind != "agregado" {
 			continue
 		}
 		optionIDs := make([]string, len(g.OptionIDs))
@@ -617,6 +673,70 @@ func buildHardwareRoles(m domain.Module, composition domain.Catalog) []workshopH
 		if agr, ok := findAgregado(agrInst.AgregadoID); ok {
 			record(agr.Components)
 		}
+	}
+	return roles
+}
+
+// buildAgregadoRoles derives the definition's agregado option-group roles
+// with the ACTIVE member sub-assemblies the workshop curated for each (#1482),
+// scanning the module's composition statically (module agregados and structure
+// agregados).
+func buildAgregadoRoles(m domain.Module, composition domain.Catalog) []workshopAgregadoRole {
+	active := make(map[string]bool, len(composition.Agregados))
+	for _, a := range composition.Agregados {
+		if a.Active {
+			active[a.ID] = true
+		}
+	}
+	findGroup := func(code string) (domain.OptionGroup, bool) {
+		for _, g := range composition.OptionGroups {
+			if strings.EqualFold(g.Code, code) && g.Kind == "agregado" {
+				return g, true
+			}
+		}
+		return domain.OptionGroup{}, false
+	}
+
+	seen := map[string]bool{}
+	roles := make([]workshopAgregadoRole, 0)
+	record := func(instances []domain.ModuleAgregadoInstance) {
+		for _, inst := range instances {
+			code := strings.TrimSpace(inst.OptionRole)
+			if code == "" || seen[code] {
+				continue
+			}
+			seen[code] = true
+
+			entry := workshopAgregadoRole{Code: code, Name: code, Required: true, OptionIDs: []string{}}
+			if group, ok := findGroup(code); ok {
+				entry.Name = group.Name
+				entry.Required = group.Required
+				entry.OptionIDs = make([]string, 0, len(group.OptionIDs))
+				for _, optionID := range group.OptionIDs {
+					if active[optionID] {
+						entry.OptionIDs = append(entry.OptionIDs, optionID)
+					}
+				}
+			}
+			roles = append(roles, entry)
+		}
+	}
+
+	findStructure := func(id string) (domain.Structure, bool) {
+		if id == "" {
+			return domain.Structure{}, false
+		}
+		for _, st := range composition.Structures {
+			if st.ID == id {
+				return st, true
+			}
+		}
+		return domain.Structure{}, false
+	}
+
+	record(m.Agregados)
+	if structure, ok := findStructure(m.StructureID); ok {
+		record(structure.Agregados)
 	}
 	return roles
 }

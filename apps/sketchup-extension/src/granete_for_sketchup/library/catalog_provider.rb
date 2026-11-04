@@ -54,6 +54,11 @@ module Granete
           []
         end
 
+        # #1482: sub-assembly definitions (agregados: drawers, doors) in the shared contract.
+        def all_agregados
+          []
+        end
+
         # #1046 S3: kind=hardware option groups the plugin can offer per
         # furniture (role-based placements choose a member from these).
         def all_option_groups
@@ -390,6 +395,14 @@ module Granete
           serve_from_fallback(&:all_hardware) || StaticCatalogProvider::HARDWARE_DEFINITIONS
         end
 
+        # #1482: active sub-assembly definitions from the remote catalog contract.
+        def all_agregados(force: false)
+          remote = fetch_contract(force: force)
+          return remote.fetch('agregados', []) if remote && remote['agregados']
+
+          serve_from_fallback(&:all_agregados) || []
+        end
+
         # #1046 S3: hardware-kind option groups from the SAME pinned catalog
         # contract (they feed the revision hash server-side). Offline/local
         # fallback serves [] — the groups UI simply does not appear, it never
@@ -602,6 +615,14 @@ module Granete
           defn['hardwareRoles']
         end
 
+        # #1482: grupos kind=agregado que la definición consume (cajones/puertas)
+        # para configurar o cambiar en Configurator e Inspector.
+        def translated_agregado_roles(defn)
+          return unless defn['agregadoRoles'].is_a?(Array)
+
+          defn['agregadoRoles']
+        end
+
         def translate_definitions(contract)
           contract.fetch('definitions', {}).map do |_id, defn|
             translate_definition(defn)
@@ -622,9 +643,14 @@ module Granete
           item['imageUrl'] = image_url if image_url
           item['categoryId'] = defn['categoryId'] if defn['categoryId']
           ESTIMATED_COUNT_KEYS.each { |key| item[key] = defn[key] if defn[key] }
+          attach_definition_roles!(item, defn)
+          item
+        end
+
+        def attach_definition_roles!(item, defn)
           item['materialRoles'] = defn['materialRoles'] if defn['materialRoles'].is_a?(Array)
           item['hardwareRoles'] = translated_hardware_roles(defn)
-          item
+          item['agregadoRoles'] = translated_agregado_roles(defn)
         end
 
         def translate_parameters(parameters)

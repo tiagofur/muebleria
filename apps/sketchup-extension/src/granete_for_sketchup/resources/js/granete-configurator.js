@@ -93,6 +93,9 @@
   // #1144: pre-insert hardware group selectors (one per consumed group).
   var libHardwareCard = document.getElementById("library-hardware-card");
   var libHardwareContainer = document.getElementById("library-hardware-container");
+  // #1482: pre-insert agregado group selectors (one per consumed sub-assembly group: drawers, doors).
+  var libAgregadosCard = document.getElementById("library-agregados-card");
+  var libAgregadosContainer = document.getElementById("library-agregados-container");
   var libMaterialsContainer = document.getElementById("library-materials-container");
   var libSummaryDims = document.getElementById("library-summary-dims");
   var libSummaryParts = document.getElementById("library-summary-parts");
@@ -150,6 +153,9 @@
     // #1144: herrajes por grupo — elijo el modelo ANTES de insertar.
     seedLibraryHardwareChoices(def);
     renderLibraryHardwareRoles(def);
+    // #1482: agregados por grupo (cajones/puertas) — elijo el modelo ANTES de insertar.
+    seedLibraryAgregadoChoices(def);
+    renderLibraryAgregadoRoles(def);
     renderRegisteredMeasuresButton(def);
     renderPresetChips();
 
@@ -326,7 +332,7 @@
   }
 
   // #1258: la elección del catálogo flotante aterriza en el MISMO mapa
-  // materialChoices del insert (#1144/#1153) — nada de estado paralelo.
+  // materialChoices del insert (#1144/#1153/#1482) — nada de estado paralelo.
   function applyHardwareChoice(groupCode, hardwareId) {
     if (!groupCode || !hardwareId) return;
     if (!libMaterialChoices) libMaterialChoices = {};
@@ -335,9 +341,10 @@
     libUserCustomizedRoles[groupCode] = true;
     clearCatalogIntentKey();
     renderLibraryHardwareRoles(activeLibDef);
+    renderLibraryAgregadoRoles(activeLibDef);
     updateLibraryInsertButton();
-    var entry = hardwareEntryById(hardwareId);
-    deps.showToast("success", "✓ Herraje seleccionado: " +
+    var entry = hardwareEntryById(hardwareId) || agregadoEntryById(hardwareId);
+    deps.showToast("success", "✓ Opción seleccionada: " +
       (entry ? (entry.name || entry.code) : hardwareId));
   }
 
@@ -346,6 +353,163 @@
   function unchosenRequiredHardwareRoles(def) {
     return hardwareRoles(def).filter(function (role) {
       return role.required && (!libMaterialChoices[role.code] || !hardwareEntryById(libMaterialChoices[role.code]));
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // #1482 — Agregados (cajones/puertas) en la configuración de inserción.
+  // Los grupos (agregadoRoles de la definición) se eligen acá y viajan
+  // en el MISMO mapa materialChoices del insert.
+  // ------------------------------------------------------------------
+  function agregadoEntryById(id) {
+    var list = typeof deps.getAgregadosCatalog === "function" ? (deps.getAgregadosCatalog() || []) : [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && (list[i].id === id || list[i].code === id)) return list[i];
+    }
+    return null;
+  }
+
+  function agregadoRoles(def) {
+    return (def && Array.isArray(def.agregadoRoles)) ? def.agregadoRoles : [];
+  }
+
+  function seedLibraryAgregadoChoices(def) {
+    agregadoRoles(def).forEach(function (role) {
+      if (role.optionIds && role.optionIds.length > 0) {
+        libMaterialChoices[role.code] = role.optionIds[0];
+      } else {
+        delete libMaterialChoices[role.code];
+      }
+    });
+  }
+
+  function renderLibraryAgregadoRoles(def) {
+    if (!libAgregadosCard || !libAgregadosContainer) return;
+    var roles = agregadoRoles(def);
+    if (roles.length === 0) {
+      libAgregadosCard.style.display = "none";
+      return;
+    }
+    libAgregadosCard.style.display = "block";
+
+    libAgregadosContainer.innerHTML = "";
+    roles.forEach(function (role) {
+      var membersKnown = role.optionIds && role.optionIds.length > 0;
+      var chosenId = membersKnown ? libMaterialChoices[role.code] : null;
+      var chosen = chosenId ? agregadoEntryById(chosenId) : null;
+
+      var block = document.createElement("div");
+      block.className = "material-role-block";
+
+      var header = document.createElement("div");
+      header.className = "material-role-header";
+      var title = document.createElement("span");
+      title.className = "material-role-title";
+      title.textContent = role.name || role.code;
+      header.appendChild(title);
+      if (role.required) {
+        var req = document.createElement("span");
+        req.className = "status-badge neutral";
+        req.textContent = "requerido";
+        header.appendChild(req);
+      }
+      var changeBtn = document.createElement("button");
+      changeBtn.type = "button";
+      changeBtn.id = "library-agregado-change-" + role.code;
+      changeBtn.className = "btn btn-secondary btn-sm design-insp-change";
+      changeBtn.style.width = "auto";
+      changeBtn.style.padding = "2px 10px";
+      changeBtn.style.fontSize = "var(--text-xs)";
+      changeBtn.style.lineHeight = "1.4";
+      changeBtn.textContent = chosenId ? "Cambiar" : "Asignar";
+      changeBtn.disabled = !membersKnown;
+      changeBtn.title = membersKnown ? "" : "Sin miembros activos en el catálogo";
+      header.appendChild(changeBtn);
+      block.appendChild(header);
+
+      var preview = document.createElement("button");
+      preview.type = "button";
+      preview.className = "material-selected-preview";
+      preview.style.marginTop = "var(--space-1)";
+      preview.title = membersKnown ? "Clic para elegir un sub-ensamble del catálogo" : "Sin miembros activos en el catálogo";
+      preview.disabled = !membersKnown;
+
+      var tile = document.createElement("span");
+      tile.className = "material-swatch material-swatch--agregado";
+      tile.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
+      preview.appendChild(tile);
+
+      var info = document.createElement("span");
+      info.className = "material-selected-info";
+      var nameSpan = document.createElement("span");
+      nameSpan.className = "material-selected-name";
+      nameSpan.textContent = chosen ? (chosen.name || chosen.code) : (chosenId || "--");
+      info.appendChild(nameSpan);
+      var metaSpan = document.createElement("span");
+      metaSpan.className = "material-selected-meta";
+      metaSpan.textContent = membersKnown
+        ? ((chosen && chosen.code) ? chosen.code : "Clic para elegir un agregado del catálogo")
+        : "Sin miembros activos en el catálogo";
+      info.appendChild(metaSpan);
+      preview.appendChild(info);
+
+      var chevron = document.createElement("span");
+      chevron.className = "material-chevron";
+      chevron.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
+      preview.appendChild(chevron);
+
+      var openPicker = function () {
+        if (!membersKnown) return;
+        openLibraryAgregadoSelector(role, chosenId);
+      };
+      preview.addEventListener("click", openPicker);
+      changeBtn.addEventListener("click", function (evt) {
+        if (evt && evt.stopPropagation) evt.stopPropagation();
+        openPicker();
+      });
+      block.appendChild(preview);
+
+      libAgregadosContainer.appendChild(block);
+    });
+  }
+
+  function openLibraryAgregadoSelector(role, currentId) {
+    var label = role.name || role.code;
+    if (window.sketchup && typeof window.sketchup.open_hardware_selector === "function") {
+      window.sketchup.open_hardware_selector(JSON.stringify({
+        groupCode: role.code,
+        groupName: label,
+        currentHardwareId: currentId || null,
+        optionIds: role.optionIds || [],
+        context: "configurator"
+      }));
+    } else if (window.GraneteUI.hardwareGroupSelector) {
+      var rows = (role.optionIds || []).map(function (agrId) {
+        var entry = agregadoEntryById(agrId);
+        return {
+          id: agrId,
+          name: entry ? (entry.name || entry.code) : agrId,
+          code: entry ? entry.code : null,
+          categoryLabel: "Sub-ensamble",
+          unitLabel: "por unidad",
+          notes: entry ? (entry.description || entry.notes) : null
+        };
+      });
+      window.GraneteUI.hardwareGroupSelector.open({
+        title: "Elegir " + label,
+        groupLabel: label,
+        rows: rows,
+        chosenId: currentId,
+        onPick: function (agrId) {
+          applyHardwareChoice(role.code, agrId);
+        }
+      });
+    }
+  }
+
+  function unchosenRequiredAgregadoRoles(def) {
+    return agregadoRoles(def).filter(function (role) {
+      return role.required && (!libMaterialChoices[role.code] || !agregadoEntryById(libMaterialChoices[role.code]));
     });
   }
 
@@ -397,12 +561,14 @@
 
   function updateLibraryInsertButton() {
     if (!btnInsert) return;
-    // #1144: un grupo requerido sin elección bloquea la inserción con el
+    // #1144 / #1482: un grupo requerido sin elección bloquea la inserción con el
     // motivo concreto (el resolve fallaría cerrado igual — nunca a ciegas).
-    var missing = unchosenRequiredHardwareRoles(activeLibDef);
+    var missingHw = unchosenRequiredHardwareRoles(activeLibDef);
+    var missingAgr = unchosenRequiredAgregadoRoles(activeLibDef);
+    var missing = missingHw.concat(missingAgr);
     if (missing.length > 0) {
       btnInsert.disabled = true;
-      btnInsert.title = "Elegí herraje para: " +
+      btnInsert.title = "Elegí opción para: " +
         missing.map(function (r) { return r.name || r.code; }).join(", ");
       return;
     }
@@ -662,6 +828,12 @@
       // explicit pre-insert selections and the design carries no hardware
       // defaults yet; without them the connected resolve loses the choice.
       hardwareRoles(activeLibDef).forEach(function (role) {
+        if (libMaterialChoices[role.code]) {
+          overrides[role.code] = libMaterialChoices[role.code];
+        }
+      });
+      // #1482: agregado group choices (cajones/puertas) also ride as overrides:
+      agregadoRoles(activeLibDef).forEach(function (role) {
         if (libMaterialChoices[role.code]) {
           overrides[role.code] = libMaterialChoices[role.code];
         }
