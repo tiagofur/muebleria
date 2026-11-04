@@ -172,22 +172,44 @@ module Granete
                   all_hw
                 end
 
-          formatted = raw.map do |hw|
+          agregados = selector_allowed_agregados(allowed_ids) if raw.empty?
+          return agregados if agregados
+
+          formatted = raw.map { |item| format_hardware_entry(item) }
+          [formatted, raw]
+        end
+
+        def selector_allowed_agregados(allowed_ids)
+          return nil unless allowed_ids.is_a?(Array) && !allowed_ids.empty?
+          return nil unless @catalog_provider.respond_to?(:all_agregados)
+
+          raw_agr = @catalog_provider.all_agregados.select do |a|
+            allowed_ids.include?(a['id']) || allowed_ids.include?(a['code'])
+          end
+          return nil if raw_agr.empty?
+
+          formatted = raw_agr.map do |a|
             {
-              'id' => hw['id'],
-              'materialId' => hw['id'],
-              'code' => hw['code'],
-              'name' => hw['name'] || hw['code'],
-              'category' => hw['category'],
-              'categoryLabel' => hardware_category_label(hw['category']),
-              'unit' => hw['unit'],
-              'unitLabel' => hardware_unit_label(hw['unit']),
-              'notes' => hw['notes'] || hw['description'],
-              'imageUrl' => hw['imageUrl'] || hw['image_url'] || hw['thumbnailUrl'] || hw['previewUrl'],
-              'kind' => 'hardware'
+              'id' => a['id'], 'materialId' => a['id'], 'code' => a['code'],
+              'name' => a['name'] || a['code'], 'category' => 'agregado',
+              'categoryLabel' => 'Sub-ensamble', 'unit' => 'piece',
+              'unitLabel' => 'por unidad', 'notes' => a['description'] || a['notes'],
+              'kind' => 'agregado'
             }
           end
-          [formatted, raw]
+          [formatted, raw_agr]
+        end
+
+        def format_hardware_entry(item)
+          {
+            'id' => item['id'], 'materialId' => item['id'], 'code' => item['code'],
+            'name' => item['name'] || item['code'], 'category' => item['category'],
+            'categoryLabel' => hardware_category_label(item['category']),
+            'unit' => item['unit'], 'unitLabel' => hardware_unit_label(item['unit']),
+            'notes' => item['notes'] || item['description'],
+            'imageUrl' => item['imageUrl'] || item['image_url'] || item['thumbnailUrl'] || item['previewUrl'],
+            'kind' => 'hardware'
+          }
         end
 
         def open_hardware_dialog(dialog, params, formatted_hardware, raw_hardware, categories)

@@ -602,3 +602,78 @@ func TestMaterialRolesSurviveAFailingDefaultLayout(t *testing.T) {
 		t.Fatal("estimates stay layout-gated (resolve evidence), got nonzero")
 	}
 }
+
+func TestBuildAgregadoRoles(t *testing.T) {
+	composition := domain.Catalog{
+		Agregados: []domain.Agregado{
+			{ID: "agr-blum-500", Code: "CAJ-BLUM-500", Name: "Cajón Blum 500", Active: true},
+			{ID: "agr-hafele-500", Code: "CAJ-HAFELE-500", Name: "Cajón Hafele 500", Active: true},
+			{ID: "agr-stale", Code: "CAJ-STALE", Name: "Cajón Inactivo", Active: false},
+		},
+		OptionGroups: []domain.OptionGroup{
+			{
+				ID: "og-cajon", Code: "CAJON", Name: "Cajón", Kind: "agregado", Required: true,
+				OptionIDs: []string{"agr-blum-500", "agr-hafele-500", "agr-stale"},
+			},
+		},
+		Structures: []domain.Structure{
+			{
+				ID: "st-base", Code: "ST-BASE", Name: "Estructura Base",
+				Agregados: []domain.ModuleAgregadoInstance{
+					{ID: "inst-st-1", OptionRole: "CAJON", AgregadoID: "agr-blum-500"},
+				},
+			},
+		},
+	}
+
+	// Module consuming the role through structure and own agregados
+	module := domain.Module{
+		ID: "m-cajonera", Code: "MOD-CAJ", Name: "Cajonera", StructureID: "st-base",
+		Agregados: []domain.ModuleAgregadoInstance{
+			{ID: "inst-m-1", OptionRole: "CAJON", AgregadoID: "agr-blum-500"},
+		},
+	}
+
+	roles := buildAgregadoRoles(module, composition)
+	if len(roles) != 1 {
+		t.Fatalf("expected exactly one agregado role, got %+v", roles)
+	}
+	role := roles[0]
+	if role.Code != "CAJON" || role.Name != "Cajón" || !role.Required {
+		t.Fatalf("role must carry group identity, got %+v", role)
+	}
+	if len(role.OptionIDs) != 2 || role.OptionIDs[0] != "agr-blum-500" || role.OptionIDs[1] != "agr-hafele-500" {
+		t.Fatalf("inactive member must stay out of the selector, got %+v", role.OptionIDs)
+	}
+
+	// Orphan role without option group in catalog
+	orphanModule := domain.Module{
+		ID: "m-orphan", Code: "MOD-ORPH", Name: "Orphan",
+		Agregados: []domain.ModuleAgregadoInstance{
+			{ID: "inst-orph", OptionRole: "PUERTA_SPECIAL", AgregadoID: "agr-x"},
+		},
+	}
+	orphan := buildAgregadoRoles(orphanModule, composition)
+	if len(orphan) != 1 || orphan[0].Code != "PUERTA_SPECIAL" || len(orphan[0].OptionIDs) != 0 {
+		t.Fatalf("orphan role must surface with empty members, got %+v", orphan)
+	}
+}
+
+func TestWorkshopCatalogRevisionCoversAgregadoRoles(t *testing.T) {
+	build := func(roles []workshopAgregadoRole) workshopFurnitureCatalog {
+		return workshopFurnitureCatalog{
+			Definitions: map[string]workshopFurnitureDefinition{
+				"m1": {FurnitureDefinitionID: "m1", AgregadoRoles: roles},
+			},
+		}
+	}
+	role := []workshopAgregadoRole{{Code: "CAJON", Name: "Cajón", Required: true, OptionIDs: []string{"agr-1"}}}
+	base := build(role)
+	if workshopCatalogRevisionID(base) != workshopCatalogRevisionID(build(role)) {
+		t.Fatal("revision must be stable for identical agregado roles")
+	}
+	changed := build([]workshopAgregadoRole{{Code: "CAJON", Name: "Cajón", Required: true, OptionIDs: []string{"agr-2"}}})
+	if workshopCatalogRevisionID(base) == workshopCatalogRevisionID(changed) {
+		t.Fatal("revision must change when a role's members change")
+	}
+}

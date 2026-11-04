@@ -379,6 +379,15 @@ class CatalogParameterContractTest < Minitest::Test
     parameter
   end
 
+  def test_accepts_agregado_roles_in_definition
+    definition = valid_definition
+    definition['agregadoRoles'] = [
+      { 'code' => 'CAJON', 'name' => 'Cajón', 'required' => true, 'optionIds' => ['agr-1'] }
+    ]
+
+    assert_same definition, Contract.validate_definition!(definition, 'definition')
+  end
+
   # #497 T8 — the extension's catalog contract accepts the EXACT published
   # definition the Go chain served (golden fixture): the downloaded catalog a
   # real workshop edit produced passes the SketchUp-side gate with no

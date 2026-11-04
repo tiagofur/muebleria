@@ -275,6 +275,18 @@
               <div id="library-hardware-container" style="margin-top: var(--space-2);"></div>
             </div>
 
+            <!-- #1482: Agregados y cajones por grupo — un selector por grupo kind=agregado
+                 que la definición consume; la elección viaja en el MISMO mapa
+                 materialChoices del insert y el resolve la aplica. Sin grupos
+                 consumidos la card no aparece. -->
+            <div class="card" id="library-agregados-card" style="display: none;">
+              <div class="card-title">Cajones y Sistemas del Mueble</div>
+              <p class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 0 0;">
+                Elegí el modelo de cada grupo; se aplica al insertar.
+              </p>
+              <div id="library-agregados-container" style="margin-top: var(--space-2);"></div>
+            </div>
+
             <!-- #1448: the ONLY reachable trigger of «Preparar montaje de
                  herraje» — the flow existed (controller + tool + bridge) but
                  had no UI entry point, so no asset could ever become
@@ -1693,6 +1705,7 @@
                 categories: payload.materialCategories || []
               });
               window.GraneteUI.inspector.setHardwareCatalog(payload.hardware || []);
+              window.GraneteUI.inspector.setAgregadosCatalog(payload.agregados || []);
               window.GraneteUI.inspector.setOptionGroups(payload.optionGroups || []);
               window.GraneteUI.media.setCatalogMedia(payload.media);
               if (window.GraneteState) {
@@ -2149,7 +2162,8 @@
           switchTab: switchTab,
           requestProjectFurniture: window.GraneteUI.projectFurniture.requestProjectFurniture,
           pfPlaceFailureMessage: window.GraneteUI.projectFurniture.pfPlaceFailureMessage,
-          getHardwareCatalog: function () { return window.GraneteUI.inspector.getHardwareCatalog(); }
+          getHardwareCatalog: function () { return window.GraneteUI.inspector.getHardwareCatalog(); },
+          getAgregadosCatalog: function () { return window.GraneteUI.inspector.getAgregadosCatalog(); }
         });
 
         // #848 C4.5: the finish selector module owns the visual material

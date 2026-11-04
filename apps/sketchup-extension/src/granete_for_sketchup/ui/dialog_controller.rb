@@ -367,6 +367,7 @@ module Granete
             'materialCategories' => material_categories,
             'materials' => @catalog_provider.respond_to?(:all_materials) ? @catalog_provider.all_materials : [],
             'hardware' => @catalog_provider.respond_to?(:all_hardware) ? @catalog_provider.all_hardware : [],
+            'agregados' => @catalog_provider.respond_to?(:all_agregados) ? @catalog_provider.all_agregados : [],
             'optionGroups' => option_groups_payload,
             'source' => @catalog_provider.respond_to?(:last_source) ? @catalog_provider.last_source : 'local',
             'licenseBlocked' => @catalog_provider.respond_to?(:last_license_blocked) &&

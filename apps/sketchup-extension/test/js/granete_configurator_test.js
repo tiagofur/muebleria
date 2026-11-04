@@ -143,7 +143,7 @@ function runModule(overrides) {
     createElement: (tag) => createMockElement('', tag)
   };
 
-  const state = { connected: false, mediaUrls: {}, catalog: [], failBegin: false, hardwareCatalog: [] };
+  const state = { connected: false, mediaUrls: {}, catalog: [], failBegin: false, hardwareCatalog: [], agregadosCatalog: [] };
 
   const deps = {
     icon: (name) => '<svg-' + name + '>',
@@ -188,7 +188,8 @@ function runModule(overrides) {
     switchTab: (tab) => calls.switchTab.push(tab),
     requestProjectFurniture: () => calls.requestProjectFurniture.push('reload'),
     pfPlaceFailureMessage: (result) => (result && result.reason) || 'fallo de colocación',
-    getHardwareCatalog: () => state.hardwareCatalog
+    getHardwareCatalog: () => state.hardwareCatalog,
+    getAgregadosCatalog: () => state.agregadosCatalog
   };
 
   const sandbox = {
@@ -918,6 +919,64 @@ test('hardware roles: connected insert sends group choices inside materialOverri
     'the explicit hardware choice rides materialOverrides in connected mode');
   assert.strictEqual(sent.payload.materialChoices.BISAGRA, 'hw-eco',
     'and the same map for the local/disconnected resolve path');
+});
+
+// #1482: agregado option groups (cajones, puertas)
+test('agregado roles: definition with agregado groups renders card and defaults to first member', () => {
+  const sandbox = runModule();
+  sandbox.__state.agregadosCatalog = [
+    { id: 'agr-blum', code: 'CAJ-BLUM', name: 'Cajón Blum Tandembox' },
+    { id: 'agr-hafele', code: 'CAJ-HAFELE', name: 'Cajón Hafele Alto' }
+  ];
+  sandbox.window.GraneteUI.configurator.open(definition({
+    agregadoRoles: [
+      { code: 'CAJON', name: 'Cajón', required: true, optionIds: ['agr-blum', 'agr-hafele'] }
+    ]
+  }));
+
+  assert(visible(el(sandbox, 'library-agregados-card')), 'the agregados card appears for consumed groups');
+  const block = el(sandbox, 'library-agregados-container').children[0];
+  const header = block.children[0];
+  assert.strictEqual(header.children[0].textContent, 'Cajón');
+  const preview = block.children[1];
+  assert.strictEqual(preview.children[1].children[0].textContent, 'Cajón Blum Tandembox',
+    'default choice = first active member, shown in the row');
+  assert.strictEqual(header.children[header.children.length - 1].textContent, 'Cambiar');
+
+  // Clicking row opens selector
+  sandbox.__calls.bridge.length = 0;
+  preview.click();
+  const opened = sandbox.__calls.bridge.filter((c) => c.fn === 'open_hardware_selector').pop();
+  assert(opened, 'open_hardware_selector called');
+  assert.strictEqual(opened.payload.groupCode, 'CAJON');
+  assert.strictEqual(opened.payload.context, 'configurator');
+  assert.deepStrictEqual(opened.payload.optionIds, ['agr-blum', 'agr-hafele']);
+  assert.strictEqual(opened.payload.currentHardwareId, 'agr-blum');
+
+  // Picking an option updates choice
+  sandbox.window.GraneteUI.configurator.applyHardwareChoice('CAJON', 'agr-hafele');
+  sandbox.__calls.bridge.length = 0;
+  el(sandbox, 'btn-insert').click();
+  const sent = sandbox.__calls.bridge.filter((c) => c.fn === 'begin_catalog_placement_preview').pop();
+  assert(sent, 'insert payload sent');
+  assert.strictEqual(sent.payload.materialChoices.CAJON, 'agr-hafele',
+    'the agregado choice rides materialChoices');
+});
+
+test('agregado roles: required group without active members disables Insert with honest reason', () => {
+  const sandbox = runModule();
+  sandbox.window.GraneteUI.configurator.open(definition({
+    agregadoRoles: [
+      { code: 'CAJON', name: 'Cajón', required: true, optionIds: [] }
+    ]
+  }));
+
+  assert(visible(el(sandbox, 'library-agregados-card')));
+  const block = el(sandbox, 'library-agregados-container').children[0];
+  const preview = block.children[1];
+  assert(preview.disabled, 'empty group renders a disabled row');
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, true, 'Insert is blocked');
+  assert(/Cajón/.test(el(sandbox, 'btn-insert').title), 'the reason names the missing group');
 });
 
 console.log(JSON.stringify({ success: true, testsPassed }));

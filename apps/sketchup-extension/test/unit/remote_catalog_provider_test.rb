@@ -678,6 +678,37 @@ class RemoteCatalogProviderTest < Minitest::Test
     assert_equal '/furniture/definitions/abc/layout?widthMm=600', transport.last_payload['path']
   end
 
+  def test_translate_definition_carries_agregado_roles_and_all_agregados
+    body = {
+      'schemaId' => 'granete.workshopFurnitureCatalog.v1',
+      'definitions' => {
+        '11111111-1111-1111-1111-111111111111' => {
+          'furnitureDefinitionId' => '11111111-1111-1111-1111-111111111111',
+          'code' => 'M1',
+          'name' => 'Módulo con cajón',
+          'category' => 'Bases',
+          'version' => '1.0.0',
+          'schemaRevision' => 1,
+          'definitionHash' => "sha256-#{'1' * 64}",
+          'parameters' => [],
+          'agregadoRoles' => [
+            { 'code' => 'CAJON', 'name' => 'Cajón', 'required' => true, 'optionIds' => ['agr-1'] }
+          ]
+        }
+      },
+      'agregados' => [
+        { 'id' => 'agr-1', 'code' => 'CAJ-1', 'name' => 'Cajón Blum' }
+      ]
+    }
+    provider = build_provider(status: 200, body: body)
+    defs = provider.all_definitions
+    assert_equal 1, defs.length
+    assert_equal [{ 'code' => 'CAJON', 'name' => 'Cajón', 'required' => true, 'optionIds' => ['agr-1'] }],
+                 defs.first['agregadoRoles']
+    assert_equal [{ 'id' => 'agr-1', 'code' => 'CAJ-1', 'name' => 'Cajón Blum' }],
+                 provider.all_agregados
+  end
+
   private
 
   def build_provider(status: nil, body: nil, transport: nil)

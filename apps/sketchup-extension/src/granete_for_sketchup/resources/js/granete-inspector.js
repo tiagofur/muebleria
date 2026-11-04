@@ -66,6 +66,7 @@
   if (window.GraneteUI.inspector) return;
 
   var catalogHardware = [];
+  var catalogAgregados = [];
   // #1046 S3: kind=hardware option groups from the SAME pinned catalog
   // contract (setCatalog). Empty under offline/local catalogs — the groups
   // UI never invents demo groups.
@@ -1843,6 +1844,10 @@
     for (var i = 0; i < list.length; i++) {
       if (list[i] && (list[i].id === id || list[i].code === id)) return list[i];
     }
+    var agrList = catalogAgregados || [];
+    for (var j = 0; j < agrList.length; j++) {
+      if (agrList[j] && (agrList[j].id === id || agrList[j].code === id)) return agrList[j];
+    }
     return null;
   }
 
@@ -1897,6 +1902,8 @@
     getMaterialsCard: function () { return inspectorMaterialsCard; },
     updateOpeningSummary: renderOpeningSummaryCard,
     setHardwareCatalog: setHardwareCatalog,
+    setAgregadosCatalog: function (agregados) { catalogAgregados = agregados || []; },
+    getAgregadosCatalog: function () { return catalogAgregados; },
     setOptionGroups: function (groups) { catalogOptionGroups = groups || []; },
     getOptionGroups: function () { return catalogOptionGroups; },
     getHardwareCatalog: function () { return catalogHardware; }

@@ -100,7 +100,7 @@ module Granete
             # del mueble ofrece el cambio de modelo por grupo.
             hardware_groups: HardwareInventory.groups_for_furniture(
               @metadata_store, entity,
-              definition_roles: definition ? definition['hardwareRoles'] : [],
+              definition_roles: definition_option_roles(definition),
               item_choices: intent['materialChoices'] || {}
             )
           )
@@ -129,6 +129,12 @@ module Granete
           # Discovery is presentation affordance only: a scan failure must
           # never take the whole SelectionContext down.
           context.door_actors = []
+        end
+
+        def definition_option_roles(definition)
+          return [] unless definition
+
+          Array(definition['hardwareRoles']) + Array(definition['agregadoRoles'])
         end
 
         def child_context(entity, metadata)
