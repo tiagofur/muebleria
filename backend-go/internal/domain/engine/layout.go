@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -253,6 +254,10 @@ type FurnitureLayout struct {
 	Components            []LayoutComponent `json:"components"`
 	Hardware              []LayoutHardware  `json:"hardware"`
 	Assemblies            []LayoutAssembly  `json:"assemblies,omitempty"`
+	// #1493 slice 2: bahías/instancias que NO emitieron ensamble con la razón
+	// exacta — el layout nunca vuelve a omitir un cajón en silencio. Consumidores
+	// nuevos (web) muestran el aviso; el plugin ignora campos desconocidos.
+	AssemblyRejections []LayoutAssemblyRejection `json:"assemblyRejections,omitempty"`
 }
 
 // LayoutAssembly describes a resolved Agregado sub-assembly in furniture space (#670 / #1435).
@@ -263,6 +268,27 @@ type LayoutAssembly struct {
 	DimensionsMm         [3]float64                           `json:"dimensionsMm,omitempty"`
 	RigidMembers         []domain.ResolvedRigidMember         `json:"rigidMembers,omitempty"`
 	FabricatedComponents []domain.ResolvedFabricatedComponent `json:"fabricatedComponents,omitempty"`
+	// #1493 slice 2: la variante comercial elegida en ESTA bahía (p. ej. la
+	// altura Blum MERIVOBOX N/M/K/E) — la web la nombra («Cajón E cacerolero»)
+	// en lugar de inferirla de los assets.
+	SelectedVariants []domain.SelectedAssemblyVariant `json:"selectedVariants,omitempty"`
+}
+
+// LayoutAssemblyRejection reports an agregado bay or instance that did NOT
+// emit an assembly, with the exact reason (#1493 slice 2). Machine reasons,
+// UI maps them to Spanish copy: "definition_invalid" (receta inválida),
+// "variant_not_found" (ninguna altura/variante cabe en la bahía),
+// "ambiguous_kit" (dos kits declarados entre las seleccionadas),
+// "resolve_failed" (cualquier otro error del resolve).
+type LayoutAssemblyRejection struct {
+	AssemblyInstanceID string    `json:"assemblyInstanceId"`
+	AgregadoID         string    `json:"agregadoId"`
+	AgregadoCode       string    `json:"agregadoCode,omitempty"`
+	Reason             string    `json:"reason"`
+	VariantSetID       string    `json:"variantSetId,omitempty"`
+	BayHeightMm        float64   `json:"bayHeightMm,omitempty"`
+	FittingNominals    []float64 `json:"fittingNominals,omitempty"`
+	Detail             string    `json:"detail,omitempty"`
 }
 
 // layoutBoard is the intermediate resolved board before AABB projection.
@@ -557,21 +583,24 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 	}
 
 	// #670 / #1435: Emit resolved assemblies and their rigid members for SketchUp layout consumption.
-	layout.Assemblies = resolveLayoutAssemblies(module, catalog, dims, baseClearanceForLayout(module, module.BaseMode), optionChoices)
+	layout.Assemblies, layout.AssemblyRejections = resolveLayoutAssemblies(module, catalog, dims, baseClearanceForLayout(module, module.BaseMode), optionChoices)
 
 	return layout, boards, nil
 }
 
 // resolveLayoutAssemblies traverses module & structure agregados, resolves their recipe
 // into rigid members with authoritative poses, and packages them into LayoutAssembly entries.
-func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims LayoutDims, baseClearance int, optionChoices map[string]string) []LayoutAssembly {
+// #1493 slice 2: además devuelve un rechazo explícito por cada bahía/instancia
+// que NO emitió ensamble — el layout nunca omite un cajón en silencio.
+func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims LayoutDims, baseClearance int, optionChoices map[string]string) ([]LayoutAssembly, []LayoutAssemblyRejection) {
 	structure, _ := findStructure(catalog, module.StructureID)
 	agregadoInstances := append(append([]domain.ModuleAgregadoInstance{}, structure.Agregados...), module.Agregados...)
 	if len(agregadoInstances) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	var assemblies []LayoutAssembly
+	var rejections []LayoutAssemblyRejection
 	parentDims := formulaDims{
 		W: dims.WidthMm, H: dims.HeightMm, D: dims.DepthMm,
 		PW: dims.WidthMm, PH: dims.HeightMm, PD: dims.DepthMm,
@@ -588,6 +617,19 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 		}
 		baseAgr, ok := findAgregado(catalog, effectiveID)
 		if !ok {
+			continue
+		}
+		// #1493 slice 2: la definición se valida UNA vez por instancia (sugerencia
+		// del review del slice 1) — una receta inválida es un rechazo visible,
+		// nunca unidades que fallan en silencio una a una.
+		if err := domain.ValidateAgregadoAssemblyDefinition(baseAgr); err != nil {
+			rejections = append(rejections, LayoutAssemblyRejection{
+				AssemblyInstanceID: agrInst.ID,
+				AgregadoID:         baseAgr.ID,
+				AgregadoCode:       baseAgr.Code,
+				Reason:             "definition_invalid",
+				Detail:             err.Error(),
+			})
 			continue
 		}
 		// #1493: el sync de partes del kit ya no corre por instancia — el kit
@@ -658,12 +700,36 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 			// altura Blum MERIVOBOX N/M/K/E distinta por bahía. Selección y
 			// resolución son deterministas: el resolve interno repite la misma
 			// selección y produce el mismo resultado.
+			instID := agregadoAssemblyInstanceID(agrInst, qty, unit.index)
 			selectedVariants, selErr := SelectAgregadoVariants(baseAgr, params)
 			if selErr != nil {
+				rej := LayoutAssemblyRejection{
+					AssemblyInstanceID: instID,
+					AgregadoID:         baseAgr.ID,
+					AgregadoCode:       baseAgr.Code,
+					Reason:             "resolve_failed",
+					BayHeightMm:        unit.h,
+					Detail:             selErr.Error(),
+				}
+				var variantErr *domain.ErrAssemblyVariantNotFound
+				if errors.As(selErr, &variantErr) {
+					rej.Reason = "variant_not_found"
+					rej.VariantSetID = variantErr.VariantSetID
+					rej.FittingNominals = variantErr.AvailableNominals
+				}
+				rejections = append(rejections, rej)
 				continue
 			}
 			effectiveKit, kitErr := EffectiveKitHardwareID(baseAgr, selectedVariants)
 			if kitErr != nil {
+				rejections = append(rejections, LayoutAssemblyRejection{
+					AssemblyInstanceID: instID,
+					AgregadoID:         baseAgr.ID,
+					AgregadoCode:       baseAgr.Code,
+					Reason:             "ambiguous_kit",
+					BayHeightMm:        unit.h,
+					Detail:             kitErr.Error(),
+				})
 				continue
 			}
 			agr := syncAgregadoRigidMembersFromCatalog(baseAgr, catalog, effectiveKit)
@@ -680,7 +746,18 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 			}
 
 			resolvedAssembly, err := ResolveAgregadoAssembly(agr, params)
-			if err != nil || len(resolvedAssembly.RigidMembers) == 0 {
+			if err != nil {
+				rejections = append(rejections, LayoutAssemblyRejection{
+					AssemblyInstanceID: instID,
+					AgregadoID:         baseAgr.ID,
+					AgregadoCode:       baseAgr.Code,
+					Reason:             "resolve_failed",
+					BayHeightMm:        unit.h,
+					Detail:             err.Error(),
+				})
+				continue
+			}
+			if len(resolvedAssembly.RigidMembers) == 0 {
 				continue
 			}
 
@@ -717,8 +794,6 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 				}
 			}
 
-			instID := agregadoAssemblyInstanceID(agrInst, qty, unit.index)
-
 			assemblies = append(assemblies, LayoutAssembly{
 				AssemblyInstanceID: instID,
 				AgregadoID:         agr.ID,
@@ -730,12 +805,13 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 						"z": []float64{0, 0, 1},
 					},
 				},
-				DimensionsMm: [3]float64{unit.w, unit.h, unit.d},
-				RigidMembers: resolvedAssembly.RigidMembers,
+				DimensionsMm:     [3]float64{unit.w, unit.h, unit.d},
+				RigidMembers:     resolvedAssembly.RigidMembers,
+				SelectedVariants: resolvedAssembly.SelectedVariants,
 			})
 		}
 	}
-	return assemblies
+	return assemblies, rejections
 }
 
 // #1464: identidad de ensamble compartida por las DOS vías que materializan
