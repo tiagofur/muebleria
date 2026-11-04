@@ -142,6 +142,16 @@ export interface OpeningProfileRowLike {
   readonly bomMembers: OpeningProfileBOMMembersLike | null;
 }
 
+/**
+ * Datasheet numbers arrive as float64 carrying float32 conversion noise
+ * (27.2 read back as 27.200000762939453); the form shows the workshop
+ * decimal. Four decimals = 0.1 µm, far below any real datasheet precision.
+ */
+export function formatMmInput(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '';
+  return String(Number(value.toFixed(4)));
+}
+
 /** Edit-draft conversion from a listed profile row. */
 export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfileDraft {
   const notch = row.bodyModifiers.find((m) => m.notch_at !== undefined || m.notch_height_mm !== undefined);
@@ -162,24 +172,24 @@ export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfil
     // datasheet pair sum so the edit migrates the profile transparently.
     doorReductionMm:
       row.doorReductionMm != null
-        ? String(row.doorReductionMm)
+        ? formatMmInput(row.doorReductionMm)
         : row.frontReductionMm != null && row.gripClearanceMm != null
-          ? String(row.frontReductionMm + row.gripClearanceMm)
+          ? formatMmInput(row.frontReductionMm + row.gripClearanceMm)
           : '',
-    frontReductionMm: row.frontReductionMm != null ? String(row.frontReductionMm) : '',
-    gripClearanceMm: row.gripClearanceMm != null ? String(row.gripClearanceMm) : '',
-    profileHeightMm: row.profileHeightMm != null ? String(row.profileHeightMm) : '',
-    profileDepthMm: row.profileDepthMm != null ? String(row.profileDepthMm) : '',
+    frontReductionMm: row.frontReductionMm != null ? formatMmInput(row.frontReductionMm) : '',
+    gripClearanceMm: row.gripClearanceMm != null ? formatMmInput(row.gripClearanceMm) : '',
+    profileHeightMm: row.profileHeightMm != null ? formatMmInput(row.profileHeightMm) : '',
+    profileDepthMm: row.profileDepthMm != null ? formatMmInput(row.profileDepthMm) : '',
     geometryOrigin: row.geometryOrigin ?? '',
     notchEnabled: notch != null,
-    notchHeightMm: notch?.notch_height_mm != null ? String(notch.notch_height_mm) : '',
-    notchDepthMm: notch?.notch_depth_mm != null ? String(notch.notch_depth_mm) : '',
+    notchHeightMm: notch?.notch_height_mm != null ? formatMmInput(notch.notch_height_mm) : '',
+    notchDepthMm: notch?.notch_depth_mm != null ? formatMmInput(notch.notch_depth_mm) : '',
     notchAt: (notch?.notch_at as OpeningNotchAtDraft) ?? 'top_front',
     depthReductionEnabled: reduction != null,
     depthReductionDerived: reduction == null || reduction.depth_reduction_mm == null,
-    depthReductionMm: reduction?.depth_reduction_mm != null ? String(reduction.depth_reduction_mm) : '',
+    depthReductionMm: reduction?.depth_reduction_mm != null ? formatMmInput(reduction.depth_reduction_mm) : '',
     bevelEnabled: bevel != null,
-    bevelSizeMm: bevel?.bevel_size_mm != null ? String(bevel.bevel_size_mm) : '',
+    bevelSizeMm: bevel?.bevel_size_mm != null ? formatMmInput(bevel.bevel_size_mm) : '',
     bevelAt: (bevel?.bevel_at as OpeningBevelAtDraft) ?? 'top_front',
     members: membersOfMap(row.bomMembers),
   };
@@ -200,8 +210,8 @@ function membersOfMap(members: OpeningProfileBOMMembersLike | null): readonly Op
         componentId: member.component_id ?? '',
         rule: member.rule ?? '',
         unit: member.unit ?? '',
-        spacingMm: member.spacing_mm != null ? String(member.spacing_mm) : '',
-        dims: (member.dimensions_mm ?? [null, null, null]).map((d) => (d != null ? String(d) : '')) as [string, string, string],
+        spacingMm: member.spacing_mm != null ? formatMmInput(member.spacing_mm) : '',
+        dims: (member.dimensions_mm ?? [null, null, null]).map((d) => (d != null ? formatMmInput(d) : '')) as [string, string, string],
       };
     });
 }

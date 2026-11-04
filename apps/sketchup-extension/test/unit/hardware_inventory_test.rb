@@ -3,6 +3,7 @@
 require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/selection/hardware_inventory'
+require_relative '../../src/granete_for_sketchup/selection/hardware_option_groups'
 
 # HardwareInventory.scan (#1046 S2): the project hardware inventory is
 # discovered from MANAGED METADATA ONLY — children whose intent entityClass

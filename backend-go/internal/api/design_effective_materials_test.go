@@ -54,6 +54,15 @@ func TestHandleDesignEffectiveMaterials(t *testing.T) {
 				Kind:      "board",
 				OptionIDs: []string{matOak, matWalnut},
 			},
+			{
+				Code:      "CAJON",
+				Name:      "Cajón",
+				Kind:      "agregado",
+				OptionIDs: []string{"agr-cajon-1"},
+			},
+		},
+		Agregados: []domain.Agregado{
+			{ID: "agr-cajon-1", Code: "CAJON-1", Name: "Cajón Hafele", Active: true},
 		},
 		Components: []domain.Component{lateral, door},
 		Structures: []domain.Structure{
@@ -73,6 +82,9 @@ func TestHandleDesignEffectiveMaterials(t *testing.T) {
 				StructureID: "st-1",
 				Components: []domain.ComponentInstance{
 					{ComponentID: "comp-door", Quantity: 1},
+				},
+				Agregados: []domain.ModuleAgregadoInstance{
+					{ID: "inst-cajon", AgregadoID: "agr-cajon-1", OptionRole: "CAJON", Quantity: 1},
 				},
 			},
 		},
@@ -125,6 +137,9 @@ func TestHandleDesignEffectiveMaterials(t *testing.T) {
 		}
 		if resp.MaterialChoices["FRENTES"] != matOak || resp.MaterialChoiceModes["FRENTES"] != openapi.DesignMaterialChoiceModeDesign {
 			t.Errorf("FRENTES = %v (mode %v), want %s (mode design)", resp.MaterialChoices["FRENTES"], resp.MaterialChoiceModes["FRENTES"], matOak)
+		}
+		if resp.MaterialChoices["CAJON"] != "agr-cajon-1" || resp.MaterialChoiceModes["CAJON"] != openapi.DesignMaterialChoiceModeDefinition {
+			t.Errorf("CAJON = %v (mode %v), want agr-cajon-1 (mode definition)", resp.MaterialChoices["CAJON"], resp.MaterialChoiceModes["CAJON"])
 		}
 	})
 

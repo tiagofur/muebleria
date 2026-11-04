@@ -354,6 +354,7 @@ module Granete
         end
 
         def send_catalog(dialog)
+          @catalog_provider.refresh! if @catalog_provider.respond_to?(:refresh!)
           definitions = @catalog_provider.all_definitions
           material_categories = if @catalog_provider.respond_to?(:all_material_categories)
                                   @catalog_provider.all_material_categories

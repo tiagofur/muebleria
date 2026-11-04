@@ -98,7 +98,7 @@ module Granete
             # fail-closed por hijo); la elección vigente es la explícita del
             # item (viaja en el mismo mapa materialChoices, #1153). La card
             # del mueble ofrece el cambio de modelo por grupo.
-            hardware_groups: HardwareInventory.groups_for_furniture(
+            hardware_groups: HardwareOptionGroups.groups_for_furniture(
               @metadata_store, entity,
               definition_roles: definition_option_roles(definition),
               item_choices: intent['materialChoices'] || {}

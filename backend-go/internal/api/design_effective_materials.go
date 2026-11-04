@@ -71,11 +71,11 @@ func (s *Server) HandleDesignEffectiveMaterials(w http.ResponseWriter, r *http.R
 	}
 
 	// 3. Convert the definition's consumable option roles to domain specs:
-	// board roles AND hardware groups (#1153). A kind=hardware group is a
-	// choice of the same map (optionRole → concrete id); without it here the
-	// composition silently drops a connected insert's hardware override and
+	// board roles, hardware groups (#1153) and agregado groups (#1482). A kind=hardware
+	// or kind=agregado group is a choice of the same map (optionRole → concrete id);
+	// without them here the composition silently drops an insert's overrides/defaults and
 	// the resolve fails closed ("grupo sin elección").
-	roleSpecs := make([]domain.DefinitionRoleOptionSpec, 0, len(def.MaterialRoles)+len(def.HardwareRoles))
+	roleSpecs := make([]domain.DefinitionRoleOptionSpec, 0, len(def.MaterialRoles)+len(def.HardwareRoles)+len(def.AgregadoRoles))
 	for _, mr := range def.MaterialRoles {
 		roleSpecs = append(roleSpecs, domain.DefinitionRoleOptionSpec{
 			Role:      mr.Role,
@@ -88,6 +88,13 @@ func (s *Server) HandleDesignEffectiveMaterials(w http.ResponseWriter, r *http.R
 			Role:      hr.Code,
 			Label:     hr.Name,
 			OptionIDs: hr.OptionIDs,
+		})
+	}
+	for _, ar := range def.AgregadoRoles {
+		roleSpecs = append(roleSpecs, domain.DefinitionRoleOptionSpec{
+			Role:      ar.Code,
+			Label:     ar.Name,
+			OptionIDs: ar.OptionIDs,
 		})
 	}
 

@@ -754,6 +754,10 @@ func validateMaterialChoices(choices map[string]string, catalog domain.Catalog) 
 				for _, edge := range catalog.Edges {
 					valid = valid || edge.ID == choiceID && edge.Active
 				}
+			case "agregado":
+				for _, agregado := range catalog.Agregados {
+					valid = valid || (agregado.ID == choiceID || agregado.Code == choiceID) && agregado.Active
+				}
 			}
 		}
 		if groupCount == 1 && valid {
