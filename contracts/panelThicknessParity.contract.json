@@ -170,6 +170,24 @@
         "components": [],
         "hardwareLines": [],
         "active": true
+      },
+      {
+        "id": "m-panel-zoclo",
+        "code": "TER-COST-Z",
+        "name": "Panel costado con zoclo",
+        "structureId": "st-panel-cost",
+        "furnitureType": "panel",
+        "panelThicknessDim": "width",
+        "externalDims": {
+          "width": 15,
+          "height": 720,
+          "depth": 560
+        },
+        "baseMode": "plinth_board",
+        "presets": [],
+        "components": [],
+        "hardwareLines": [],
+        "active": true
       }
     ]
   },
@@ -259,6 +277,38 @@
             "quantity": 1,
             "optionRole": "INTERIOR",
             "edges": [],
+            "materialId": "mat-front-18"
+          }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "axis-width-frente-18-with-plinth",
+      "description": "Eje width + FRENTE 18 + baseMode plinth_board: el zócalo sintetizado (ZOCLO-AUTO) sale con el ancho DERIVADO (18) como largo — el tratamiento de base consume las dims derivadas, no las autoreadas; su material hereda FRENTE.",
+      "moduleId": "m-panel-zoclo",
+      "optionChoicesOverride": {
+        "FRENTE": "mat-front-18",
+        "INTERIOR": "mat-front-18"
+      },
+      "expected": {
+        "parts": [
+          {
+            "description": "Sensor PW",
+            "lengthMm": 18,
+            "widthMm": 60,
+            "quantity": 1,
+            "optionRole": "INTERIOR",
+            "edges": [],
+            "materialId": "mat-front-18"
+          },
+          {
+            "description": "Zócalo (melamina)",
+            "lengthMm": 18,
+            "widthMm": 100,
+            "quantity": 1,
+            "optionRole": "ZOCLO",
+            "edges": ["L1"],
             "materialId": "mat-front-18"
           }
         ],

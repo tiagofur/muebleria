@@ -8,6 +8,7 @@
  */
 
 import { resolveModuleMeasurePreset } from './measurePresets';
+import { effectiveOptionChoices } from './optionChoices';
 import { resolveBoardOptionChoiceId } from './plinth';
 import type {
   Catalog,
@@ -97,22 +98,14 @@ export function validateItemCustomDims(
     });
     return issues;
   }
-  // #1496: el eje del espesor de un panel nunca se escribe a mano — sale del
-  // material de frentes. Fail-closed: la UI lo bloquea y la API lo rechaza.
+  // #1496: el eje del espesor de un panel no se valida acá — sale del material
+  // de frentes y el resolver lo reemplaza después (customDims → dimsOverride →
+  // applyPanelThicknessDim), así que el número autoreado de ese eje es
+  // irrelevante. Los otros dos ejes se validan normalmente (UI y API no tienen
+  // un guard dedicado para customDims de ítem: esta función es el control).
   const axis = panelThicknessAxis(module);
-  if (axis && dims[`${axis}Mm` as 'widthMm' | 'heightMm' | 'depthMm'] !== undefined) {
-    const labels: Record<PanelThicknessDim, string> = {
-      width: 'El ancho',
-      height: 'El alto',
-      depth: 'La profundidad',
-    };
-    issues.push({
-      field: `${axis}Mm` as 'widthMm' | 'heightMm' | 'depthMm',
-      message: `${labels[axis]} es el espesor del panel: sale del material de frentes y no se escribe a mano.`,
-    });
-    return issues;
-  }
   const check = (field: 'widthMm' | 'heightMm' | 'depthMm', label: string) => {
+    if (axis && field === `${axis}Mm`) return;
     const v = dims[field];
     if (!Number.isFinite(v) || !Number.isInteger(v)) {
       issues.push({ field, message: `${label} debe ser un número entero de mm.` });
@@ -159,7 +152,8 @@ export type PanelDimsContext = {
  * throwing — callers render what the catalog can still resolve.
  * When `panelCtx` is present and the module is a panel with a declared axis
  * (#1496), the axis dim is replaced by the FRENTE material thickness —
- * regardless of the source (custom dims on the axis are already rejected).
+ * regardless of the source (a custom dims value on the axis is overridden,
+ * never authored).
  */
 export function resolveItemDims(
   item: Pick<ProjectItem, 'customDims' | 'measurePresetId'>,
@@ -169,10 +163,13 @@ export function resolveItemDims(
 ): ItemDims {
   const derive = (dims: ItemDims): ItemDims => {
     if (!module || !panelCtx) return dims;
-    const effectiveChoices =
-      panelCtx.optionChoices && Object.keys(panelCtx.optionChoices).length > 0
-        ? panelCtx.optionChoices
-        : panelCtx.projectLevelChoices;
+    // Per-key merge (F029/#35): project-level defaults + item overrides, the
+    // same canonical merge pricing.ts feeds resolveBom — never a whole-object
+    // fallback that drops inherited keys.
+    const effectiveChoices = effectiveOptionChoices(
+      panelCtx.optionChoices,
+      panelCtx.projectLevelChoices,
+    );
     const derived = applyPanelThicknessDim(
       module,
       dims,

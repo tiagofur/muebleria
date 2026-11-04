@@ -143,7 +143,7 @@ function SpacePlanSvg({
       if (r) list.push(r);
     }
     return list;
-  }, [space.placements, frames, project.items, modules]);
+  }, [space.placements, frames, project.items, modules, panelThickness]);
 
   const bounds = useMemo(
     () => resolvePlanBounds({ wallFrames: frames, placements: resolvedPlacements }),
@@ -385,7 +385,7 @@ export function PresentationKitchenPlanSlide({
 
   const fps = useMemo(
     () => allFootprints(project, modules, panelThickness),
-    [project, modules],
+    [project, modules, panelThickness],
   );
   const placedKeys = useMemo(() => countPlacedKeys(spaces), [spaces]);
   const unplacedCount = fps.filter(

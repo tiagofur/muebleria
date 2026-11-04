@@ -355,8 +355,11 @@ export function KitchenPlanPanel({
 
       updatePlacement(drag.itemId, drag.instanceIndex, { offsetMm: newOffset });
     },
+    // updatePlacement is deliberately omitted (stable closure over
+    // layout/onChange); panelThickness (#1496) IS a real dep — stale snap
+    // widths when the front material changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layout.placements, project.items, modules],
+    [layout.placements, project.items, modules, panelThickness],
   );
 
   const handlePlacementPointerUp = useCallback(

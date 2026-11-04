@@ -109,8 +109,9 @@ func TestCloneCatalog_RemapsFKsAndJSONB(t *testing.T) {
 		 '[{"componentId":"cccccccc-0000-0000-0000-000000000002","quantity":1}]'::jsonb,
 		 '[{"id":"hl1","quantity":2,"option_role":"BISAGRAS","hardware_id":"cccccccc-0000-0000-0000-000000000003"},{"id":"hl2","quantity":4,"option_role":"SOPORTES","component_id":"cccccccc-0000-0000-0000-000000000002"},{"id":"hl3","quantity":1,"option_role":"OTROS"}]'::jsonb,
 		 '` + multiOrgInitialOrgID + `')`,
-		`INSERT INTO modules (id, code, name, category_id, width_mm, height_mm, depth_mm, agregados, parameter_definitions, organization_id)
+		`INSERT INTO modules (id, code, name, category_id, width_mm, height_mm, depth_mm, furniture_type, panel_thickness_dim, agregados, parameter_definitions, organization_id)
 		 VALUES ('cccccccc-0000-0000-0000-000000000005', 'MOD-GAB-01', 'Gabinete', 'cccccccc-0000-0000-0000-000000000001', 600, 720, 500,
+		 'panel', 'width',
 		 '[{"agregado_id":"cccccccc-0000-0000-0000-000000000004","name":"Puerta","quantity":2,"layout_direction":"vertical","gap_mm":3}]'::jsonb,
 		 '[{"name":"shelfCount","label":"Shelf count","type":"number","defaultValue":1,"required":true,"unit":"count","category":"configuration","min":0,"max":5,"step":1,"integer":true,"binding":{"version":1,"kind":"componentQuantity","componentId":"cccccccc-0000-0000-0000-000000000002","relationship":{"kind":"shelf-support","sourceRole":"shelf-edge","targets":[{"componentId":"cccccccc-0000-0000-0000-000000000007","role":"inside-face"}]}}},{"name":"hasBack","label":"Has back","type":"boolean","defaultValue":true,"required":true,"category":"configuration","binding":{"version":1,"kind":"componentCondition","componentId":"cccccccc-0000-0000-0000-000000000008"}}]'::jsonb,
 		 '` + multiOrgInitialOrgID + `')`,
@@ -135,13 +136,18 @@ func TestCloneCatalog_RemapsFKsAndJSONB(t *testing.T) {
 	}
 
 	// El módulo clonado existe en org B con NUEVO id y su categoría apunta a la clonada.
-	var modID, modCat, agrJSON string
+	var modID, modCat, agrJSON, modFurnitureType, modPanelThicknessDim string
 	err := pool.QueryRow(ctx, `
-		SELECT m.id::text, m.category_id::text, m.agregados::text
+		SELECT m.id::text, m.category_id::text, m.agregados::text, m.furniture_type, m.panel_thickness_dim
 		FROM modules m WHERE m.organization_id = $1::uuid AND m.code = 'MOD-GAB-01'`, orgB).
-		Scan(&modID, &modCat, &agrJSON)
+		Scan(&modID, &modCat, &agrJSON, &modFurnitureType, &modPanelThicknessDim)
 	if err != nil {
 		t.Fatalf("módulo clonado no encontrado: %v", err)
+	}
+	// #1496: furniture_type Y panel_thickness_dim deben sobrevivir el clon
+	// (000175 añadió la columna y el INSERT...SELECT del clon la omitía).
+	if modFurnitureType != "panel" || modPanelThicknessDim != "width" {
+		t.Fatalf("el clon perdió furniture_type/panel_thickness_dim (furniture_type=%q panel_thickness_dim=%q, want panel/width)", modFurnitureType, modPanelThicknessDim)
 	}
 	if modID == "cccccccc-0000-0000-0000-000000000005" {
 		t.Fatal("el módulo clonado debe tener id nuevo")

@@ -1007,7 +1007,7 @@ export function ProjectSpatialStudio({
       selectedItem
         ? resolveItemDims(selectedItem, selectedModule, catalog.materials, project.projectLevelChoices)
         : null,
-    [selectedItem, selectedModule],
+    [selectedItem, selectedModule, catalog.materials, project.projectLevelChoices],
   );
 
   /**

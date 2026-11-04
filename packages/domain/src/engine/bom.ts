@@ -1096,14 +1096,17 @@ export function resolveBom(
 
     // Synthesize the base parts the mode needs, then apply mode rules
     // (zoclo strip ml, legs qty) over composed + module hardware.
+    // #1496: base treatment rides the DERIVED dims (panel axis already
+    // replaced) — mirror of Go resolveBomCommon, which feeds the
+    // expandComposedModulePartsWithDims dims into applyBaseTreatment.
     const treatment = applyBaseTreatment(
       module.code,
       allParts,
       [...composedHardware, ...bandedHardware],
       resolveBaseModeWithContext(module, baseContext),
       resolveBaseClearanceWithContext(module, baseContext),
-      dims.width,
-      dims.depth,
+      panelDims.width,
+      panelDims.depth,
       baseContext?.plinthSides,
       optionChoices,
       baseContext?.plinthRun,

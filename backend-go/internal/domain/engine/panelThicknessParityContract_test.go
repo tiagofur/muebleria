@@ -101,6 +101,7 @@ type ptModule struct {
 	StructureID       string       `json:"structureId"`
 	FurnitureType     string       `json:"furnitureType"`
 	PanelThicknessDim string       `json:"panelThicknessDim"`
+	BaseMode          string       `json:"baseMode"`
 	ExternalDims      ptDims       `json:"externalDims"`
 	Components        []ptInstance `json:"components"`
 	Active            bool         `json:"active"`
@@ -198,6 +199,7 @@ func (f *panelFixture) toDomainCatalog() domain.Catalog {
 			StructureID:       m.StructureID,
 			FurnitureType:     m.FurnitureType,
 			PanelThicknessDim: m.PanelThicknessDim,
+			BaseMode:          m.BaseMode,
 			WidthMm:           m.ExternalDims.Width, HeightMm: m.ExternalDims.Height, DepthMm: m.ExternalDims.Depth,
 		}
 		for _, i := range m.Components {
