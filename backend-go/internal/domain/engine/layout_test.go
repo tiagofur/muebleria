@@ -320,6 +320,144 @@ func TestResolveFurnitureLayoutDimsOverride(t *testing.T) {
 	}
 }
 
+// kitGuardDrawerCatalog builds a drawer agregado with a commercial kit: the
+// kit `hw-mbox-kit` owns two rail children already present as recipe rigid
+// members, and the fondo board (`comp-fondo`) carries the placement under
+// test. Mirrors the MERIVOBOX drawer shape (#1487): rails draw from the
+// recipe assembly; a drilling-only screw placement on the fondo must never
+// suppress that assembly.
+func kitGuardDrawerCatalog(placement domain.HardwarePlacement) (domain.Module, domain.Catalog) {
+	fondo := domain.Component{
+		ID: "comp-fondo", Code: "FONDO-CAJ", Name: "Fondo Cajón", Placement: domain.PlacementFrenteCajon,
+		GeometryKind: "rectangular_board", LengthMm: 349, WidthMm: 474, ThicknessMm: 15,
+		OptionRoles: []string{"INTERIOR"}, Active: true,
+	}
+	kit := domain.Hardware{ID: "hw-mbox-kit", Code: "MBOX-SET", Name: "Cajón Kit", Unit: domain.UnitSet, Active: true}
+	railL := domain.Hardware{ID: "hw-rail-l", Code: "RAIL-L", Name: "Guía fija izquierda", Unit: domain.UnitPiece, Active: true, KitHardwareID: strPtr("hw-mbox-kit")}
+	railR := domain.Hardware{ID: "hw-rail-r", Code: "RAIL-R", Name: "Guía fija derecha", Unit: domain.UnitPiece, Active: true, KitHardwareID: strPtr("hw-mbox-kit")}
+	screw := domain.Hardware{ID: "hw-screw", Code: "TOR-FONDO", Name: "Tornillo fondo 3.5x15", Unit: domain.UnitPiece, Active: true}
+
+	agregado := domain.Agregado{
+		ID: "agr-drawer-kit", Code: "CAJON-KIT", Name: "Cajón con kit", Active: true,
+		WidthMm: 400, HeightMm: 81, DepthMm: 500,
+		CommercialKitHardwareID: strPtr("hw-mbox-kit"),
+		Components: []domain.ComponentInstance{{
+			ComponentID: "comp-fondo", Quantity: 1,
+			Overrides:     &domain.ComponentInstanceOverrides{HardwarePlacements: []domain.HardwarePlacement{placement}},
+		}},
+		RigidMembers: []domain.AgregadoRigidMember{
+			{
+				MemberID: "fixed_rail_left", Role: "fixed_rail",
+				Source:          domain.RigidMemberSource{Kind: domain.RigidMemberSourceFixed, Fixed: &domain.FixedHardwareSource{HardwareID: "hw-rail-l"}},
+				BOMRole:         domain.BOMRoleIncludedInKit,
+				ActorMembership: "body",
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 136},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+				},
+			},
+			{
+				MemberID: "fixed_rail_right", Role: "fixed_rail",
+				Source:          domain.RigidMemberSource{Kind: domain.RigidMemberSourceFixed, Fixed: &domain.FixedHardwareSource{HardwareID: "hw-rail-r"}},
+				BOMRole:         domain.BOMRoleIncludedInKit,
+				ActorMembership: "body",
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 136},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+				},
+			},
+		},
+	}
+
+	module, catalog := oneDoorCabinetCatalog()
+	module.Components = []domain.ComponentInstance{}
+	catalog.Agregados = append(catalog.Agregados, agregado)
+	catalog.Components = append(catalog.Components, fondo)
+	catalog.Hardware = append(catalog.Hardware, kit, railL, railR, screw)
+	catalog.Structures[0].Agregados = []domain.ModuleAgregadoInstance{{
+		ID: "agr-kit-inst-1", AgregadoID: "agr-drawer-kit", Quantity: 1,
+	}}
+	return module, catalog
+}
+
+func kitGuardAssemblyMemberCount(t *testing.T, module domain.Module, catalog domain.Catalog, optionChoices map[string]string) int {
+	t.Helper()
+	layout, err := ResolveFurnitureLayout(module, catalog, nil, optionChoices)
+	if err != nil {
+		t.Fatalf("resolve layout: %v", err)
+	}
+	total := 0
+	for _, asm := range layout.Assemblies {
+		total += len(asm.RigidMembers)
+	}
+	return total
+}
+
+func TestResolveFurnitureLayoutAgregadoKitGuard(t *testing.T) {
+	const railMembers = 2
+
+	t.Run("unrelated drilling placement keeps the rail assembly", func(t *testing.T) {
+		module, catalog := kitGuardDrawerCatalog(domain.HardwarePlacement{
+			HardwareID: "hw-screw", AnchorFace: "front",
+			RelativePosition: domain.HardwareRelPosition{XMm: 256, YMm: 9},
+		})
+		if got := kitGuardAssemblyMemberCount(t, module, catalog, nil); got != railMembers {
+			t.Fatalf("drilling screw must not suppress the rail assembly: got %d members, want %d", got, railMembers)
+		}
+	})
+
+	t.Run("kit placement on the board still skips the assembly", func(t *testing.T) {
+		module, catalog := kitGuardDrawerCatalog(domain.HardwarePlacement{
+			HardwareID: "hw-mbox-kit", AnchorFace: "front",
+			RelativePosition: domain.HardwareRelPosition{XMm: 50, YMm: 50},
+		})
+		if got := kitGuardAssemblyMemberCount(t, module, catalog, nil); got != 0 {
+			t.Fatalf("kit placement must suppress the assembly: got %d members, want 0", got)
+		}
+	})
+
+	t.Run("role resolved to a kit child still skips the assembly", func(t *testing.T) {
+		module, catalog := kitGuardDrawerCatalog(domain.HardwarePlacement{
+			OptionRole: "JALADERA", AnchorFace: "front",
+			RelativePosition: domain.HardwareRelPosition{XMm: 50, YMm: 50},
+		})
+		choices := map[string]string{"JALADERA": "hw-rail-l"}
+		if got := kitGuardAssemblyMemberCount(t, module, catalog, choices); got != 0 {
+			t.Fatalf("role resolving to a kit child must suppress the assembly: got %d members, want 0", got)
+		}
+	})
+
+	t.Run("role resolved to unrelated hardware keeps the assembly", func(t *testing.T) {
+		module, catalog := kitGuardDrawerCatalog(domain.HardwarePlacement{
+			OptionRole: "TORNICILLO", AnchorFace: "front",
+			RelativePosition: domain.HardwareRelPosition{XMm: 256, YMm: 9},
+		})
+		choices := map[string]string{"TORNICILLO": "hw-screw"}
+		if got := kitGuardAssemblyMemberCount(t, module, catalog, choices); got != railMembers {
+			t.Fatalf("role resolving to non-kit hardware must keep the rail assembly: got %d members, want %d", got, railMembers)
+		}
+	})
+
+	// The layout resolver fails closed on a role without an effective choice
+	// long before the guard runs, so the conservative-skip branch is only
+	// reachable through the predicate itself.
+	t.Run("predicate keeps the conservative skip for unresolved roles", func(t *testing.T) {
+		_, catalog := kitGuardDrawerCatalog(domain.HardwarePlacement{
+			OptionRole: "JALADERA", AnchorFace: "front",
+			RelativePosition: domain.HardwareRelPosition{XMm: 50, YMm: 50},
+		})
+		agr := catalog.Agregados[len(catalog.Agregados)-1]
+		if !agregadoBoardsPlaceKitHardware(agr, catalog, nil) {
+			t.Fatalf("unresolved role must keep the conservative skip")
+		}
+		if agregadoBoardsPlaceKitHardware(domain.Agregado{}, catalog, nil) {
+			t.Fatalf("no placements must not skip the assembly")
+		}
+	})
+}
+
 func TestResolveFurnitureLayoutAgregadoUnits(t *testing.T) {
 	// A 3-drawer agregado laid out vertically inside the cabinet body.
 	drawerFront := domain.Component{

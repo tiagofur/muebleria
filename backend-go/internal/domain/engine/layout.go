@@ -646,9 +646,11 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 		units := agregadoSubspaceUnits(qty, spaceW, spaceH, spaceD, spaceX, spaceY, spaceZ, agrInst.LayoutDirection, agrInst.GapMm)
 
 		for _, unit := range units {
-			// Skip assembly emission if the agregado's board components already place
-			// the commercial kit hardware on the board face (avoids duplicate hinges at 0,0,0).
-			if agr.CommercialKitHardwareID != nil && *agr.CommercialKitHardwareID != "" && agregadoBoardsHaveHardwarePlacements(agr) {
+			// Skip assembly emission only when the agregado's board components already
+			// place the commercial kit hardware on the board face (avoids duplicate
+			// hinges at 0,0,0). Unrelated placements — a drilling-only screw (#1487) —
+			// must not suppress the recipe's rigid-member assembly.
+			if agr.CommercialKitHardwareID != nil && *agr.CommercialKitHardwareID != "" && agregadoBoardsPlaceKitHardware(agr, catalog, optionChoices) {
 				continue
 			}
 
@@ -1874,10 +1876,48 @@ var hardwareFinishPresetColors = map[string]string{
 	"blanco-mate":     "#f0f2f5",
 }
 
-func agregadoBoardsHaveHardwarePlacements(agr domain.Agregado) bool {
+// agregadoBoardsPlaceKitHardware reports whether any board placement draws the
+// commercial kit itself — the kit or one of its children, concrete or resolved
+// through the effective option choices. Only then does the assembly emission
+// step aside: the boards are already the single drawing source for the kit
+// parts. A placement of unrelated hardware (a drilling-only screw, #1487)
+// never suppresses the recipe's rigid-member assembly; a role without an
+// effective choice (and the id-less authoring error #1147) keeps the
+// historical conservative skip.
+func agregadoBoardsPlaceKitHardware(agr domain.Agregado, catalog domain.Catalog, optionChoices map[string]string) bool {
+	kitID := ""
+	if agr.CommercialKitHardwareID != nil {
+		kitID = strings.TrimSpace(*agr.CommercialKitHardwareID)
+	}
+	kitHardware := make(map[string]bool)
+	if kitID != "" {
+		kitHardware[kitID] = true
+		for _, hw := range catalog.Hardware {
+			if hw.Active && hw.KitHardwareID != nil && *hw.KitHardwareID == kitID {
+				kitHardware[hw.ID] = true
+			}
+		}
+	}
 	for _, ci := range agr.Components {
-		if ci.Overrides != nil && len(ci.Overrides.HardwarePlacements) > 0 {
-			return true
+		if ci.Overrides == nil {
+			continue
+		}
+		for _, p := range ci.Overrides.HardwarePlacements {
+			if id := strings.TrimSpace(p.HardwareID); id != "" {
+				if kitHardware[id] {
+					return true
+				}
+				continue
+			}
+			role := strings.TrimSpace(p.OptionRole)
+			if role == "" {
+				return true
+			}
+			if effective := strings.TrimSpace(optionChoices[role]); effective == "" {
+				return true
+			} else if kitHardware[effective] {
+				return true
+			}
 		}
 	}
 	return false

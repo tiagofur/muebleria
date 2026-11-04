@@ -17,6 +17,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { Modal } from '../../common';
 import {
   emptyMemberDraft,
+  formatMmInput,
   type OpeningBevelAtDraft,
   type OpeningCrossSectionDraft,
   type OpeningGripTypeDraft,
@@ -237,7 +238,7 @@ export function OpeningProfileFormModal({
                 ['bottom', 'Inferior', 'bottom'],
               ] as const
             ).map(([key, label]) => (
-              <label key={key} className="settings-checkbox" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label key={key} className="catalog-form__check">
                 <input
                   type="checkbox"
                   checked={draft[key]}
@@ -272,10 +273,10 @@ export function OpeningProfileFormModal({
             'opening-profile-door-reduction')}
           <div className="catalog-form__row">
             {numberField('opening-profile-height', 'Alto del perfil (mm)', draft.profileHeightMm,
-              (value) => setDraft((current) => ({ ...current, profileHeightMm: value })), 'Decimal de ficha (8006: 56.5).',
+              (value) => setDraft((current) => ({ ...current, profileHeightMm: value })), 'Valor de la ficha del fabricante (8006: 56.5).',
               'opening-profile-height')}
             {numberField('opening-profile-depth', 'Profundidad del perfil (mm)', draft.profileDepthMm,
-              (value) => setDraft((current) => ({ ...current, profileDepthMm: value })), 'Decimal de ficha (8006: 27.2).',
+              (value) => setDraft((current) => ({ ...current, profileDepthMm: value })), 'Valor de la ficha del fabricante (8006: 27.2).',
               'opening-profile-depth')}
           </div>
           {verified ? (
@@ -295,7 +296,7 @@ export function OpeningProfileFormModal({
         <fieldset className="catalog-form__fieldset" data-testid="opening-profile-modifiers">
           <legend>Efectos sobre el cuerpo</legend>
 
-          <label className="settings-checkbox" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label className="catalog-form__check">
             <input
               type="checkbox"
               checked={draft.notchEnabled}
@@ -329,7 +330,7 @@ export function OpeningProfileFormModal({
             </div>
           ) : null}
 
-          <label className="settings-checkbox" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <label className="catalog-form__check">
             <input
               type="checkbox"
               checked={draft.depthReductionEnabled}
@@ -343,7 +344,7 @@ export function OpeningProfileFormModal({
           {draft.depthReductionEnabled ? (
             <>
               <div className="catalog-form__row" role="radiogroup" aria-label="Fuente del descuento">
-                <label className="settings-checkbox" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label className="catalog-form__check">
                   <input
                     type="radio"
                     name="opening-profile-reduction-source"
@@ -354,11 +355,11 @@ export function OpeningProfileFormModal({
                   <span>
                     Deriva de la ficha
                     {Number.isFinite(derivedPreview) && derivedPreview > 0
-                      ? ` (${Number(draft.profileDepthMm)} mm)`
+                      ? ` (${formatMmInput(derivedPreview)} mm)`
                       : ' (faltan los mm de la ficha)'}
                   </span>
                 </label>
-                <label className="settings-checkbox" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label className="catalog-form__check">
                   <input
                     type="radio"
                     name="opening-profile-reduction-source"
@@ -377,7 +378,7 @@ export function OpeningProfileFormModal({
             </>
           ) : null}
 
-          <label className="settings-checkbox" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <label className="catalog-form__check">
             <input
               type="checkbox"
               checked={draft.bevelEnabled}
@@ -385,7 +386,7 @@ export function OpeningProfileFormModal({
               data-testid="opening-profile-bevel-toggle"
             />
             <span>
-              <strong>Bisel 45° en la puerta</strong> — el corte del agarre del gola italiano (#1327)
+              <strong>Bisel 45° en la puerta</strong> — el corte del agarre del gola italiano
             </span>
           </label>
           {draft.bevelEnabled ? (
@@ -414,7 +415,7 @@ export function OpeningProfileFormModal({
           {draft.members.length === 0 ? (
             <p className="catalog-form__hint">
               Los elementos que la apertura agrega al mueble: un herraje del catálogo (perfil, soportes)
-              o un componente panel (#1327 — la tira del gola italiano, que viaja al despiece con el
+              o un componente panel (la tira del gola italiano, que viaja al despiece con el
               material de la puerta).
             </p>
           ) : null}
@@ -430,7 +431,7 @@ export function OpeningProfileFormModal({
                   data-testid="opening-profile-member-key"
                 />
               </label>
-              <label className="catalog-form__field catalog-form__field--narrow">
+              <label className="catalog-form__field">
                 <span>Tipo</span>
                 <select
                   value={member.kind}
@@ -455,7 +456,7 @@ export function OpeningProfileFormModal({
                   data-testid="opening-profile-member-ref"
                 />
               </label>
-              <label className="catalog-form__field catalog-form__field--narrow">
+              <label className="catalog-form__field">
                 <span>Regla</span>
                 <select
                   value={member.rule}

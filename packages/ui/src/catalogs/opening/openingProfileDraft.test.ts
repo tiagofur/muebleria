@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bodyModifiersOfDraft,
   emptyOpeningProfileDraft,
+  formatMmInput,
   suggestOpeningProfileId,
   toOpeningProfileDraft,
   type OpeningProfileRowLike,
@@ -198,6 +199,22 @@ describe('#1327 — miembro tipo componente (tira del gola italiano)', () => {
     // hardware_id stays as the required contract key, EMPTY for component members.
     expect((body.bom_members as Record<string, unknown>).tira).toHaveProperty('hardware_id', '');
     expect(body.door_reduction_mm).toBe(35);
+  });
+});
+
+describe('formatMmInput — ruido float64 de la ficha', () => {
+  it('hidrata la profundidad float64 como el decimal del taller (27.2, no 27.200000762939453)', () => {
+    const draft = toOpeningProfileDraft({ ...v7Row, profileDepthMm: 27.200000762939453 });
+    expect(draft.profileDepthMm).toBe('27.2');
+    expect(draft.profileHeightMm).toBe('56.5');
+  });
+
+  it('mantiene la precisión real de la ficha y las ausencias honestas', () => {
+    expect(formatMmInput(27.2005)).toBe('27.2005');
+    expect(formatMmInput(30)).toBe('30');
+    expect(formatMmInput(0)).toBe('0');
+    expect(formatMmInput(null)).toBe('');
+    expect(formatMmInput(Number.NaN)).toBe('');
   });
 });
 
