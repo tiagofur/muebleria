@@ -1,7 +1,9 @@
 /**
- * Create/edit hardware modal (SM) — Identidad / Compra / Vista 3D
- * disclosure (F069 shape + finish preset; F080 per-part finishes) / Maquinado
- * CNC disclosure (F127 drilling footprint).
+ * Create/edit hardware modal (LG) — Identidad (foto con preview) / Partes
+ * del juego (tarjetas de 2 filas: identidad + apertura/posición siempre
+ * visibles) / Compra / Vista 3D disclosure (F069 shape + finish preset;
+ * F080 per-part finishes) / Maquinado CNC disclosure (F127 drilling
+ * footprint).
  * Owns the preview disclosure state; resets it every time the modal opens
  * (F117 fix: it used to stay open between edit sessions).
  */
@@ -12,6 +14,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
+import { Trash2 } from 'lucide-react';
 import {
   formatKitPartPlacementLabel,
   resolveKitPartConfig,
@@ -138,7 +141,7 @@ export function HardwareFormModal({
           ? `Editar herraje — ${identity.code} · ${identity.name}`
           : 'Nuevo herraje'
       }
-      size="md"
+      size="lg"
       dataTestId="hardware-form-modal"
       footer={
         <>
@@ -196,21 +199,36 @@ export function HardwareFormModal({
                 size="md"
               />
               {canMutate && onUploadImage ? (
-                <input
-                  id="hw-image"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    void onUploadImage(file)
-                      .then((url) => setDraft({ ...draft, imageUrl: url }))
-                      .catch(() => {
-                        /* shell toasts */
-                      });
-                    e.target.value = '';
-                  }}
-                />
+                <div className="catalog-hw-photo__controls">
+                  <input
+                    id="hw-image"
+                    className="visually-hidden"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      void onUploadImage(file)
+                        .then((url) => setDraft({ ...draft, imageUrl: url }))
+                        .catch(() => {
+                          /* shell toasts */
+                        });
+                      e.target.value = '';
+                    }}
+                  />
+                  <label htmlFor="hw-image" className="btn btn--sm">
+                    {draft.imageUrl ? 'Cambiar foto' : 'Añadir foto'}
+                  </label>
+                  {draft.imageUrl ? (
+                    <button
+                      type="button"
+                      className="btn btn--sm btn--ghost"
+                      onClick={() => setDraft({ ...draft, imageUrl: '' })}
+                    >
+                      Quitar foto
+                    </button>
+                  ) : null}
+                </div>
               ) : (
                 <p className="catalog-form__hint">
                   {draft.imageUrl ? 'Foto cargada' : 'Sin foto'}
@@ -244,34 +262,13 @@ export function HardwareFormModal({
               return (
                 <div
                   key={part.id}
-                  className="catalog-kit-part-card"
+                  className="catalog-hw-part"
                   data-testid={`hardware-form-kit-part-${part.code}`}
-                  style={{
-                    border: '1px solid var(--border-subtle, #e0e0e0)',
-                    borderRadius: 'var(--radius-md, 6px)',
-                    padding: '0.75rem',
-                    marginBottom: '0.5rem',
-                    background: 'var(--surface-raised, #f9fafb)',
-                  }}
                 >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: '0.5rem',
-                    }}
-                  >
-                    <div>
-                      <span
-                        className="catalog-kit-part-row__code"
-                        style={{ fontWeight: 600, marginRight: '0.5rem' }}
-                      >
-                        {part.code}
-                      </span>
-                      <span className="catalog-kit-part-row__name">{part.name}</span>
-                    </div>
-                    <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                  <div className="catalog-hw-part__head">
+                    <span className="catalog-kit-part-row__code">{part.code}</span>
+                    <span className="catalog-kit-part-row__name">{part.name}</span>
+                    <div className="catalog-hw-part__actions">
                       <button
                         type="button"
                         className="btn btn--sm"
@@ -284,28 +281,22 @@ export function HardwareFormModal({
                         <button
                           type="button"
                           className="btn btn--sm btn--danger"
+                          aria-label={`Quitar ${part.code} del juego`}
+                          title="Quitar del juego"
                           onClick={() => onRemoveKitPart(part)}
                           data-testid={`hardware-form-kit-part-remove-${part.code}`}
                         >
-                          Quitar del juego
+                          <Trash2 size={14} strokeWidth={1.5} aria-hidden />
+                          Quitar
                         </button>
                       ) : null}
                     </div>
                   </div>
 
                   {onUpdateKitPartConfig ? (
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-                        gap: '0.5rem',
-                        fontSize: '0.85rem',
-                        paddingTop: '0.4rem',
-                        borderTop: '1px solid var(--border-subtle, #eaeaea)',
-                      }}
-                    >
-                      <label className="catalog-form__field" style={{ margin: 0 }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>Al abrir</span>
+                    <div className="catalog-form__row catalog-hw-part__config">
+                      <label className="catalog-form__field">
+                        <span>Al abrir</span>
                         <select
                           className="select select--sm"
                           value={partConfig.actorMembership}
@@ -325,8 +316,8 @@ export function HardwareFormModal({
                         </select>
                       </label>
 
-                      <label className="catalog-form__field" style={{ margin: 0 }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>Lado (Eje X)</span>
+                      <label className="catalog-form__field">
+                        <span>Lado (Eje X)</span>
                         <select
                           className="select select--sm"
                           value={partConfig.xRef}
@@ -351,12 +342,11 @@ export function HardwareFormModal({
                         </select>
                       </label>
 
-                      <label className="catalog-form__field" style={{ margin: 0 }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>Offset X (mm)</span>
+                      <label className="catalog-form__field">
+                        <span>Offset X (mm)</span>
                         <input
                           type="number"
                           step="any"
-                          style={{ height: '2rem', padding: '0.2rem 0.4rem' }}
                           value={partConfig.xOffsetMm}
                           onChange={(e) =>
                             onUpdateKitPartConfig(part, {
@@ -368,12 +358,11 @@ export function HardwareFormModal({
                         />
                       </label>
 
-                      <label className="catalog-form__field" style={{ margin: 0 }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>Offset Y (Prof)</span>
+                      <label className="catalog-form__field">
+                        <span>Offset Y (Prof)</span>
                         <input
                           type="number"
                           step="any"
-                          style={{ height: '2rem', padding: '0.2rem 0.4rem' }}
                           value={partConfig.yOffsetMm}
                           onChange={(e) =>
                             onUpdateKitPartConfig(part, {
@@ -385,12 +374,11 @@ export function HardwareFormModal({
                         />
                       </label>
 
-                      <label className="catalog-form__field" style={{ margin: 0 }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>Offset Z (Alto)</span>
+                      <label className="catalog-form__field">
+                        <span>Offset Z (Alto)</span>
                         <input
                           type="number"
                           step="any"
-                          style={{ height: '2rem', padding: '0.2rem 0.4rem' }}
                           value={partConfig.zOffsetMm}
                           onChange={(e) =>
                             onUpdateKitPartConfig(part, {
@@ -406,7 +394,7 @@ export function HardwareFormModal({
                 </div>
               );
             })}
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+            <div className="catalog-form__inline-actions">
               {onAddKitPart ? (
                 <button
                   type="button"
@@ -418,7 +406,7 @@ export function HardwareFormModal({
                 </button>
               ) : null}
               {onLinkExistingPart && availableHardware && availableHardware.length > 0 ? (
-                <div style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
+                <>
                   <label htmlFor="link-existing-part-select" className="visually-hidden">
                     Vincular parte existente
                   </label>
@@ -445,7 +433,7 @@ export function HardwareFormModal({
                         </option>
                       ))}
                   </select>
-                </div>
+                </>
               ) : null}
             </div>
           </fieldset>
