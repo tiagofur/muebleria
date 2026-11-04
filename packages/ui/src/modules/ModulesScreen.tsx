@@ -353,6 +353,7 @@ export function ModulesScreen({
             }}
             canMutate={canMutate}
             hardwareRoles={state.hardwareRoles}
+            optionGroups={optionGroups}
             activeHardware={state.activeHardware}
             onAddHardware={state.addHardwareLine}
             onRemoveHardware={state.removeHardwareLine}

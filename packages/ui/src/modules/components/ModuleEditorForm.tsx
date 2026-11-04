@@ -60,6 +60,7 @@ export type ModuleEditorFormProps = {
   readonly onRequestAddComponent: () => void;
   readonly canMutate: boolean;
   readonly hardwareRoles: readonly OptionGroup[];
+  readonly optionGroups?: readonly OptionGroup[];
   readonly activeHardware: readonly Hardware[];
   readonly onAddHardware: () => void;
   readonly onRemoveHardware: (id: string) => void;
@@ -119,6 +120,7 @@ export function ModuleEditorForm({
   onRequestAddComponent,
   canMutate,
   hardwareRoles,
+  optionGroups = [],
   activeHardware,
   onAddHardware,
   onRemoveHardware,
@@ -271,7 +273,7 @@ export function ModuleEditorForm({
         setDraft={setDraft}
         catalogAgregados={catalogAgregados}
         catalogHardware={activeHardware}
-        optionGroups={hardwareRoles}
+        optionGroups={optionGroups.length > 0 ? optionGroups : hardwareRoles}
         hidden={editorTab !== 'agregados'}
         idPrefix="module-editor"
       />
