@@ -44,11 +44,16 @@ func authoringStubServer(t *testing.T) (*Server, string) {
 	fullCatalog.Materials = materials
 	fullCatalog.Edges = []domain.EdgeBand{{ID: "edge-white", Active: true}, {ID: "edge-inactive", Active: false}}
 	fullCatalog.Hardware = append(fullCatalog.Hardware, domain.Hardware{ID: "hw-inactive", Active: false})
+	fullCatalog.Agregados = []domain.Agregado{
+		{ID: "agr-cajon-active", Code: "CAJON-STD", Name: "Cajón Estándar", Active: true},
+		{ID: "agr-inactive", Code: "CAJON-INACTIVO", Name: "Cajón Inactivo", Active: false},
+	}
 	fullCatalog.OptionGroups = []domain.OptionGroup{
 		{Code: "FRENTE", Kind: "board", OptionIDs: []string{"mat-oak18"}},
 		{Code: "INTERIOR", Kind: "board", OptionIDs: []string{"mat-white18"}},
 		{Code: "BISAGRA", Kind: "hardware", OptionIDs: []string{"hw-hinge", "hw-inactive"}},
 		{Code: "EDGE", Kind: "edge", OptionIDs: []string{"edge-white", "edge-inactive"}},
+		{Code: "CAJON", Kind: "agregado", OptionIDs: []string{"agr-cajon-active", "agr-inactive"}},
 	}
 	server.Store = &stubStore{
 		getUserByEmail:     u,
@@ -57,7 +62,7 @@ func authoringStubServer(t *testing.T) (*Server, string) {
 		listModules:        []domain.Module{*module},
 		listStructures:     catalog.Structures,
 		listComponents:     catalog.Components,
-		listAgregados:      catalog.Agregados,
+		listAgregados:      fullCatalog.Agregados,
 		listHardwares:      catalog.Hardware,
 		listMaterials:      materials,
 	}
@@ -1285,6 +1290,8 @@ func TestAuthoringResolveRejectsInvalidCatalogOptions(t *testing.T) {
 		{"hardware inactive", "BISAGRA", "hw-inactive"},
 		{"edge wrong kind", "EDGE", "hw-hinge"},
 		{"edge inactive", "EDGE", "edge-inactive"},
+		{"agregado wrong kind", "CAJON", "mat-oak18"},
+		{"agregado inactive", "CAJON", "agr-inactive"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(revision, authoringResolveFurniture{
@@ -1296,6 +1303,33 @@ func TestAuthoringResolveRejectsInvalidCatalogOptions(t *testing.T) {
 			}
 			assertIssueCode(t, rec.Body.Bytes(), "MATERIAL_CHOICE_INVALID")
 		})
+	}
+}
+
+func TestAuthoringResolveAgregadoOptionChoice(t *testing.T) {
+	server, token := authoringStubServer(t)
+	revision := authoringCatalogRevision(t, server)
+	choices := map[string]string{
+		"INTERIOR": "mat-white18",
+		"CAJON":    "agr-cajon-active",
+	}
+	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(revision, authoringResolveFurniture{
+		FurnitureDefinitionID: authoringFixtureModuleID,
+		MaterialChoices:       choices,
+	}))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST resolve status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		NormalizedSnapshot struct {
+			MaterialChoices map[string]string `json:"materialChoices"`
+		} `json:"normalizedSnapshot"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.NormalizedSnapshot.MaterialChoices["CAJON"] != "agr-cajon-active" {
+		t.Fatalf("normalized CAJON = %q, want %q", response.NormalizedSnapshot.MaterialChoices["CAJON"], "agr-cajon-active")
 	}
 }
 
