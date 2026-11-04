@@ -106,13 +106,14 @@ func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T)
 			// 000170 when design_parts joined the hardware read per #1417, re-pinned
 			// to 000171 when kit_hardware_id joined the hardware read per #1422,
 			// re-pinned to 000173 when dimensions joined the hardware read per
-			// #1453 F1):
+			// #1453 F1, re-pinned to 000175 when panel_thickness_dim joined
+			// the modules catalog read per #1496):
 			// the typed-definition rejection under test is
 			// schema-version-independent and the catalog read scans version
 			// on modules and hardware. The pin exists only to keep this
 			// proof on a fixed, explicit schema state — bump it whenever
 			// the catalog read starts requiring newer columns.
-			identityApplyThrough(t, pool, 173)
+			identityApplyThrough(t, pool, 175)
 			_, err := pool.Exec(context.Background(), `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES (gen_random_uuid(),$1,$2,$2,$3::jsonb)`, multiOrgInitialOrgID, "BAD-"+tt.name, tt.raw)
 			if err != nil {
 				t.Fatalf("seed direct SQL: %v", err)
@@ -182,7 +183,10 @@ func TestModuleParameterDefinitionsStorageRoundTrip(t *testing.T) {
 	pool := multiOrgFreshMigrationDB(t)
 	// 168: storage CreateModule/UpdateModule writes hardware_lines.component_id
 	// (#1394) — the partial schema must include the column the layer writes.
-	identityApplyThrough(t, pool, 168)
+	// Re-pinned to 175 when panel_thickness_dim joined the module
+	// write/read per #1496 (same rule: the partial schema carries every
+	// column the layer writes and scans).
+	identityApplyThrough(t, pool, 175)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
 	min, max, step := 0.0, 5.0, 1.0
@@ -279,7 +283,9 @@ func TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions(t *testing.T) 
 			pool := multiOrgFreshMigrationDB(t)
 			// 168: storage CreateModule/UpdateModule writes hardware_lines.component_id
 			// (#1394) — the partial schema must include the column the layer writes.
-			identityApplyThrough(t, pool, 168)
+			// Re-pinned to 175 when panel_thickness_dim joined the module
+			// write/read per #1496.
+			identityApplyThrough(t, pool, 175)
 			store := &storage.PostgresStore{Pool: pool}
 			ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
 
@@ -339,7 +345,7 @@ func applyModuleParameterDefinitionsMigration(t *testing.T, pool *pgxpool.Pool, 
 // the whole org and every authoring resolve.
 func TestCreateAndUpdateModuleRejectOrphanedParameterBindings(t *testing.T) {
 	pool := multiOrgFreshMigrationDB(t)
-	identityApplyThrough(t, pool, 168)
+	identityApplyThrough(t, pool, 175)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
 
