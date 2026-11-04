@@ -45,10 +45,8 @@ const buildAgregado = (withVariantKits: boolean): Agregado =>
       memberId: `side-${i === 0 ? 'left' : 'right'}`,
       role: `drawer_side_${i === 0 ? 'left' : 'right'}`,
       source: {
-        kind: withVariantKits ? 'variant' : 'fixed',
-        ...(withVariantKits
-          ? { variant: { variantSetId: 'height-variants' } }
-          : { fixed: { hardwareId: 'hw-mbox-m' } }),
+        kind: 'variant',
+        variant: { variantSetId: 'height-variants' },
       },
       placement: { x: { ref, offsetMm: 0 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 0 } },
       bomRole: 'included_in_kit',
@@ -116,5 +114,29 @@ describe('#1493 slice 3 — cotización del kit por bahía (paridad con Go)', ()
     });
     // La receta legacy (kit a nivel agregado) NO aporta líneas de kit.
     expect(kitLines.every((line) => !line.id.startsWith('kit-agr-inst-legacy'))).toBe(true);
+  });
+
+  it('dedupe: una línea bulk de la receta que resuelve al kit efectivo no se duplica', () => {
+    // Review slice 3 (major 2): la autoría manda — el autor que añadió el
+    // kit-E como bulk line no recibe una segunda línea del quote.
+    const withBulk: Catalog = {
+      ...catalog,
+      agregados: [
+        {
+          ...(catalog.agregados as unknown as Agregado[])[0]!,
+          hardwareLines: [
+            { id: 'hl-kit-e', quantity: 1, optionRole: 'KIT_MANUAL', hardwareId: 'kit-mbox-e' },
+          ],
+        },
+        (catalog.agregados as unknown as Agregado[])[1]!,
+      ],
+    } as unknown as Catalog;
+    const bom = resolveBom(
+      { ...module, agregados: [{ id: 'inst-bajo', agregadoId: 'agr-mbox-alturas', quantity: 1, dimensions: { heightFormula: 'PH * 0.5' } }] } as unknown as Module,
+      {},
+      withBulk,
+    );
+    const kitELines = bom.hardwareLines.filter((line) => line.hardwareId === 'kit-mbox-e');
+    expect(kitELines).toHaveLength(1); // la bulk del autor manda (su id viaja con sufijo de unidad, convención TS)
   });
 });

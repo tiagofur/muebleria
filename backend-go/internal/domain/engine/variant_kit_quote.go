@@ -52,22 +52,32 @@ func collectVariantKitHardwareLines(
 			PW: dims.W, PH: dims.H, PD: dims.D,
 			T: 18, B: baseClearance,
 		}
+		// Cadena de fallback EXACTA del layout (layout.go) y de la expansión de
+		// partes (resolve.go): fórmula vacía o fallada → externalDims de la
+		// receta → dims del módulo. Review slice 3 (blocker): con externalDims
+		// + fórmulas parciales el quote cotizaba contra la caja equivocada.
 		spaceW, spaceH, spaceD := float64(dims.W), float64(dims.H), float64(dims.D)
 		if inst.Dimensions != nil {
 			if inst.Dimensions.WidthFormula != "" {
 				if v, err := evaluatePartFormula(inst.Dimensions.WidthFormula, parentDims); err == nil {
 					spaceW = float64(v)
 				}
+			} else if agr.WidthMm > 0 {
+				spaceW = float64(agr.WidthMm)
 			}
 			if inst.Dimensions.HeightFormula != "" {
 				if v, err := evaluatePartFormula(inst.Dimensions.HeightFormula, parentDims); err == nil {
 					spaceH = float64(v)
 				}
+			} else if agr.HeightMm > 0 {
+				spaceH = float64(agr.HeightMm)
 			}
 			if inst.Dimensions.DepthFormula != "" {
 				if v, err := evaluatePartFormula(inst.Dimensions.DepthFormula, parentDims); err == nil {
 					spaceD = float64(v)
 				}
+			} else if agr.DepthMm > 0 {
+				spaceD = float64(agr.DepthMm)
 			}
 		} else {
 			if agr.WidthMm > 0 {
@@ -82,6 +92,15 @@ func collectVariantKitHardwareLines(
 		}
 
 		units := agregadoSubspaceUnits(quantity, spaceW, spaceH, spaceD, 0, 0, 0, inst.LayoutDirection, inst.GapMm)
+		// #1386: pose formulas with i/N make every unit full-size (the split
+		// stays off) — mirror of resolve.go's parts expansion and the TS quote,
+		// so the kit per bay matches the bay the layout draws (review slice 3).
+		if formulaUsesCopyIndex(inst.Position) {
+			units = make([]agregadoUnit, 0, quantity)
+			for idx := 0; idx < quantity; idx++ {
+				units = append(units, agregadoUnit{index: idx, w: spaceW, h: spaceH, d: spaceD})
+			}
+		}
 		for _, unit := range units {
 			params := AssemblyResolutionParams{WidthMm: unit.w, HeightMm: unit.h, DepthMm: unit.d}
 			selected, err := SelectAgregadoVariants(agr, params)
