@@ -1609,6 +1609,7 @@ describe('catalogFromApi — construcción policy (#1218)', () => {
         {
           id: 'inst-1',
           agregadoId: 'agr-caj-3',
+          optionRole: 'SISTEMA_CAJON',
           name: 'Columna de 3 Cajones',
           quantity: 3,
           layoutDirection: 'vertical',
@@ -1627,6 +1628,7 @@ describe('catalogFromApi — construcción policy (#1218)', () => {
     const round = structureFromApi(api);
     expect(round.agregados).toHaveLength(1);
     expect(round.agregados![0]!.agregadoId).toBe('agr-caj-3');
+    expect(round.agregados![0]!.optionRole).toBe('SISTEMA_CAJON');
     expect(round.agregados![0]!.quantity).toBe(3);
     expect(round.agregados![0]!.layoutDirection).toBe('vertical');
     expect(round.agregados![0]!.gapMm).toBe(3);

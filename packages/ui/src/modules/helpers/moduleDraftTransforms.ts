@@ -157,7 +157,7 @@ export const componentInstanceDraftRule: DraftRule = objectRule({
     rotateX: optionalRule(numberRule), rotateY: optionalRule(numberRule), rotateZ: optionalRule(numberRule),
     hardwarePlacements: optionalRule(arrayRule(hardwarePlacementRule)) })) });
 export const agregadoInstanceDraftRule: DraftRule = objectRule({
-  id: optionalRule(stringRule), ...stringFields('agregadoId'), name: optionalRule(stringRule),
+  id: optionalRule(stringRule), ...stringFields('agregadoId'), optionRole: optionalRule(stringRule), name: optionalRule(stringRule),
   position: optionalRule(objectRule({ xFormula: optionalRule(stringRule), yFormula: optionalRule(stringRule), zFormula: optionalRule(stringRule) })),
   dimensions: optionalRule(objectRule({ widthFormula: optionalRule(stringRule), heightFormula: optionalRule(stringRule), depthFormula: optionalRule(stringRule) })),
   quantity: numberRule, layoutDirection: optionalRule(enumRule('vertical', 'horizontal', 'none')),
@@ -406,7 +406,12 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
       overrides: c.overrides,
     })),
     agregados:
-      (draft.agregados ?? []).length > 0 ? [...draft.agregados] : undefined,
+      (draft.agregados ?? []).length > 0
+        ? draft.agregados.map((a) => ({
+            ...a,
+            optionRole: a.optionRole?.trim() || undefined,
+          }))
+        : undefined,
     presets:
       (draft.presets ?? []).length > 0
         ? (draft.presets ?? []).map((p) => ({

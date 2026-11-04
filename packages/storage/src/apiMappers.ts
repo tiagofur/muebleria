@@ -1232,9 +1232,11 @@ function presetFromApi(raw: Record<string, unknown>): import('@granete/domain').
 export function agregadoInstanceToApi(
   inst: import('@granete/domain').ModuleAgregadoInstance,
 ): Record<string, unknown> {
+  const role = inst.optionRole?.trim();
   return {
     id: inst.id,
     agregado_id: inst.agregadoId,
+    ...(role ? { option_role: role } : {}),
     name: inst.name,
     quantity: inst.quantity,
     layout_direction: inst.layoutDirection,
@@ -1264,10 +1266,12 @@ export function agregadoInstanceFromApi(
   const posRaw = raw.position as Record<string, unknown> | undefined;
   const dimsRaw = raw.dimensions as Record<string, unknown> | undefined;
   const overridesRaw = raw.option_overrides ?? raw.optionOverrides;
+  const optionRole = str(raw.option_role ?? raw.optionRole).trim() || undefined;
 
   return {
     id: str(raw.id),
     agregadoId: str(raw.agregado_id ?? raw.agregadoId),
+    optionRole,
     name: str(raw.name) || undefined,
     quantity: num(raw.quantity) || 1,
     layoutDirection: (str(raw.layout_direction ?? raw.layoutDirection) as any) || 'none',
