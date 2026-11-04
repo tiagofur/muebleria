@@ -2,7 +2,6 @@ package engine_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 
@@ -286,13 +285,13 @@ func TestMerivoboxHeightsPerBayKitSync_1493(t *testing.T) {
 				if bay == galeriaBay && !present {
 					t.Errorf("bay %d: expected galería %s in the E bay", bay, extraHw)
 				}
-				if bay != galeriaBay && present {
-					t.Errorf("bay %d (%s): galería %s must not appear outside the E bay", bay, wantCode, extraHw)
-				}
+			if bay != galeriaBay && present {
+				t.Errorf("bay %d (%s): galería %s must not appear outside the E bay", bay, wantCode, extraHw)
 			}
 		}
-		_ = fmt.Sprintf("") // keep fmt import if assertions change
 	}
+}
+
 }
 
 func strPtr(s string) *string { return &s }

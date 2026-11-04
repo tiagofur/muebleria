@@ -33,10 +33,17 @@ function syncAgregadoForKit(
   hardware: readonly Hardware[],
 ): Agregado {
   const kitParts = hardware.filter((h) => h.active && h.kitHardwareId === kitId);
-  if (agregado.commercialKitHardwareId === kitId) {
+  // Review #1494: si la receta TAMBIÉN declara kits por variante, el espejo
+  // destructivo del kit a nivel agregado borraría en silencio las partes de
+  // los otros kits (el motor da precedencia a la variante) — en esa
+  // combinación manda el sync aditivo.
+  const declaresAnyVariantKit = (agregado.variantSets ?? []).some((vs) =>
+    (vs.variants ?? []).some((v) => (v.commercialKitHardwareId ?? '').trim() !== ''),
+  );
+  if (agregado.commercialKitHardwareId === kitId && !declaresAnyVariantKit) {
     return syncAgregadoWithKitParts(agregado, kitParts);
   }
-  if (agregadoDeclaresKitViaVariant(agregado, kitId)) {
+  if (agregado.commercialKitHardwareId === kitId || agregadoDeclaresKitViaVariant(agregado, kitId)) {
     return ensureAgregadoKitParts(agregado, kitParts);
   }
   return agregado;

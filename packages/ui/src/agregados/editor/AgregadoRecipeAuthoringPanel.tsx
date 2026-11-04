@@ -666,8 +666,8 @@ export function AgregadoRecipeAuthoringPanel({
                   <div className="agregado-editor__item-fields">
                     <label className="catalog-form__label">Variantes</label>
                     <span className="catalog-form__hint">
-                      #1493: «Juego» declara el kit comercial de esa variante —
-                      una altura de cajón puede ser otro juego (la E cacerolera
+                      «Juego» declara el kit comercial de esa variante — una
+                      altura de cajón puede ser otro juego (la E cacerolera
                       lleva galería). Vacío = manda el juego del agregado.
                     </span>
                     {s.variants.map((v, vIdx) => (
