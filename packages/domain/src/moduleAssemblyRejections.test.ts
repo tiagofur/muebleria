@@ -140,6 +140,32 @@ describe('#1493 slice 2 — rechazos explícitos del resolver de módulo (parida
     expect(rejections[0]!.reason).toBe('variant_not_found');
   });
 
+  it('dos kits declarados entre las seleccionadas: rechazo ambiguous_kit a nivel layout', () => {
+    // Review slice 2 (minor 2): espejo del test Go — el set de altura declara
+    // kit por variante y el set de ancho declara OTRO kit.
+    const ambiguous = {
+      ...heightAgregado,
+      variantSets: [
+        { id: 'height-variants', dimension: 'height', variants: heightVariants },
+        {
+          id: 'width-variants',
+          dimension: 'width',
+          variants: [{ nominalDimensionMm: 500, hardwareId: 'hw-mbox-w500', commercialKitHardwareId: 'kit-mbox-otro' }],
+        },
+      ],
+    } as unknown as Agregado;
+    const { assemblies, rejections } = resolveModuleAgregadoAssembliesDetailed(
+      moduleWithBays([{ id: 'inst-ambigua', z: '0', h: '280' }]),
+      { width: 600, height: 280, depth: 500 },
+      { ...catalog, agregados: [ambiguous] },
+      { optionChoices: {} },
+    );
+    expect(assemblies).toHaveLength(0);
+    expect(rejections).toHaveLength(1);
+    expect(rejections[0]!.reason).toBe('ambiguous_kit');
+    expect(rejections[0]!.assemblyInstanceId).toBe('inst-ambigua');
+  });
+
   it('receta inválida: rechazo definition_invalid una vez por instancia', () => {
     const broken = {
       ...heightAgregado,

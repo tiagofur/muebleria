@@ -1066,14 +1066,26 @@ describe('resolveProject3DPreview — #1493 slice 2 assemblyRejections', () => {
     active: true,
   } as unknown as Component;
 
-  const hardware1493 = heightVariants.map((v) => ({
-    id: v.hardwareId,
-    code: v.hardwareId,
-    name: `MERIVOBOX ${v.hardwareId.slice(-1).toUpperCase()}`,
-    unit: 'piece',
-    costPerUnit: 1,
-    active: true,
-  })) as unknown as Hardware[];
+  // Los kits declarados por variante existen en el catálogo (datos reales del
+  // owner): un kit ausente falla la cotización — nunca un cero silencioso.
+  const hardware1493 = heightVariants.flatMap((v) => [
+    {
+      id: v.hardwareId,
+      code: v.hardwareId,
+      name: `MERIVOBOX ${v.hardwareId.slice(-1).toUpperCase()}`,
+      unit: 'piece',
+      costPerUnit: 1,
+      active: true,
+    },
+    {
+      id: v.commercialKitHardwareId,
+      code: v.commercialKitHardwareId,
+      name: `Kit MERIVOBOX ${v.hardwareId.slice(-1).toUpperCase()}`,
+      unit: 'set',
+      costPerUnit: 200,
+      active: true,
+    },
+  ]) as unknown as Hardware[];
 
   const modC: Module = {
     id: 'm-c',
