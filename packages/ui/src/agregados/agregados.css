@@ -537,6 +537,12 @@
   margin-bottom: var(--space-2);
 }
 
+/* #1493: juego comercial opcional por variante — compacto junto al herraje. */
+.agregado-recipe__variant-kit {
+  flex: 0 1 168px;
+  min-width: 0;
+}
+
 .agregado-recipe__variant .catalog-form__input {
   flex: 0 0 96px;
 }

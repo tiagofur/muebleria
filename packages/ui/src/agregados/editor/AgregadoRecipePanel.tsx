@@ -134,7 +134,15 @@ export function AgregadoRecipePanel({
                 key={set.id}
                 icon={RulerIcon}
                 primary={`${set.id} · ${set.dimension}`}
-                secondary={set.variants.map((v) => `${v.nominalDimensionMm} mm (${v.hardwareId})`).join(' · ')}
+                // #1493: el juego declarado por la variante (si existe) queda
+                // visible — es el kit que manda en el BOM cuando se selecciona.
+                secondary={set.variants
+                  .map((v) =>
+                    v.commercialKitHardwareId
+                      ? `${v.nominalDimensionMm} mm (${v.hardwareId} · ${v.commercialKitHardwareId})`
+                      : `${v.nominalDimensionMm} mm (${v.hardwareId})`,
+                  )
+                  .join(' · ')}
                 testId={`${testId}-set-${set.id}`}
               />
             ))}

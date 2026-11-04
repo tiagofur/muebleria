@@ -108,47 +108,13 @@ func ResolveAgregadoAssembly(
 
 	// 4. Variant resolution
 	selectedVariantsMap := make(map[string]domain.SelectedAssemblyVariant)
-	selectedVariantsList := make([]domain.SelectedAssemblyVariant, 0, len(agregado.VariantSets))
-
-	compatRuleBySet := make(map[string]domain.AssemblyCompatibilityRule)
-	for _, rule := range agregado.CompatibilityRules {
-		compatRuleBySet[rule.VariantSetID] = rule
+	selectedVariantsList, err := SelectAgregadoVariants(agregado, params)
+	if err != nil {
+		return domain.ResolvedAssembly{}, err
 	}
-
-	for _, vs := range agregado.VariantSets {
-		rule, hasRule := compatRuleBySet[vs.ID]
-		if !hasRule {
-			rule = domain.AssemblyCompatibilityRule{
-				VariantSetID:      vs.ID,
-				ClearanceMm:       0.0,
-				SelectionStrategy: "max_fitting",
-			}
-		}
-
-		var targetDimensionSpace float64
-		switch vs.Dimension {
-		case "depth":
-			targetDimensionSpace = params.DepthMm
-		case "height":
-			targetDimensionSpace = params.HeightMm
-		case "width":
-			targetDimensionSpace = params.WidthMm
-		default:
-			return domain.ResolvedAssembly{}, fmt.Errorf("unsupported variant dimension: '%s'", vs.Dimension)
-		}
-
-		selectedVariant, err := selectAssemblyVariant(vs, targetDimensionSpace, rule)
-		if err != nil {
-			return domain.ResolvedAssembly{}, err
-		}
-
-		selectedVariantsMap[vs.ID] = selectedVariant
-		selectedVariantsList = append(selectedVariantsList, selectedVariant)
+	for _, sv := range selectedVariantsList {
+		selectedVariantsMap[sv.VariantSetID] = sv
 	}
-
-	sort.Slice(selectedVariantsList, func(i, j int) bool {
-		return selectedVariantsList[i].VariantSetID < selectedVariantsList[j].VariantSetID
-	})
 
 	// 5. Resolve Rigid Members
 	resolvedRigidMembers := make([]domain.ResolvedRigidMember, 0, len(agregado.RigidMembers))
@@ -297,11 +263,25 @@ func ResolveAgregadoAssembly(
 		})
 	}
 
-	// 7. Generate BOM
+	// 7. Generate BOM — #1493: el kit efectivo puede venir de la variante
+	// seleccionada (una altura de cajón = un kit). Fallback: kit del agregado.
+	effectiveKit, err := EffectiveKitHardwareID(agregado, selectedVariantsList)
+	if err != nil {
+		return domain.ResolvedAssembly{}, err
+	}
+	if effectiveKit == "" {
+		for _, m := range resolvedRigidMembers {
+			if m.BOMRole == domain.BOMRoleIncludedInKit {
+				return domain.ResolvedAssembly{}, fmt.Errorf(
+					"member '%s' has bomRole 'included_in_kit' but no effective commercial kit is declared (agregado level or on the selected variant)", m.MemberID)
+			}
+		}
+	}
+
 	bomItems := make([]domain.AssemblyBOMItem, 0)
-	if agregado.CommercialKitHardwareID != nil && *agregado.CommercialKitHardwareID != "" {
+	if effectiveKit != "" {
 		bomItems = append(bomItems, domain.AssemblyBOMItem{
-			HardwareID: *agregado.CommercialKitHardwareID,
+			HardwareID: effectiveKit,
 			Quantity:   1.0,
 			Role:       "commercial_kit",
 			Notes:      fmt.Sprintf("Commercial kit for assembly %s", agregado.ID),
@@ -331,9 +311,17 @@ func ResolveAgregadoAssembly(
 		})
 	}
 
+	// #1493: CommercialKitHardwareID refleja el kit EFECTIVO (variante o
+	// agregado); legacy sin kits de variante ⇒ valor idéntico al anterior.
+	var effectiveKitPtr *string
+	if effectiveKit != "" {
+		k := effectiveKit
+		effectiveKitPtr = &k
+	}
+
 	resolved := domain.ResolvedAssembly{
 		AgregadoID:              agregado.ID,
-		CommercialKitHardwareID: agregado.CommercialKitHardwareID,
+		CommercialKitHardwareID: effectiveKitPtr,
 		ResolvedDimensionsMm:    [3]float64{params.WidthMm, params.DepthMm, params.HeightMm},
 		SelectedVariants:        selectedVariantsList,
 		RigidMembers:            resolvedRigidMembers,
@@ -475,6 +463,107 @@ func FreezePublishedAssemblySnapshot(
 		FabricatedComponents:    assembly.FabricatedComponents,
 		BOMItems:                assembly.BOMItems,
 	}, nil
+}
+
+// SelectAgregadoVariants deterministically selects one variant per variant set
+// of the agregado (max_fitting by default, exact by compatibility rule) and
+// returns the list sorted by variantSetId. #1493: extracted from
+// ResolveAgregadoAssembly so the layout engine can pre-select variants per
+// drawer bay BEFORE syncing kit parts — the commercial kit may come from the
+// selected variant (one Blum MERIVOBOX kit per drawer height N/M/K/E).
+func SelectAgregadoVariants(
+	agregado domain.Agregado,
+	params AssemblyResolutionParams,
+) ([]domain.SelectedAssemblyVariant, error) {
+	compatRuleBySet := make(map[string]domain.AssemblyCompatibilityRule)
+	for _, rule := range agregado.CompatibilityRules {
+		compatRuleBySet[rule.VariantSetID] = rule
+	}
+
+	selectedVariantsList := make([]domain.SelectedAssemblyVariant, 0, len(agregado.VariantSets))
+	for _, vs := range agregado.VariantSets {
+		rule, hasRule := compatRuleBySet[vs.ID]
+		if !hasRule {
+			rule = domain.AssemblyCompatibilityRule{
+				VariantSetID:      vs.ID,
+				ClearanceMm:       0.0,
+				SelectionStrategy: "max_fitting",
+			}
+		}
+
+		var targetDimensionSpace float64
+		switch vs.Dimension {
+		case "depth":
+			targetDimensionSpace = params.DepthMm
+		case "height":
+			targetDimensionSpace = params.HeightMm
+		case "width":
+			targetDimensionSpace = params.WidthMm
+		default:
+			return nil, fmt.Errorf("unsupported variant dimension: '%s'", vs.Dimension)
+		}
+
+		selectedVariant, err := selectAssemblyVariant(vs, targetDimensionSpace, rule)
+		if err != nil {
+			return nil, err
+		}
+		selectedVariantsList = append(selectedVariantsList, selectedVariant)
+	}
+
+	sort.Slice(selectedVariantsList, func(i, j int) bool {
+		return selectedVariantsList[i].VariantSetID < selectedVariantsList[j].VariantSetID
+	})
+	return selectedVariantsList, nil
+}
+
+// EffectiveKitHardwareID returns the commercial kit that governs a resolved
+// variant selection (#1493). A variant may declare its own
+// commercialKitHardwareId (one Blum MERIVOBOX kit per drawer height); when the
+// selected variants declare kits, the variant kit wins over the agregado-level
+// kit. Two or more DISTINCT declared kits are ambiguous and fail closed; no
+// declared kit falls back to the agregado-level kit ("" when the recipe
+// declares none). A declared-but-unselected variant kit is ignored — the
+// selection is the only commercial truth of this resolution.
+func EffectiveKitHardwareID(agregado domain.Agregado, selected []domain.SelectedAssemblyVariant) (string, error) {
+	variantsBySet := make(map[string][]domain.ProductVariant, len(agregado.VariantSets))
+	for _, vs := range agregado.VariantSets {
+		variantsBySet[vs.ID] = vs.Variants
+	}
+
+	kitOwner := make(map[string]string)  // kit -> first variantSetId that declared it
+	distinctKits := make([]string, 0, 2) // deterministic declaration order
+	for _, sv := range selected {
+		kit := ""
+		for _, v := range variantsBySet[sv.VariantSetID] {
+			if v.NominalDimensionMm == sv.NominalDimensionMm {
+				kit = strings.TrimSpace(v.CommercialKitHardwareID)
+				break
+			}
+		}
+		if kit == "" {
+			continue
+		}
+		if _, seen := kitOwner[kit]; !seen {
+			kitOwner[kit] = sv.VariantSetID
+			distinctKits = append(distinctKits, kit)
+		}
+	}
+
+	if len(distinctKits) > 1 {
+		owners := make([]string, 0, len(distinctKits))
+		for _, kit := range distinctKits {
+			owners = append(owners, fmt.Sprintf("'%s' (set '%s')", kit, kitOwner[kit]))
+		}
+		return "", fmt.Errorf("ambiguous commercial kit: selected variants declare %d distinct kits: %s",
+			len(distinctKits), strings.Join(owners, ", "))
+	}
+	if len(distinctKits) == 1 {
+		return distinctKits[0], nil
+	}
+	if agregado.CommercialKitHardwareID != nil {
+		return strings.TrimSpace(*agregado.CommercialKitHardwareID), nil
+	}
+	return "", nil
 }
 
 func selectAssemblyVariant(

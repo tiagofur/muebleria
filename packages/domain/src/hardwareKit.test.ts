@@ -6,7 +6,9 @@ import {
   DEFAULT_FIXED_OFFSET_MM,
   DEFAULT_MOVING_OFFSET_MM,
   HARDWARE_KIT_SLOTS,
+  agregadoDeclaresKitViaVariant,
   defaultAgregadoCode,
+  ensureAgregadoKitParts,
   planHardwareKit,
   syncAgregadoWithKitParts,
   validateHardwareKitInput,
@@ -358,5 +360,130 @@ describe('plantillas del taller editables (#1422 slice 2 — fixture compartido 
       const synced = syncAgregadoWithKitParts(initialAgregado, []);
       expect(synced.rigidMembers).toHaveLength(0);
     });
+  });
+});
+
+// #1493: sync aditivo para recetas que ligan el kit vía VARIANTE (una altura
+// Blum MERIVOBOX N/M/K/E = un kit). La propiedad que justifica la función:
+// con kits múltiples, el sync de un kit NUNCA puede borrar las partes de otro.
+describe('ensureAgregadoKitParts (#1493, sync aditivo por variante)', () => {
+  const parteGaleriaE = {
+    id: 'hw-galeria-e',
+    code: 'KIT-MBX-E-GALERIA',
+    name: 'Galería cacerolera E',
+    previewShape: 'part',
+    designParts: [
+      { componentName: 'galeria', actorMembership: 'body', label: 'pos:min:20:0:0' },
+    ],
+  };
+  const parteM = {
+    id: 'hw-parte-m',
+    code: 'KIT-MBX-M-PARTE',
+    name: 'Parte kit M',
+    designParts: [
+      { componentName: 'parte', actorMembership: 'body', label: 'pos:max:12:0:4' },
+    ],
+  };
+
+  const recetaMultiKit = {
+    id: 'agr-merivobox-alturas',
+    code: 'MERIVOBOX-ALTURAS',
+    rigidMembers: [
+      // Miembro de variante (source variant, sin hardware fijo): intocable.
+      {
+        memberId: 'side-left',
+        role: 'drawer_side_left',
+        source: { kind: 'variant', variant: { variantSetId: 'height-variants' } },
+        placement: { x: { ref: 'min', offsetMm: 0 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 0 } },
+        bomRole: 'included_in_kit',
+      },
+      // Miembro fijo de OTRO kit (kit-E): la galería.
+      {
+        memberId: 'part_kit_mbx_e_galeria',
+        role: 'part',
+        source: { kind: 'fixed', fixed: { hardwareId: 'hw-galeria-e' } },
+        placement: { x: { ref: 'min', offsetMm: 20 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 0 } },
+        bomRole: 'included_in_kit',
+        actorMembership: 'body',
+      },
+    ],
+  };
+
+  it('AÑADE las partes faltantes del kit como included_in_kit', () => {
+    const synced = ensureAgregadoKitParts(recetaMultiKit, [parteM]);
+    const added = synced.rigidMembers.find(
+      (m: any) => m.source?.fixed?.hardwareId === 'hw-parte-m',
+    );
+    expect(added).toBeDefined();
+    expect(added.bomRole).toBe('included_in_kit');
+    expect(added.memberId).toBe('part_kit_mbx_m_parte');
+  });
+
+  it('REFRESCA colocación y actor de los miembros que ya referencian partes de este kit', () => {
+    const galeriaActualizada = {
+      ...parteGaleriaE,
+      designParts: [
+        { componentName: 'galeria', actorMembership: 'actor:drawer', label: 'pos:min:44:2:8' },
+      ],
+    };
+    const synced = ensureAgregadoKitParts(recetaMultiKit, [galeriaActualizada]);
+    const galeria = synced.rigidMembers.find(
+      (m: any) => m.source?.fixed?.hardwareId === 'hw-galeria-e',
+    );
+    expect(galeria.placement.x.offsetMm).toBe(44);
+    expect(galeria.placement.y.offsetMm).toBe(2);
+    expect(galeria.placement.z.offsetMm).toBe(8);
+    expect(galeria.actorMembership).toBe('actor:drawer');
+    expect(synced.rigidMembers).toHaveLength(2); // sin duplicados
+  });
+
+  it('NUNCA remueve: el sync de un kit conserva los miembros de OTRO kit', () => {
+    // Sync con las partes del kit-M: la galería del kit-E DEBE sobrevivir.
+    const synced = ensureAgregadoKitParts(recetaMultiKit, [parteM]);
+    const galeria = synced.rigidMembers.find(
+      (m: any) => m.source?.fixed?.hardwareId === 'hw-galeria-e',
+    );
+    expect(galeria).toBeDefined();
+    // Y el miembro de variante también.
+    const variante = synced.rigidMembers.find(
+      (m: any) => m.source?.kind === 'variant',
+    );
+    expect(variante).toBeDefined();
+    expect(synced.rigidMembers).toHaveLength(3); // variante + galería + parte-M
+  });
+
+  it('miembro cuyo hardware ya no es parte de ESTE kit no se toca (no destruye)', () => {
+    const synced = ensureAgregadoKitParts(recetaMultiKit, [parteM]);
+    const galeria = synced.rigidMembers.find(
+      (m: any) => m.source?.fixed?.hardwareId === 'hw-galeria-e',
+    );
+    expect(galeria?.placement?.x?.offsetMm).toBe(20); // sin cambios de parte ajena
+  });
+});
+
+describe('agregadoDeclaresKitViaVariant (#1493)', () => {
+  const receta = {
+    variantSets: [
+      {
+        id: 'height-variants',
+        dimension: 'height',
+        variants: [
+          { nominalDimensionMm: 85.5, hardwareId: 'hw-mbox-n', commercialKitHardwareId: 'kit-mbox-n' },
+          { nominalDimensionMm: 108, hardwareId: 'hw-mbox-m' },
+        ],
+      },
+    ],
+  };
+
+  it('detecta el kit declarado en una variante', () => {
+    expect(agregadoDeclaresKitViaVariant(receta, 'kit-mbox-n')).toBe(true);
+  });
+
+  it('false cuando el kit no está declarado o el id es vacío/whitespace', () => {
+    expect(agregadoDeclaresKitViaVariant(receta, 'kit-mbox-m')).toBe(false);
+    expect(agregadoDeclaresKitViaVariant(receta, 'kit-otro')).toBe(false);
+    expect(agregadoDeclaresKitViaVariant(receta, '')).toBe(false);
+    expect(agregadoDeclaresKitViaVariant(receta, '   ')).toBe(false);
+    expect(agregadoDeclaresKitViaVariant({}, 'kit-mbox-n')).toBe(false);
   });
 });

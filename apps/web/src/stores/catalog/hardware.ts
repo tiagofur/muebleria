@@ -3,9 +3,12 @@
  */
 
 import {
+  agregadoDeclaresKitViaVariant,
+  ensureAgregadoKitParts,
   normalizeHardwarePartFinishes,
   syncAgregadoWithKitParts,
   validateHardwareDesignParts,
+  type Agregado,
   type HardwareDesignPart,
 } from '@granete/domain';
 import type { Hardware } from '@granete/domain';
@@ -15,6 +18,36 @@ import type { CatalogState, CatalogStoreCtx } from './shared';
 import { optionalNotes, parseDraftNum } from './shared';
 
 const HARDWARE_SHAPES = ['knob', 'bar-pull', 'cup-pull', 'hinge', 'slide', 'rail', 'leg'];
+
+/**
+ * #1493: sincroniza un agregado con las partes efectivas de un kit. Las
+ * recetas ligadas por commercialKitHardwareId usan el espejo destructivo
+ * histórico (una parte desvinculada sale de la receta); las que declaran el
+ * kit vía VARIANTE (una altura Blum MERIVOBOX = un kit) reciben el sync
+ * aditivo — nunca remueve, porque el sync de un kit no puede borrar las
+ * partes de otro.
+ */
+function syncAgregadoForKit(
+  agregado: Agregado,
+  kitId: string,
+  hardware: readonly Hardware[],
+): Agregado {
+  const kitParts = hardware.filter((h) => h.active && h.kitHardwareId === kitId);
+  // Review #1494: si la receta TAMBIÉN declara kits por variante, el espejo
+  // destructivo del kit a nivel agregado borraría en silencio las partes de
+  // los otros kits (el motor da precedencia a la variante) — en esa
+  // combinación manda el sync aditivo.
+  const declaresAnyVariantKit = (agregado.variantSets ?? []).some((vs) =>
+    (vs.variants ?? []).some((v) => (v.commercialKitHardwareId ?? '').trim() !== ''),
+  );
+  if (agregado.commercialKitHardwareId === kitId && !declaresAnyVariantKit) {
+    return syncAgregadoWithKitParts(agregado, kitParts);
+  }
+  if (agregado.commercialKitHardwareId === kitId || agregadoDeclaresKitViaVariant(agregado, kitId)) {
+    return ensureAgregadoKitParts(agregado, kitParts);
+  }
+  return agregado;
+}
 
 /**
  * Extracts 3D preview fields from a HardwareDraft into a partial Hardware
@@ -153,15 +186,9 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
       return ctx.saveAndToast(
         (c) => {
           const nextHardware = [...c.hardware, item];
-          const nextAgregados = item.kitHardwareId
-            ? (c.agregados ?? []).map((a) =>
-                a.commercialKitHardwareId === item.kitHardwareId
-                  ? syncAgregadoWithKitParts(
-                      a,
-                      nextHardware.filter((h) => h.active && h.kitHardwareId === item.kitHardwareId),
-                    )
-                  : a,
-              )
+          const newKitId = item.kitHardwareId;
+          const nextAgregados = newKitId
+            ? (c.agregados ?? []).map((a) => syncAgregadoForKit(a, newKitId, nextHardware))
             : c.agregados;
           return {
             ...c,
@@ -218,18 +245,27 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
           const affectedKitIds = new Set<string>();
           if (prevTarget?.kitHardwareId) affectedKitIds.add(prevTarget.kitHardwareId);
           if (draft.kitHardwareId) affectedKitIds.add(draft.kitHardwareId);
+          // #1493: una receta con kits por variante puede recibir partes de
+          // VARIOS kits afectados — el sync aditivo se aplica por cada kit que
+          // declare; la receta legacy se espeja una sola vez (comportamiento
+          // histórico intacto).
           const nextAgregados =
             affectedKitIds.size > 0
-              ? (c.agregados ?? []).map((a) =>
-                  a.commercialKitHardwareId && affectedKitIds.has(a.commercialKitHardwareId)
-                    ? syncAgregadoWithKitParts(
-                        a,
-                        nextHardware.filter(
-                          (h) => h.active && h.kitHardwareId === a.commercialKitHardwareId,
-                        ),
-                      )
-                    : a,
-                )
+              ? (c.agregados ?? []).map((a) => {
+                  let next = a;
+                  if (a.commercialKitHardwareId && affectedKitIds.has(a.commercialKitHardwareId)) {
+                    return syncAgregadoForKit(a, a.commercialKitHardwareId, nextHardware);
+                  }
+                  for (const kitId of affectedKitIds) {
+                    if (agregadoDeclaresKitViaVariant(next, kitId)) {
+                      next = ensureAgregadoKitParts(
+                        next,
+                        nextHardware.filter((h) => h.active && h.kitHardwareId === kitId),
+                      );
+                    }
+                  }
+                  return next;
+                })
               : c.agregados;
           return {
             ...c,

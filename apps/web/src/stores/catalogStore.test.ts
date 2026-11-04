@@ -2104,3 +2104,134 @@ describe('catalogStore — simulate receta de agregado (#1369)', () => {
     });
   });
 });
+
+describe('#1493 sync de kit declarado por VARIANTE en updateHardware', () => {
+  const hardwareDraftFull = (overrides: Record<string, unknown>) => ({
+    code: 'X',
+    name: 'X',
+    unit: 'piece' as const,
+    costPerUnit: 10,
+    packageSize: '',
+    imageUrl: '',
+    notes: '',
+    previewShape: '',
+    previewColor: '',
+    previewSizeMm: '',
+    previewDiameterMm: '',
+    previewProjectionMm: '',
+    dimensionWidthMm: '',
+    dimensionHeightMm: '',
+    dimensionDepthMm: '',
+    previewRoughness: '',
+    previewMetalness: '',
+    previewClearcoat: '',
+    partFinishes: { body: '', base: '', grip: '' },
+    machining: null,
+    visualAsset: null,
+    kitHardwareId: '',
+    ...overrides,
+  });
+
+  const catalogMultiKit = (): Catalog =>
+    ({
+      ...seedCatalog(),
+      hardware: [
+        {
+          id: 'hw-parte-m',
+          code: 'KIT-MBX-M-PARTE',
+          name: 'Parte kit M',
+          unit: 'piece',
+          costPerUnit: 10,
+          active: true,
+          kitHardwareId: 'kit-mbox-m',
+        },
+        {
+          id: 'hw-galeria-e',
+          code: 'KIT-MBX-E-GALERIA',
+          name: 'Galería cacerolera E',
+          unit: 'piece',
+          costPerUnit: 20,
+          active: true,
+          kitHardwareId: 'kit-mbox-e',
+        },
+      ],
+      agregados: [
+        {
+          id: 'agr-alturas',
+          code: 'MERIVOBOX-ALTURAS',
+          name: 'Cajón MERIVOBOX por altura',
+          active: true,
+          createdAt: new Date('2026-11-04T00:00:00Z'),
+          updatedAt: new Date('2026-11-04T00:00:00Z'),
+          version: 1,
+          variantSets: [
+            {
+              id: 'height-variants',
+              dimension: 'height',
+              variants: [
+                { nominalDimensionMm: 108, hardwareId: 'hw-mbox-m', commercialKitHardwareId: 'kit-mbox-m' },
+                { nominalDimensionMm: 209, hardwareId: 'hw-mbox-e', commercialKitHardwareId: 'kit-mbox-e' },
+              ],
+            },
+          ],
+          rigidMembers: [
+            {
+              memberId: 'side-left',
+              role: 'drawer_side_left',
+              source: { kind: 'variant', variant: { variantSetId: 'height-variants' } },
+              placement: { x: { ref: 'min', offsetMm: 0 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 0 } },
+              bomRole: 'included_in_kit',
+            },
+            {
+              memberId: 'part_kit_mbx_e_galeria',
+              role: 'part',
+              source: { kind: 'fixed', fixed: { hardwareId: 'hw-galeria-e' } },
+              placement: { x: { ref: 'min', offsetMm: 20 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 0 } },
+              bomRole: 'included_in_kit',
+              actorMembership: 'body',
+            },
+          ],
+        } as unknown as Agregado,
+      ],
+    }) as unknown as Catalog;
+
+  it('editar parte del kit-M añade su parte a la receta y CONSERVA la galería del kit-E', async () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(catalogMultiKit());
+
+    await store.getState().updateHardware('hw-parte-m', hardwareDraftFull({
+      code: 'KIT-MBX-M-PARTE',
+      name: 'Parte kit M renombrada',
+      kitHardwareId: 'kit-mbox-m',
+    }));
+
+    const agr = store.getState().catalog!.agregados![0]!;
+    const memberIds = (agr.rigidMembers ?? []).map((m) => m.source?.fixed?.hardwareId);
+    // Sync aditivo: la parte del kit-M entró a la receta...
+    expect(memberIds).toContain('hw-parte-m');
+    // ...y la galería del kit-E NO fue removida (invariante nunca-remueve).
+    expect(memberIds).toContain('hw-galeria-e');
+    expect((agr.rigidMembers ?? []).length).toBe(3);
+  });
+
+  it('editar la galería del kit-E refresca su miembro sin tocar el resto', async () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(catalogMultiKit());
+
+    await store.getState().updateHardware('hw-galeria-e', hardwareDraftFull({
+      code: 'KIT-MBX-E-GALERIA',
+      name: 'Galería E actualizada',
+      kitHardwareId: 'kit-mbox-e',
+    }));
+
+    const agr = store.getState().catalog!.agregados![0]!;
+    const galeria = (agr.rigidMembers ?? []).find(
+      (m) => m.source?.fixed?.hardwareId === 'hw-galeria-e',
+    );
+    expect(galeria).toBeDefined();
+    // La parte del kit-M no fue añadida ni tocada: el sync fue SOLO del kit-E.
+    expect((agr.rigidMembers ?? []).some((m) => m.source?.fixed?.hardwareId === 'hw-parte-m')).toBe(false);
+  });
+});

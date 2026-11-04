@@ -586,14 +586,14 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 		if effectiveID == "" {
 			continue
 		}
-		agr, ok := findAgregado(catalog, effectiveID)
+		baseAgr, ok := findAgregado(catalog, effectiveID)
 		if !ok {
 			continue
 		}
-		agr = syncAgregadoRigidMembersFromCatalog(agr, catalog)
-		if len(agr.RigidMembers) == 0 {
-			continue
-		}
+		// #1493: el sync de partes del kit ya no corre por instancia — el kit
+		// comercial efectivo puede venir de la variante seleccionada (una
+		// altura Blum MERIVOBOX N/M/K/E distinta por bahía), así que la
+		// selección y el sync se hacen POR UNIDAD dentro del loop de abajo.
 
 		spaceW, spaceH, spaceD := float64(dims.WidthMm), float64(dims.HeightMm), float64(dims.DepthMm)
 		if agrInst.Dimensions != nil {
@@ -601,22 +601,22 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 				if v, err := evaluatePartFormula(agrInst.Dimensions.WidthFormula, parentDims); err == nil {
 					spaceW = float64(v)
 				}
-			} else if agr.WidthMm > 0 {
-				spaceW = float64(agr.WidthMm)
+			} else if baseAgr.WidthMm > 0 {
+				spaceW = float64(baseAgr.WidthMm)
 			}
 			if agrInst.Dimensions.HeightFormula != "" {
 				if v, err := evaluatePartFormula(agrInst.Dimensions.HeightFormula, parentDims); err == nil {
 					spaceH = float64(v)
 				}
-			} else if agr.HeightMm > 0 {
-				spaceH = float64(agr.HeightMm)
+			} else if baseAgr.HeightMm > 0 {
+				spaceH = float64(baseAgr.HeightMm)
 			}
 			if agrInst.Dimensions.DepthFormula != "" {
 				if v, err := evaluatePartFormula(agrInst.Dimensions.DepthFormula, parentDims); err == nil {
 					spaceD = float64(v)
 				}
-			} else if agr.DepthMm > 0 {
-				spaceD = float64(agr.DepthMm)
+			} else if baseAgr.DepthMm > 0 {
+				spaceD = float64(baseAgr.DepthMm)
 			}
 		}
 
@@ -646,20 +646,39 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 		units := agregadoSubspaceUnits(qty, spaceW, spaceH, spaceD, spaceX, spaceY, spaceZ, agrInst.LayoutDirection, agrInst.GapMm)
 
 		for _, unit := range units {
-			// Skip assembly emission only when the agregado's board components already
-			// place the commercial kit hardware on the board face (avoids duplicate
-			// hinges at 0,0,0). Unrelated placements — a drilling-only screw (#1487) —
-			// must not suppress the recipe's rigid-member assembly.
-			if agr.CommercialKitHardwareID != nil && *agr.CommercialKitHardwareID != "" && agregadoBoardsPlaceKitHardware(agr, catalog, optionChoices) {
-				continue
-			}
-
 			params := AssemblyResolutionParams{
 				WidthMm:            unit.w,
 				HeightMm:           unit.h,
 				DepthMm:            unit.d,
 				HardwareDimensions: hardwareDimsLookup,
 			}
+
+			// #1493: la variante se selecciona POR UNIDAD (bahía de cajón) antes
+			// del sync porque el kit comercial puede venir de la variante — una
+			// altura Blum MERIVOBOX N/M/K/E distinta por bahía. Selección y
+			// resolución son deterministas: el resolve interno repite la misma
+			// selección y produce el mismo resultado.
+			selectedVariants, selErr := SelectAgregadoVariants(baseAgr, params)
+			if selErr != nil {
+				continue
+			}
+			effectiveKit, kitErr := EffectiveKitHardwareID(baseAgr, selectedVariants)
+			if kitErr != nil {
+				continue
+			}
+			agr := syncAgregadoRigidMembersFromCatalog(baseAgr, catalog, effectiveKit)
+			if len(agr.RigidMembers) == 0 {
+				continue
+			}
+
+			// Skip assembly emission only when the agregado's board components already
+			// place the commercial kit hardware on the board face (avoids duplicate
+			// hinges at 0,0,0). Unrelated placements — a drilling-only screw (#1487) —
+			// must not suppress the recipe's rigid-member assembly.
+			if effectiveKit != "" && agregadoBoardsPlaceKitHardware(agr, catalog, optionChoices, effectiveKit) {
+				continue
+			}
+
 			resolvedAssembly, err := ResolveAgregadoAssembly(agr, params)
 			if err != nil || len(resolvedAssembly.RigidMembers) == 0 {
 				continue
@@ -762,7 +781,7 @@ func parseKitPartPlacementLabelGo(label string) (domain.AssemblyAxisRef, float64
 	return xRef, xOff, yOff, zOff, true
 }
 
-func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Catalog) domain.Agregado {
+func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Catalog, effectiveKitHardwareID string) domain.Agregado {
 	members := make([]domain.AgregadoRigidMember, 0, len(agr.RigidMembers))
 	existingHwIDs := make(map[string]bool, len(agr.RigidMembers))
 
@@ -788,8 +807,7 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 		members = append(members, rm)
 	}
 
-	if agr.CommercialKitHardwareID != nil && *agr.CommercialKitHardwareID != "" {
-		kitID := *agr.CommercialKitHardwareID
+	if kitID := strings.TrimSpace(effectiveKitHardwareID); kitID != "" {
 		for _, hw := range catalog.Hardware {
 			if !hw.Active || hw.KitHardwareID == nil || *hw.KitHardwareID != kitID {
 				continue
@@ -1884,11 +1902,10 @@ var hardwareFinishPresetColors = map[string]string{
 // never suppresses the recipe's rigid-member assembly; a role without an
 // effective choice (and the id-less authoring error #1147) keeps the
 // historical conservative skip.
-func agregadoBoardsPlaceKitHardware(agr domain.Agregado, catalog domain.Catalog, optionChoices map[string]string) bool {
-	kitID := ""
-	if agr.CommercialKitHardwareID != nil {
-		kitID = strings.TrimSpace(*agr.CommercialKitHardwareID)
-	}
+// kitID llega del llamador: el kit efectivo de ESTA bahía (#1493 — puede ser
+// el kit de la variante seleccionada, no el del agregado).
+func agregadoBoardsPlaceKitHardware(agr domain.Agregado, catalog domain.Catalog, optionChoices map[string]string, kitID string) bool {
+	kitID = strings.TrimSpace(kitID)
 	kitHardware := make(map[string]bool)
 	if kitID != "" {
 		kitHardware[kitID] = true

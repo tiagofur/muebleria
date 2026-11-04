@@ -665,6 +665,11 @@ export function AgregadoRecipeAuthoringPanel({
                   </div>
                   <div className="agregado-editor__item-fields">
                     <label className="catalog-form__label">Variantes</label>
+                    <span className="catalog-form__hint">
+                      «Juego» declara el kit comercial de esa variante — una
+                      altura de cajón puede ser otro juego (la E cacerolera
+                      lleva galería). Vacío = manda el juego del agregado.
+                    </span>
                     {s.variants.map((v, vIdx) => (
                       <div className="agregado-recipe__variant" key={vIdx}>
                         <input
@@ -702,6 +707,31 @@ export function AgregadoRecipeAuthoringPanel({
                             active: h.active,
                           }))}
                           data-testid={`${testId}-set-${idx}-variant-${vIdx}-hardware`}
+                        />
+                        <CatalogPicker
+                          id={`${testId}-set-${idx}-variant-${vIdx}-kit`}
+                          className="agregado-recipe__variant-kit"
+                          label="Juego"
+                          placeholder="Juego…"
+                          searchPlaceholder="Buscar juego…"
+                          value={v.commercialKitHardwareId ?? ''}
+                          onChange={(kit) => {
+                            const variants = s.variants.map((vv, i) => {
+                              if (i !== vIdx) return vv;
+                              const { commercialKitHardwareId: _drop, ...rest } = vv;
+                              return kit.trim() !== ''
+                                ? { ...rest, commercialKitHardwareId: kit }
+                                : rest;
+                            });
+                            updateVariantSet(idx, { variants });
+                          }}
+                          items={catalogHardware.map((h) => ({
+                            id: h.id,
+                            code: h.code,
+                            name: h.name,
+                            active: h.active,
+                          }))}
+                          data-testid={`${testId}-set-${idx}-variant-${vIdx}-kit`}
                         />
                         <button
                           type="button"

@@ -112,7 +112,12 @@ const rigidMemberDraftRule = objectRule({
 const variantSetDraftRule = objectRule({
   ...stringFields('id', 'dimension'),
   variants: arrayRule(
-    objectRule({ nominalDimensionMm: numberRule, ...stringFields('hardwareId') }),
+    // #1493: la variante puede declarar su propio kit comercial (opcional).
+    objectRule({
+      nominalDimensionMm: numberRule,
+      ...stringFields('hardwareId'),
+      commercialKitHardwareId: optionalRule(stringRule),
+    }),
   ),
 });
 

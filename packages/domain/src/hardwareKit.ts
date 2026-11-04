@@ -748,3 +748,91 @@ export function syncAgregadoWithKitParts(
     rigidMembers: [...keptMembers, ...newMembers],
   };
 }
+
+/**
+ * #1493: reporta si una receta declara el kit dado vía variantSets (una
+ * altura Blum MERIVOBOX N/M/K/E = un kit). Los kits declarados por variante
+ * NO son el commercialKitHardwareId del agregado — viven en la variante.
+ */
+export function agregadoDeclaresKitViaVariant(
+  agregado: {
+    readonly variantSets?: readonly {
+      readonly variants?: readonly { readonly commercialKitHardwareId?: string }[];
+    }[];
+  },
+  kitId: string,
+): boolean {
+  const target = kitId.trim();
+  if (!target) return false;
+  return (agregado.variantSets ?? []).some((vs) =>
+    (vs.variants ?? []).some((v) => (v.commercialKitHardwareId ?? '').trim() === target),
+  );
+}
+
+/**
+ * #1493: sync ADITIVO de partes de kit para recetas que referencian el kit
+ * vía variantes. A diferencia de syncAgregadoWithKitParts (que espeja el kit
+ * completo y REMUEVE miembros ajenos a él — correcto cuando el agregado tiene
+ * UN solo kit), esta variante nunca elimina: actualiza la colocación/actor de
+ * los miembros que ya referencian partes de ESTE kit y añade las que falten
+ * como included_in_kit. Con kits múltiples por altura (N/M/K/E) remover
+ * sería destructivo: el sync de un kit borraría las partes de otro.
+ */
+export function ensureAgregadoKitParts(
+  agregado: { readonly id: string; readonly code: string; readonly rigidMembers?: readonly any[] },
+  kitParts: readonly {
+    readonly id: string;
+    readonly code: string;
+    readonly name: string;
+    readonly previewShape?: string;
+    readonly designParts?: readonly { readonly componentName: string; readonly actorMembership: string; readonly label?: string }[];
+  }[],
+): any {
+  const currentMembers = (agregado.rigidMembers ?? []).map((m) => {
+    const hwId = m.source?.fixed?.hardwareId;
+    const part = hwId ? kitParts.find((p) => p.id === hwId) : undefined;
+    if (!part) return m;
+    // Miembro de una parte de ESTE kit: refresca colocación/actor desde la parte.
+    const dp = part.designParts?.[0];
+    const nextActor = dp?.actorMembership?.trim() || m.actorMembership;
+    const parsedPos = dp ? parseKitPartPlacementLabel(dp.label) : undefined;
+    if (!parsedPos) {
+      return nextActor ? { ...m, actorMembership: nextActor } : m;
+    }
+    return {
+      ...m,
+      actorMembership: nextActor,
+      placement: {
+        ...(m.placement ?? {}),
+        x: { ...(m.placement?.x ?? {}), ref: parsedPos.xRef, offsetMm: parsedPos.xOffsetMm },
+        y: { ...(m.placement?.y ?? {}), ref: m.placement?.y?.ref ?? 'min', offsetMm: parsedPos.yOffsetMm },
+        z: { ...(m.placement?.z ?? {}), ref: m.placement?.z?.ref ?? 'min', offsetMm: parsedPos.zOffsetMm },
+      },
+    };
+  });
+
+  const existingHwIds = new Set(currentMembers.map((m) => m.source?.fixed?.hardwareId).filter(Boolean));
+  const newMembers: any[] = [];
+  for (const part of kitParts) {
+    if (existingHwIds.has(part.id)) continue;
+    const cfg = resolveKitPartConfig(part, agregado);
+    const safeMemberId = `part_${part.code.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
+    newMembers.push({
+      memberId: safeMemberId,
+      role: part.previewShape || 'part',
+      source: { kind: 'fixed', fixed: { hardwareId: part.id } },
+      placement: {
+        x: { ref: cfg.xRef, offsetMm: cfg.xOffsetMm },
+        y: { ref: 'min', offsetMm: cfg.yOffsetMm },
+        z: { ref: 'min', offsetMm: cfg.zOffsetMm },
+      },
+      bomRole: 'included_in_kit',
+      actorMembership: cfg.actorMembership,
+    });
+  }
+
+  return {
+    ...agregado,
+    rigidMembers: [...currentMembers, ...newMembers],
+  };
+}
