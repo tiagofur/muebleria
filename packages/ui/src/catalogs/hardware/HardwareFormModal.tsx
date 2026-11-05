@@ -17,6 +17,7 @@ import {
 import { Trash2 } from 'lucide-react';
 import {
   formatKitPartPlacementLabel,
+  isHardwareKitPart,
   resolveKitPartConfig,
   type Agregado,
   type Hardware,
@@ -426,7 +427,7 @@ export function HardwareFormModal({
                       + Vincular herraje existente…
                     </option>
                     {availableHardware
-                      .filter((h) => h.id !== editingId && !h.kitHardwareId && h.unit !== 'set')
+                      .filter((h) => h.id !== editingId && !isHardwareKitPart(h) && h.unit !== 'set')
                       .map((h) => (
                         <option key={h.id} value={h.id}>
                           {h.code} — {h.name}

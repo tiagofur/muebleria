@@ -22,6 +22,7 @@ import {
   countMachiningOperations,
   ensureAgregadoKitParts,
   formatKitPartPlacementLabel,
+  isHardwareKitPart,
   validateMachiningProfile,
   suggestDuplicateCode,
   syncAgregadoWithKitParts,
@@ -225,7 +226,7 @@ export function HardwareCatalog({
       filterCatalogItems(hardware, {
         status,
         query: debouncedSearch,
-      }).filter((h) => !h.kitHardwareId || debouncedSearch.trim() !== ''),
+      }).filter((h) => !isHardwareKitPart(h) || debouncedSearch.trim() !== ''),
     [hardware, status, debouncedSearch],
   );
 

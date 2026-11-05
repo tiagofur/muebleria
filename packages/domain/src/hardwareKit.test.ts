@@ -9,6 +9,7 @@ import {
   agregadoDeclaresKitViaVariant,
   defaultAgregadoCode,
   ensureAgregadoKitParts,
+  isHardwareKitPart,
   planHardwareKit,
   syncAgregadoWithKitParts,
   validateHardwareKitInput,
@@ -168,6 +169,14 @@ describe('validateHardwareKitLink (#1422 slice 1)', () => {
     expect(() => validateHardwareKitLink('nueva', 'parte-1', catalog)).toThrow(
       'no puede ser parte de otro',
     );
+  });
+});
+
+describe('isHardwareKitPart (#1506 kit opaco)', () => {
+  it('una parte de kit (kitHardwareId) es parte; el kit, un herraje suelto y undefined no', () => {
+    expect(isHardwareKitPart({ kitHardwareId: 'kit-1' })).toBe(true);
+    expect(isHardwareKitPart({ kitHardwareId: undefined })).toBe(false);
+    expect(isHardwareKitPart({})).toBe(false);
   });
 });
 

@@ -19,6 +19,7 @@ import {
   PATAS_ROLE,
   ZOCLO_BOARD_ROLE,
   ZOCLO_STRIP_ROLE,
+  isHardwareKitPart,
 } from '@granete/domain';
 import { filterActiveForPicker, normalizeCode } from '../catalogs/catalogHelpers';
 
@@ -165,6 +166,7 @@ export function optionGroupKindLabel(kind: OptionGroupKind): string {
  * OPT-02: members available for a group kind (active catalog items only by default).
  * #1436: kit design parts never list for hardware groups — the part is not
  * purchasable on its own, the whole kit travels (owner decision 10-31).
+ * #1506: the exclusion is the shared `isHardwareKitPart` rule, not a local filter.
  */
 export function membersForKind(
   kind: OptionGroupKind,
@@ -180,7 +182,7 @@ export function membersForKind(
     kind === 'board'
       ? catalogs.materials
       : kind === 'hardware'
-        ? catalogs.hardware.filter((h) => !h.kitHardwareId)
+        ? catalogs.hardware.filter((h) => !isHardwareKitPart(h))
         : kind === 'agregado'
           ? (catalogs.agregados ?? []).map((a) => ({
               id: a.id,
