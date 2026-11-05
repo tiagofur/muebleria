@@ -61,7 +61,7 @@
 - **V0 estructural**: gofmt limpio en archivos nuevos (drift preexistente en
   main no tocado); `pnpm tsc --noEmit` limpio en domain/ui/storage/web;
   rubocop 0 ofensas en los 2 archivos Ruby tocados;
-  `scripts/ci_extension_version.py` aplicable (bump presente).
+  `scripts/ci_extension_version.py` PASS 0.1.102→0.1.103.
 - **V1 funcional (PASS)**:
   - `go test ./internal/domain/... ./internal/api/... ./internal/storage/...` ok
     (incluye 7 tests accesorio nuevos + paridad de códigos #1501 +
@@ -71,9 +71,26 @@
     packages/storage (280 ✓), packages/ui (2439 ✓, incluye descubrimiento #1502),
     apps/web (612 ✓).
   - `rake unit` plugin: 1495 runs, 0 failures (incluye paridad Ruby de whitelists).
+  - Migración 000176 up verificada en postgres:16 desechable (columna
+    `kit_hardware_id` presente tras el up — ver corrección B1).
 - **V2 operacional: NOT_RUN** — S3 en vivo (owner): herrajes accesorios con SKP
   propio, grupo vinculado a MBOX-IRIDIUN-E, release nueva, prueba SketchUp.
   Requiere migración 000176 aplicada + release > 0.3.48.
+
+## Review independiente (un revisor, decisión del owner para esta cadena)
+
+- Ronda 1 (HEAD b3297b4e): BLOCKED con 2 blockers → 1 ronda de corrección
+  consolidada (commit 9ae7df4b):
+  - **B1 (P0)**: el up de 000176 llevaba una línea `DROP COLUMN` pegada del
+    down — la columna se autoeliminaba (feature muerta + API option_groups
+    caído en DB fresca/actualizada). El "storage ok" del escritor era vacuo:
+    la suite hace skip sin DATABASE_URL. Fix verificado en postgres:16.
+  - **B2 (P1)**: `dimension: 'height'` sin `as const` en el test nuevo →
+    tsc --noEmit de packages/ui rojo en HEAD (vitest/esbuild no typechequea).
+- Sugerencias aplicadas/en PR: P2 (ensanchamiento agrego-aware del gate del
+  alta) documentado en el body del PR. P3 (asimetrías de trim Go↔TS) fuera de
+  alcance — datos normalizados server-side.
+- Re-review del fix: en curso por el mismo revisor fresco (HEAD 9ae7df4b).
 
 ## Entrega
 
