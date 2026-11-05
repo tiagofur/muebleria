@@ -251,6 +251,12 @@ type OptionGroup struct {
 	Kind      string   `json:"kind"`
 	Required  bool     `json:"required"`
 	OptionIDs []string `json:"option_ids"`
+	// KitHardwareID (#1502): when set, this group offers ACCESSORY options
+	// for the referenced kit — the chosen member (an accessory hardware,
+	// often itself a kit with parts) is materialized and quoted per bay on
+	// top of the kit. Server-validated: kind hardware, kit exists and is
+	// active. Nil = legacy group (byte-identical behavior).
+	KitHardwareID *string `json:"kit_hardware_id,omitempty"`
 	// Version is server-owned optimistic-concurrency state (#443/#448):
 	// writes carry the expected version as If-Match and the server bumps it.
 	Version int64 `json:"version"`

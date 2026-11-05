@@ -319,6 +319,11 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 		return nil, err
 	}
 
+	// #1502: accesorios de kit requeridos sin elección — fail-closed visible
+	// con el código del contrato cerrado (status blocked, layout presente:
+	// el usuario ve la bahía y elige el accesorio).
+	manufacturing = append(manufacturing, accessoryChoiceContractIssues(layout.AssemblyRejections)...)
+
 	// 3b. Position range authority (#467): an authored translation must stay
 	// inside the furniture envelope the layout itself resolved. Deeper
 	// manufacturing constraints (clearances, interference, relationship

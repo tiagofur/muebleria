@@ -367,7 +367,8 @@
             "OPENING_PROFILE_NOT_CURATED",
             "OPENING_PROFILE_REQUIRED",
             "OPENING_SYSTEM_UNAVAILABLE",
-            "OPENING_SYSTEM_UNKNOWN"
+            "OPENING_SYSTEM_UNKNOWN",
+            "ACCESSORY_CHOICE_REQUIRED"
           ]
         },
         "message": {

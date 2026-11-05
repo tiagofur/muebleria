@@ -604,4 +604,79 @@ describe('selectableGroupCodesForModule (F087)', () => {
     expect(codes).not.toContain('BISAGRA');
     expect(codes).not.toContain('EDGE-OPT');
   });
+
+  // #1502 kit accesorio elegible: el grupo con kit_hardware_id entra al
+  // selector (y al gate de requeridos) SÓLO cuando un agregado del módulo
+  // monta ese kit — a nivel agregado o por cualquiera de sus variantes.
+  it('descubre grupos de accesorio desde los kits montados por los agregados (#1502)', () => {
+    const agrConKit = {
+      id: 'agr-mbox',
+      code: 'AGR-MBOX',
+      name: 'MERIVOBOX',
+      variantSets: [
+        {
+          id: 'height-variants',
+          dimension: 'height',
+          variants: [
+            { nominalDimensionMm: 209, hardwareId: 'hw-e', commercialKitHardwareId: 'kit-mbox-e' },
+          ],
+        },
+      ],
+      components: [],
+      hardwareLines: [],
+    } as unknown as Agregado;
+    const kitGroups: OptionGroup[] = [
+      ...baseGroups,
+      {
+        id: 'og-lateral-e',
+        code: 'LATERAL_E',
+        name: 'Lateral superior E',
+        kind: 'hardware',
+        required: true,
+        optionIds: ['kit-acc-gal'],
+        kitHardwareId: 'kit-mbox-e',
+      },
+      {
+        id: 'og-otro',
+        code: 'LATERAL_OTRO',
+        name: 'Lateral de otro kit',
+        kind: 'hardware',
+        required: true,
+        optionIds: ['kit-acc-x'],
+        kitHardwareId: 'kit-otro',
+      },
+    ];
+    const moduleConAgregado = {
+      hardwareLines: [],
+      components: [],
+      agregados: [{ agregadoId: 'agr-mbox' }],
+    };
+
+    const codes = selectableGroupCodesForModule(
+      moduleConAgregado,
+      kitGroups,
+      [],
+      [],
+      [agrConKit],
+      kitGroups,
+    );
+    expect(codes).toContain('LATERAL_E');
+    expect(codes).not.toContain('LATERAL_OTRO');
+
+    expect(
+      requiredGroupCodesForModule(
+        moduleConAgregado,
+        kitGroups,
+        [],
+        [],
+        [agrConKit],
+        kitGroups,
+      ),
+    ).toContain('LATERAL_E');
+
+    // Sin agregados en el módulo: el grupo vinculado queda fuera.
+    expect(
+      selectableGroupCodesForModule(bareModule, kitGroups, [], [], [agrConKit], kitGroups),
+    ).not.toContain('LATERAL_E');
+  });
 });

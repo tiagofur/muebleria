@@ -78,6 +78,8 @@ export function groupsForModuleItem(
   catalogAgregados?: readonly Agregado[],
   /** Item-level base-mode override (F087) — synthesized roles count as used. */
   baseModeOverride?: ModuleBaseMode,
+  /** #1502: grupos de accesorios declarados por los kits de los agregados. */
+  catalogOptionGroups?: readonly OptionGroup[],
 ): OptionGroup[] {
   if (!module) return [];
   const effectiveModule =
@@ -90,6 +92,7 @@ export function groupsForModuleItem(
     catalogComponents,
     catalogStructures,
     catalogAgregados,
+    catalogOptionGroups,
   );
   const byCode = new Map(optionGroups.map((g) => [g.code, g]));
   return codes
@@ -108,6 +111,8 @@ export function canShowProjectPricePreview(
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
+  /** #1502: grupos de accesorios declarados por los kits de los agregados. */
+  catalogOptionGroups?: readonly OptionGroup[],
 ): PricePreviewGateResult {
   const missing = new Set<string>();
   const byId = new Map(modules.map((m) => [m.id, m]));
@@ -124,6 +129,7 @@ export function canShowProjectPricePreview(
       catalogComponents,
       catalogStructures,
       catalogAgregados,
+      catalogOptionGroups,
     );
     const effective = effectiveOptionChoices(
       item.optionChoices,
@@ -331,6 +337,8 @@ export function defaultChoicesForNewItem(
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
   projectLevelChoices?: Readonly<Record<string, string>>,
+  /** #1502: grupos de accesorios declarados por los kits de los agregados. */
+  catalogOptionGroups?: readonly OptionGroup[],
 ): OptionChoices {
   const required = requiredGroupCodesForModule(
     module,
@@ -338,11 +346,16 @@ export function defaultChoicesForNewItem(
     catalogComponents,
     catalogStructures,
     catalogAgregados,
+    catalogOptionGroups,
   );
   const byCode = new Map(optionGroups.map((g) => [g.code, g]));
   const choices: Record<string, string> = {};
   for (const code of required) {
     const group = byCode.get(code);
+    // #1502: los accesorios de kit NO se siembran por default — la elección
+    // es explícita; sin elección el motor rechaza visible (nunca un
+    // accesorio silencioso ni cotizado de más).
+    if (group?.kitHardwareId) continue;
     const first = group?.optionIds[0];
     if (first) {
       choices[code] = first;
@@ -383,6 +396,8 @@ export function quickAddPayloadForModule(
     readonly measureDefaults?: Readonly<
       Record<string, { readonly depth?: number; readonly height?: number }>
     >;
+    /** #1502: grupos de accesorios declarados por los kits de los agregados. */
+    readonly catalogOptionGroups?: readonly OptionGroup[];
   },
 ): {
   readonly moduleId: string;
@@ -398,6 +413,7 @@ export function quickAddPayloadForModule(
     ctx.catalogStructures,
     ctx.catalogAgregados,
     ctx.projectLevelChoices,
+    ctx.catalogOptionGroups,
   );
   const projectLevel = ctx.projectLevelChoices ?? {};
   const optionChoices: Record<string, string> = {};

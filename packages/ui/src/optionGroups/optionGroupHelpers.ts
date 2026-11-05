@@ -23,6 +23,37 @@ import {
 import { filterActiveForPicker, normalizeCode } from '../catalogs/catalogHelpers';
 
 /**
+ * #1502 kit accesorio elegible: códigos de los grupos que declaran accesorios
+ * para algún kit que la receta monta — el kit a nivel agregado o declarado por
+ * CUALQUIER variante (la altura efectiva se elige después: el selector aparece
+ * cuando el kit vinculado es alcanzable por la receta; las bahías cuyo kit no
+ * declara el grupo simplemente no materializan accesorio).
+ */
+export function kitAccessoryGroupCodes(
+  agr: Pick<Agregado, 'commercialKitHardwareId' | 'variantSets'>,
+  catalogOptionGroups?: readonly OptionGroup[],
+): string[] {
+  if (!catalogOptionGroups || catalogOptionGroups.length === 0) return [];
+  const kits = new Set<string>();
+  const levelKit = (agr.commercialKitHardwareId ?? '').trim();
+  if (levelKit) kits.add(levelKit);
+  for (const vs of agr.variantSets ?? []) {
+    for (const v of vs.variants ?? []) {
+      const kit = (v.commercialKitHardwareId ?? '').trim();
+      if (kit) kits.add(kit);
+    }
+  }
+  if (kits.size === 0) return [];
+  const codes: string[] = [];
+  for (const og of catalogOptionGroups) {
+    if (og.kind !== 'hardware') continue;
+    const linked = (og.kitHardwareId ?? '').trim();
+    if (linked && kits.has(linked)) codes.push(og.code);
+  }
+  return codes;
+}
+
+/**
  * Collect optionRoles from a module's component instances AND the component
  * instances of its referenced structure (when both catalogs are provided).
  * Modules no longer carry board parts, so roles come from components.
@@ -83,6 +114,8 @@ function collectAgregadoRoles(
   catalogAgregados: readonly Agregado[] | undefined,
   catalogComponents: readonly Component[] | undefined,
   out: Set<string>,
+  // #1502: grupos declarados por los kits que la receta monta.
+  catalogOptionGroups?: readonly OptionGroup[],
 ): void {
   if (!agregadoInstances || !catalogAgregados) return;
   for (const inst of agregadoInstances) {
@@ -97,6 +130,9 @@ function collectAgregadoRoles(
           if (line.hardwareId) continue;
           if (line.optionRole?.trim()) out.add(line.optionRole.trim());
         }
+      }
+      for (const code of kitAccessoryGroupCodes(agregado, catalogOptionGroups)) {
+        out.add(code);
       }
       collectComponentRoles(agregado.components, catalogComponents, out);
     }
@@ -250,12 +286,15 @@ export function requiredGroupCodesForModule(
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
+  // #1502: grupos de accesorios declarados por los kits de los agregados.
+  catalogOptionGroups?: readonly OptionGroup[],
 ): string[] {
   const usedRoles = collectUsedOptionRoles(
     module,
     catalogComponents,
     catalogStructures,
     catalogAgregados,
+    catalogOptionGroups,
   );
 
   const required = optionGroups
@@ -289,6 +328,7 @@ function collectUsedOptionRoles(
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
+  catalogOptionGroups?: readonly OptionGroup[],
 ): Set<string> {
   const usedRoles = new Set<string>();
   for (const line of module.hardwareLines ?? []) {
@@ -296,7 +336,7 @@ function collectUsedOptionRoles(
     if (line.optionRole?.trim()) usedRoles.add(line.optionRole.trim());
   }
   collectComponentRoles(module.components, catalogComponents, usedRoles);
-  collectAgregadoRoles(module.agregados, catalogAgregados, catalogComponents, usedRoles);
+  collectAgregadoRoles(module.agregados, catalogAgregados, catalogComponents, usedRoles, catalogOptionGroups);
   if (module.structureId && catalogStructures) {
     const structure = catalogStructures.find((s) => s.id === module.structureId);
     collectComponentRoles(structure?.components, catalogComponents, usedRoles);
@@ -305,6 +345,7 @@ function collectUsedOptionRoles(
       catalogAgregados,
       catalogComponents,
       usedRoles,
+      catalogOptionGroups,
     );
   }
   // F087 — the base treatment consumes a role even when its part/line is
@@ -355,12 +396,15 @@ export function selectableGroupCodesForModule(
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
+  // #1502: grupos de accesorios declarados por los kits de los agregados.
+  catalogOptionGroups?: readonly OptionGroup[],
 ): string[] {
   const usedRoles = collectUsedOptionRoles(
     module,
     catalogComponents,
     catalogStructures,
     catalogAgregados,
+    catalogOptionGroups,
   );
   return optionGroups
     .filter((g) => usedRoles.has(g.code))

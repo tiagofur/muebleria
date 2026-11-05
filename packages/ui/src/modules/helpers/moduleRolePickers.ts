@@ -15,6 +15,7 @@ import {
   ZOCLO_BOARD_ROLE,
   ZOCLO_STRIP_ROLE,
 } from '@granete/domain';
+import { kitAccessoryGroupCodes } from '../../optionGroups/optionGroupHelpers';
 
 export type ModuleRolesSource = {
   readonly components?: readonly { readonly componentId: string }[];
@@ -54,6 +55,8 @@ export function usedOptionRolesForModule(
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
+  // #1502: grupos de accesorios declarados por los kits que los agregados montan.
+  catalogOptionGroups?: readonly OptionGroup[],
 ): Set<string> {
   const usedRoles = new Set<string>();
 
@@ -78,6 +81,11 @@ export function usedOptionRolesForModule(
       if (!hLine.hardwareId && hLine.optionRole?.trim()) {
         usedRoles.add(hLine.optionRole.trim());
       }
+    }
+    // #1502: grupos con kit_hardware_id declarado por los kits de la receta —
+    // la elección de accesorio viaja por optionChoices como cualquier grupo.
+    for (const code of kitAccessoryGroupCodes(agr, catalogOptionGroups)) {
+      usedRoles.add(code);
     }
   };
 
@@ -124,17 +132,24 @@ export function defaultOptionChoicesForModule(
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
+  // #1502: grupos de accesorios declarados por los kits de los agregados.
+  catalogOptionGroups?: readonly OptionGroup[],
 ): Record<string, string> {
   const usedRoles = usedOptionRolesForModule(
     module,
     catalogComponents,
     catalogStructures,
     catalogAgregados,
+    catalogOptionGroups,
   );
 
   const choices: Record<string, string> = {};
   for (const group of optionGroups) {
     if (!usedRoles.has(group.code)) continue;
+    // #1502: los accesorios de kit NO tienen default — la elección es
+    // explícita (opcional sin elección = nada; requerido sin elección =
+    // rechazo visible, nunca un accesorio silencioso).
+    if (group.kitHardwareId) continue;
     const first = group.optionIds[0];
     if (first) {
       choices[group.code] = first;
@@ -171,12 +186,15 @@ export function boardFinishPickerGroupsForModule(
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
+  // #1502: grupos de accesorios declarados por los kits de los agregados.
+  catalogOptionGroups?: readonly OptionGroup[],
 ): BoardFinishPickerGroup[] {
   const usedRoles = usedOptionRolesForModule(
     module,
     catalogComponents,
     catalogStructures,
     catalogAgregados,
+    catalogOptionGroups,
   );
   const byId = new Map(materials.map((m) => [m.id, m]));
   const result: BoardFinishPickerGroup[] = [];

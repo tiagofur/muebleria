@@ -449,6 +449,78 @@ describe('suggestPartCode / defaultOptionChoicesForModule', () => {
     );
     expect(Array.from(roles)).toContain('PUERTA');
   });
+
+  // #1502 kit accesorio elegible: los grupos con kit_hardware_id declarado
+  // por los kits de la receta se descubren desde el agregado — el kit a
+  // nivel agregado o el declarado por cualquier variante.
+  it('descubre grupos de accesorio desde los kits que la receta monta (#1502)', () => {
+    const catalogAgregados = [
+      {
+        id: 'agr-mbox',
+        code: 'AGR-MBOX',
+        name: 'MERIVOBOX por altura',
+        variantSets: [
+          {
+            id: 'height-variants',
+            dimension: 'height' as const,
+            variants: [
+              { nominalDimensionMm: 209, hardwareId: 'hw-e', commercialKitHardwareId: 'kit-mbox-e' },
+              { nominalDimensionMm: 108, hardwareId: 'hw-m', commercialKitHardwareId: 'kit-mbox-m' },
+            ],
+          },
+        ],
+      },
+    ];
+    const catalogOptionGroups: OptionGroup[] = [
+      {
+        id: 'og-le',
+        code: 'LATERAL_E',
+        name: 'Lateral superior E',
+        kind: 'hardware',
+        required: true,
+        optionIds: ['kit-acc-gal'],
+        kitHardwareId: 'kit-mbox-e',
+      },
+      {
+        id: 'og-lx',
+        code: 'LATERAL_X',
+        name: 'Lateral de otro kit',
+        kind: 'hardware',
+        required: true,
+        optionIds: ['kit-acc-x'],
+        kitHardwareId: 'kit-otro',
+      },
+      {
+        id: 'og-comun',
+        code: 'BISAGRA',
+        name: 'Bisagras',
+        kind: 'hardware',
+        required: false,
+        optionIds: ['bis-1'],
+      },
+    ];
+    const roles = usedOptionRolesForModule(
+      { agregados: [{ agregadoId: 'agr-mbox' }] },
+      [],
+      [],
+      catalogAgregados,
+      catalogOptionGroups,
+    );
+    expect(roles.has('LATERAL_E')).toBe(true);
+    expect(roles.has('LATERAL_X')).toBe(false);
+    expect(roles.has('BISAGRA')).toBe(false);
+
+    // Sin elección de default para accesorios: la elección es explícita.
+    const defaults = defaultOptionChoicesForModule(
+      { agregados: [{ agregadoId: 'agr-mbox' }] },
+      catalogOptionGroups,
+      [],
+      [],
+      catalogAgregados,
+      catalogOptionGroups,
+    );
+    expect(defaults['LATERAL_E']).toBeUndefined();
+  });
 });
 
 describe('SEED_MODULE_CODES', () => {

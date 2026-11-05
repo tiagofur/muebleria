@@ -211,6 +211,10 @@ export function ProjectAddItemModal({
     catalogComponents,
     catalogStructures,
     catalogAgregados,
+    undefined,
+    // #1502: los grupos de accesorios declarados por los kits aparecen como
+    // selector en el alta (elección explícita, sin default).
+    optionGroups,
   );
 
   const selectModuleForAdd = (moduleId: string) => {
@@ -227,6 +231,7 @@ export function ProjectAddItemModal({
           catalogStructures,
           catalogAgregados,
           projectLevelChoices,
+          optionGroups,
         )
       : {};
     const projectLevel = projectLevelChoices ?? {};
@@ -288,6 +293,11 @@ export function ProjectAddItemModal({
       optionGroups,
       catalogComponents,
       catalogStructures,
+      catalogAgregados,
+      undefined,
+      // #1502: un accesorio requerido sin elección se exige aquí, antes de
+      // que el motor lo rechace visible en el resolve.
+      optionGroups,
     ).filter((g) => g.required);
     const effective = effectiveOptionChoices(addItem.optionChoices, projectLevelChoices);
     for (const group of groups) {

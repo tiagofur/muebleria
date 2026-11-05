@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.accessoryKitParity.v1",
+  "comment": "#1502 — kit accesorio elegible: la bahía que monta el kit vinculado (grupo con kit_hardware_id) materializa el accesorio elegido como ensamble SEPARADO del SKP del cajón (miembros = partes del kit accesorio, placements desde DesignParts[0].Label) y aporta su línea de cotización. Autoridad numérica única para Go (ResolveFurnitureLayout + ResolveBomWithContext) y TS (resolveModuleAgregadoAssembliesDetailed + resolveBom): ambos lados CONSTRUYEN catálogo y receta desde ESTOS números. Sin elección y grupo opcional → base sin accesorio ni línea; requerido sin elección → rechazo accessory_choice_required / issue ACCESSORY_CHOICE_REQUIRED y sin línea (la cotización no inventa demanda).",
+  "heights": [
+    { "code": "N", "nominalDimensionMm": 85.5, "hardwareId": "hw-mbox-n", "kitHardwareId": "kit-mbox-n" },
+    { "code": "E", "nominalDimensionMm": 209, "hardwareId": "hw-mbox-e", "kitHardwareId": "kit-mbox-e" }
+  ],
+  "module": {
+    "widthMm": 600,
+    "heightMm": 560,
+    "depthMm": 500,
+    "bayHeightFormula": "PH * 0.5"
+  },
+  "accessoryGroup": {
+    "code": "LATERAL_E",
+    "name": "Lateral superior E",
+    "required": true,
+    "kitHardwareId": "kit-mbox-e",
+    "accessories": [
+      {
+        "id": "kit-acc-galeria",
+        "code": "KIT-E-GAL",
+        "name": "Galería E",
+        "parts": [
+          { "id": "hw-gal-d", "code": "GAL-D", "name": "Galería derecha", "label": "pos:max:0:0:120", "actorMembership": "body" },
+          { "id": "hw-gal-i", "code": "GAL-I", "name": "Galería izquierda", "label": "pos:min:0:0:120", "actorMembership": "body" }
+        ]
+      },
+      {
+        "id": "kit-acc-boxcover",
+        "code": "KIT-E-CVR",
+        "name": "Boxcover E",
+        "parts": []
+      }
+    ]
+  },
+  "chosenAccessoryId": "kit-acc-galeria",
+  "expectedAccessoryAssembly": {
+    "assemblyInstanceId": "inst-bajo-acc-lateral_e",
+    "memberHardwareIds": ["hw-gal-d", "hw-gal-i"]
+  },
+  "expectedAccessoryKitLine": {
+    "id": "kit-acc-inst-bajo-u0-lateral_e",
+    "hardwareId": "kit-acc-galeria",
+    "quantity": 1
+  }
+}

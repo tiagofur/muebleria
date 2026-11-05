@@ -939,6 +939,33 @@ export function resolveComposedModule(
       );
       agregadosHardware.push(...res.hardwareLines);
 
+      // #1502: los accesorios elegidos para ESTE kit se cotizan por bahía —
+      // demanda adicional que NO participa del dedupe contra bulk del kit
+      // principal (cotiza lo dibujado, mismo criterio del layout; espejo de
+      // collectAccessoryKitHardwareLines en accessory_kit.go). Sin elección:
+      // nada — la cotización no inventa demanda por un accesorio que no se
+      // dibuja.
+      const accInstanceKey = (agrInst.id ?? '').trim() || effectiveAgregadoId;
+      const accessoryGroups = (catalog.optionGroups ?? [])
+        .filter(
+          (og) => og.kind === 'hardware' && (og.kitHardwareId ?? '').trim() === (unitKitId ?? '').trim() && unitKitId,
+        )
+        .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
+      for (const og of accessoryGroups) {
+        const choice = (optionChoices?.[og.code] ?? '').trim();
+        if (!choice) continue;
+        const isActiveMember =
+          og.optionIds.includes(choice) &&
+          (catalog.hardware ?? []).some((h) => h.id === choice && h.active);
+        if (!isActiveMember) continue;
+        agregadosHardware.push({
+          id: `kit-acc-${accInstanceKey}-u${unit.unitIndex}-${og.code.toLowerCase()}`,
+          quantity: 1,
+          optionRole: 'COMMERCIAL_KIT',
+          hardwareId: choice,
+        });
+      }
+
       const filteredComponents = filterComponentInstancesForBaseMode(
         res.components ?? [],
         catalog.components ?? [],

@@ -23,6 +23,8 @@ export function createOptionGroupsActions(ctx: CatalogStoreCtx): OptionGroupsSli
         kind: draft.kind,
         required: draft.required,
         optionIds: [...draft.optionIds],
+        // #1502: kit accesorio elegible; '' = sin link (grupo legacy).
+        ...(draft.kitHardwareId ? { kitHardwareId: draft.kitHardwareId } : {}),
       };
       ctx.saveAndToast(
         (c) => ({ ...c, optionGroups: [...c.optionGroups, item] }),
@@ -43,6 +45,10 @@ export function createOptionGroupsActions(ctx: CatalogStoreCtx): OptionGroupsSli
                   kind: draft.kind,
                   required: draft.required,
                   optionIds: [...draft.optionIds],
+                  // #1502: '' elimina el link (unlink deliberado).
+                  ...(draft.kitHardwareId
+                    ? { kitHardwareId: draft.kitHardwareId }
+                    : { kitHardwareId: undefined }),
                 }
               : g,
           ),

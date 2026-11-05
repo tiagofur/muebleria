@@ -732,6 +732,13 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 				})
 				continue
 			}
+			// #1502: accesorios elegibles del kit que esta bahía monta —
+			// ensambles SEPARADOS del SKP del cajón (el grupo de apertura no
+			// cambia) + rejections fail-closed de grupos requeridos sin
+			// elección. Legacy sin grupos vinculados: nada.
+			accAssemblies, accRejections := resolveAccessoryAssemblies(baseAgr, catalog, optionChoices, effectiveKit, instID, unit, params)
+			assemblies = append(assemblies, accAssemblies...)
+			rejections = append(rejections, accRejections...)
 			agr := syncAgregadoRigidMembersFromCatalog(baseAgr, catalog, effectiveKit)
 			if len(agr.RigidMembers) == 0 {
 				continue
@@ -762,37 +769,7 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 			}
 
 			// Attach visual assets and mount frames from catalog hardware to rigid members
-			for rIdx := range resolvedAssembly.RigidMembers {
-				rm := &resolvedAssembly.RigidMembers[rIdx]
-				if hw, ok := findHardware(catalog, rm.HardwareID); ok {
-					rm.Name = hw.Name
-					if hw.VisualAsset != nil {
-						assetID := hw.VisualAsset.AssetID
-						revID := hw.VisualAsset.AssetRevisionID
-						rm.AssetID = &assetID
-						rm.AssetRevisionID = &revID
-						if hw.VisualAsset.SHA256 != "" {
-							sha := hw.VisualAsset.SHA256
-							rm.SHA256 = &sha
-						}
-						if hw.VisualAsset.SizeBytes > 0 {
-							sizeBytes := hw.VisualAsset.SizeBytes
-							rm.ExpectedBytes = &sizeBytes
-						}
-						if hw.VisualAsset.Representation != "" {
-							rep := string(hw.VisualAsset.Representation)
-							rm.Representation = &rep
-						}
-						if hw.VisualAsset.PreparationState != "" {
-							prep := string(hw.VisualAsset.PreparationState)
-							rm.PreparationState = &prep
-						}
-						if hw.VisualAsset.MountFrame != nil {
-							rm.MountFrame = hw.VisualAsset.MountFrame
-						}
-					}
-				}
-			}
+			attachHardwareAssetsToMembers(resolvedAssembly.RigidMembers, catalog)
 
 			assemblies = append(assemblies, LayoutAssembly{
 				AssemblyInstanceID: instID,
@@ -891,66 +868,112 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 			if existingHwIDs[hw.ID] {
 				continue
 			}
-			actor := "body"
-			upperCode := strings.ToUpper(hw.Code)
-			lowerName := strings.ToLower(hw.Name)
-			isRight := strings.HasSuffix(upperCode, "-D") || strings.Contains(lowerName, "derech")
-			isMoving := strings.Contains(upperCode, "-MOV") || strings.Contains(upperCode, "-BRAZO") ||
-				strings.Contains(lowerName, "móvil") || strings.Contains(lowerName, "movil") || strings.Contains(lowerName, "brazo")
-			if isMoving {
-				if strings.Contains(strings.ToUpper(agr.Code), "PUERTA") || strings.Contains(strings.ToUpper(agr.Code), "PUE") {
-					actor = "actor:door"
-				} else {
-					actor = "actor:drawer"
-				}
-			}
-			xRef := domain.AxisRefMin
-			xOff := 10.0
-			if isMoving && actor == "actor:drawer" {
-				xOff = 35.0
-			}
-			if isRight {
-				xRef = domain.AxisRefMax
-				xOff = -xOff
-			}
-			yOff, zOff := 0.0, 0.0
-			if len(hw.DesignParts) > 0 {
-				dp := hw.DesignParts[0]
-				if strings.TrimSpace(dp.ActorMembership) != "" {
-					actor = strings.TrimSpace(dp.ActorMembership)
-				}
-				if parsedRef, px, py, pz, okPos := parseKitPartPlacementLabelGo(dp.Label); okPos {
-					xRef = parsedRef
-					xOff = px
-					yOff = py
-					zOff = pz
-				}
-			}
-			safeID := "part_" + strings.ToLower(strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(hw.Code))
-			role := "part"
-			if hw.PreviewShape != nil && *hw.PreviewShape != "" {
-				role = *hw.PreviewShape
-			}
-			members = append(members, domain.AgregadoRigidMember{
-				MemberID: safeID,
-				Role:     role,
-				Source: domain.RigidMemberSource{
-					Kind:  domain.RigidMemberSourceFixed,
-					Fixed: &domain.FixedHardwareSource{HardwareID: hw.ID},
-				},
-				Placement: domain.AssemblyAnchorRule{
-					X: domain.AssemblyAxisPlacement{Ref: xRef, OffsetMm: xOff},
-					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: yOff},
-					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: zOff},
-				},
-				BOMRole:         domain.BOMRoleIncludedInKit,
-				ActorMembership: actor,
-			})
+			members = append(members, kitPartMember(hw, agr.Code))
 		}
 	}
 
 	agr.RigidMembers = members
 	return agr
+}
+
+// kitPartMember builds the rigid member that draws one kit design part
+// (#1422): placement and actor membership come from the part's own
+// DesignParts[0] declaration, falling back to the same side/moving inference
+// the sync has always applied. Shared by the recipe kit sync and the #1502
+// accessory materialization (identical output either way).
+func kitPartMember(hw domain.Hardware, agrCode string) domain.AgregadoRigidMember {
+	actor := "body"
+	upperCode := strings.ToUpper(hw.Code)
+	lowerName := strings.ToLower(hw.Name)
+	isRight := strings.HasSuffix(upperCode, "-D") || strings.Contains(lowerName, "derech")
+	isMoving := strings.Contains(upperCode, "-MOV") || strings.Contains(upperCode, "-BRAZO") ||
+		strings.Contains(lowerName, "móvil") || strings.Contains(lowerName, "movil") || strings.Contains(lowerName, "brazo")
+	if isMoving {
+		if strings.Contains(strings.ToUpper(agrCode), "PUERTA") || strings.Contains(strings.ToUpper(agrCode), "PUE") {
+			actor = "actor:door"
+		} else {
+			actor = "actor:drawer"
+		}
+	}
+	xRef := domain.AxisRefMin
+	xOff := 10.0
+	if isMoving && actor == "actor:drawer" {
+		xOff = 35.0
+	}
+	if isRight {
+		xRef = domain.AxisRefMax
+		xOff = -xOff
+	}
+	yOff, zOff := 0.0, 0.0
+	if len(hw.DesignParts) > 0 {
+		dp := hw.DesignParts[0]
+		if strings.TrimSpace(dp.ActorMembership) != "" {
+			actor = strings.TrimSpace(dp.ActorMembership)
+		}
+		if parsedRef, px, py, pz, okPos := parseKitPartPlacementLabelGo(dp.Label); okPos {
+			xRef = parsedRef
+			xOff = px
+			yOff = py
+			zOff = pz
+		}
+	}
+	safeID := "part_" + strings.ToLower(strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(hw.Code))
+	role := "part"
+	if hw.PreviewShape != nil && *hw.PreviewShape != "" {
+		role = *hw.PreviewShape
+	}
+	return domain.AgregadoRigidMember{
+		MemberID: safeID,
+		Role:     role,
+		Source: domain.RigidMemberSource{
+			Kind:  domain.RigidMemberSourceFixed,
+			Fixed: &domain.FixedHardwareSource{HardwareID: hw.ID},
+		},
+		Placement: domain.AssemblyAnchorRule{
+			X: domain.AssemblyAxisPlacement{Ref: xRef, OffsetMm: xOff},
+			Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: yOff},
+			Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: zOff},
+		},
+		BOMRole:         domain.BOMRoleIncludedInKit,
+		ActorMembership: actor,
+	}
+}
+
+// attachHardwareAssetsToMembers pins the visual asset, mount frame and name
+// from the catalog hardware onto each resolved rigid member (#668 R2) —
+// shared by the main recipe resolve and the #1502 accessory assemblies.
+func attachHardwareAssetsToMembers(members []domain.ResolvedRigidMember, catalog domain.Catalog) {
+	for rIdx := range members {
+		rm := &members[rIdx]
+		if hw, ok := findHardware(catalog, rm.HardwareID); ok {
+			rm.Name = hw.Name
+			if hw.VisualAsset != nil {
+				assetID := hw.VisualAsset.AssetID
+				revID := hw.VisualAsset.AssetRevisionID
+				rm.AssetID = &assetID
+				rm.AssetRevisionID = &revID
+				if hw.VisualAsset.SHA256 != "" {
+					sha := hw.VisualAsset.SHA256
+					rm.SHA256 = &sha
+				}
+				if hw.VisualAsset.SizeBytes > 0 {
+					sizeBytes := hw.VisualAsset.SizeBytes
+					rm.ExpectedBytes = &sizeBytes
+				}
+				if hw.VisualAsset.Representation != "" {
+					rep := string(hw.VisualAsset.Representation)
+					rm.Representation = &rep
+				}
+				if hw.VisualAsset.PreparationState != "" {
+					prep := string(hw.VisualAsset.PreparationState)
+					rm.PreparationState = &prep
+				}
+				if hw.VisualAsset.MountFrame != nil {
+					rm.MountFrame = hw.VisualAsset.MountFrame
+				}
+			}
+		}
+	}
 }
 
 // boardPlacementLabel resolves the managed placement vocabulary a board or

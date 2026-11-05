@@ -1124,6 +1124,8 @@ export function ProjectSpatialStudio({
         catalog.structures,
         catalog.agregados,
         selectedItem?.baseMode,
+        // #1502: grupos de accesorios declarados por los kits de los agregados.
+        catalog.optionGroups,
       ),
     [selectedModule, catalog, selectedItem],
   );

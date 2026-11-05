@@ -24,9 +24,11 @@ import type {
   Module,
   ModuleComponentInstance,
   OptionChoices,
+  OptionGroup,
   Structure,
 } from './types';
 import { calculateAgregadoSubspaceUnits, resolveEffectiveAgregadoId, type SubspaceUnit } from './agregados';
+import { ensureAgregadoKitParts } from './hardwareKit';
 import type { HardwareDesignPart } from './hardwareDesignParts';
 import { resolveHardwareDimensions, type EffectiveHardwareDimensions } from './hardwarePlacement';
 import { evaluatePartFormula } from './engine/shared';
@@ -1734,7 +1736,10 @@ export type AssemblyRejectionReason =
   | 'definition_invalid'
   | 'variant_not_found'
   | 'ambiguous_kit'
-  | 'resolve_failed';
+  | 'resolve_failed'
+  // #1502 kit accesorio elegible: la bahía monta un kit con grupo de
+  // accesorios obligatorio y sin elección (espejo de accessoryChoiceRequiredReason).
+  | 'accessory_choice_required';
 
 export interface ModuleAssemblyRejection {
   readonly assemblyInstanceId: string;
@@ -1837,6 +1842,122 @@ export function enrichFabricatedComponentsWithAuthority(
  * 3. Live visual pins: Attaches visual assets from catalog (#668) so live rigid members carry renderStatus = 'exact'.
  * 4. Historical snapshots: Passthrough without recipe re-evaluation or current catalog lookup.
  */
+/**
+ * #1502 kit accesorio elegible: miembros del accesorio elegido para una
+ * bahía. Un accesorio que es a su vez kit con partes reutiliza la maquinaria
+ * de partes (placement desde DesignParts[0].Label, actorMembership); un
+ * accesorio monolítico se dibuja a sí mismo con su asset. Espejo de
+ * accessoryRigidMembers en accessory_kit.go.
+ */
+function accessoryRigidMembers(
+  hardware: readonly Hardware[] | undefined,
+  accessoryKitId: string,
+  hostCode: string,
+): AgregadoAssemblyInput['rigidMembers'] {
+  const active = (hardware ?? []).filter((h) => h.active);
+  const parts = active.filter((h) => (h.kitHardwareId ?? '') === accessoryKitId);
+  const source = parts.length > 0 ? parts : active.filter((h) => h.id === accessoryKitId);
+  if (source.length === 0) return [];
+  return ensureAgregadoKitParts({ id: '', code: hostCode, rigidMembers: [] }, source).rigidMembers;
+}
+
+/**
+ * #1502: accesorios elegibles del kit que UNA bahía monta — ensambles
+ * SEPARADOS del SKP del cajón (el grupo de apertura no cambia) + rejections
+ * fail-closed de grupos requeridos sin elección. Espejo exacto de
+ * resolveAccessoryAssemblies en accessory_kit.go. Legacy sin grupos
+ * vinculados: nada (byte-idéntico).
+ */
+function resolveAccessoryAssembliesForUnit(
+  agregado: AgregadoAssemblyInput & { readonly code?: string; readonly name?: string },
+  agrInst: { readonly agregadoId: string },
+  catalog: {
+    readonly hardware?: readonly Hardware[];
+    readonly optionGroups?: readonly OptionGroup[];
+  },
+  optionChoices: OptionChoices | undefined,
+  effectiveKit: string,
+  accBaseInstanceId: string,
+  unit: SubspaceUnit,
+  hardwareDimensions: Record<string, EffectiveHardwareDimensions>,
+  visualLookup: VisualAssetLookup,
+): ResolvedModuleAssemblies {
+  const target = effectiveKit.trim();
+  const groups = (catalog.optionGroups ?? [])
+    .filter((og) => og.kind === 'hardware' && (og.kitHardwareId ?? '').trim() === target)
+    .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
+  const assemblies: ResolvedModuleAssembly[] = [];
+  const rejections: ModuleAssemblyRejection[] = [];
+  for (const og of groups) {
+    const accInstanceId = `${accBaseInstanceId}-acc-${og.code.toLowerCase()}`;
+    const choice = (optionChoices?.[og.code] ?? '').trim();
+    if (!choice) {
+      if (og.required) {
+        rejections.push({
+          assemblyInstanceId: accInstanceId,
+          agregadoId: agrInst.agregadoId,
+          agregadoCode: agregado.code ?? '',
+          reason: 'accessory_choice_required',
+          bayHeightMm: unit.height,
+          detail: `el grupo «${og.code}» declara accesorios para el kit montado en esta bahía y es obligatorio`,
+        });
+      }
+      continue;
+    }
+    const chosen = og.optionIds.includes(choice)
+      ? (catalog.hardware ?? []).find((h) => h.id === choice && h.active)
+      : undefined;
+    if (!chosen) {
+      rejections.push({
+        assemblyInstanceId: accInstanceId,
+        agregadoId: agrInst.agregadoId,
+        agregadoCode: agregado.code ?? '',
+        reason: 'resolve_failed',
+        bayHeightMm: unit.height,
+        detail: `la elección «${choice}» del grupo «${og.code}» no es un accesorio activo del grupo`,
+      });
+      continue;
+    }
+    try {
+      const accMembers = accessoryRigidMembers(catalog.hardware, choice, agregado.code ?? '');
+      if (!accMembers || accMembers.length === 0) continue;
+      // La receta sintética sólo alimenta resolveAgregadoAssembly: su kit
+      // comercial mantiene legales los miembros included_in_kit y su BOM
+      // interno se descarta (la cotización agrega la línea del accesorio por
+      // la vía del kit por bahía, nunca desde BOMs de ensamble).
+      const resolvedAcc = resolveAgregadoAssembly(
+        {
+          id: accInstanceId,
+          code: agregado.code ?? '',
+          name: `${agregado.name ?? ''} · ${og.name}`,
+          rigidMembers: accMembers,
+          commercialKitHardwareId: choice,
+        } as unknown as AgregadoAssemblyInput,
+        { widthMm: unit.width, depthMm: unit.depth, heightMm: unit.height, hardwareDimensions },
+      );
+      const withAccParts = attachHardwareDesignParts(resolvedAcc, catalog.hardware);
+      const pinnedAcc = attachVisualPins(withAccParts, visualLookup);
+      assemblies.push({
+        assemblyInstanceId: accInstanceId,
+        agregadoId: agrInst.agregadoId,
+        placement: { originMm: [unit.x, unit.y, unit.z] },
+        resolvedAssembly: pinnedAcc,
+        isHistorical: false,
+      });
+    } catch (err) {
+      rejections.push({
+        assemblyInstanceId: accInstanceId,
+        agregadoId: agrInst.agregadoId,
+        agregadoCode: agregado.code ?? '',
+        reason: 'resolve_failed',
+        bayHeightMm: unit.height,
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return { assemblies, rejections };
+}
+
 export function resolveModuleAgregadoAssembliesDetailed(
   module: Module,
   moduleDims: { width: number; height: number; depth: number },
@@ -1846,6 +1967,7 @@ export function resolveModuleAgregadoAssembliesDetailed(
     readonly components?: readonly Component[];
     readonly materials?: readonly MaterialBoard[];
     readonly hardware?: readonly Hardware[];
+    readonly optionGroups?: readonly OptionGroup[];
   },
   options: ResolveModuleAgregadoAssembliesOptions = {},
 ): ResolvedModuleAssemblies {
@@ -2067,6 +2189,23 @@ export function resolveModuleAgregadoAssembliesDetailed(
           continue;
         }
 
+        // #1502: accesorios elegibles del kit efectivo de esta bahía — van
+        // ANTES del ensamble principal (mismo orden que el guard Go) y nunca
+        // cambian el SKP del cajón.
+        const accessories = resolveAccessoryAssembliesForUnit(
+          agregado,
+          agrInst,
+          catalog,
+          options.optionChoices,
+          pinned.commercialKitHardwareId ?? '',
+          assemblyInstanceId,
+          unit,
+          hardwareDimensions,
+          visualLookup,
+        );
+        rejections.push(...accessories.rejections);
+        for (const accAsm of accessories.assemblies) out.push(accAsm);
+
         out.push({
           assemblyInstanceId,
           agregadoId: agrInst.agregadoId,
@@ -2096,6 +2235,7 @@ export function resolveModuleAgregadoAssemblies(
     readonly components?: readonly Component[];
     readonly materials?: readonly MaterialBoard[];
     readonly hardware?: readonly Hardware[];
+    readonly optionGroups?: readonly OptionGroup[];
   },
   options: ResolveModuleAgregadoAssembliesOptions = {},
 ): readonly ResolvedModuleAssembly[] {

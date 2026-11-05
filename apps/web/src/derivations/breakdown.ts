@@ -88,6 +88,9 @@ export function computeModuleCostPreview(
       catalog.components,
       catalog.structures,
       catalog.agregados,
+      // #1502: los grupos de accesorios declarados por los kits entran en la
+      // lista honesta de faltantes.
+      catalog.optionGroups,
     );
     const missing = selectable.filter((code) => !choices[code]?.trim());
     return {
