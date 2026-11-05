@@ -387,3 +387,200 @@ func TestMemberHostValidationAndFailClosed(t *testing.T) {
 		t.Fatalf("missing profile must fail closed with zero holes (issues=%+v, ops=%d)", issues, len(ops))
 	}
 }
+
+// #1429 slice B — dedupe con placements manuales equivalentes: la autoría
+// explícita del owner manda. Un placement manual que ya autoró el MISMO
+// agujero (misma pieza anfitriona, cara, centro ±0.1mm, diámetro y
+// profundidad) suprime la operación member-host equivalente; los agujeros NO
+// equivalentes conviven y el gate DRILLING_CONFLICT sigue fail-closed.
+func TestDedupeMemberHostManualEquivalents(t *testing.T) {
+	memberHostOp := func(id, host string, face string, x, y, diam, depth float64) ResolvedMachiningOperation {
+		return ResolvedMachiningOperation{
+			OperationID:             id,
+			HostComponentInstanceID: host,
+			Provenance: ResolvedMachiningProvenance{
+				SourceKind: "assemblyMemberHost", AssemblyInstanceID: "asm-1", MemberID: "rail",
+			},
+			Holes: []ResolveHole{{Face: face, XMm: x, YMm: y, DiameterMm: diam, DepthMm: depth, Type: "screw"}},
+		}
+	}
+	manualOp := func(id, host string, face string, x, y, diam, depth float64) ResolvedMachiningOperation {
+		return ResolvedMachiningOperation{
+			OperationID:             id,
+			HostComponentInstanceID: host,
+			Provenance: ResolvedMachiningProvenance{
+				SourceKind: "manualHardwarePlacement", HardwarePlacementID: id,
+			},
+			Holes: []ResolveHole{{Face: face, XMm: x, YMm: y, DiameterMm: diam, DepthMm: depth, Type: "screw"}},
+		}
+	}
+
+	t.Run("placement manual equivalente suprime el member-host duplicado", func(t *testing.T) {
+		ops := []ResolvedMachiningOperation{
+			memberHostOp("asm-1:rail:b1:op-1", "b1", "front", 37, 33.5, 3.2, 12),
+			memberHostOp("asm-1:rail:b1:op-2", "b1", "front", 69, 33.5, 3.2, 12),
+			manualOp("hp-1", "b1", "front", 37.05, 33.52, 3.2, 12.05),
+		}
+		kept := dedupeMemberHostManualEquivalents(ops)
+		if len(kept) != 2 {
+			t.Fatalf("kept %d ops, want 2 (manual + the non-equivalent member-host): %+v", len(kept), kept)
+		}
+		if kept[0].OperationID != "asm-1:rail:b1:op-2" || kept[1].OperationID != "hp-1" {
+			t.Fatalf("wrong survivors: %+v", kept)
+		}
+	})
+
+	t.Run("misma posición con otra profundidad NO es equivalente (gate fail-closed)", func(t *testing.T) {
+		ops := []ResolvedMachiningOperation{
+			memberHostOp("asm-1:rail:b1:op-1", "b1", "front", 37, 33.5, 3.2, 12),
+			manualOp("hp-1", "b1", "front", 37, 33.5, 3.2, 15),
+		}
+		kept := dedupeMemberHostManualEquivalents(ops)
+		if len(kept) != 2 {
+			t.Fatalf("both operations must survive a depth mismatch, got %d", len(kept))
+		}
+	})
+
+	t.Run("sin placements manuales el conjunto queda intacto", func(t *testing.T) {
+		ops := []ResolvedMachiningOperation{
+			memberHostOp("asm-1:rail:b1:op-1", "b1", "front", 37, 33.5, 3.2, 12),
+		}
+		kept := dedupeMemberHostManualEquivalents(ops)
+		if len(kept) != 1 || kept[0].OperationID != "asm-1:rail:b1:op-1" {
+			t.Fatalf("no manual placements must keep the member-host op: %+v", kept)
+		}
+	})
+}
+
+// TestMemberHostManualPlacementDedupeEndToEnd (#1429 slice B): through the
+// REAL boundary — a manual HER-TOR-3X20 placement authored exactly on one of
+// the fixed rail's Blum rows suppresses that member-host duplicate while the
+// rest of the guide rows keep drilling, with zero DRILLING_CONFLICT issues.
+func TestMemberHostManualPlacementDedupeEndToEnd(t *testing.T) {
+	const (
+		moduleW = 400.0
+		moduleH = 720.0
+		moduleD = 500.0
+	)
+
+	// Profile matches the manual table entry HER-TOR-3X20 (screw Ø3×15) so a
+	// manual placement CAN be equivalent to a member-host hole.
+	guideProfile := domain.HardwareMachiningProfile{Parts: []domain.HardwareMachiningPart{{
+		ID: "pilot", Role: "screw", Operations: guideOps(3, 15),
+	}}}
+	frontProfile := func(sign float64) domain.HardwareMachiningProfile {
+		return domain.HardwareMachiningProfile{Parts: []domain.HardwareMachiningPart{{
+			ID: "pilot", Role: "screw",
+			Operations: []domain.MachiningOperation{
+				{ID: "pilot-low", Kind: "screw_pilot", DiameterMm: 2.7, DepthMm: ptrFloat64(8), XMm: 20.5 * sign, YMm: 33.5, Face: "anchor"},
+				{ID: "pilot-high", Kind: "screw_pilot", DiameterMm: 2.7, DepthMm: ptrFloat64(8), XMm: 20.5 * sign, YMm: 65.5, Face: "anchor"},
+			},
+		}}}
+	}
+
+	agr := domain.Agregado{
+		ID: "agr-mbox", Code: "CAJON-MBOX", Name: "Cajón MERIVOBOX", Active: true,
+		WidthMm: int(moduleW), HeightMm: 81, DepthMm: int(moduleD),
+		RigidMembers: []domain.AgregadoRigidMember{
+			{
+				MemberID: "fixed_rail_left", Role: "fixed_rail",
+				Source:        domain.RigidMemberSource{Kind: domain.RigidMemberSourceFixed, Fixed: &domain.FixedHardwareSource{HardwareID: "hw-rail-fij-l"}},
+				BOMRole:       domain.BOMRoleNonPurchasing,
+				HostPlacement: "lateral_izquierdo",
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 136},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+				},
+			},
+			{
+				MemberID: "moving_rail_left", Role: "moving_rail",
+				Source:        domain.RigidMemberSource{Kind: domain.RigidMemberSourceFixed, Fixed: &domain.FixedHardwareSource{HardwareID: "hw-rail-mov-l"}},
+				BOMRole:       domain.BOMRoleNonPurchasing,
+				HostPlacement: "frente_cajon",
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+				},
+			},
+		},
+	}
+
+	rails := []domain.Hardware{
+		{ID: "hw-rail-fij-l", Code: "RAIL-FIJ-L", Name: "Guía fija izquierda", Unit: domain.UnitPiece, Active: true, Machining: &guideProfile},
+		{ID: "hw-rail-mov-l", Code: "RAIL-MOV-L", Name: "Corredera móvil izquierda", Unit: domain.UnitPiece, Active: true, Machining: ptrProfile(frontProfile(1))},
+		{ID: "HER-TOR-3X20", Code: "HER-TOR-3X20", Name: "Tornillo 3x20", Unit: domain.UnitPiece, Active: true},
+	}
+
+	module, catalog := memberHostCabinet(int(moduleW), int(moduleH), int(moduleD))
+	catalog.Agregados = append(catalog.Agregados, agr)
+	catalog.Hardware = append(catalog.Hardware, rails...)
+	module.Agregados = []domain.ModuleAgregadoInstance{{AgregadoID: "agr-mbox", Quantity: 1}}
+	dims := &LayoutDims{WidthMm: int(moduleW), HeightMm: int(moduleH), DepthMm: int(moduleD)}
+
+	// Pass 1: no manual placements — collect the member-host holes of the
+	// fixed left rail to author the equivalent manual placement on top.
+	first, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, Dims: dims,
+	})
+	if err != nil {
+		t.Fatalf("pass-1 resolve: %v", err)
+	}
+	var target *ResolvedMachiningOperation
+	for i := range first.Machining.Operations {
+		op := &first.Machining.Operations[i]
+		if op.Provenance.SourceKind == "assemblyMemberHost" && op.Provenance.MemberID == "fixed_rail_left" {
+			target = op
+			break
+		}
+	}
+	if target == nil || len(target.Holes) != 1 {
+		t.Fatalf("pass 1 produced no member-host hole for fixed_rail_left: %+v", first.Machining.Operations)
+	}
+	hole := target.Holes[0]
+
+	// Pass 2: the owner additionally authors a manual placement at the SAME
+	// spot (face + panel-local offsets read from the member-host hole).
+	second, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, Dims: dims,
+		ManualPlacements: []AuthoringManualPlacement{{
+			HardwarePlacementID:     "hp-equiv",
+			CatalogHardwareID:       "HER-TOR-3X20",
+			HostComponentInstanceID: target.HostComponentInstanceID,
+			AnchorFace:              hole.Face,
+			OffsetMm:                [2]float64{hole.XMm, hole.YMm},
+		}},
+		ManualPlacementsPresent: true,
+	})
+	if err != nil {
+		t.Fatalf("pass-2 resolve: %v", err)
+	}
+	countAtSpot := 0
+	survivors := 0
+	for _, op := range second.Machining.Operations {
+		if op.Provenance.SourceKind == "assemblyMemberHost" && op.Provenance.MemberID == "fixed_rail_left" {
+			survivors++
+		}
+		if op.Provenance.SourceKind == "manualHardwarePlacement" && op.Provenance.HardwarePlacementID == "" {
+			t.Fatalf("manual op lost its identity: %+v", op)
+		}
+		if op.Provenance.SourceKind == "manualHardwarePlacement" &&
+			op.HostComponentInstanceID == target.HostComponentInstanceID &&
+			len(op.Holes) == 1 &&
+			op.Holes[0].Face == hole.Face && op.Holes[0].XMm == hole.XMm && op.Holes[0].YMm == hole.YMm {
+			countAtSpot++
+		}
+	}
+	if survivors != 5 {
+		t.Fatalf("fixed_rail_left must keep its 5 non-equivalent holes, got %d", survivors)
+	}
+	if countAtSpot != 1 {
+		t.Fatalf("the equivalent hole must appear exactly ONCE (the manual op), got %d", countAtSpot)
+	}
+	for _, issue := range second.ValidationIssues {
+		if issue.Code == "DRILLING_CONFLICT" {
+			t.Fatalf("equivalent holes must not collide: %+v", issue)
+		}
+	}
+}
