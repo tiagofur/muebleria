@@ -139,6 +139,15 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   'OPERATION_GEOMETRY_INVALID',
   'OPERATION_GEOMETRY_DUPLICATE',
   'OPERATION_ID_AMBIGUOUS',
+  // #1429 slice A: the rigid member hostPlacement derivation (backend
+  // authoring_member_host.go) surfaces these on the resolve wire.
+  'MEMBER_HOST_PLACEMENT_MISSING',
+  'MEMBER_HOST_PROFILE_REQUIRED',
+  'MEMBER_HOST_BASIS_UNSUPPORTED',
+  // #1219 joinery connection face gate + authoring resolve API rejections.
+  'CONNECTION_FACE_INVALID',
+  'FACTORY_POLICY_INVALID',
+  'LIBRARY_RELEASE_UNAVAILABLE',
 ] as const;
 
 export type AuthoringResolveIssueCode = (typeof AUTHORING_RESOLVE_ISSUE_CODES)[number];

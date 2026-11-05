@@ -338,7 +338,13 @@
             "OPERATION_RULE_INVALID",
             "OPERATION_GEOMETRY_INVALID",
             "OPERATION_GEOMETRY_DUPLICATE",
-            "OPERATION_ID_AMBIGUOUS"
+            "OPERATION_ID_AMBIGUOUS",
+            "MEMBER_HOST_PLACEMENT_MISSING",
+            "MEMBER_HOST_PROFILE_REQUIRED",
+            "MEMBER_HOST_BASIS_UNSUPPORTED",
+            "CONNECTION_FACE_INVALID",
+            "FACTORY_POLICY_INVALID",
+            "LIBRARY_RELEASE_UNAVAILABLE"
           ]
         },
         "message": {
