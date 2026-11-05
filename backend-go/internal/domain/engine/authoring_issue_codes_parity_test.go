@@ -69,10 +69,7 @@ func TestEngineContractIssueCodesAreRegistered(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			patterns := []*regexp.Regexp{literalExported, literalLower}
-			if strings.Contains(filepath.Base(path), "opening_") {
-				patterns = append(patterns, constantDecl)
-			}
+			patterns := []*regexp.Regexp{literalExported, literalLower, constantDecl}
 			for _, re := range patterns {
 				for _, m := range re.FindAllStringSubmatch(string(raw), -1) {
 					code := m[1]

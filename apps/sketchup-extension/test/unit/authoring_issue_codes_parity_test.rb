@@ -2,8 +2,8 @@
 
 require 'test_helper'
 require 'json'
-require 'granete_for_sketchup/library/catalog_provider'
-require 'granete_for_sketchup/library/authoring_resolve_contract'
+require_relative '../../src/granete_for_sketchup/library/catalog_provider'
+require_relative '../../src/granete_for_sketchup/library/authoring_resolve_contract'
 
 # Paridad de la whitelist Ruby contra el enum cerrado del contrato de
 # authoring resolve (#1501 review B2). El schema JSON de contracts/ es la
@@ -33,15 +33,8 @@ class AuthoringIssueCodesParityTest < Minitest::Test
   def test_member_host_codes_registered
     %w[MEMBER_HOST_PLACEMENT_MISSING MEMBER_HOST_PROFILE_REQUIRED
        MEMBER_HOST_BASIS_UNSUPPORTED].each do |code|
-      assert Inclusion.issued?(Granete::SketchUpExtension::Library::AuthoringIssueParsing::ISSUE_CODES, code),
+      assert Granete::SketchUpExtension::Library::AuthoringIssueParsing::ISSUE_CODES.map(&:to_s).include?(code),
              "falta el código #{code} en la whitelist Ruby"
-    end
-  end
-
-  # Módulo mínimo para el helper de pertenencia sin depender de detalles internos.
-  module Inclusion
-    def self.issued?(list, code)
-      list.map(&:to_s).include?(code)
     end
   end
 end
