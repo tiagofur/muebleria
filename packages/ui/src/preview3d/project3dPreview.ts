@@ -753,6 +753,10 @@ export function describeAssemblyRejection(rej: ModuleAssemblyRejection): string 
       return `${who}: dos juegos comerciales declarados entre las variantes seleccionadas — corregí la receta del agregado.`;
     case 'definition_invalid':
       return `${who}: la receta del ensamble es inválida — corregila en Catálogos${rej.detail ? ` (${rej.detail})` : ''}.`;
+    // #1502 kit accesorio elegible: el kit montado exige un accesorio de un
+    // grupo obligatorio y no hay elección — se elige en el alta del ítem.
+    case 'accessory_choice_required':
+      return `${who}: este kit lleva un accesorio obligatorio sin elegir${bay} — elegilo en las opciones del mueble${rej.detail ? ` (${rej.detail})` : ''}.`;
     default:
       return `${who}: el ensamble no se pudo resolver${bay} — revisá la receta${rej.detail ? ` (${rej.detail})` : ''}.`;
   }

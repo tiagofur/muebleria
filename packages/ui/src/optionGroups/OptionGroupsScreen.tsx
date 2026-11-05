@@ -43,6 +43,8 @@ export type OptionGroupDraft = {
   kind: OptionGroupKind;
   required: boolean;
   optionIds: string[];
+  /** #1502: kit accesorio asociado ('' = sin kit, grupo legacy). */
+  kitHardwareId: string;
 };
 
 const emptyDraft = (): OptionGroupDraft => ({
@@ -51,6 +53,7 @@ const emptyDraft = (): OptionGroupDraft => ({
   kind: 'board',
   required: true,
   optionIds: [],
+  kitHardwareId: '',
 });
 
 function toDraft(item: OptionGroup): OptionGroupDraft {
@@ -60,6 +63,7 @@ function toDraft(item: OptionGroup): OptionGroupDraft {
     kind: item.kind,
     required: item.required,
     optionIds: [...item.optionIds],
+    kitHardwareId: item.kitHardwareId ?? '',
   };
 }
 
@@ -165,6 +169,16 @@ export function OptionGroupsScreen({
     return map;
   }, [materials, edges, hardware, agregados]);
 
+  // #1502: candidatos a kit accesorio = herrajes con partes de diseño (kits),
+  // activos — cada accesorio del grupo se monta sobre el kit declarado.
+  const kitCandidates = useMemo(
+    () =>
+      hardware.filter(
+        (h) => h.active !== false && (h.designParts?.length ?? 0) > 0,
+      ),
+    [hardware],
+  );
+
   const closeModal = () => {
     setModalOpen(false);
     setEditingId(null);
@@ -200,6 +214,8 @@ export function OptionGroupsScreen({
     setDraft((prev) => ({
       ...prev,
       kind,
+      // #1502: el kit asociado sólo tiene sentido en grupos de herrajes.
+      kitHardwareId: kind === 'hardware' ? prev.kitHardwareId : '',
       optionIds: filterOptionIdsByMembers(prev.optionIds, nextMembers),
     }));
   };
@@ -237,6 +253,7 @@ export function OptionGroupsScreen({
       ...draft,
       code: draft.code.trim(),
       name: draft.name.trim(),
+      kitHardwareId: draft.kind === 'hardware' ? draft.kitHardwareId.trim() : '',
       optionIds: filterOptionIdsByMembers(draft.optionIds, memberCandidates),
     };
     setError(null);
@@ -549,6 +566,34 @@ export function OptionGroupsScreen({
                 <option value="agregado">{optionGroupKindLabel('agregado')}</option>
               </select>
             </div>
+            {draft.kind === 'hardware' ? (
+              <div
+                className="catalog-form__field"
+                data-testid="option-group-form-kit-link"
+              >
+                <label htmlFor="og-kit">Kit accesorio asociado</label>
+                <select
+                  id="og-kit"
+                  value={draft.kitHardwareId}
+                  onChange={(e) =>
+                    setDraft({ ...draft, kitHardwareId: e.target.value })
+                  }
+                >
+                  <option value="">Sin kit (grupo común)</option>
+                  {kitCandidates.map((kit) => (
+                    <option key={kit.id} value={kit.id}>
+                      {kit.code} — {kit.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="catalog-form__hint">
+                  Con kit asociado, los miembros del grupo son accesorios que
+                  se montan sobre ese kit (p. ej. galería, boxcover o boxcap
+                  sobre un MERIVOBOX E): se dibujan y cotizan por bahía según
+                  la elección del mueble.
+                </p>
+              </div>
+            ) : null}
             <div className="catalog-form__field catalog-form__row-check">
               <input
                 id="og-required"

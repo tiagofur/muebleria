@@ -564,6 +564,8 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
               catalogStructures,
               catalogAgregados,
               item.baseMode,
+              // #1502: grupos de accesorios declarados por los kits de los agregados.
+              optionGroups,
             );
 
             // Drop indicator classes
