@@ -111,12 +111,18 @@ func collectVariantKitHardwareLines(
 			if err != nil || kit == "" {
 				continue
 			}
-			if agregadoBulkLinesReferenceKit(agr, optionChoices, kit) {
-				continue
-			}
 			instanceKey := strings.TrimSpace(inst.ID)
 			if instanceKey == "" {
 				instanceKey = effectiveID
+			}
+			// #1502: los accesorios elegidos para ESTE kit se cotizan por
+			// bahía — demanda adicional que NO participa del dedupe contra
+			// bulk del kit principal (ese dedupe sólo evita duplicar el kit,
+			// nunca sus accesorios). Sin elección: nada — la cotización no
+			// inventa demanda por un accesorio que no se dibuja.
+			lines = append(lines, collectAccessoryKitHardwareLines(catalog, optionChoices, kit, instanceKey, unit.index)...)
+			if agregadoBulkLinesReferenceKit(agr, optionChoices, kit) {
+				continue
 			}
 			lines = append(lines, domain.HardwareLine{
 				ID:         fmt.Sprintf("kit-agr-%s-u%d", instanceKey, unit.index),

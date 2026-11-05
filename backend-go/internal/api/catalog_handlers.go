@@ -512,6 +512,47 @@ func (s *Server) validateOptionGroupKitParts(w http.ResponseWriter, r *http.Requ
 	return true
 }
 
+// respondOptionGroupKitLinkGuard writes the typed 422 for the #1502 kit-link
+// validation (same shape as the #1436 guard above).
+func respondOptionGroupKitLinkGuard(w http.ResponseWriter, message string) {
+	respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+		"code":    "OPTION_GROUP_KIT_LINK_INVALID",
+		"message": message,
+	})
+}
+
+// validateOptionGroupKitLink (#1502): a group declaring an eligible-accessory
+// kit link must be kind hardware and reference an existing, active kit in the
+// same organization. Trimmed-empty wire values normalize to nil (no link).
+// Members that are parts of the linked kit stay rejected by the STRONGER
+// #1436 guard above (a part is never an option at all), which covers the
+// same-kit double-materialization case.
+func (s *Server) validateOptionGroupKitLink(w http.ResponseWriter, r *http.Request, og *domain.OptionGroup) bool {
+	if og.KitHardwareID == nil {
+		return true
+	}
+	kitID := strings.TrimSpace(*og.KitHardwareID)
+	if kitID == "" {
+		og.KitHardwareID = nil
+		return true
+	}
+	og.KitHardwareID = &kitID
+	if og.Kind != "hardware" {
+		respondOptionGroupKitLinkGuard(w, "sólo los grupos de herrajes pueden declarar un kit accesorio asociado")
+		return false
+	}
+	kit, err := s.Store.GetHardwareByID(r.Context(), kitID)
+	if err != nil || kit == nil {
+		respondOptionGroupKitLinkGuard(w, "el kit accesorio del grupo no existe en este taller")
+		return false
+	}
+	if !kit.Active {
+		respondOptionGroupKitLinkGuard(w, fmt.Sprintf("el kit accesorio «%s» está inactivo", kit.Code))
+		return false
+	}
+	return true
+}
+
 // moduleFixedHardwareIDs collects the hardware ids of fixed module hardware
 // lines (optionRole-resolved lines carry no id and resolve through guarded
 // groups instead).
@@ -799,6 +840,11 @@ func (s *Server) HandleOptionGroups(w http.ResponseWriter, r *http.Request) {
 		if !s.validateOptionGroupKitParts(w, r, &og) {
 			return
 		}
+		// #1502: the eligible-accessory kit link validates server-side
+		// (kind hardware + existing active kit), fail-closed.
+		if !s.validateOptionGroupKitLink(w, r, &og) {
+			return
+		}
 		err := s.Store.CreateOptionGroup(r.Context(), &og)
 		if err != nil {
 			if isDuplicateKey(err) {
@@ -847,6 +893,10 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 		// #1436: same fail-closed guard on replace — a payload keeping a kit
 		// part as member is rejected so existing rows must be cleaned up.
 		if !s.validateOptionGroupKitParts(w, r, &og) {
+			return
+		}
+		// #1502: same kit-link validation on replace.
+		if !s.validateOptionGroupKitLink(w, r, &og) {
 			return
 		}
 		err := s.Store.UpdateOptionGroup(r.Context(), id, expectedVersion, &og)

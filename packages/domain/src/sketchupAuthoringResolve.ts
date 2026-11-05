@@ -175,6 +175,10 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   'OPENING_PROFILE_REQUIRED',
   'OPENING_SYSTEM_UNAVAILABLE',
   'OPENING_SYSTEM_UNKNOWN',
+  // #1502 kit accesorio elegible: una bahía monta un kit con grupo de
+  // accesorios obligatorio sin elección (authoring_resolve.go vía
+  // accessoryChoiceContractIssues; rejection accessory_choice_required).
+  'ACCESSORY_CHOICE_REQUIRED',
 ] as const;
 
 export type AuthoringResolveIssueCode = (typeof AUTHORING_RESOLVE_ISSUE_CODES)[number];

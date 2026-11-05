@@ -209,7 +209,9 @@ type workshopHardwareCatalogEntry struct {
 }
 
 // workshopOptionGroup mirrors domain.OptionGroup for the hardware-kind
-// subset the plugin needs (#1046 S3).
+// subset the plugin needs (#1046 S3). KitHardwareID (#1502) joins the
+// projection only when set — adding it re-pins the revisionId, which is
+// expected for new catalog fields.
 type workshopOptionGroup struct {
 	ID        string   `json:"id"`
 	Code      string   `json:"code"`
@@ -217,6 +219,9 @@ type workshopOptionGroup struct {
 	Kind      string   `json:"kind"`
 	Required  bool     `json:"required"`
 	OptionIDs []string `json:"optionIds"`
+	// KitHardwareID declares the group as offering ACCESSORY options for
+	// the referenced kit (#1502). Empty = legacy group.
+	KitHardwareID string `json:"kitHardwareId,omitempty"`
 }
 
 type dimensionSpec struct {
@@ -471,14 +476,18 @@ func buildWorkshopHardwareOptionGroups(groups []domain.OptionGroup) []workshopOp
 		}
 		optionIDs := make([]string, len(g.OptionIDs))
 		copy(optionIDs, g.OptionIDs)
-		out = append(out, workshopOptionGroup{
+		wog := workshopOptionGroup{
 			ID:        g.ID,
 			Code:      g.Code,
 			Name:      g.Name,
 			Kind:      g.Kind,
 			Required:  g.Required,
 			OptionIDs: optionIDs,
-		})
+		}
+		if g.KitHardwareID != nil && *g.KitHardwareID != "" {
+			wog.KitHardwareID = *g.KitHardwareID
+		}
+		out = append(out, wog)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Code != out[j].Code {
