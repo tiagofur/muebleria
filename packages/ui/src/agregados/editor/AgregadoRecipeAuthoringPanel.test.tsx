@@ -22,6 +22,9 @@ afterEach(() => {
 const catalogHardware: readonly Hardware[] = [
   { id: 'hw-corr', code: 'HER-CORR-TEL-50', name: 'Corredera Telescópica 500', unit: 'set', costPerUnit: 90, active: true },
   { id: 'hw-kit', code: 'KIT-CAJ', name: 'Kit cajón', unit: 'set', costPerUnit: 120, active: true },
+  // #1506: parte de diseño del kit — nunca elegible por sí sola.
+  { id: 'hw-parte', code: 'KIT-CAJ-PARTE', name: 'Riel fijo izq', unit: 'piece', costPerUnit: 20, active: true, kitHardwareId: 'hw-kit' },
+  { id: 'hw-bis', code: 'HER-BIS', name: 'Bisagra', unit: 'piece', costPerUnit: 5, active: true },
 ];
 
 function Harness({ onChange, initial }: { onChange?: (d: AgregadoDraft) => void; initial?: Partial<AgregadoDraft> }): ReactNode {
@@ -75,6 +78,23 @@ describe('AgregadoRecipeAuthoringPanel (#1412 autoría de receta)', () => {
     await user.clear(idInput);
     await user.type(idInput, 'guia-izq');
     expect(latest?.rigidMembers[0]?.memberId).toBe('guia-izq');
+  });
+
+  it('las partes de un kit no se ofrecen como miembro rígido (#1506)', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByTestId('agregado-tab-recipe-authoring-add-member'));
+    const root = screen.getByTestId('agregado-tab-recipe-authoring-member-0-source-hardware');
+    await user.click(root.querySelector('button')!);
+
+    const optionText = screen
+      .getAllByRole('option')
+      .map((o) => o.textContent ?? '')
+      .join('\n');
+    expect(optionText).toContain('HER-BIS');
+    expect(optionText).toContain('KIT-CAJ');
+    expect(optionText).not.toContain('KIT-CAJ-PARTE');
   });
 
   it('membresía fijo/móvil (#1376): body y actor:<id> se componen sobre el miembro', async () => {

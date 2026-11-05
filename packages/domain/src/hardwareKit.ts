@@ -546,6 +546,17 @@ export function validateHardwareKitLink(
   }
 }
 
+/**
+ * #1506 kit opaco: una parte de diseño (kitHardwareId) nunca es elegible por
+ * sí sola — el kit es la única unidad comprable/de autoría (#1436, decisión
+ * owner 10-31). Todo picker o lista que ofrezca herrajes del catálogo excluye
+ * las partes con esta regla única; sólo el editor del kit, la búsqueda
+ * explícita en la lista Herrajes y la explosión BOM/CNC las conservan.
+ */
+export function isHardwareKitPart(h: { readonly kitHardwareId?: string }): boolean {
+  return Boolean(h.kitHardwareId);
+}
+
 export interface KitPartPlacementConfig {
   readonly actorMembership: string;
   readonly xRef: 'min' | 'max' | 'center';

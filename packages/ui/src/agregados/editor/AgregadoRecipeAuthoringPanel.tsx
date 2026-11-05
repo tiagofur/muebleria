@@ -17,6 +17,7 @@ import type {
   AssemblyAxisRef,
   Hardware,
 } from '@granete/domain';
+import { isHardwareKitPart } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import { isKitDerivedMember, kitPartsOf } from './KitCommercialPicker';
@@ -345,6 +346,8 @@ export function AgregadoRecipeAuthoringPanel({
                       <div className="catalog-form__field">
                         <CatalogPicker
                           id={`${testId}-member-${idx}-source-hardware`}
+                          // #1506/#1436: las partes de un kit nunca se ofrecen
+                          // como miembro rígido — el kit es la unidad de autoría.
                           label="Herraje"
                           placeholder="Seleccionar herraje…"
                           searchPlaceholder="Buscar herraje…"
@@ -357,12 +360,14 @@ export function AgregadoRecipeAuthoringPanel({
                               },
                             })
                           }
-                          items={catalogHardware.map((h) => ({
-                            id: h.id,
-                            code: h.code,
-                            name: h.name,
-                            active: h.active,
-                          }))}
+                          items={catalogHardware
+                            .filter((h) => !isHardwareKitPart(h))
+                            .map((h) => ({
+                              id: h.id,
+                              code: h.code,
+                              name: h.name,
+                              active: h.active,
+                            }))}
                           data-testid={`${testId}-member-${idx}-source-hardware`}
                         />
                         {(m.source.fixed?.hardwareId ?? '') === '' ? (
@@ -700,12 +705,14 @@ export function AgregadoRecipeAuthoringPanel({
                             );
                             updateVariantSet(idx, { variants });
                           }}
-                          items={catalogHardware.map((h) => ({
-                            id: h.id,
-                            code: h.code,
-                            name: h.name,
-                            active: h.active,
-                          }))}
+                          items={catalogHardware
+                            .filter((h) => !isHardwareKitPart(h))
+                            .map((h) => ({
+                              id: h.id,
+                              code: h.code,
+                              name: h.name,
+                              active: h.active,
+                            }))}
                           data-testid={`${testId}-set-${idx}-variant-${vIdx}-hardware`}
                         />
                         <CatalogPicker
@@ -725,12 +732,14 @@ export function AgregadoRecipeAuthoringPanel({
                             });
                             updateVariantSet(idx, { variants });
                           }}
-                          items={catalogHardware.map((h) => ({
-                            id: h.id,
-                            code: h.code,
-                            name: h.name,
-                            active: h.active,
-                          }))}
+                          items={catalogHardware
+                            .filter((h) => !isHardwareKitPart(h))
+                            .map((h) => ({
+                              id: h.id,
+                              code: h.code,
+                              name: h.name,
+                              active: h.active,
+                            }))}
                           data-testid={`${testId}-set-${idx}-variant-${vIdx}-kit`}
                         />
                         <button
