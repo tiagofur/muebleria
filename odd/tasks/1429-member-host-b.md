@@ -47,6 +47,26 @@ cajón por rol de frente); readback KDT del programa congelado (owner).
   tapas) son ruido ajeno al fixture — la aserción de issues del test TS queda
   scoped a member-host.
 
+## Review independiente (un revisor, decisión del owner para esta cadena)
+
+- Ronda 1 (b725bd59): BLOCKED — B1 tests TS del dedupe/fail-closed + sugerencias
+  S2-S5. Corregidos (40b202de): tests B1 discriminatorios (el revisor probó con
+  probe transitorio que el placement manual cae exactamente en el golden),
+  type parity restringida, rejections superficializadas, limpieza en cambio de
+  fuente, comentario Chebyshev.
+- Ronda 2 (f72b0b58): BLOCKED — B3 base stale por el merge de #1504 (2888d294).
+  Resuelto (240ca9f0): rebase + surfacing veraz (rejections `-acc-` NO son
+  member-host: la bahía padre sigue resuelta) + **bug latente de #1504
+  corregido**: el espejo TS resolveAccessoryAssembliesForUnit no tenía el
+  guard de target vacío del gemelo Go — toda bahía kit-less heredaba
+  rejections accessory_choice_required FALSAS en previews (BISAGRA/CORREDERA
+  matcheaban ''). Guard + test de regresión en accessoryKitParity.test.ts.
+- Ronda 3: **APPROVED de 240ca9f0** (re-review verificó guard fiel al Go,
+  filtrado -acc- veraz, test discriminatorio; CI run 42099670398 success
+  completo sobre el HEAD exacto). Sugerencias no bloqueantes registradas:
+  P2 tag explícito de kind accessory en rejections (vs substring), P3 trim
+  divergente Go/TS, P3 redacción del body.
+
 ## Verificación (candidato congelado)
 
 - **V0**: gofmt limpio en archivos tocados; tsc limpio (domain/ui/storage/web).
@@ -58,9 +78,8 @@ cajón por rol de frente); readback KDT del programa congelado (owner).
     → 5 holes sobreviven + 1 manual + 0 DRILLING_CONFLICT),
     TestMemberHostDrillingSharedContract_1429 (golden fijado),
     regresión slice A intacta.
-  - TS: vitest domain 2145 ✓ (incl. memberHostDrilling.contract.test.ts 5/5:
-    los 4 miembros taladran sus piezas con los agujeros golden EXACTOS),
-    storage 280 ✓, ui 2439 ✓ (incl. 2 tests nuevos del select hostPlacement),
+  - TS (HEAD 240ca9f0, rebased sobre #1504): vitest domain 2154 ✓ (contract
+    7/7 + regresión del guard + suite #1504), storage 280 ✓, ui 2441 ✓,
     web 612 ✓; tsc 0 errores.
 - **V2: NOT_RUN** — readback KDT/MPR del programa congelado + prueba en vivo
   del owner (el dedupe se observará cuando autoré un placement equivalente).
