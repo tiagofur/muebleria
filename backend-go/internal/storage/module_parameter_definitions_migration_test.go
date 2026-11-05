@@ -99,22 +99,24 @@ func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T)
 		t.Run(tt.name, func(t *testing.T) {
 			pool := multiOrgFreshMigrationDB(t)
 			// Applied through the CURRENT head (000142 at #497, re-pinned to
-			// 000151 when presentation_motion joined the agregados catalog
-			// read, re-pinned to 000155 when the structural families
-			// joined the catalog read per #1096/#443, re-pinned to 000165
-			// when available_finishes joined the hardware read per #1209, re-pinned to
-			// 000170 when design_parts joined the hardware read per #1417, re-pinned
-			// to 000171 when kit_hardware_id joined the hardware read per #1422,
-			// re-pinned to 000173 when dimensions joined the hardware read per
-			// #1453 F1, re-pinned to 000175 when panel_thickness_dim joined
-			// the modules catalog read per #1496, re-pinned to 000176 when
-			// kit_hardware_id joined the option groups read per #1502):
-			// the typed-definition rejection under test is
-			// schema-version-independent and the catalog read scans version
-			// on modules and hardware. The pin exists only to keep this
-			// proof on a fixed, explicit schema state — bump it whenever
-			// the catalog read starts requiring newer columns.
-			identityApplyThrough(t, pool, 176)
+				// 000151 when presentation_motion joined the agregados catalog
+				// read, re-pinned to 000155 when the structural families
+				// joined the catalog read per #1096/#443, re-pinned to 000165
+				// when available_finishes joined the hardware read per #1209, re-pinned to
+				// 000170 when design_parts joined the hardware read per #1417, re-pinned
+				// to 000171 when kit_hardware_id joined the hardware read per #1422,
+				// re-pinned to 000173 when dimensions joined the hardware read per
+				// #1453 F1, re-pinned to 000175 when panel_thickness_dim joined
+				// the modules catalog read per #1496, re-pinned to 000176 when
+				// kit_hardware_id joined the option groups read per #1502, re-pinned
+				// to 000177 when category_id/brand joined the hardware read per
+				// #1507):
+				// the typed-definition rejection under test is
+				// schema-version-independent and the catalog read scans version
+				// on modules and hardware. The pin exists only to keep this
+				// proof on a fixed, explicit schema state — bump it whenever
+				// the catalog read starts requiring newer columns.
+				identityApplyThrough(t, pool, 177)
 			_, err := pool.Exec(context.Background(), `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES (gen_random_uuid(),$1,$2,$2,$3::jsonb)`, multiOrgInitialOrgID, "BAD-"+tt.name, tt.raw)
 			if err != nil {
 				t.Fatalf("seed direct SQL: %v", err)
