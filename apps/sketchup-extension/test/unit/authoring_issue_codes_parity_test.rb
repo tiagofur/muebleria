@@ -18,8 +18,8 @@ class AuthoringIssueCodesParityTest < Minitest::Test
     enum = schema.fetch('$defs').fetch('issue').fetch('properties').fetch('code').fetch('enum').sort
     ruby = Granete::SketchUpExtension::Library::AuthoringIssueParsing::ISSUE_CODES.map(&:to_s).sort
 
-    assert_equal enum, ruby, 'ISSUE_CODES debe ser set-igual al enum del schema (solo-Ruby: '\
-                              "#{(ruby - enum).inspect}; solo-schema: #{(enum - ruby).inspect})"
+    assert_equal enum, ruby, 'ISSUE_CODES debe ser set-igual al enum del schema (solo-Ruby: ' \
+                             "#{(ruby - enum).inspect}; solo-schema: #{(enum - ruby).inspect})"
   end
 
   def test_whitelist_tokens_are_pure_upper_snake
