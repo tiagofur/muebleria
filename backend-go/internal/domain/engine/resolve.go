@@ -1133,8 +1133,8 @@ func CalcHardwareLineCost(
 	}, nil
 }
 
-// applyPanelThicknessDims (#1496): for furnitureType "panel" with a declared
-// axis, replace that dim with the FRENTE material thickness resolved from the
+// applyPanelThicknessDims (#1496): for any module with a declared panel
+// thickness axis, replace that dim with the FRENTE material thickness resolved from the
 // item's option choices. Without a resolvable material the incoming dim is
 // preserved (authored number = display fallback, never an error). Mirrors TS
 // applyPanelThicknessDim (packages/domain/src/itemDims.ts).
@@ -1144,9 +1144,6 @@ func applyPanelThicknessDims(
 	optionChoices map[string]string,
 	catalog domain.Catalog,
 ) formulaDims {
-	if module.FurnitureType != "panel" {
-		return dims
-	}
 	axis := module.PanelThicknessDim
 	if axis != "width" && axis != "height" && axis != "depth" {
 		return dims

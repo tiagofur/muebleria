@@ -56,20 +56,13 @@ func (s *Server) validateModuleHardwareLines(w http.ResponseWriter, r *http.Requ
 }
 
 // validateModulePanelFields rejects module writes with an invalid #1496 panel
-// declaration: panelThicknessDim must be a known axis and only makes sense on
-// furnitureType "panel" (a declared axis on a non-panel module is a drafting
-// error we fail closed instead of persisting as dead data).
+// declaration: panelThicknessDim must be a known axis.
 func (s *Server) validateModulePanelFields(w http.ResponseWriter, m *domain.Module) bool {
 	switch m.PanelThicknessDim {
 	case "", "width", "height", "depth":
 	default:
 		respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeBadRequest,
 			"La dimensión de espesor del panel debe ser width, height o depth.", nil)
-		return false
-	}
-	if m.PanelThicknessDim != "" && m.FurnitureType != "panel" {
-		respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeBadRequest,
-			"La dimensión de espesor sólo aplica a muebles de tipo panel.", nil)
 		return false
 	}
 	return true

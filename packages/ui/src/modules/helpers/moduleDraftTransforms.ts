@@ -340,10 +340,10 @@ export function moduleToDraft(mod: Module): ModuleDraft {
     categoryId: mod.categoryId ?? '',
     furnitureType: mod.furnitureType ?? 'inferior',
     panelThicknessDim:
-      mod.furnitureType === 'panel'
-        ? (mod.panelThicknessDim ??
-          suggestPanelThicknessDim(mod.externalDims))
-        : '',
+      mod.panelThicknessDim ??
+      (mod.furnitureType === 'panel'
+        ? suggestPanelThicknessDim(mod.externalDims)
+        : ''),
     baseMode: mod.baseMode && isModuleBaseMode(mod.baseMode) ? mod.baseMode : '',
     baseClearanceMm:
       mod.baseClearanceMm !== undefined ? String(mod.baseClearanceMm) : '',
@@ -403,8 +403,8 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
     notes: optionalNotes(draft.notes),
     categoryId: draft.categoryId.trim() || undefined,
     furnitureType: draft.furnitureType,
-    // #1496: el eje sólo viaja cuando el tipo es panel — evita datos muertos.
-    ...(draft.furnitureType === 'panel' && draft.panelThicknessDim
+    // #1496: el eje viaja si está declarado (cualquier tipo de mueble puede ser panel de terminación).
+    ...(draft.panelThicknessDim
       ? { panelThicknessDim: draft.panelThicknessDim }
       : {}),
     baseMode,

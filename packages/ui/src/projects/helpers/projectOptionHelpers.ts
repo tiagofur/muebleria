@@ -412,6 +412,10 @@ export function quickAddPayloadForModule(
     optionChoices,
     measurePresetId: pickPresetByMeasureDefaults(module, ctx.measureDefaults),
     baseMode:
-      module.baseMode ?? defaultBaseModeForFurnitureType(module.furnitureType),
+      module.baseMode ??
+      defaultBaseModeForFurnitureType(
+        module.furnitureType,
+        Boolean(module.panelThicknessDim),
+      ),
   };
 }

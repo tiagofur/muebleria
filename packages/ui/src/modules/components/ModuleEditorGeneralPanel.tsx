@@ -147,9 +147,6 @@ export function ModuleEditorGeneralPanel({
               setDraft({
                 ...draft,
                 furnitureType,
-                // #1496: al salir de panel, el eje deja de aplicar — no lo
-                // persistimos como dato muerto.
-                ...(furnitureType !== 'panel' ? { panelThicknessDim: '' } : {}),
               });
             }}
             data-testid="module-furniture-type"
@@ -157,39 +154,36 @@ export function ModuleEditorGeneralPanel({
             <option value="inferior">Inferior (gabinete)</option>
             <option value="superior">Superior (alacena)</option>
             <option value="alto">Alto (despensa)</option>
-            <option value="panel">Panel de terminación</option>
+            <option value="panel">Panel de terminación (general)</option>
           </select>
           <p className="module-editor__hint">
             Define el tipo fundamental. Los defaults de medida del proyecto se aplican por tipo al agregar el mueble a una cotización.
           </p>
         </div>
 
-        {draft.furnitureType === 'panel' ? (
-          <div className="catalog-form__field" data-testid="module-thickness-dim-field">
-            <label htmlFor="mod-thickness-dim">Dimensión del espesor</label>
-            <select
-              id="mod-thickness-dim"
-              value={draft.panelThicknessDim || ''}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  panelThicknessDim: e.target.value as ModuleDraft['panelThicknessDim'],
-                })
-              }
-              data-testid="module-thickness-dim"
-            >
-              <option value="">Elegí el eje del espesor…</option>
-              <option value="width">Ancho</option>
-              <option value="height">Alto</option>
-              <option value="depth">Fondo</option>
-            </select>
-            <p className="module-editor__hint">
-              Esa medida no se escribe a mano: sale del espesor del tablero de
-              frentes elegido en cada cotización. La medida base del mueble sólo
-              la usa el preview.
-            </p>
-          </div>
-        ) : null}
+        <div className="catalog-form__field" data-testid="module-thickness-dim-field">
+          <label htmlFor="mod-thickness-dim">Dimensión del espesor (panel de terminación)</label>
+          <select
+            id="mod-thickness-dim"
+            value={draft.panelThicknessDim || ''}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                panelThicknessDim: e.target.value as ModuleDraft['panelThicknessDim'],
+              })
+            }
+            data-testid="module-thickness-dim"
+          >
+            <option value="">Ninguna — mueble estándar</option>
+            <option value="width">Ancho (ej. panel costado)</option>
+            <option value="height">Alto (ej. panel piso/techo)</option>
+            <option value="depth">Fondo (ej. panel fondo/isla)</option>
+          </select>
+          <p className="module-editor__hint">
+            Si este mueble es un panel de terminación, esa medida sale del espesor del tablero de
+            frentes en cada cotización.
+          </p>
+        </div>
 
         <div className="catalog-form__field" data-testid="module-base-mode-field">
           <label htmlFor="mod-base-mode">Zócalo: ¿cómo apoya en el piso?</label>
