@@ -90,7 +90,18 @@
 - Sugerencias aplicadas/en PR: P2 (ensanchamiento agrego-aware del gate del
   alta) documentado en el body del PR. P3 (asimetrías de trim Go↔TS) fuera de
   alcance — datos normalizados server-side.
-- Re-review del fix: en curso por el mismo revisor fresco (HEAD 9ae7df4b).
+- Re-review del fix: APPROVED del candidato 9ae7df4b (replay 000176 en
+  postgres:16 + tsc ui re-verificados por el revisor).
+- Ronda CI 1 (HEAD 8b95111b, docs-only sobre 9ae7df4b): Storage shard 2/4 rojo
+  — `TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions` con
+  `column "kit_hardware_id" does not exist`: el test pinnea el schema con
+  `identityApplyThrough(pool, 175)` y su comentario propio exige re-pin cuando
+  el catálogo empieza a requerir columnas nuevas (trigger exacto de #1502).
+  Fix (commit ef23b5e9): re-pin 175→176 en el único sitio de lectura; los
+  otros 3 pins del archivo son de escritura de módulos. Reproducido en local
+  con el runner canónico aislado (postgres efímero + roles): PASS. Los otros
+  2 checks rojos (Go Backend Tests / Foundation Gate A) eran agregadores del
+  shard. Re-validación del revisor + CI nueva en ef23b5e9.
 
 ## Entrega
 
