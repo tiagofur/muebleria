@@ -52,6 +52,9 @@ func TestEngineContractIssueCodesAreRegistered(t *testing.T) {
 	// codes are out of scope here.
 	literalExported := regexp.MustCompile(`Code:\s+"([A-Z][A-Z0-9_]+)"`)
 	literalLower := regexp.MustCompile(`\bcode:\s+"([A-Z][A-Z0-9_]+)"`)
+	// #1503 review B-A: codes injected by IDENTIFIER (opening constants) —
+	// capture the constant declarations so the closed set covers them.
+	constantDecl := regexp.MustCompile(`Opening(?:Err|Reason)[A-Za-z]+\s*=\s*"([A-Z][A-Z0-9_]+)"`)
 	roots := []string{".", filepath.Join("..", "..", "api")}
 	emitted := make(map[string]string) // code -> first file that emits it
 	for _, root := range roots {
@@ -66,7 +69,11 @@ func TestEngineContractIssueCodesAreRegistered(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			for _, re := range []*regexp.Regexp{literalExported, literalLower} {
+			patterns := []*regexp.Regexp{literalExported, literalLower}
+			if strings.Contains(filepath.Base(path), "opening_") {
+				patterns = append(patterns, constantDecl)
+			}
+			for _, re := range patterns {
 				for _, m := range re.FindAllStringSubmatch(string(raw), -1) {
 					code := m[1]
 					if _, seen := emitted[code]; !seen {
