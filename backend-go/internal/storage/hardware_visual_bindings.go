@@ -106,6 +106,15 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 		if h.VisualAsset != nil && h.VisualAsset.AssetRevisionID != "" {
 			revisionIDs = append(revisionIDs, h.VisualAsset.AssetRevisionID)
 		}
+		// #1512 M3: per-hand bindings resolve their facts in the same batch —
+		// the layout engine copies them per member by hand.
+		if h.Hands != nil {
+			for _, hand := range []*domain.HardwareHand{h.Hands.Left, h.Hands.Right} {
+				if hand != nil && hand.Asset != nil && hand.Asset.AssetRevisionID != "" {
+					revisionIDs = append(revisionIDs, hand.Asset.AssetRevisionID)
+				}
+			}
+		}
 	}
 	if len(revisionIDs) == 0 {
 		return nil
@@ -218,10 +227,11 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 		}
 	}
 
-	for i := range items {
-		binding := items[i].VisualAsset
+	// applyFacts fills one binding with the server-resolved revision facts.
+	// #1512 M3: hands bindings share the exact contract of visualAsset.
+	applyFacts := func(binding *domain.HardwareVisualAssetBinding) {
 		if binding == nil {
-			continue
+			return
 		}
 		d, ok := details[binding.AssetRevisionID]
 		if !ok {
@@ -234,7 +244,7 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 			binding.PreparationState = ""
 			binding.MountFrame = nil
 			binding.Glb = nil
-			continue
+			return
 		}
 		binding.Representation = d.Representation
 		binding.SHA256 = d.SHA256
@@ -248,6 +258,17 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 			binding.Glb = hardwareAssetGlbRepresentation(d.Representation, binding.AssetRevisionID, d.SHA256, d.SizeBytes, d.SourceRevisionID, d.Origin)
 		case domain.HardwareAssetRepresentationSKP:
 			binding.Glb = derivedBySource[binding.AssetRevisionID]
+		}
+	}
+	for i := range items {
+		applyFacts(items[i].VisualAsset)
+		if items[i].Hands != nil {
+			if items[i].Hands.Left != nil {
+				applyFacts(items[i].Hands.Left.Asset)
+			}
+			if items[i].Hands.Right != nil {
+				applyFacts(items[i].Hands.Right.Asset)
+			}
 		}
 	}
 	return nil

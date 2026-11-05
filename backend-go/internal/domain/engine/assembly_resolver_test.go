@@ -1603,3 +1603,77 @@ func TestAgregadoActorMembershipSharedContract(t *testing.T) {
 		}
 	}
 }
+
+// #1512 M3: hand semantics — closed vocabulary, hand rides to the resolved
+// member, and the default X anchor derives from the hand ONLY when the
+// member declares no explicit X ref (the recipe always wins).
+func TestResolveAgregadoAssemblyHandSemantics_1512(t *testing.T) {
+	buildAgregado := func(hand string, xRef domain.AssemblyAxisRef, offsetMm float64) domain.Agregado {
+		return domain.Agregado{
+			ID:   "agr-hands-synth",
+			Code: "HANDS-SYNTH",
+			RigidMembers: []domain.AgregadoRigidMember{
+				{
+					MemberID: "riel",
+					Role:     "slide",
+					Source: domain.RigidMemberSource{
+						Kind:  domain.RigidMemberSourceFixed,
+						Fixed: &domain.FixedHardwareSource{HardwareID: "hw-perfil-m"},
+					},
+					Placement: domain.AssemblyAnchorRule{
+						X: domain.AssemblyAxisPlacement{Ref: xRef, OffsetMm: offsetMm},
+						Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+						Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+					},
+					BOMRole: domain.BOMRoleSeparatelyPurchased,
+					Hand:    hand,
+				},
+			},
+		}
+	}
+
+	t.Run("mano válida viaja al miembro resuelto", func(t *testing.T) {
+		res, err := engine.ResolveAgregadoAssembly(buildAgregado(domain.MemberHandRight, domain.AxisRefMin, 10), engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 530, HeightMm: 300})
+		if err != nil {
+			t.Fatalf("resolve: %v", err)
+		}
+		if len(res.RigidMembers) != 1 || res.RigidMembers[0].Hand != domain.MemberHandRight {
+			t.Fatalf("hand = %v, want right", res.RigidMembers)
+		}
+	})
+
+	t.Run("anclaje default: right sin ref → max con offset negado; left sin ref → min", func(t *testing.T) {
+		resRight, err := engine.ResolveAgregadoAssembly(buildAgregado(domain.MemberHandRight, "", 10), engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 530, HeightMm: 300})
+		if err != nil {
+			t.Fatalf("resolve right: %v", err)
+		}
+		if got := resRight.RigidMembers[0].LocalTransform.TranslationMm[0]; got != 590 {
+			t.Fatalf("right default X = %g, want 590 (max 600 − 10)", got)
+		}
+
+		resLeft, err := engine.ResolveAgregadoAssembly(buildAgregado(domain.MemberHandLeft, "", 10), engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 530, HeightMm: 300})
+		if err != nil {
+			t.Fatalf("resolve left: %v", err)
+		}
+		if got := resLeft.RigidMembers[0].LocalTransform.TranslationMm[0]; got != 10 {
+			t.Fatalf("left default X = %g, want 10 (min + 10)", got)
+		}
+	})
+
+	t.Run("la declaración explícita de la receta gana sobre la mano", func(t *testing.T) {
+		res, err := engine.ResolveAgregadoAssembly(buildAgregado(domain.MemberHandRight, domain.AxisRefMin, 10), engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 530, HeightMm: 300})
+		if err != nil {
+			t.Fatalf("resolve: %v", err)
+		}
+		if got := res.RigidMembers[0].LocalTransform.TranslationMm[0]; got != 10 {
+			t.Fatalf("explicit min X = %g, want 10 (la receta manda)", got)
+		}
+	})
+
+	t.Run("mano inválida falla cerrado", func(t *testing.T) {
+		_, err := engine.ResolveAgregadoAssembly(buildAgregado("center", "", 10), engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 530, HeightMm: 300})
+		if err == nil || !strings.Contains(err.Error(), "hand inválida") {
+			t.Fatalf("expected typed hand error, got %v", err)
+		}
+	})
+}

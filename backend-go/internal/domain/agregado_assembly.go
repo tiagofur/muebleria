@@ -116,6 +116,31 @@ type AgregadoRigidMember struct {
 	// host lives inside the agregado (those go through component placements,
 	// F131).
 	HostPlacement string `json:"hostPlacement,omitempty"`
+	// Hand (#1512 M3): the member's side for multi-design hardware — closed
+	// vocabulary "" | "left" | "right" (IsValidMemberHand). Declared with a
+	// hardware that declares Hands ⇒ selects that hand's asset and derives
+	// the default X anchor (left → min/+, right → max/−) when the member
+	// does not declare its own. Empty = symmetric/legacy.
+	Hand string `json:"hand,omitempty"`
+}
+
+// EffectivePlacement returns the member's anchor with the #1512 M3 default
+// applied: a declared hand provides the X anchor (left → min with a positive
+// offset, right → max with a negated positive offset) when the member
+// declares no explicit X ref. The recipe's own declaration always wins.
+func (m AgregadoRigidMember) EffectivePlacement() AssemblyAnchorRule {
+	p := m.Placement
+	if (m.Hand == MemberHandLeft || m.Hand == MemberHandRight) && p.X.Ref == "" {
+		if m.Hand == MemberHandRight {
+			p.X.Ref = AxisRefMax
+			if p.X.OffsetMm > 0 {
+				p.X.OffsetMm = -p.X.OffsetMm
+			}
+		} else {
+			p.X.Ref = AxisRefMin
+		}
+	}
+	return p
 }
 
 // DimensionRuleSource defines the authoritative source for recalculating fabricated board dimensions.
@@ -203,6 +228,10 @@ type ResolvedRigidMember struct {
 	// the hardware's catalog profile onto that board. Empty = no external
 	// host (the historical behavior).
 	HostPlacement    string                  `json:"hostPlacement,omitempty"`
+	// Hand (#1512 M3): the member's side copied from the recipe member —
+	// drives the per-hand asset binding in attachHardwareAssetsToMembers and
+	// the default X anchor. Empty = symmetric/legacy.
+	Hand             string                  `json:"hand,omitempty"`
 	DesignParts      []HardwareDesignPart    `json:"designParts,omitempty"`     // #1417: parts of the member's hardware (by SKP component name).
 	// #1460 F2: dimensiones efectivas tras aplicar DimensionOverrides (merge
 	// sobre catálogo). Sólo con override — payloads legacy byte-idénticos.
@@ -687,7 +716,13 @@ func ValidateAgregadoRigidMember(m AgregadoRigidMember, hasCommercialKit bool) e
 			return fmt.Errorf("rigid member '%s': hostPlacement %q is outside the supported vocabulary (lateral_izquierdo, lateral_derecho, frente_cajon)", m.MemberID, hp)
 		}
 	}
-	if err := ValidateAssemblyAnchorRule(m.Placement); err != nil {
+	// #1512 M3: closed hand vocabulary — an unknown value is an authoring bug.
+	if !IsValidMemberHand(m.Hand) {
+		return fmt.Errorf("rigid member '%s': hand inválida %q (valores: left|right)", m.MemberID, m.Hand)
+	}
+	// #1512 M3: the hand provides the default X anchor, so an empty X ref is
+	// valid exactly when a hand derives it — validate the effective rule.
+	if err := ValidateAssemblyAnchorRule(m.EffectivePlacement()); err != nil {
 		return fmt.Errorf("rigid member '%s': %w", m.MemberID, err)
 	}
 

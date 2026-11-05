@@ -868,7 +868,20 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 			if existingHwIDs[hw.ID] {
 				continue
 			}
-			members = append(members, kitPartMember(hw, agr.Code))
+			// #1512 M3: a multi-design kit part (hands) expands to TWO members
+			// — one per side — sharing the same catalog row; each member
+			// binds its hand's asset and derives its X anchor from the hand.
+			// Legacy -I/-D parts keep the single-member path untouched.
+			if hw.Hands != nil && (handHasAsset(hw.Hands.Left) || handHasAsset(hw.Hands.Right)) {
+				for _, hand := range []string{domain.MemberHandLeft, domain.MemberHandRight} {
+					m := kitPartMember(hw, agr.Code, hand)
+					m.MemberID = m.MemberID + "_" + hand
+					m.Hand = hand
+					members = append(members, m)
+				}
+				continue
+			}
+			members = append(members, kitPartMember(hw, agr.Code, ""))
 		}
 	}
 
@@ -876,16 +889,30 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 	return agr
 }
 
+// handHasAsset reports whether a declared hand carries its own asset binding.
+func handHasAsset(h *domain.HardwareHand) bool {
+	return h != nil && h.Asset != nil && h.Asset.AssetID != "" && h.Asset.AssetRevisionID != ""
+}
+
 // kitPartMember builds the rigid member that draws one kit design part
 // (#1422): placement and actor membership come from the part's own
 // DesignParts[0] declaration, falling back to the same side/moving inference
 // the sync has always applied. Shared by the recipe kit sync and the #1502
-// accessory materialization (identical output either way).
-func kitPartMember(hw domain.Hardware, agrCode string) domain.AgregadoRigidMember {
+// accessory materialization (identical output either way). hand (#1512 M3)
+// replaces the code/name regex when declared: the side is DATA, never
+// inferred from names.
+func kitPartMember(hw domain.Hardware, agrCode string, hand string) domain.AgregadoRigidMember {
 	actor := "body"
 	upperCode := strings.ToUpper(hw.Code)
 	lowerName := strings.ToLower(hw.Name)
-	isRight := strings.HasSuffix(upperCode, "-D") || strings.Contains(lowerName, "derech")
+	var isRight bool
+	if hand == domain.MemberHandRight {
+		isRight = true
+	} else if hand == domain.MemberHandLeft {
+		isRight = false
+	} else {
+		isRight = strings.HasSuffix(upperCode, "-D") || strings.Contains(lowerName, "derech")
+	}
 	isMoving := strings.Contains(upperCode, "-MOV") || strings.Contains(upperCode, "-BRAZO") ||
 		strings.Contains(lowerName, "móvil") || strings.Contains(lowerName, "movil") || strings.Contains(lowerName, "brazo")
 	if isMoving {
@@ -947,29 +974,46 @@ func attachHardwareAssetsToMembers(members []domain.ResolvedRigidMember, catalog
 		rm := &members[rIdx]
 		if hw, ok := findHardware(catalog, rm.HardwareID); ok {
 			rm.Name = hw.Name
-			if hw.VisualAsset != nil {
-				assetID := hw.VisualAsset.AssetID
-				revID := hw.VisualAsset.AssetRevisionID
+			// #1512 M3: a member with an explicit hand binds THAT hand's asset
+			// when the hardware declares hands; any other case (symmetric
+			// hardware, hand-less member, hand without its own asset) falls
+			// back to the global visualAsset. No silent box substitution.
+			binding := hw.VisualAsset
+			if hw.Hands != nil {
+				switch rm.Hand {
+				case domain.MemberHandLeft:
+					if hw.Hands.Left != nil && hw.Hands.Left.Asset != nil {
+						binding = hw.Hands.Left.Asset
+					}
+				case domain.MemberHandRight:
+					if hw.Hands.Right != nil && hw.Hands.Right.Asset != nil {
+						binding = hw.Hands.Right.Asset
+					}
+				}
+			}
+			if binding != nil {
+				assetID := binding.AssetID
+				revID := binding.AssetRevisionID
 				rm.AssetID = &assetID
 				rm.AssetRevisionID = &revID
-				if hw.VisualAsset.SHA256 != "" {
-					sha := hw.VisualAsset.SHA256
+				if binding.SHA256 != "" {
+					sha := binding.SHA256
 					rm.SHA256 = &sha
 				}
-				if hw.VisualAsset.SizeBytes > 0 {
-					sizeBytes := hw.VisualAsset.SizeBytes
+				if binding.SizeBytes > 0 {
+					sizeBytes := binding.SizeBytes
 					rm.ExpectedBytes = &sizeBytes
 				}
-				if hw.VisualAsset.Representation != "" {
-					rep := string(hw.VisualAsset.Representation)
+				if binding.Representation != "" {
+					rep := string(binding.Representation)
 					rm.Representation = &rep
 				}
-				if hw.VisualAsset.PreparationState != "" {
-					prep := string(hw.VisualAsset.PreparationState)
+				if binding.PreparationState != "" {
+					prep := string(binding.PreparationState)
 					rm.PreparationState = &prep
 				}
-				if hw.VisualAsset.MountFrame != nil {
-					rm.MountFrame = hw.VisualAsset.MountFrame
+				if binding.MountFrame != nil {
+					rm.MountFrame = binding.MountFrame
 				}
 			}
 		}

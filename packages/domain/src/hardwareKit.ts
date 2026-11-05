@@ -11,6 +11,7 @@
  */
 
 import type { HardwareVisualAssetBinding } from './types';
+import type { RigidMemberHand } from './agregadoAssembly';
 
 export type HardwareKitDesignSlot = 'fixed_left' | 'fixed_right' | 'moving_left' | 'moving_right';
 
@@ -736,28 +737,60 @@ export function syncAgregadoWithKitParts(
   const newMembers: any[] = [];
   for (const part of kitParts) {
     if (existingHwIds.has(part.id)) continue;
-
-    const cfg = resolveKitPartConfig(part, agregado);
-    const safeMemberId = `part_${part.code.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
-
-    newMembers.push({
-      memberId: safeMemberId,
-      role: part.previewShape || 'part',
-      source: { kind: 'fixed', fixed: { hardwareId: part.id } },
-      placement: {
-        x: { ref: cfg.xRef, offsetMm: cfg.xOffsetMm },
-        y: { ref: 'min', offsetMm: cfg.yOffsetMm },
-        z: { ref: 'min', offsetMm: cfg.zOffsetMm },
-      },
-      bomRole: 'included_in_kit',
-      actorMembership: cfg.actorMembership,
-    });
+    newMembers.push(...newKitPartMembers(part, agregado));
   }
 
   return {
     ...agregado,
     rigidMembers: [...keptMembers, ...newMembers],
   };
+}
+
+/**
+ * #1512 M3: miembros NUEVOS de una parte de kit. Una parte multi-diseño
+ * (hands con asset) expande a DOS miembros — uno por mano — compartiendo la
+ * fila de catálogo; el anclaje X por defecto se deriva de la mano (left →
+ * min/+; right → max/−), nunca de regex sobre el nombre. Legacy: 1 miembro
+ * byte-idéntico (la inferencia por regex histórica queda intacta).
+ */
+function newKitPartMembers(
+  part: {
+    readonly id: string;
+    readonly code: string;
+    readonly name: string;
+    readonly previewShape?: string;
+    readonly hands?: {
+      readonly left?: { readonly asset?: { readonly assetId: string; readonly assetRevisionId: string } };
+      readonly right?: { readonly asset?: { readonly assetId: string; readonly assetRevisionId: string } };
+    };
+  },
+  agregado: { readonly id: string; readonly code: string },
+): any[] {
+  const cfg = resolveKitPartConfig(part, agregado);
+  const safeMemberId = `part_${part.code.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
+  const build = (hand?: RigidMemberHand, memberIdSuffix = '') => ({
+    memberId: `${safeMemberId}${memberIdSuffix}`,
+    role: part.previewShape || 'part',
+    source: { kind: 'fixed', fixed: { hardwareId: part.id } },
+    placement: {
+      x: { ref: cfg.xRef, offsetMm: cfg.xOffsetMm },
+      y: { ref: 'min', offsetMm: cfg.yOffsetMm },
+      z: { ref: 'min', offsetMm: cfg.zOffsetMm },
+    },
+    bomRole: 'included_in_kit',
+    actorMembership: cfg.actorMembership,
+    ...(hand ? { hand } : {}),
+  });
+  const hasLeft = Boolean(part.hands?.left?.asset?.assetId && part.hands.left.asset.assetRevisionId);
+  const hasRight = Boolean(part.hands?.right?.asset?.assetId && part.hands.right.asset.assetRevisionId);
+  if (!hasLeft && !hasRight) {
+    return [build()];
+  }
+  const left = build('left', '_left');
+  const right = build('right', '_right');
+  left.placement.x = { ref: 'min', offsetMm: Math.abs(cfg.xOffsetMm) };
+  right.placement.x = { ref: 'max', offsetMm: -Math.abs(cfg.xOffsetMm) };
+  return [left, right];
 }
 
 /**
@@ -826,20 +859,7 @@ export function ensureAgregadoKitParts(
   const newMembers: any[] = [];
   for (const part of kitParts) {
     if (existingHwIds.has(part.id)) continue;
-    const cfg = resolveKitPartConfig(part, agregado);
-    const safeMemberId = `part_${part.code.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
-    newMembers.push({
-      memberId: safeMemberId,
-      role: part.previewShape || 'part',
-      source: { kind: 'fixed', fixed: { hardwareId: part.id } },
-      placement: {
-        x: { ref: cfg.xRef, offsetMm: cfg.xOffsetMm },
-        y: { ref: 'min', offsetMm: cfg.yOffsetMm },
-        z: { ref: 'min', offsetMm: cfg.zOffsetMm },
-      },
-      bomRole: 'included_in_kit',
-      actorMembership: cfg.actorMembership,
-    });
+    newMembers.push(...newKitPartMembers(part, agregado));
   }
 
   return {

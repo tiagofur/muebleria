@@ -21,6 +21,8 @@ export type {
   Hardware,
   HardwareCategoryNode,
   HardwareDimensions,
+  HardwareHand,
+  HardwareHands,
   HardwareVisualAssetBinding,
   HardwareVisualGlbBinding,
   HardwareVisualMountFrameBinding,

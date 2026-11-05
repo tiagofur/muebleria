@@ -18164,6 +18164,21 @@
             ],
             "description": "#1422 slice 1: when set, this hardware is a design part of the referenced kit hardware (same organization). Server-validated: kit exists, never self, kit never a part."
           },
+          "hands": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "#1512 M3: per-hand assets of a multi-design hardware (one catalog row, SKP per side). Writes carry identifiers only; facts are server-resolved on read. Null = symmetric/legacy.",
+            "properties": {
+              "left": {
+                "$ref": "#/components/schemas/HardwareHand"
+              },
+              "right": {
+                "$ref": "#/components/schemas/HardwareHand"
+              }
+            }
+          },
           "active": {
             "type": "boolean"
           },
@@ -19549,6 +19564,24 @@
           },
           "sortOrder": {
             "type": "integer"
+          }
+        }
+      },
+      "HardwareHand": {
+        "type": "object",
+        "description": "#1512 M3: one side of a multi-design hardware. Nil asset falls back to the hardware visualAsset at resolve time.",
+        "properties": {
+          "asset": {
+            "type": "object",
+            "description": "Exact asset binding for this hand: identifiers only on write; facts resolved server-side.",
+            "properties": {
+              "assetId": {
+                "type": "string"
+              },
+              "assetRevisionId": {
+                "type": "string"
+              }
+            }
           }
         }
       },

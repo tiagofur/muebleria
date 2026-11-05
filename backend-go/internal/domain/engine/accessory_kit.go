@@ -64,7 +64,19 @@ func accessoryRigidMembers(catalog domain.Catalog, accessoryKitID, hostCode stri
 		return accessory.RigidMembers
 	}
 	if hw, ok := findHardware(catalog, accessoryKitID); ok {
-		return []domain.AgregadoRigidMember{kitPartMember(hw, hostCode)}
+		// #1512 M3: a multi-design monolithic accessory draws BOTH sides —
+		// one member per hand, same expansion rule as multi-design kit parts.
+		if hw.Hands != nil && (handHasAsset(hw.Hands.Left) || handHasAsset(hw.Hands.Right)) {
+			members := make([]domain.AgregadoRigidMember, 0, 2)
+			for _, hand := range []string{domain.MemberHandLeft, domain.MemberHandRight} {
+				m := kitPartMember(hw, hostCode, hand)
+				m.MemberID = m.MemberID + "_" + hand
+				m.Hand = hand
+				members = append(members, m)
+			}
+			return members
+		}
+		return []domain.AgregadoRigidMember{kitPartMember(hw, hostCode, "")}
 	}
 	return nil
 }

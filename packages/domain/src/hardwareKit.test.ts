@@ -316,6 +316,50 @@ describe('plantillas del taller editables (#1422 slice 2 — fixture compartido 
   });
 
   describe('syncAgregadoWithKitParts (#1435)', () => {
+    it('#1512: una parte multi-diseño (hands) expande a DOS miembros con mano y anclaje por lado', () => {
+      const agregado = {
+        id: 'agr-hands',
+        code: 'AGR-CAJON-M',
+        commercialKitHardwareId: 'kit-1',
+        rigidMembers: [],
+      };
+      const kitParts = [
+        {
+          id: 'hw-perfil',
+          code: 'MBOX-IGM-M',
+          name: 'Perfil MERIVOBOX M',
+          hands: {
+            left: { asset: { assetId: 'a1', assetRevisionId: 'r1' } },
+            right: { asset: { assetId: 'a2', assetRevisionId: 'r2' } },
+          },
+        },
+      ];
+
+      const synced = syncAgregadoWithKitParts(agregado, kitParts);
+      expect(synced.rigidMembers).toHaveLength(2);
+
+      const left = synced.rigidMembers[0];
+      expect(left.memberId).toBe('part_mbox_igm_m_left');
+      expect(left.hand).toBe('left');
+      expect(left.placement.x.ref).toBe('min');
+      expect(left.placement.x.offsetMm).toBeGreaterThan(0);
+
+      const right = synced.rigidMembers[1];
+      expect(right.memberId).toBe('part_mbox_igm_m_right');
+      expect(right.hand).toBe('right');
+      expect(right.placement.x.ref).toBe('max');
+      expect(right.placement.x.offsetMm).toBeLessThan(0);
+    });
+
+    it('#1512: una parte legacy (sin hands) sigue creando UN miembro byte-idéntico', () => {
+      const agregado = { id: 'agr-l', code: 'AGR-CAJON', rigidMembers: [] };
+      const kitParts = [{ id: 'hw-fij-i', code: 'KIT-FIJ-I', name: 'Guía Fija Izq' }];
+      const synced = syncAgregadoWithKitParts(agregado, kitParts);
+      expect(synced.rigidMembers).toHaveLength(1);
+      expect(synced.rigidMembers[0].memberId).toBe('part_kit_fij_i');
+      expect(synced.rigidMembers[0].hand).toBeUndefined();
+    });
+
     it('agrega slots inferidos para piezas nuevas y preserva las existentes', () => {
       const initialAgregado = {
         id: 'agr-1',

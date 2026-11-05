@@ -554,6 +554,34 @@ type HardwareVisualGlbRepresentation struct {
 	UpAxis          string `json:"upAxis,omitempty"`
 }
 
+// HardwareHand is one side of a multi-design hardware (#1512 M3). The asset
+// follows the HardwareVisualAssetBinding contract: writes carry identifiers
+// only, facts are server-resolved on read. Nil asset = that hand falls back
+// to the hardware's global VisualAsset.
+type HardwareHand struct {
+	Asset *HardwareVisualAssetBinding `json:"asset,omitempty"`
+}
+
+// HardwareHands declares the per-hand assets of an asymmetric hardware
+// (#1512 M3): one catalog row with its SKP per side instead of duplicated
+// -I/-D rows. Nil hands on resolve = legacy single-asset behavior.
+type HardwareHands struct {
+	Left  *HardwareHand `json:"left,omitempty"`
+	Right *HardwareHand `json:"right,omitempty"`
+}
+
+// MemberHand is the closed vocabulary of AgregadoRigidMember.Hand (#1512 M3).
+const (
+	MemberHandLeft  = "left"
+	MemberHandRight = "right"
+)
+
+// IsValidMemberHand reports whether h is an acceptable member hand value:
+// empty (symmetric/legacy) or one of the closed sides.
+func IsValidMemberHand(h string) bool {
+	return h == "" || h == MemberHandLeft || h == MemberHandRight
+}
+
 // DesignRevisionHardwareAssetPin is one frozen reference written at
 // DesignRevision publish time: the exact asset revision (and its digest) the
 // hardware used when THIS revision was published. Rows are immutable — R1
