@@ -222,3 +222,70 @@ describe('AgregadoRecipeAuthoringPanel (#1412 autoría de receta)', () => {
     });
   });
 });
+
+// #1429 slice B: autoría del anfitrión externo por miembro — el select de
+// hostPlacement aparece sólo en miembros fixed, escribe el vocabulario
+// cerrado y se limpia con la opción vacía.
+describe('hostPlacement — pieza anfitriona del miembro (#1429 slice B)', () => {
+  const memberBase = {
+    memberId: 'guia-izq',
+    role: 'fixed_rail',
+    placement: {
+      x: { ref: 'min' as const, offsetMm: 0 },
+      y: { ref: 'min' as const, offsetMm: 0 },
+      z: { ref: 'min' as const, offsetMm: 0 },
+    },
+    bomRole: 'non_purchasing' as const,
+  };
+
+  it('fixed: el select escribe hostPlacement y la opción vacía lo quita', async () => {
+    const user = userEvent.setup();
+    let latest: AgregadoDraft | undefined;
+    render(
+      <Harness
+        onChange={(d) => (latest = d)}
+        initial={{
+          rigidMembers: [
+            { ...memberBase, source: { kind: 'fixed' as const, fixed: { hardwareId: 'hw-corr' } } },
+          ],
+        }}
+      />,
+    );
+
+    const select = screen.getByTestId('agregado-tab-recipe-authoring-member-0-host-placement');
+    expect((select as HTMLSelectElement).value).toBe('');
+
+    await user.selectOptions(select, 'lateral_izquierdo');
+    expect(latest?.rigidMembers?.[0]?.hostPlacement).toBe('lateral_izquierdo');
+    expect((screen.getByTestId('agregado-tab-recipe-authoring-member-0-host-placement') as HTMLSelectElement).value).toBe('lateral_izquierdo');
+
+    await user.selectOptions(
+      screen.getByTestId('agregado-tab-recipe-authoring-member-0-host-placement'),
+      '',
+    );
+    expect(latest?.rigidMembers?.[0]?.hostPlacement).toBeUndefined();
+  });
+
+  it('variant: el anfitrión no se autorá (fuente fija únicamente)', async () => {
+    render(
+      <Harness
+        initial={{
+          rigidMembers: [
+            {
+              ...memberBase,
+              source: { kind: 'variant', variant: { variantSetId: 'set-1' } },
+            },
+          ],
+          variantSets: [
+            { id: 'set-1', dimension: 'depth', variants: [{ nominalDimensionMm: 500, hardwareId: 'hw-corr' }] },
+          ],
+          compatibilityRules: [{ variantSetId: 'set-1', clearanceMm: 0, selectionStrategy: 'max_fitting' }],
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId('agregado-tab-recipe-authoring-member-0-host-placement'),
+    ).toBeNull();
+  });
+});

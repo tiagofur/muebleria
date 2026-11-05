@@ -142,7 +142,12 @@ function findHardwareInCatalog(
   return (catalog as Record<string, Hardware>)[hardwareId];
 }
 
-function inferHoleType(
+/**
+ * #1429 slice B: exported for the member-host drilling projection
+ * (memberHostDrilling.ts) — the SAME typing precedence the manual-placement
+ * resolver applies, so provenance never changes the hole's type.
+ */
+export function inferHoleType(
   part?: HardwareMachiningPart,
   op?: MachiningOperation,
   hardware?: Hardware,

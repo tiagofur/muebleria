@@ -10,6 +10,7 @@
 
 import { generateCutRowsWithLinks, type CutRowPieceLink } from './engine/cut';
 import { componentIdFromComposedPartId, resolveBom } from './engine/bom';
+import { resolveModuleMeasurePreset } from './measurePresets';
 import {
   deriveJointHardwarePlacements,
   type DerivedJointPlacement,
@@ -22,6 +23,12 @@ import {
   resolveEffectiveAgregadoId,
   type SubspaceUnit,
 } from './agregados';
+import { resolveModuleAgregadoAssembliesDetailed } from './agregadoAssembly';
+import {
+  memberHostHoleIsEquivalent,
+  projectMemberHostDrilling,
+  type MemberHostDrillingResult,
+} from './memberHostDrilling';
 import type {
   Agregado,
   Catalog,
@@ -56,12 +63,15 @@ export interface ProjectDrillingResult {
 }
 
 export interface ProjectDrillingResolutionIssue {
-  readonly code: 'DRILLING_BOM_RESOLUTION_FAILED' | 'DRILLING_AGREGADO_HOST_UNRESOLVED';
+  readonly code:
+    | 'DRILLING_BOM_RESOLUTION_FAILED'
+    | 'DRILLING_AGREGADO_HOST_UNRESOLVED'
+    | 'DRILLING_MEMBER_HOST_UNRESOLVED';
   readonly message: string;
   readonly projectId: string;
   readonly projectItemId: string;
   readonly moduleId: string;
-  readonly stage: 'secondary-bom' | 'agregado-host';
+  readonly stage: 'secondary-bom' | 'agregado-host' | 'member-host';
   readonly blocking: true;
 }
 
@@ -209,6 +219,9 @@ export function resolveProjectDrilling(
   const moduleIdByKey = new Map<string, string>();
   const itemIdByKey = new Map<string, string>();
   const choicesByKey = new Map<string, ReturnType<typeof effectiveOptionChoices>>();
+  // #1429 slice B: member-host projection per template (assemblies resolved
+  // with the SAME dims the BOM resolved, mirroring the Go authoring input).
+  const memberHostByKey = new Map<string, MemberHostDrillingResult>();
   const resolutionIssues: ProjectDrillingResolutionIssue[] = [];
 
   for (const item of project.items) {
@@ -258,6 +271,53 @@ export function resolveProjectDrilling(
     // first item's effective choices govern the shared template.
     choicesByKey.set(cacheKey, choices);
 
+    // #1429 slice B: members declaring an external host (hostPlacement) drill
+    // that module board with their hardware's catalog profile — the TS mirror
+    // of deriveMemberHostMachining. Dims follow the same chain the BOM used
+    // (customDims → preset → module.externalDims → structure.externalDims).
+    try {
+      const structure = catalog.structures?.find((s) => s.id === module.structureId);
+      const preset = resolveModuleMeasurePreset(module, item.measurePresetId);
+      const dims = item.customDims
+        ? { width: item.customDims.widthMm, height: item.customDims.heightMm, depth: item.customDims.depthMm }
+        : preset
+          ? { width: preset.width, height: preset.height, depth: preset.depth }
+          : module.externalDims
+            ? { width: module.externalDims.width, height: module.externalDims.height, depth: module.externalDims.depth }
+            : structure?.externalDims
+              ? { width: structure.externalDims.width, height: structure.externalDims.height, depth: structure.externalDims.depth }
+              : undefined;
+      if (dims) {
+        const detailed = resolveModuleAgregadoAssembliesDetailed(module, dims, catalog, {
+          optionChoices: choices,
+        });
+        memberHostByKey.set(
+          cacheKey,
+          projectMemberHostDrilling({
+            assemblies: detailed.assemblies,
+            parts,
+            hardwareCatalog: catalog.hardware,
+          }),
+        );
+      } else {
+        memberHostByKey.set(cacheKey, { holesByPartId: new Map(), issues: [] });
+      }
+    } catch {
+      // The assemblies failed to resolve for this template: report it
+      // fail-closed — the pieces keep their manual/derived drilling but the
+      // member-host projection is NOT silently dropped.
+      memberHostByKey.set(cacheKey, { holesByPartId: new Map(), issues: [] });
+      resolutionIssues.push({
+        code: 'DRILLING_MEMBER_HOST_UNRESOLVED',
+        message: 'No se pudo resolver el ensamble del agregado para proyectar sus perforaciones member-host; revise la receta.',
+        projectId: project.id,
+        projectItemId: item.id,
+        moduleId: module.id,
+        stage: 'member-host',
+        blocking: true,
+      });
+    }
+
     derivedByKey.set(
       cacheKey,
       deriveJointHardwarePlacements({
@@ -286,6 +346,7 @@ export function resolveProjectDrilling(
   const patterns: ResolvedPartDrilling[] = [];
   let totalHoles = 0;
   const reportedUnresolvedHosts = new Set<string>();
+  const reportedMemberHostKeys = new Set<string>();
   for (const link of links) {
     const cacheKey = keyByPartId.get(link.partId);
     const moduleId = cacheKey ? moduleIdByKey.get(cacheKey) : undefined;
@@ -335,13 +396,36 @@ export function resolveProjectDrilling(
       optionChoices: cacheKey ? choicesByKey.get(cacheKey) : undefined,
     });
 
+    // #1429 slice B: declared external hosts report fail-closed ONCE per
+    // template (missing board / profile / identity basis — mirror of the Go
+    // derivation issues), and the projected holes join the piece with the
+    // manual-placement dedupe: the owner's explicit authoring wins.
+    const memberHost = cacheKey ? memberHostByKey.get(cacheKey) : undefined;
+    if (cacheKey && memberHost && memberHost.issues.length > 0 && !reportedMemberHostKeys.has(cacheKey)) {
+      reportedMemberHostKeys.add(cacheKey);
+      for (const issue of memberHost.issues) {
+        resolutionIssues.push({
+          code: 'DRILLING_MEMBER_HOST_UNRESOLVED',
+          message: issue.message,
+          projectId: project.id,
+          projectItemId: itemIdByKey.get(cacheKey) ?? '',
+          moduleId: moduleId ?? '',
+          stage: 'member-host',
+          blocking: true,
+        });
+      }
+    }
+    const memberHostHoles = (cacheKey ? memberHost?.holesByPartId.get(link.partId) : undefined) ?? [];
+    const addedHoles = memberHostHoles.filter((h) => !memberHostHoleIsEquivalent(h, resolved.holes));
+
     patterns.push({
       ...resolved,
+      holes: [...resolved.holes, ...addedHoles],
       pieceCode: link.labelRef,
       moduleCode: link.moduleCode,
       partName: link.part.description,
     });
-    totalHoles += resolved.holes.length;
+    totalHoles += resolved.holes.length + addedHoles.length;
   }
 
   const plain: readonly PartDrillingPattern[] = patterns.map((p) => ({

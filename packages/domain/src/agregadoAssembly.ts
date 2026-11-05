@@ -220,7 +220,27 @@ export interface ResolvedRigidMember {
    * miembro declara override — los payloads sin override quedan byte-idénticos.
    */
   readonly resolvedDimensions?: EffectiveHardwareDimensions;
+  /**
+   * #1429 slice A/B: rol de placement de la pieza EXTERNA que este miembro
+   * fija, propagado desde la definición al miembro resuelto (el espejo Go lo
+   * consume deriveMemberHostMachining; el puerto TS del preview, el módulo
+   * memberHostDrilling). Ausente ⇒ el miembro no taladra fuera del agregado.
+   */
+  readonly hostPlacement?: string;
 }
+
+/**
+ * #1429 slice A: vocabulario CERRADO de piezas anfitrionas externas que un
+ * miembro rígido puede declarar (fuente fixed únicamente). Espejo exacto del
+ * switch de validación Go (agregado_assembly.go) y del guard del editor.
+ */
+export const AGREGADO_MEMBER_HOST_PLACEMENTS = [
+  'lateral_izquierdo',
+  'lateral_derecho',
+  'frente_cajon',
+] as const;
+
+export type AgregadoMemberHostPlacement = (typeof AGREGADO_MEMBER_HOST_PLACEMENTS)[number];
 
 export interface AssemblyBOMItem {
   readonly hardwareId: string;
@@ -631,15 +651,15 @@ export function validateAgregadoRigidMember(
   }
   validateRigidMemberSource(m.source);
   // #1429 slice A: vocabulario cerrado de anfitriones externos + fuente fija
-  // (gemelo Go de ValidateAgregadoRigidMember).
+  // (gemelo Go de ValidateAgregadoRigidMember; constante compartida con la UI).
   const hostPlacement = (m.hostPlacement ?? '').trim();
   if (hostPlacement) {
     if (m.source.kind !== 'fixed') {
       throw new Error(`rigid member '${m.memberId}': hostPlacement requires a fixed hardware source`);
     }
-    if (hostPlacement !== 'lateral_izquierdo' && hostPlacement !== 'lateral_derecho' && hostPlacement !== 'frente_cajon') {
+    if (!AGREGADO_MEMBER_HOST_PLACEMENTS.includes(hostPlacement as AgregadoMemberHostPlacement)) {
       throw new Error(
-        `rigid member '${m.memberId}': hostPlacement '${hostPlacement}' is outside the supported vocabulary (lateral_izquierdo, lateral_derecho, frente_cajon)`,
+        `rigid member '${m.memberId}': hostPlacement '${hostPlacement}' is outside the supported vocabulary (${AGREGADO_MEMBER_HOST_PLACEMENTS.join(', ')})`,
       );
     }
   }
@@ -1194,6 +1214,9 @@ export function resolveAgregadoAssembly(
         },
         bomRole: member.bomRole,
         actorMembership: member.actorMembership,
+        // #1429 slice B: el anfitrión externo declarado viaja al miembro
+        // resuelto (el puerto TS del preview lo proyecta). Ausente ⇒ nada.
+        ...(member.hostPlacement ? { hostPlacement: member.hostPlacement } : {}),
         // Sólo con override: los payloads legacy quedan byte-idénticos.
         ...(member.dimensionOverrides ? { resolvedDimensions: memberDims } : {}),
       });
