@@ -148,6 +148,11 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   'CONNECTION_FACE_INVALID',
   'FACTORY_POLICY_INVALID',
   'LIBRARY_RELEASE_UNAVAILABLE',
+  // Design-opening resolve failures (api/authoring_resolve.go via
+  // designOpeningResolveFailure) — review #1501 B1.
+  'DESIGN_UNKNOWN',
+  'OPENING_PROFILE_UNKNOWN',
+  'OPENING_OVERHANG_RULE_UNAVAILABLE',
 ] as const;
 
 export type AuthoringResolveIssueCode = (typeof AUTHORING_RESOLVE_ISSUE_CODES)[number];

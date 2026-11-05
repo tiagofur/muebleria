@@ -344,7 +344,10 @@
             "MEMBER_HOST_BASIS_UNSUPPORTED",
             "CONNECTION_FACE_INVALID",
             "FACTORY_POLICY_INVALID",
-            "LIBRARY_RELEASE_UNAVAILABLE"
+            "LIBRARY_RELEASE_UNAVAILABLE",
+            "DESIGN_UNKNOWN",
+            "OPENING_PROFILE_UNKNOWN",
+            "OPENING_OVERHANG_RULE_UNAVAILABLE"
           ]
         },
         "message": {

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -42,30 +43,41 @@ func TestEngineContractIssueCodesAreRegistered(t *testing.T) {
 		registered[code] = true
 	}
 
-	// Walk the engine + API sources for ContractIssue Code literals.
-	literal := regexp.MustCompile(`Code:\s+"([A-Z][A-Z0-9_]+)"`)
+	// Walk the ONLY two source trees that feed the authoring-resolve wire
+	// (engine derivations + the API handlers), recursively. Both shapes:
+	// exported-field `Code: "X"` and struct-literal lowercase `code: "X"`
+	// (review #1501 B1: the design-opening failures assign lowercase and
+	// were invisible to the first regex). Other internal packages
+	// (hardware-profiles, machine-output) speak different contracts — their
+	// codes are out of scope here.
+	literalExported := regexp.MustCompile(`Code:\s+"([A-Z][A-Z0-9_]+)"`)
+	literalLower := regexp.MustCompile(`\bcode:\s+"([A-Z][A-Z0-9_]+)"`)
 	roots := []string{".", filepath.Join("..", "..", "api")}
 	emitted := make(map[string]string) // code -> first file that emits it
 	for _, root := range roots {
-		entries, err := os.ReadDir(root)
-		if err != nil {
-			t.Fatalf("read dir %s: %v", root, err)
-		}
-		for _, e := range entries {
-			name := e.Name()
-			if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-				continue
-			}
-			raw, err := os.ReadFile(filepath.Join(root, name))
+		walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
-				t.Fatalf("read %s: %v", name, err)
+				return err
 			}
-			for _, m := range literal.FindAllStringSubmatch(string(raw), -1) {
-				code := m[1]
-				if _, seen := emitted[code]; !seen {
-					emitted[code] = filepath.Join(root, name)
+			if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, re := range []*regexp.Regexp{literalExported, literalLower} {
+				for _, m := range re.FindAllStringSubmatch(string(raw), -1) {
+					code := m[1]
+					if _, seen := emitted[code]; !seen {
+						emitted[code] = path
+					}
 				}
 			}
+			return nil
+		})
+		if walkErr != nil {
+			t.Fatalf("walk %s: %v", root, walkErr)
 		}
 	}
 
