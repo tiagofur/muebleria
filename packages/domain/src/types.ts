@@ -448,6 +448,14 @@ export interface OptionGroup {
   readonly kind: OptionGroupKind;
   readonly required: boolean;
   readonly optionIds: readonly string[];
+  /**
+   * #1502 kit accesorio elegible: cuando está seteado, el grupo ofrece
+   * OPCIONES DE ACCESORIO para el kit referenciado — el miembro elegido (un
+   * herraje accesorio, a menudo kit con partes propias) se materializa y
+   * cotiza por bahía sobre el kit. Simétrico de `Hardware.kitHardwareId`.
+   * Ausente = grupo legacy (comportamiento byte-idéntico).
+   */
+  readonly kitHardwareId?: string;
 }
 
 // --- Hierarchical categories (generic, max 3 levels) ---

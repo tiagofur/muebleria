@@ -671,11 +671,15 @@ export function optionGroupToApi(g: OptionGroup): Record<string, unknown> {
     kind: g.kind,
     required: g.required,
     option_ids: [...g.optionIds],
+    // #1502 kit accesorio elegible: null elimina el link (mismo convenio que
+    // hardwares.kit_hardware_id); undefined omite la clave.
+    ...(g.kitHardwareId !== undefined ? { kit_hardware_id: g.kitHardwareId || null } : {}),
   };
 }
 
 export function optionGroupFromApi(raw: Record<string, unknown>): OptionGroup {
   const ids = raw.option_ids ?? raw.optionIds;
+  const kitHardwareId = raw.kit_hardware_id ?? raw.kitHardwareId;
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -683,6 +687,8 @@ export function optionGroupFromApi(raw: Record<string, unknown>): OptionGroup {
     kind: (str(raw.kind, 'board') as OptionGroup['kind']),
     required: bool(raw.required, true),
     optionIds: Array.isArray(ids) ? ids.map(String) : [],
+    // #1502: grupo vinculado a un kit accesorio; null/vacío = grupo legacy.
+    ...(typeof kitHardwareId === 'string' && kitHardwareId ? { kitHardwareId } : {}),
   };
 }
 
