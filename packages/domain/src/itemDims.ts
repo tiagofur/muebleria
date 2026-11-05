@@ -35,13 +35,13 @@ export function moduleAcceptsCustomDims(module: Module): boolean {
 }
 
 /**
- * #1496 — the panel's thickness axis, when declared on a `panel`-type module.
- * Undefined for every other module (or a panel without a declared axis).
+ * #1496 — the panel's thickness axis, when declared on a module.
+ * Undefined for modules without a declared thickness axis.
  */
 export function panelThicknessAxis(
   module: Pick<Module, 'furnitureType' | 'panelThicknessDim'>,
 ): PanelThicknessDim | undefined {
-  return module.furnitureType === 'panel' ? module.panelThicknessDim : undefined;
+  return module.panelThicknessDim || undefined;
 }
 
 /**
