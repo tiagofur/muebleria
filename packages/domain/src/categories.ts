@@ -6,6 +6,7 @@
 import type {
   AmbientMaterial,
   CategoryNode,
+  Hardware,
   MaterialBoard,
   Module,
   ModuleCategory,
@@ -260,6 +261,24 @@ export function filterMaterialBoardsByCategory<T extends CategoryNode = Category
   }
   const allowed = categoryFilterIdSet(filterId, categories)!;
   return materials.filter((m) => m.categoryId && allowed.has(m.categoryId));
+}
+
+/**
+ * Filter hardware by category tree node (#1507: subgrupos de herrajes).
+ * filterId null = all; UNCATEGORIZED = sin subgrupo. Kit parts are still
+ * subject to their own visibility rule (#1506) — this filter only narrows.
+ */
+export function filterHardwareByCategory<T extends CategoryNode = CategoryNode>(
+  hardware: readonly Hardware[],
+  filterId: CategoryFilterId,
+  categories: readonly T[],
+): Hardware[] {
+  if (filterId === null) return [...hardware];
+  if (filterId === UNCATEGORIZED_FILTER) {
+    return hardware.filter((h) => !h.categoryId);
+  }
+  const allowed = categoryFilterIdSet(filterId, categories)!;
+  return hardware.filter((h) => h.categoryId && allowed.has(h.categoryId));
 }
 
 /** Breadcrumb path from root to category (inclusive). */

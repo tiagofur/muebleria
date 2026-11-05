@@ -18179,6 +18179,14 @@
             "type": "integer",
             "minimum": 1,
             "description": "Server-owned optimistic-concurrency version (#443/#448); echoed back as the strong If-Match ETag."
+          },
+          "category_id": {
+            "type": "string",
+            "description": "HardwareCategory tree link (#1507). Unset = uncategorized. FK enforced server-side."
+          },
+          "brand": {
+            "type": "string",
+            "description": "Free-form manufacturer/series label (#1507, e.g. Blum). Unset = sin marca."
           }
         }
       },
@@ -19524,6 +19532,29 @@
       },
       "WorkshopMaterialCategory": {
         "type": "object",
+        "required": [
+          "id",
+          "name",
+          "sortOrder"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer"
+          }
+        }
+      },
+      "WorkshopHardwareCategory": {
+        "type": "object",
+        "description": "Hardware category tree node (#1507, subgrupos de herrajes). Same shape and 3-level rules as the other catalogs.",
         "required": [
           "id",
           "name",

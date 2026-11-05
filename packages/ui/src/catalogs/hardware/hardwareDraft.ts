@@ -73,6 +73,13 @@ export type HardwareDraft = {
    * editar una parte NO borre su link).
    */
   kitHardwareId?: string;
+  /**
+   * #1507: subgrupo del catálogo de herrajes ('' = sin categoría). El select
+   * lista el árbol `hardwareCategories` de la org.
+   */
+  categoryId?: string;
+  /** #1507: marca/serie en texto libre ('' = sin marca). */
+  brand?: string;
 };
 
 export const emptyPartFinishes = (): { body: string; base: string; grip: string } => ({
@@ -105,6 +112,8 @@ export const emptyDraft = (): HardwareDraft => ({
   visualAsset: null,
   maxOpeningAngleDeg: '',
   designParts: [],
+  categoryId: '',
+  brand: '',
 });
 
 export function toDraft(item: Hardware): HardwareDraft {
@@ -143,5 +152,7 @@ export function toDraft(item: Hardware): HardwareDraft {
       finishKey: p.finishKey ?? '',
     })),
     kitHardwareId: item.kitHardwareId,
+    categoryId: item.categoryId ?? '',
+    brand: item.brand ?? '',
   };
 }

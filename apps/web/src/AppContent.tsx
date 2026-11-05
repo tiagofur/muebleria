@@ -966,6 +966,7 @@ export function AppContent({
   const ambientMaterials = catalog?.ambientMaterials ?? [];
   const ambientCategories = catalog?.ambientCategories ?? [];
   const materialCategories = catalog?.materialCategories ?? [];
+  const hardwareCategories = catalog?.hardwareCategories ?? [];
   const optionGroups = catalog?.optionGroups ?? [];
   const modules = catalog?.modules ?? [];
   const structures = catalog?.structures ?? [];
@@ -1151,6 +1152,9 @@ export function AppContent({
   const createMaterialCategory = catalogActions.createMaterialCategory;
   const updateMaterialCategory = catalogActions.updateMaterialCategory;
   const deleteMaterialCategory = catalogActions.deleteMaterialCategory;
+  const createHardwareCategory = catalogActions.createHardwareCategory;
+  const updateHardwareCategory = catalogActions.updateHardwareCategory;
+  const deleteHardwareCategory = catalogActions.deleteHardwareCategory;
   const createOptionGroup = catalogActions.createOptionGroup;
   const updateOptionGroup = catalogActions.updateOptionGroup;
   const deleteOptionGroup = catalogActions.deleteOptionGroup;
@@ -1796,6 +1800,7 @@ export function AppContent({
     ambientCategories,
     ambientMaterials,
     materialCategories,
+    hardwareCategories,
     analyticsPeriod,
     applyScenarioB,
     assignableOwners,
@@ -2030,6 +2035,9 @@ export function AppContent({
     setEdgeActive,
     setEditingModuleId,
     setHardwareActive,
+    createHardwareCategory,
+    updateHardwareCategory,
+    deleteHardwareCategory,
     setItemFloorStatus,
     setMaterialActive,
     setShowOnboardingTour,

@@ -146,7 +146,12 @@ function hardwareDimensionsField(
 
 type HardwareSlice = Pick<
   CatalogState,
-  'createHardware' | 'updateHardware' | 'setHardwareActive'
+  | 'createHardware'
+  | 'updateHardware'
+  | 'setHardwareActive'
+  | 'createHardwareCategory'
+  | 'updateHardwareCategory'
+  | 'deleteHardwareCategory'
 >;
 
 /**
@@ -179,6 +184,8 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
         imageUrl: draft.imageUrl?.trim() || undefined,
         notes: optionalNotes(draft.notes),
         active: true,
+        categoryId: draft.categoryId || undefined,
+        brand: draft.brand?.trim() || undefined,
         ...hardwarePreviewFields(draft),
         ...hardwareMachiningField(draft),
         ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
@@ -226,6 +233,8 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               maxOpeningAngleDeg: _dmoa,
               designParts: _ddp,
               kitHardwareId: _dkid,
+              categoryId: _dcat,
+              brand: _dbrand,
               ...rest
             } = h;
             return {
@@ -237,6 +246,8 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               ...(packageSize === undefined ? {} : { packageSize }),
               imageUrl: draft.imageUrl?.trim() || undefined,
               notes: optionalNotes(draft.notes),
+              categoryId: draft.categoryId || undefined,
+              brand: draft.brand?.trim() || undefined,
               ...hardwarePreviewFields(draft),
               ...hardwareMachiningField(draft),
               ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
@@ -291,6 +302,66 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
           : null,
         'info',
       );
+    },
+
+    // #1507: subgrupos de herrajes — espejo de los actions de tableros (F142).
+    createHardwareCategory: (draft) => {
+      const item = {
+        id: ctx.newId(),
+        name: draft.name.trim(),
+        parentId: draft.parentId.trim() || undefined,
+        sortOrder: Number(draft.sortOrder) || 0,
+      };
+      ctx.saveAndToast(
+        (c) => ({
+          ...c,
+          hardwareCategories: [...(c.hardwareCategories ?? []), item],
+        }),
+        `✓ Categoría "${item.name}" creada`,
+      );
+    },
+
+    updateHardwareCategory: (id, draft) => {
+      ctx.saveAndToast(
+        (cat) => ({
+          ...cat,
+          hardwareCategories: (cat.hardwareCategories ?? []).map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  name: draft.name.trim(),
+                  parentId: draft.parentId.trim() || undefined,
+                  sortOrder: Number(draft.sortOrder) || 0,
+                }
+              : c,
+          ),
+        }),
+        'Categoría actualizada',
+      );
+    },
+
+    deleteHardwareCategory: async (id) => {
+      const cats = ctx.get().catalog?.hardwareCategories ?? [];
+      const hasChildren = cats.some((c) => c.parentId === id);
+      if (hasChildren) {
+        ctx.toast({
+          type: 'warning',
+          message: 'No se puede eliminar: tiene subcategorías',
+        });
+        return;
+      }
+      const saved = await ctx.patchSaved((c) => ({
+        ...c,
+        hardwareCategories: (c.hardwareCategories ?? []).filter((cat) => cat.id !== id),
+        hardware: (c.hardware ?? []).map((h) =>
+          h.categoryId === id ? { ...h, categoryId: undefined } : h,
+        ),
+      }));
+      if (!saved) return;
+      const ok = await ctx.hardDeleteOnAuth(`/catalog/hardware-categories/${id}`);
+      if (ok) {
+        ctx.toast({ type: 'info', message: 'Categoría eliminada' });
+      }
     },
   };
 }

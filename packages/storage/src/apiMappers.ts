@@ -20,6 +20,7 @@ import type {
   FloorStatusEvent,
   ReleaseEngineeringState,
   Hardware,
+  HardwareCategoryNode,
   HardwareLine,
   MaterialBoard,
   MaterialCategory,
@@ -369,6 +370,31 @@ export function materialCategoryFromApi(
   };
 }
 
+// --- Hardware categories (#1507: subgrupos de herrajes, espejo material) ---
+
+export function hardwareCategoryToApi(
+  c: HardwareCategoryNode,
+): Record<string, unknown> {
+  return {
+    id: c.id,
+    name: c.name,
+    parent_id: c.parentId ?? null,
+    sort_order: c.sortOrder,
+  };
+}
+
+export function hardwareCategoryFromApi(
+  raw: Record<string, unknown>,
+): HardwareCategoryNode {
+  const parent = str(raw.parentId ?? raw.parent_id);
+  return {
+    id: str(raw.id),
+    name: str(raw.name),
+    parentId: parent || undefined,
+    sortOrder: num(raw.sortOrder ?? raw.sort_order),
+  };
+}
+
 // --- Edges ---
 
 export function edgeToApi(e: EdgeBand): Record<string, unknown> {
@@ -474,6 +500,9 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     design_parts: h.designParts ? h.designParts.map((p) => ({ ...p })) : null,
     // Kit link (#1422 slice 1); null = herraje independiente.
     kit_hardware_id: h.kitHardwareId ?? null,
+    // #1507: category tree link + free-form brand; null/'' = unset.
+    category_id: h.categoryId ?? null,
+    brand: h.brand ?? '',
   };
 }
 
@@ -537,6 +566,11 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     ...(normalizeHardwareDesignParts(raw.design_parts ?? raw.designParts)),
     // Kit link (#1422 slice 1) — passthrough validado server-side.
     ...(kitHardwareId(raw.kit_hardware_id ?? raw.kitHardwareId)),
+    // #1507: category tree link + free-form brand — unset = uncategorized.
+    ...(str(raw.category_id ?? raw.categoryId)
+      ? { categoryId: str(raw.category_id ?? raw.categoryId) }
+      : {}),
+    ...(str(raw.brand) ? { brand: str(raw.brand) } : {}),
   };
 }
 
@@ -3756,6 +3790,8 @@ export function catalogFromApi(parts: {
   ambient_categories?: unknown;
   materialCategories?: unknown;
   material_categories?: unknown;
+  hardwareCategories?: unknown;
+  hardware_categories?: unknown;
   constructionPolicy?: unknown;
   construction_policy?: unknown;
   openingProfiles?: unknown;
@@ -3784,6 +3820,9 @@ export function catalogFromApi(parts: {
     materialCategories: asRows(
       parts.material_categories ?? parts.materialCategories,
     ).map(materialCategoryFromApi),
+    hardwareCategories: asRows(
+      parts.hardware_categories ?? parts.hardwareCategories,
+    ).map(hardwareCategoryFromApi),
     // #1218: the factory hinge demand policy, catalog-carried (nil when the
     // organization runs the library ladder).
     constructionPolicy: constructionPolicyFromApi(

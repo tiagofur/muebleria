@@ -105,8 +105,20 @@ export const demoMaterialCategories: Catalog['materialCategories'] = [
   { id: 'cat-mdf', name: 'MDF', sortOrder: 2 },
 ];
 
+/**
+ * #1507: subgrupos de herrajes demo — los `categoryId` de
+ * `plantillaCatalog.hardware` apuntan a estos nodos (espejo de los tableros).
+ */
+export const demoHardwareCategories: Catalog['hardwareCategories'] = [
+  { id: 'cat-hw-bisagras', name: 'Bisagras', sortOrder: 1 },
+  { id: 'cat-hw-correderas', name: 'Correderas', sortOrder: 2 },
+  { id: 'cat-hw-tiradores', name: 'Tiradores', sortOrder: 3 },
+  { id: 'cat-hw-soportes', name: 'Soportes y patas', sortOrder: 4 },
+];
+
 export const plantillaCatalog: Catalog = {
   materialCategories: demoMaterialCategories,
+  hardwareCategories: demoHardwareCategories,
   materials: [
     {
       id: IDS.matArauco,
@@ -194,6 +206,7 @@ export const plantillaCatalog: Catalog = {
       unit: 'piece',
       costPerUnit: 35,
       active: true,
+      categoryId: 'cat-hw-bisagras',
       previewShape: 'hinge',
       previewColor: '#9aa0a6',
       previewMetalness: 0.85,
@@ -248,6 +261,8 @@ export const plantillaCatalog: Catalog = {
       unit: 'piece',
       costPerUnit: 45,
       active: true,
+      categoryId: 'cat-hw-tiradores',
+      brand: 'Blum',
       previewShape: 'bar-pull',
       previewColor: '#c8ccd0',
       previewMetalness: 0.9,

@@ -67,6 +67,13 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	mux.Handle("PUT /api/catalog/material-categories/{id}", authMW(http.HandlerFunc(server.HandleMaterialCategoryByID)))
 	mux.Handle("DELETE /api/catalog/material-categories/{id}", authMW(http.HandlerFunc(server.HandleMaterialCategoryByID)))
 
+	// Catálogo: Categorías de herrajes / subgrupos (#1507)
+	mux.Handle("GET /api/catalog/hardware-categories", authMW(http.HandlerFunc(server.HandleHardwareCategories)))
+	mux.Handle("POST /api/catalog/hardware-categories", authMW(http.HandlerFunc(server.HandleHardwareCategories)))
+	mux.Handle("GET /api/catalog/hardware-categories/{id}", authMW(http.HandlerFunc(server.HandleHardwareCategoryByID)))
+	mux.Handle("PUT /api/catalog/hardware-categories/{id}", authMW(http.HandlerFunc(server.HandleHardwareCategoryByID)))
+	mux.Handle("DELETE /api/catalog/hardware-categories/{id}", authMW(http.HandlerFunc(server.HandleHardwareCategoryByID)))
+
 	// Catálogo: Cantos (Cintillas)
 	mux.Handle("GET /api/catalog/edges", authMW(http.HandlerFunc(server.HandleEdgeBands)))
 	mux.Handle("POST /api/catalog/edges", authMW(http.HandlerFunc(server.HandleEdgeBands)))

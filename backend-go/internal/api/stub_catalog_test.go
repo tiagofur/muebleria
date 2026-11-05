@@ -140,6 +140,36 @@ func (s *stubStore) DeleteMaterialCategory(_ context.Context, _ string, _ int64)
 	return nil
 }
 
+// #1507: hardware categories — same stub shape as the material categories.
+func (s *stubStore) ListHardwareCategories(context.Context) ([]domain.HardwareCategory, error) {
+	if s.listHardwareCategories != nil {
+		return s.listHardwareCategories, nil
+	}
+	return []domain.HardwareCategory{}, nil
+}
+
+func (s *stubStore) GetHardwareCategoryByID(_ context.Context, _ string) (*domain.HardwareCategory, error) {
+	return s.hardwareCategoryReturnedByID, s.hardwareCategoryGetByIDErr
+}
+
+func (s *stubStore) CreateHardwareCategory(_ context.Context, _ *domain.HardwareCategory) error {
+	if s.createHardwareCategoryErr != nil {
+		return s.createHardwareCategoryErr
+	}
+	s.createHardwareCategoryOK = true
+	return nil
+}
+
+func (s *stubStore) UpdateHardwareCategory(_ context.Context, _ string, _ int64, _ *domain.HardwareCategory) error {
+	s.updateHardwareCategoryCalled = true
+	return nil
+}
+
+func (s *stubStore) DeleteHardwareCategory(_ context.Context, _ string, _ int64) error {
+	s.deleteHardwareCategoryCalled = true
+	return nil
+}
+
 func (s *stubStore) ListEdgeBands(context.Context) ([]domain.EdgeBand, error) {
 	s.stubNotUsed("ListEdgeBands")
 	return nil, nil

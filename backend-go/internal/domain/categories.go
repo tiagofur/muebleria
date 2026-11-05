@@ -134,3 +134,13 @@ func ValidateMaterialCategoryPlacement(parentID string, categories []MaterialCat
 	}
 	return ValidateCategoryPlacement(parentID, conv, movingID)
 }
+
+// ValidateHardwareCategoryPlacement ensures create/move of HardwareCategory
+// (#1507 subgrupos de herrajes) stays within MaxCategoryDepth.
+func ValidateHardwareCategoryPlacement(parentID string, categories []HardwareCategory, movingID string) error {
+	conv := make([]ModuleCategory, len(categories))
+	for i, c := range categories {
+		conv[i] = ModuleCategory{ID: c.ID, Name: c.Name, ParentID: c.ParentID, SortOrder: c.SortOrder}
+	}
+	return ValidateCategoryPlacement(parentID, conv, movingID)
+}

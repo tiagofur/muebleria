@@ -124,6 +124,7 @@ import {
   customerFromApi,
   edgeToApi,
   hardwareToApi,
+  hardwareCategoryToApi,
   materialToApi,
   materialCategoryToApi,
   moduleToApi,
@@ -472,6 +473,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       ambientMaterials,
       ambientCategories,
       materialCategories,
+      hardwareCategories,
       constructionPolicy,
       openingProfiles,
     ] = await Promise.all([
@@ -491,6 +493,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       fetchJson('/catalog/ambient-categories').catch(() => []),
       // F142: subgrupos de tableros. `.catch(() => [])` = backend viejo.
       fetchJson('/catalog/material-categories').catch(() => []),
+      // #1507: subgrupos de herrajes. `.catch(() => [])` = backend viejo.
+      fetchJson('/catalog/hardware-categories').catch(() => []),
       // #1218: política de construcción de fábrica (overlay parseado).
       // `.catch(() => null)` = backend viejo — previews con la escalera de
       // librería, jamás un fallo de catálogo por la familia nueva.
@@ -513,6 +517,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       ambientMaterials,
       ambientCategories,
       materialCategories,
+      hardwareCategories,
       constructionPolicy,
       openingProfiles,
     });
@@ -544,6 +549,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     seedEntityVersions('ambient-materials', ambientMaterials);
     seedEntityVersions('ambient-categories', ambientCategories);
     seedEntityVersions('material-categories', materialCategories);
+    seedEntityVersions('hardware-categories', hardwareCategories);
     // #1084 (#443 slice 1): seed the hardware version cache straight from the
     // validated wire payload (the mapped domain shape carries no version), so
     // every save goes out under If-Match against the loaded server state.
@@ -1168,6 +1174,19 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
           '/catalog/material-categories',
           materialCategoryToApi(cat),
           'material-categories',
+          cat.id,
+        );
+      }
+    }
+
+    // Hardware categories (#1507: subgrupos de herrajes, padres primero).
+    if (catalog.hardwareCategories) {
+      for (const cat of sortCategoriesForSave(catalog.hardwareCategories)) {
+        await this.upsertGuarded(
+          `/catalog/hardware-categories/${cat.id}`,
+          '/catalog/hardware-categories',
+          hardwareCategoryToApi(cat),
+          'hardware-categories',
           cat.id,
         );
       }

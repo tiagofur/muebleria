@@ -161,6 +161,13 @@ type Hardware struct {
 	AvailableFinishes []string `json:"available_finishes,omitempty"`
 	// Category is the HardwareCategory from #350 ("hinge", "slide", "handle", "connector", "shelf_pin", "leg", etc.).
 	Category string `json:"category,omitempty"`
+	// CategoryID links the hardware into the HardwareCategory tree (#1507,
+	// subgrupos de herrajes como los muebles F142). FK enforced in DB; unset =
+	// uncategorized. Engine matching keeps using the free-form Category string.
+	CategoryID string `json:"category_id,omitempty"`
+	// Brand is the free-form manufacturer/series label (#1507, e.g. "Blum").
+	// Unset = sin marca. No purchase or machining meaning.
+	Brand string `json:"brand,omitempty"`
 	// CompatibleRoles optionally lists component roles or placements this hardware can mount on.
 	CompatibleRoles []string `json:"compatible_roles,omitempty"`
 	// Machining is the CNC drilling footprint (F127): operations per structural

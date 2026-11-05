@@ -73,6 +73,13 @@ type CatalogStore interface {
 	UpdateMaterialCategory(ctx context.Context, id string, expectedVersion int64, c *domain.MaterialCategory) error
 	DeleteMaterialCategory(ctx context.Context, id string, expectedVersion int64) error
 
+	// Catalog: hardware categories (#1507: subgrupos de herrajes)
+	ListHardwareCategories(ctx context.Context) ([]domain.HardwareCategory, error)
+	GetHardwareCategoryByID(ctx context.Context, id string) (*domain.HardwareCategory, error)
+	CreateHardwareCategory(ctx context.Context, c *domain.HardwareCategory) error
+	UpdateHardwareCategory(ctx context.Context, id string, expectedVersion int64, c *domain.HardwareCategory) error
+	DeleteHardwareCategory(ctx context.Context, id string, expectedVersion int64) error
+
 	// Catalog: edge bands
 	ListEdgeBands(ctx context.Context) ([]domain.EdgeBand, error)
 	GetEdgeBandByID(ctx context.Context, id string) (*domain.EdgeBand, error)

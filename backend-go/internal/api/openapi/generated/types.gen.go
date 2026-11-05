@@ -2990,6 +2990,8 @@ type Hardware struct {
 	CreatedAt           *string             `json:"created_at,omitempty"`
 	UpdatedAt           *string             `json:"updated_at,omitempty"`
 	Version             int64               `json:"version"`
+	CategoryID          *string             `json:"category_id,omitempty"`
+	Brand               *string             `json:"brand,omitempty"`
 }
 
 type HardwareWrite struct {
@@ -3284,6 +3286,13 @@ type WorkshopFurnitureCategory struct {
 }
 
 type WorkshopMaterialCategory struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	ParentId  *string `json:"parentId,omitempty"`
+	SortOrder int64   `json:"sortOrder"`
+}
+
+type WorkshopHardwareCategory struct {
 	ID        string  `json:"id"`
 	Name      string  `json:"name"`
 	ParentId  *string `json:"parentId,omitempty"`
