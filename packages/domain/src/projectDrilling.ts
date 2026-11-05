@@ -294,15 +294,19 @@ export function resolveProjectDrilling(
         // #1429 slice B (review): a recipe that declares external hosts but
         // fails to resolve (definition_invalid, variant_not_found…) must not
         // mute the projection — surface its rejections once per template.
+        // Accessory sub-assemblies (`-acc-`, #1504) are NOT surfaced: their
+        // rejection leaves the PARENT bay resolved, so the member-host holes
+        // of the drawer ARE projected — claiming otherwise would be false.
         const declaresHost = (agrId: string): boolean =>
           (catalog.agregados ?? [])
             .filter((a) => a.id === agrId)
             .some((a) => (a.rigidMembers ?? []).some((m) => (m.hostPlacement ?? '').trim() !== ''));
         for (const rej of detailed.rejections) {
           if (!declaresHost(rej.agregadoId)) continue;
+          if (rej.assemblyInstanceId.includes('-acc-')) continue;
           resolutionIssues.push({
             code: 'DRILLING_MEMBER_HOST_UNRESOLVED',
-            message: `el ensamble ${rej.agregadoCode || rej.agregadoId} no resolvió (${rej.reason})${rej.detail ? `: ${rej.detail}` : ''}; sus perforaciones member-host no se proyectan.`,
+            message: `el ensamble ${rej.assemblyInstanceId} (${rej.agregadoCode || rej.agregadoId}) no resolvió (${rej.reason})${rej.detail ? `: ${rej.detail}` : ''}; las perforaciones member-host de esa bahía no se proyectan.`,
             projectId: project.id,
             projectItemId: item.id,
             moduleId: module.id,

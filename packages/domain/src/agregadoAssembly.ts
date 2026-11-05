@@ -1906,6 +1906,14 @@ function resolveAccessoryAssembliesForUnit(
   visualLookup: VisualAssetLookup,
 ): ResolvedModuleAssemblies {
   const target = effectiveKit.trim();
+  // Guard del gemelo Go (linkedAccessoryGroups): un target VACÍO (bahía
+  // legacy sin kit) NO resuelve grupos — sin él, todo grupo hardware sin
+  // kit_hardware_id matchearía el '' y las bahías kit-less heredarían
+  // rejections de accesorio falsas (cazado por #1429 slice B vía el
+  // surfacing de previews).
+  if (!target) {
+    return { assemblies: [], rejections: [] };
+  }
   const groups = (catalog.optionGroups ?? [])
     .filter((og) => og.kind === 'hardware' && (og.kitHardwareId ?? '').trim() === target)
     .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));

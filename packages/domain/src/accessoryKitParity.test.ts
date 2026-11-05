@@ -252,4 +252,62 @@ describe('#1502 — kit accesorio elegible (paridad con Go)', () => {
     const bom = resolveBom(module, choices, catalog);
     expect(bom.hardwareLines.filter((line) => line.id.startsWith('kit-acc-'))).toHaveLength(0);
   });
+  it('guard target vacío: una bahía legacy SIN kit no hereda grupos hardware sin link como accesorios (#1429 slice B)', () => {
+    // Cajón kit-less (miembros fixed, sin kits de variante ni a nivel
+    // agregado) en un catálogo con un grupo hardware REQUERIDO sin
+    // kit_hardware_id (el BISAGRA clásico): sin el guard del gemelo Go, el
+    // target '' lo matcheaba y la bahía heredaba rejections
+    // accessory_choice_required falsas en cada preview (cazado vía el
+    // surfacing de #1429 slice B).
+    const kitless = {
+      id: 'agr-kitless',
+      code: 'CAJON-KITLESS',
+      name: 'Cajón sin kit',
+      active: true,
+      rigidMembers: (['min', 'max'] as const).map((ref, i) => ({
+        memberId: `side-${i}`,
+        role: `drawer_side_${i}`,
+        source: { kind: 'fixed', fixed: { hardwareId: 'hw-fijo' } },
+        placement: { x: { ref, offsetMm: 0 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 0 } },
+        bomRole: 'separately_purchased',
+      })),
+      components: [],
+      hardwareLines: [],
+    } as unknown as Agregado;
+    const grupoLegacy: OptionGroup = {
+      id: 'og-bis',
+      code: 'BISAGRA',
+      name: 'Bisagras',
+      kind: 'hardware',
+      required: true,
+      optionIds: ['hw-fijo'],
+    };
+    const catalogKitless = {
+      structures: [],
+      agregados: [kitless],
+      components: [],
+      materials: [],
+      hardware: [{ id: 'hw-fijo', code: 'HW-FIJO', name: 'Riel fijo', unit: 'piece', costPerUnit: 10, active: true }],
+      optionGroups: [grupoLegacy],
+    } as unknown as Catalog;
+    const moduleKitless = {
+      id: 'mod-kitless',
+      code: 'MOD-KITLESS',
+      name: 'Cajonera sin kit',
+      externalDims: { width: 400, height: 300, depth: 500 },
+      agregados: [{ id: 'inst-kitless', agregadoId: kitless.id, quantity: 1 }],
+      hardwareLines: [],
+    } as unknown as Module;
+
+    const detailed = resolveModuleAgregadoAssembliesDetailed(
+      moduleKitless,
+      { width: 400, height: 300, depth: 500 },
+      catalogKitless,
+      { optionChoices: {} },
+    );
+    // El cajón se dibuja y NINGUNA rejection de accesorio aparece: el grupo
+    // hardware legacy es exactamente lo que siempre fue.
+    expect(detailed.assemblies).toHaveLength(1);
+    expect(detailed.rejections).toEqual([]);
+  });
 });
