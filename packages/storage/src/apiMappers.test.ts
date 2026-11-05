@@ -6,6 +6,8 @@ import {
   ambientCategoryToApi,
   materialCategoryToApi,
   materialCategoryFromApi,
+  hardwareCategoryToApi,
+  hardwareCategoryFromApi,
   ambientMaterialFromApi,
   ambientMaterialToApi,
   edgeFromApi,
@@ -3016,6 +3018,56 @@ describe('materialCategoryToApi / materialCategoryFromApi', () => {
     const rootApi = materialCategoryToApi(root);
     expect(rootApi.parent_id).toBeNull();
     expect(materialCategoryFromApi(rootApi as Record<string, unknown>)).toEqual(root);
+  });
+});
+
+describe('hardwareCategoryToApi / hardwareCategoryFromApi (#1507)', () => {
+  it('round-trips snake_case parent/sort preserving optional parent', () => {
+    const cat = { id: 'hc-1', name: 'Bisagras', parentId: 'hc-root', sortOrder: 2 };
+    const api = hardwareCategoryToApi(cat);
+    expect(api.parent_id).toBe('hc-root');
+    expect(api.sort_order).toBe(2);
+    expect(hardwareCategoryFromApi(api as Record<string, unknown>)).toEqual(cat);
+
+    const root = { id: 'hc-root', name: 'Correderas', sortOrder: 1 };
+    const rootApi = hardwareCategoryToApi(root);
+    expect(rootApi.parent_id).toBeNull();
+    expect(hardwareCategoryFromApi(rootApi as Record<string, unknown>)).toEqual(root);
+  });
+});
+
+describe('hardwareToApi / hardwareFromApi — category + brand round-trip (#1507)', () => {
+  const base: Hardware = {
+    id: 'hw-1',
+    code: 'HW-BIS',
+    name: 'Bisagra',
+    unit: 'piece',
+    costPerUnit: 5,
+    active: true,
+  };
+
+  it('round-trips categoryId and brand; legacy rows stay unset', () => {
+    const hw: Hardware = {
+      ...base,
+      categoryId: 'hc-1',
+      brand: 'Blum',
+    };
+    const api = hardwareToApi(hw);
+    expect(api.category_id).toBe('hc-1');
+    expect(api.brand).toBe('Blum');
+
+    const round = hardwareFromApi(api as Record<string, unknown>);
+    expect(round.categoryId).toBe('hc-1');
+    expect(round.brand).toBe('Blum');
+  });
+
+  it("writes null/'' for unset category and brand (legacy shape)", () => {
+    const api = hardwareToApi(base);
+    expect(api.category_id).toBeNull();
+    expect(api.brand).toBe('');
+    const round = hardwareFromApi(api as Record<string, unknown>);
+    expect(round.categoryId).toBeUndefined();
+    expect(round.brand).toBeUndefined();
   });
 });
 

@@ -966,6 +966,7 @@ export function AppContent({
   const ambientMaterials = catalog?.ambientMaterials ?? [];
   const ambientCategories = catalog?.ambientCategories ?? [];
   const materialCategories = catalog?.materialCategories ?? [];
+  const hardwareCategories = catalog?.hardwareCategories ?? [];
   const optionGroups = catalog?.optionGroups ?? [];
   const modules = catalog?.modules ?? [];
   const structures = catalog?.structures ?? [];
@@ -2062,7 +2063,6 @@ export function AppContent({
     updateCustomer,
     updateEdge,
     updateHardware,
-    updateHardwareCategory,
     updateInstallationChecklist,
     updateKitchenLayout,
     updateMaterial,
