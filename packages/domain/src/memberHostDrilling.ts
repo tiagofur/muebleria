@@ -34,7 +34,6 @@ import type {
   ResolvedBoardPart,
 } from './types';
 import type { ResolvedModuleAssembly } from './agregadoAssembly';
-import { inferHoleType } from './partDrillingResolver';
 import type { HoleDefinition, HoleType } from './partDrilling';
 
 /** Issue codes the TS projection reports (mirrors the Go derivation). */
@@ -208,7 +207,7 @@ function holeOnBoard(
   if (local[0] < -1e-6 || local[0] > w + 1e-6 || inFaceY < -1e-6 || inFaceY > l + 1e-6) {
     return null;
   }
-  const type: HoleType = inferHoleType(profilePart, op, hw);
+  const type: HoleType = memberHostHoleType(profilePart, op, hw);
   return {
     face,
     xMm: Math.round(local[0] * 100) / 100,
@@ -218,6 +217,47 @@ function holeOnBoard(
     type,
     description: `member-host:${hw.code}:${op.id}`,
   };
+}
+
+/**
+ * Hole-type typing with the Go derivation's RESTRICTED precedence
+ * (memberHostHoleType in authoring_member_host.go): profile part role first,
+ * then the hardware name — the name carries the Spanish noun ("Tornillo…"
+ * ⇒ screw) — then the screw-pilot kind/label. Deliberately NOT the manual
+ * resolver's inferHoleType (which adds previewShape and Ø heuristics): the
+ * preview must type member-host holes exactly like the CNC derivation does.
+ */
+function memberHostHoleType(
+  part: HardwareMachiningPart,
+  op: MachiningOperation,
+  hw: Hardware,
+): HoleType {
+  const role = `${part.role}`.toLowerCase();
+  const label = `${op.label ?? ''} ${op.id}`.toLowerCase();
+  const name = `${hw.name} ${hw.code}`.toLowerCase();
+  const has = (haystack: string, needles: readonly string[]): boolean =>
+    needles.some((n) => haystack.includes(n));
+  if (has(role, ['hinge', 'bisagra', 'cup', 'taza', 'plate', 'placa']) || name.includes('bisagra')) {
+    return 'hinge';
+  }
+  if (has(role, ['minifix', 'cam', 'bolt', 'perno', 'cazuela']) || name.includes('minifix')) {
+    return 'minifix';
+  }
+  if (has(role, ['dowel', 'taquete', 'tarugo']) || has(name, ['taquete', 'tarugo'])) {
+    return 'dowel';
+  }
+  if (has(role, ['shelf', 'estante', 'soporte']) || has(name, ['soporte', 'entrepaño'])) {
+    return 'shelf';
+  }
+  if (
+    has(role, ['screw', 'tornillo']) ||
+    op.kind === 'screw_pilot' ||
+    has(label, ['tornillo', 'piloto', 'screw']) ||
+    name.includes('tornillo')
+  ) {
+    return 'screw';
+  }
+  return 'screw';
 }
 
 /**

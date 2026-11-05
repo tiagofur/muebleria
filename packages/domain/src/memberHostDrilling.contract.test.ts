@@ -236,3 +236,102 @@ describe('memberHostDrilling contract (#1429 slice B)', () => {
     }
   });
 });
+
+// #1429 slice B (review B1): el lado TS del dedupe y del fail-closed tiene
+// sus propios tests — una regresión que silencie la señal o duplique el
+// agujero no puede quedar en verde.
+describe('memberHostDrilling — dedupe y fail-closed en el pipeline (#1429 slice B)', () => {
+  it('un placement manual equivalente SUPRIME el agujero member-host duplicado (la autoría manda)', () => {
+    // Herraje de UN piloto con el perfil exacto de una fila Blum: el placement
+    // manual ancla en (front, 207, 33.5) — el golden hole de fixed_rail_left.
+    const tornillo: Hardware = {
+      id: 'hw-tornillo-32-12',
+      code: 'TOR-32-12',
+      name: 'Tornillo piloto Ø3.2×12',
+      unit: 'piece',
+      costPerUnit: 0,
+      active: true,
+      machining: {
+        parts: [
+          {
+            id: 'pilot',
+            role: 'screw',
+            operations: [
+              { id: 'pilot-1', kind: 'screw_pilot', diameterMm: 3.2, depthMm: 12, xMm: 0, yMm: 0, face: 'anchor' },
+            ],
+          },
+        ],
+      },
+    };
+    const structureConManual: Structure = {
+      ...structure,
+      components: (structure.components ?? []).map((c) =>
+        c.componentId === 'comp-side'
+          ? {
+              ...c,
+              overrides: {
+                hardwarePlacements: [
+                  { hardwareId: tornillo.id, anchorFace: 'front', relativePosition: { xMm: 207, yMm: 33.5 } },
+                ],
+              },
+            }
+          : c,
+      ),
+    };
+    const catalogConManual: Catalog = {
+      ...catalog,
+      hardware: [...catalog.hardware, tornillo],
+      structures: catalog.structures?.map((s) => (s.id === structure.id ? structureConManual : s)),
+    };
+    const resultado = resolveProjectDrilling({
+      project,
+      catalog: catalogConManual,
+      generatedAt: '2026-11-05T00:00:00.000Z',
+    });
+
+    const lateral = resultado.patterns.find((p) => p.partName === 'Lateral');
+    expect(lateral).toBeDefined();
+    const enElPunto = lateral!.holes.filter(
+      (h) =>
+        h.face === 'front' &&
+        Math.abs(h.xMm - 207) < 0.01 &&
+        Math.abs(h.yMm - 33.5) < 0.01 &&
+        Math.abs(h.diameterMm - 3.2) < 0.01 &&
+        Math.abs(h.depthMm - 12) < 0.01,
+    );
+    // El punto aparece EXACTAMENTE una vez (el manual): el member-host
+    // equivalente se suprime, ni duplicado ni colisión.
+    expect(enElPunto).toHaveLength(1);
+    // Las otras 5 filas Blum siguen perforando: 5 member-host + 1 manual.
+    const filas = lateral!.holes.filter((h) => h.face === 'front' && Math.abs(h.diameterMm - 3.2) < 0.01);
+    expect(filas).toHaveLength(6);
+  });
+
+  it('hostPlacement sin pieza con ese rol → exactamente 1 issue fail-closed por template', () => {
+    // Carrocería sin lateral derecho: fixed_rail_right declara
+    // lateral_derecho y el mueble no tiene esa pieza.
+    const carcaseSinDerecho: Component[] = carcaseComponents.filter((c) => c.id !== 'comp-side-r');
+    const structureSinDerecho: Structure = {
+      ...structure,
+      components: [{ componentId: 'comp-side', quantity: 1 }, { componentId: 'comp-front', quantity: 1 }],
+    };
+    const modSinDerecho: Module = { ...modMbox, id: 'mod-mbox-sin-der', code: 'MOD-MBOX-SD' };
+    const catalogSinDerecho: Catalog = {
+      ...catalog,
+      components: [...(catalog.components ?? []).filter((c) => !carcaseComponents.some((cc) => cc.id === c.id && cc.id === 'comp-side-r')), ...carcaseSinDerecho],
+      structures: catalog.structures?.map((s) => (s.id === structure.id ? structureSinDerecho : s)),
+      modules: [...(catalog.modules ?? []).filter((m) => m.id !== modMbox.id), modSinDerecho],
+    };
+    const resultado = resolveProjectDrilling({
+      project: { ...project, items: [{ ...project.items[0]!, id: 'item-sin-der', moduleId: modSinDerecho.id }] },
+      catalog: catalogSinDerecho,
+      generatedAt: '2026-11-05T00:00:00.000Z',
+    });
+
+    const issues = resultado.resolutionIssues.filter((i) => i.code === 'DRILLING_MEMBER_HOST_UNRESOLVED');
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.stage).toBe('member-host');
+    expect(issues[0]!.blocking).toBe(true);
+    expect(issues[0]!.message).toContain('lateral_derecho');
+  });
+});
