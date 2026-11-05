@@ -338,6 +338,11 @@ export function AgregadoRecipeAuthoringPanel({
                                     kind,
                                     variant: { variantSetId: sets[0]?.id ?? '' },
                                   },
+                                  // #1429 slice B: el anfitrión externo sólo
+                                  // existe para fuente fija — el cambio a
+                                  // variante lo limpia (la validación lo
+                                  // rechazaría con el select oculto).
+                                  hostPlacement: undefined,
                                 },
                           );
                         }}

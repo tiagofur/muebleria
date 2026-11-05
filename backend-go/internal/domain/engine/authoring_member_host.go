@@ -160,11 +160,11 @@ func deriveMemberHostMachining(
 // operations whose hole was already authored by an EXPLICIT manual placement
 // on the same host board: the owner's authoring wins, so an equivalent hole
 // neither duplicates in the output nor false-collides in the gate.
-// Equivalence = same host board, same face, center within 0.1mm, diameter
-// and depth within 0.1mm — the same tolerance the TS deduplicateHoles
-// applies (partDrillingResolver). Non-equivalent holes keep BOTH operations
-// and the collision gate stays fail-closed: another depth at the same spot
-// is a physical contradiction, never a silent merge.
+// Equivalence = same host board, same face, center within 0.1mm per axis
+// (Chebyshev box; the TS deduplicateHoles uses the equivalent 0.1mm
+// euclidean radius), diameter and depth within 0.1mm. Non-equivalent holes
+// keep BOTH operations and the collision gate stays fail-closed: another
+// depth at the same spot is a physical contradiction, never a silent merge.
 func dedupeMemberHostManualEquivalents(operations []ResolvedMachiningOperation) []ResolvedMachiningOperation {
 	manualHoles := make(map[string][]ResolveHole)
 	for _, op := range operations {
