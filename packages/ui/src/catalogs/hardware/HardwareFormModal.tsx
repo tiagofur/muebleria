@@ -13,14 +13,17 @@ import {
   type FormEvent,
   type ReactNode,
   type SetStateAction,
+  useMemo,
 } from 'react';
 import { Trash2 } from 'lucide-react';
 import {
+  childrenOf,
   formatKitPartPlacementLabel,
   isHardwareKitPart,
   resolveKitPartConfig,
   type Agregado,
   type Hardware,
+  type HardwareCategoryNode,
   type HardwareUnit,
   type KitPartPlacementConfig,
 } from '@granete/domain';
@@ -75,6 +78,8 @@ export interface HardwareFormModalProps {
   readonly onLinkExistingPart?: (hardwareId: string) => void;
   /** Actualiza la apertura y posición de una parte directamente desde el modal del kit. */
   readonly onUpdateKitPartConfig?: (part: Hardware, next: KitPartPlacementConfig) => void;
+  /** #1507: árbol de subgrupos de herrajes para el select de categoría. */
+  readonly hardwareCategories?: readonly HardwareCategoryNode[];
 }
 
 export function HardwareFormModal({
@@ -100,6 +105,7 @@ export function HardwareFormModal({
   onAddKitPart,
   onLinkExistingPart,
   onUpdateKitPartConfig,
+  hardwareCategories = [],
 }: HardwareFormModalProps): ReactNode {
   const isKit = draft.unit === 'set' || Boolean(kitParts && kitParts.length > 0);
   const isKitChildPart = Boolean(draft.kitHardwareId);
@@ -132,6 +138,20 @@ export function HardwareFormModal({
       ],
     }));
   };
+
+  /** #1507: opciones planas del árbol con sangría por nivel (padre→hijo). */
+  const categoryOptions = useMemo(() => {
+    const opts: { id: string; name: string }[] = [];
+    const walk = (parentId: string | undefined, depth: number) => {
+      for (const c of childrenOf(hardwareCategories, parentId)) {
+        const indent = depth > 0 ? `${'—'.repeat(depth)} ` : '';
+        opts.push({ id: c.id, name: `${indent}${c.name}` });
+        walk(c.id, depth + 1);
+      }
+    };
+    walk(undefined, 0);
+    return opts;
+  }, [hardwareCategories]);
 
   return (
     <Modal
@@ -186,6 +206,35 @@ export function HardwareFormModal({
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               required
+            />
+          </div>
+          {hardwareCategories.length > 0 ? (
+            <div className="catalog-form__field">
+              <label htmlFor="hw-category">Categoría (opcional)</label>
+              <select
+                id="hw-category"
+                value={draft.categoryId ?? ''}
+                onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
+                data-testid="hardware-form-category"
+              >
+                <option value="">Sin categoría</option>
+                {categoryOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          <div className="catalog-form__field">
+            <label htmlFor="hw-brand">Marca / serie (opcional)</label>
+            <input
+              id="hw-brand"
+              value={draft.brand ?? ''}
+              onChange={(e) => setDraft({ ...draft, brand: e.target.value })}
+              placeholder="Ej. Blum, Hettich…"
+              autoComplete="off"
+              data-testid="hardware-form-brand"
             />
           </div>
           <div

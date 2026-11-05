@@ -299,6 +299,16 @@ export interface Hardware {
    */
   readonly kitHardwareId?: string;
   /**
+   * #1507: category tree link (subgrupos de herrajes como los muebles F142).
+   * Unset = uncategorized. FK enforced server-side.
+   */
+  readonly categoryId?: string;
+  /**
+   * #1507: free-form manufacturer/series label (e.g. "Blum"). Unset = sin
+   * marca. No purchase or machining meaning.
+   */
+  readonly brand?: string;
+  /**
    * Maximum physical opening angle in degrees for kinematic hardware
    * (e.g. hinges: 110, 95, 155, 170; lift flaps: 107). Omitted for
    * non-rotational hardware (slides, pulls, legs).
@@ -488,6 +498,15 @@ export type AmbientCategory = CategoryNode;
 
 /** Reuses the shared hierarchical CategoryNode tree (same as modules/ambient). */
 export type MaterialCategory = CategoryNode;
+
+// --- Hardware categories (#1507: subgrupos de herrajes) ---
+
+/**
+ * Reuses the shared hierarchical CategoryNode tree (same as modules/ambient/
+ * material). Named `...Node` because `HardwareCategory` is already the #350
+ * closed vocabulary (smartFurnitureDomain) — this is the TREE type.
+ */
+export type HardwareCategoryNode = CategoryNode;
 
 // --- Module template ---
 
@@ -1819,6 +1838,11 @@ export interface Catalog {
    * Omitted/undefined treated as [] for older workspaces.
    */
   readonly materialCategories?: readonly MaterialCategory[];
+  /**
+   * Hierarchical hardware categories (#1507: subgrupos de herrajes).
+   * Omitted/undefined treated as [] for older workspaces.
+   */
+  readonly hardwareCategories?: readonly HardwareCategoryNode[];
   readonly customers?: readonly Customer[];
   /** Reusable components catalog (F049 / H07). */
   readonly components?: readonly Component[];

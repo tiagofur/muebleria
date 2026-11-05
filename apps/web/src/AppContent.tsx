@@ -1151,6 +1151,9 @@ export function AppContent({
   const createMaterialCategory = catalogActions.createMaterialCategory;
   const updateMaterialCategory = catalogActions.updateMaterialCategory;
   const deleteMaterialCategory = catalogActions.deleteMaterialCategory;
+  const createHardwareCategory = catalogActions.createHardwareCategory;
+  const updateHardwareCategory = catalogActions.updateHardwareCategory;
+  const deleteHardwareCategory = catalogActions.deleteHardwareCategory;
   const createOptionGroup = catalogActions.createOptionGroup;
   const updateOptionGroup = catalogActions.updateOptionGroup;
   const deleteOptionGroup = catalogActions.deleteOptionGroup;
@@ -1796,6 +1799,7 @@ export function AppContent({
     ambientCategories,
     ambientMaterials,
     materialCategories,
+    hardwareCategories,
     analyticsPeriod,
     applyScenarioB,
     assignableOwners,
@@ -2030,6 +2034,9 @@ export function AppContent({
     setEdgeActive,
     setEditingModuleId,
     setHardwareActive,
+    createHardwareCategory,
+    updateHardwareCategory,
+    deleteHardwareCategory,
     setItemFloorStatus,
     setMaterialActive,
     setShowOnboardingTour,
@@ -2055,6 +2062,7 @@ export function AppContent({
     updateCustomer,
     updateEdge,
     updateHardware,
+    updateHardwareCategory,
     updateInstallationChecklist,
     updateKitchenLayout,
     updateMaterial,

@@ -250,6 +250,8 @@ export interface ShellViewCtx {
   readonly ambientCategories: readonly CategoryNode[];
   /** F142: subgrupos de materiales del taller (árbol de categorías). */
   readonly materialCategories: readonly CategoryNode[];
+  /** #1507: subgrupos de herrajes del taller (árbol de categorías). */
+  readonly hardwareCategories: readonly CategoryNode[];
   readonly ambientMaterials: readonly AmbientMaterial[];
   readonly analyticsPeriod: AnalyticsPeriodDays;
   readonly applyScenarioB: (projectId: string, role: string, choiceId: string) => void;
@@ -296,6 +298,7 @@ export interface ShellViewCtx {
   readonly deleteKitTemplate: (id: string, expectedVersion: number) => Promise<void>;
   readonly createMaterial: (draft: MaterialDraft) => Promise<void>;
   readonly createMaterialCategory: (draft: CategoryDraft) => void;
+  readonly createHardwareCategory: (draft: CategoryDraft) => void;
   readonly createModule: (draft: ModuleDraft) => Promise<void>;
   readonly createOptionGroup: (draft: OptionGroupDraft) => void;
   readonly createProject: (draft: ProjectDraft) => void;
@@ -309,6 +312,7 @@ export interface ShellViewCtx {
   readonly deleteAmbientCategory: (id: string) => Promise<void>;
   readonly deleteCategory: (id: string) => Promise<void>;
   readonly deleteMaterialCategory: (id: string) => Promise<void>;
+  readonly deleteHardwareCategory: (id: string) => Promise<void>;
   readonly deleteModule: (id: string) => void;
   readonly deleteOptionGroup: (id: string) => Promise<void>;
   readonly deleteProject: (id: string) => void;
@@ -531,6 +535,7 @@ export interface ShellViewCtx {
   readonly updateCustomer: (id: string, draft: CustomerDraft) => void;
   readonly updateEdge: (id: string, draft: EdgeDraft) => Promise<void>;
   readonly updateHardware: (id: string, draft: HardwareDraft) => void;
+  readonly updateHardwareCategory: (id: string, draft: CategoryDraft) => void;
   readonly updateInstallationChecklist: (projectId: string, installationChecklist: readonly InstallationChecklistItem[]) => void;
   readonly updateKitchenLayout: (projectId: string, kitchenLayout: ProjectKitchenLayout) => void;
   readonly updateMaterial: (id: string, draft: MaterialDraft) => Promise<void>;
@@ -589,6 +594,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     ambientCategories,
     ambientMaterials,
     materialCategories,
+    hardwareCategories,
     analyticsPeriod,
     applyScenarioB,
     assignableOwners,
@@ -630,6 +636,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     createHardwareKit,
     createMaterial,
     createMaterialCategory,
+    createHardwareCategory,
     createModule,
     createOptionGroup,
     createProject,
@@ -643,6 +650,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     deleteAmbientCategory,
     deleteCategory,
     deleteMaterialCategory,
+    deleteHardwareCategory,
     deleteModule,
     deleteOptionGroup,
     deleteProject,
@@ -844,6 +852,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     updateKitchenLayout,
     updateMaterial,
     updateMaterialCategory,
+    updateHardwareCategory,
     updateMeasureDefaults,
     updateModule,
     updateOptionGroup,
@@ -2037,6 +2046,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           showCosts={showCosts}
           resolveImageUrl={resolveMediaUrl}
           assetService={hardwareAssetService}
+          hardwareCategories={hardwareCategories}
+          onCreateCategory={canMutateCatalog ? createHardwareCategory : undefined}
+          onUpdateCategory={canMutateCatalog ? updateHardwareCategory : undefined}
+          onDeleteCategory={canMutateCatalog ? deleteHardwareCategory : undefined}
           onUploadImage={
             canMutateCatalog && session === 'auth' && authToken
               ? uploadCatalogImage

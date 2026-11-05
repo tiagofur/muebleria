@@ -14,6 +14,7 @@ import {
   filterModulesByCategory,
   filterAmbientMaterialsByCategory,
   filterMaterialBoardsByCategory,
+  filterHardwareByCategory,
   materialManufacturer,
   MATERIAL_MANUFACTURER_UNSET,
   subtreeHeight,
@@ -199,5 +200,33 @@ describe('materialManufacturer', () => {
     expect(materialManufacturer({ manufacturer: '  Arauco ' } as import('./types').MaterialBoard)).toBe('Arauco');
     expect(materialManufacturer({} as import('./types').MaterialBoard)).toBe(MATERIAL_MANUFACTURER_UNSET);
     expect(materialManufacturer({ manufacturer: '   ' } as import('./types').MaterialBoard)).toBe(MATERIAL_MANUFACTURER_UNSET);
+  });
+});
+
+// ─── #1507: subgrupos de herrajes (espejo de los tableros F142) ──────────────
+
+describe('filterHardwareByCategory', () => {
+  const hardwareCats = [
+    { id: 'hc-bisagras', name: 'Bisagras', sortOrder: 1 },
+    { id: 'hc-cup', name: 'Copa', parentId: 'hc-bisagras', sortOrder: 1 },
+    { id: 'hc-correderas', name: 'Correderas', sortOrder: 2 },
+  ];
+  const hardware = [
+    { id: 'h1', categoryId: 'hc-cup' },
+    { id: 'h2', categoryId: 'hc-correderas' },
+    { id: 'h3' },
+  ] as import('./types').Hardware[];
+
+  it('null filter returns all; subtree includes descendants', () => {
+    expect(filterHardwareByCategory(hardware, null, hardwareCats)).toHaveLength(3);
+    expect(
+      filterHardwareByCategory(hardware, 'hc-bisagras', hardwareCats).map((h) => h.id),
+    ).toEqual(['h1']);
+  });
+
+  it('uncategorized filter returns hardware without subgrupo', () => {
+    expect(
+      filterHardwareByCategory(hardware, UNCATEGORIZED_FILTER, hardwareCats).map((h) => h.id),
+    ).toEqual(['h3']);
   });
 });

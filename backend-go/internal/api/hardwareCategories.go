@@ -1,0 +1,133 @@
+package api
+
+import (
+	"net/http"
+	"strings"
+
+	"errors"
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
+)
+
+// --- CATALOG / HARDWARE CATEGORIES (#1507: subgrupos de herrajes) ---
+//
+// Mirror of the material categories handlers (F142): GET for any authenticated
+// user, mutations gated by RoleCanMutateCatalog (admin/ingeniero), storage
+// error strings mapped to 400/404/409.
+
+func (s *Server) HandleHardwareCategories(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		list, err := s.Store.ListHardwareCategories(r.Context())
+		if err != nil {
+			respondWithInternalError(w, err, "hardware categories list")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, list)
+
+	case http.MethodPost:
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+			return
+		}
+		var c domain.HardwareCategory
+		if !decodeJSONBody(w, r, &c) {
+			return
+		}
+		err := s.Store.CreateHardwareCategory(r.Context(), &c)
+		if err != nil {
+			if strings.Contains(err.Error(), "invalid category placement") ||
+				strings.Contains(err.Error(), "cannot exceed") ||
+				strings.Contains(err.Error(), "name is required") {
+				respondWithError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			respondWithInternalError(w, err, "hardware category create")
+			return
+		}
+		respondWithJSON(w, http.StatusCreated, c)
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) HandleHardwareCategoryByID(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondWithError(w, http.StatusBadRequest, "missing hardware category id")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		c, err := s.Store.GetHardwareCategoryByID(r.Context(), id)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "hardware category not found")
+			return
+		}
+		w.Header().Set("ETag", FormatVersionETag(c.Version))
+		respondWithJSON(w, http.StatusOK, c)
+
+	case http.MethodPut:
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+			return
+		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		var c domain.HardwareCategory
+		if !decodeJSONBody(w, r, &c) {
+			return
+		}
+		err := s.Store.UpdateHardwareCategory(r.Context(), id, expectedVersion, &c)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				return
+			}
+			if strings.Contains(err.Error(), "invalid category placement") ||
+				strings.Contains(err.Error(), "cannot exceed") ||
+				strings.Contains(err.Error(), "name is required") ||
+				strings.Contains(err.Error(), "cannot be its own") ||
+				strings.Contains(err.Error(), "descendant") {
+				respondWithError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			respondWithInternalError(w, err, "hardware category update")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, c)
+
+	case http.MethodDelete:
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+			return
+		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		err := s.Store.DeleteHardwareCategory(r.Context(), id, expectedVersion)
+		if err != nil {
+			if strings.Contains(err.Error(), "cannot delete category with children") {
+				respondWithError(w, http.StatusConflict, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				return
+			}
+			respondWithInternalError(w, err, "hardware category delete")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]string{"message": "hardware category deleted"})
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}

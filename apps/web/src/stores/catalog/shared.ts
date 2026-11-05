@@ -130,6 +130,10 @@ export interface CatalogState {
   readonly createHardware: (draft: HardwareDraft) => Promise<void>;
   readonly updateHardware: (id: string, draft: HardwareDraft) => Promise<void>;
   readonly setHardwareActive: (id: string, active: boolean) => Promise<void>;
+  // #1507: subgrupos de herrajes (mismo patrón que los tableros F142).
+  readonly createHardwareCategory: (draft: CategoryDraft) => void;
+  readonly updateHardwareCategory: (id: string, draft: CategoryDraft) => void;
+  readonly deleteHardwareCategory: (id: string) => Promise<void>;
 
   // --- Ambient materials (presentation-only: finishes & scene textures) ---
   /** K1 #1032: settle promises so screens can await the save. */

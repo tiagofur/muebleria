@@ -13,14 +13,17 @@ import {
 import type {
   Agregado,
   Hardware,
+  HardwareCategoryNode,
   HardwareKitCreateRequest,
   HardwareKitResult,
   KitPartPlacementConfig,
 } from '@granete/domain';
 import {
+  UNCATEGORIZED_FILTER,
   ValidationError,
   countMachiningOperations,
   ensureAgregadoKitParts,
+  filterHardwareByCategory,
   formatKitPartPlacementLabel,
   isHardwareKitPart,
   validateMachiningProfile,
@@ -28,6 +31,9 @@ import {
   syncAgregadoWithKitParts,
 } from '@granete/domain';
 import type { HardwareAssetService, WorkshopKitTemplateRow } from '@granete/storage';
+import type { CategoryDraft } from '../../modules/moduleHelpers';
+import { CategoryTree } from '../ambient/AmbientCategoryTree';
+import { HardwareCategoryModals } from './HardwareCategoryModals';
 import { Copy, Eye, EyeOff, PackagePlus, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   ConfirmDialog,
@@ -95,6 +101,11 @@ export interface HardwareCatalogProps {
   /** Actualiza la receta del agregado asociado al kit cuando cambian sus partes (#1422 / #1435). */
   readonly onUpdateAgregado?: (agregado: Agregado) => void | Promise<void>;
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
+  /** #1507: árbol de subgrupos de herrajes + su ABM (mismo patrón que tableros F142). */
+  readonly hardwareCategories?: readonly HardwareCategoryNode[];
+  readonly onCreateCategory?: (draft: CategoryDraft) => void;
+  readonly onUpdateCategory?: (id: string, draft: CategoryDraft) => void;
+  readonly onDeleteCategory?: (id: string) => void;
 }
 
 // K4 #1032: same workshop-facing labels as the form's shape select — the
@@ -132,11 +143,18 @@ export function HardwareCatalog({
   onDeleteKitTemplate,
   onReloadKitTemplates,
   resolveImageUrl = (u) => u,
+  hardwareCategories = [],
+  onCreateCategory,
+  onUpdateCategory,
+  onDeleteCategory,
 }: HardwareCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = useState<CatalogStatusFilter>('active');
+  // #1507: filtro por subgrupo de herrajes (null = todas).
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
   const hardwareIds = useMemo(() => hardware.map((h) => h.id), [hardware]);
   const { selectedId: expandedId, toggleSelectedId } =
     useRoutableEntitySelection({
@@ -221,13 +239,36 @@ export function HardwareCatalog({
     return 'Móvil — abre con la puerta';
   };
 
+  // #1507: counts del árbol por subgrupo (nodo + descendientes) + sin categoría.
+  const categoryFilterCounts = useMemo(() => {
+    const byCategoryId = new Map<string, number>();
+    for (const cat of hardwareCategories) {
+      byCategoryId.set(
+        cat.id,
+        filterHardwareByCategory(hardware, cat.id, hardwareCategories).length,
+      );
+    }
+    return {
+      all: hardware.length,
+      uncategorized: filterHardwareByCategory(
+        hardware,
+        UNCATEGORIZED_FILTER,
+        hardwareCategories,
+      ).length,
+      byCategoryId,
+    };
+  }, [hardware, hardwareCategories]);
+
   const rows = useMemo(
     () =>
-      filterCatalogItems(hardware, {
-        status,
-        query: debouncedSearch,
-      }).filter((h) => !isHardwareKitPart(h) || debouncedSearch.trim() !== ''),
-    [hardware, status, debouncedSearch],
+      filterCatalogItems(
+        filterHardwareByCategory(hardware, categoryFilter, hardwareCategories),
+        {
+          status,
+          query: debouncedSearch,
+        },
+      ).filter((h) => !isHardwareKitPart(h) || debouncedSearch.trim() !== ''),
+    [hardware, categoryFilter, hardwareCategories, status, debouncedSearch],
   );
 
   const closeModal = () => {
@@ -495,6 +536,9 @@ export function HardwareCatalog({
 
   const isTrulyEmpty = hardware.length === 0;
   const isFilterEmpty = !isTrulyEmpty && rows.length === 0;
+  // #1507: el sidebar de categorías aparece cuando hay árbol o se puede crear.
+  const showCategorySidebar =
+    hardwareCategories.length > 0 || Boolean(onCreateCategory);
 
   return (
     <section className="catalog-page" aria-label="Catálogo de herrajes">
@@ -555,7 +599,79 @@ export function HardwareCatalog({
         />
       ) : null}
 
-      <div className="catalog-layout">
+      <div className={showCategorySidebar ? 'module-list-layout' : 'catalog-layout'}>
+        {showCategorySidebar ? (
+          <aside
+            className="module-category-tree"
+            aria-label="Filtro por categorías"
+            data-testid="hardware-category-filter-panel"
+          >
+            <div className="module-category-tree__header">
+              <h3 className="module-category-tree__title">Categorías</h3>
+              {canMutate && onCreateCategory ? (
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small"
+                  onClick={() => setManageCategoriesOpen(true)}
+                  aria-label="Editar categorías"
+                  data-testid="hardware-category-filter-edit"
+                >
+                  <Pencil size={14} strokeWidth={1.5} aria-hidden />
+                </button>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className={
+                categoryFilter === null
+                  ? 'module-category-tree__item module-category-tree__item--active'
+                  : 'module-category-tree__item'
+              }
+              onClick={() => setCategoryFilter(null)}
+              data-testid="hardware-category-filter-all"
+            >
+              <span className="module-category-tree__label">Todas</span>
+              <span
+                className="module-category-tree__count"
+                data-testid="hardware-category-filter-count-all"
+              >
+                {categoryFilterCounts.all}
+              </span>
+            </button>
+            <button
+              type="button"
+              className={
+                categoryFilter === UNCATEGORIZED_FILTER
+                  ? 'module-category-tree__item module-category-tree__item--active'
+                  : 'module-category-tree__item'
+              }
+              onClick={() => setCategoryFilter(UNCATEGORIZED_FILTER)}
+              data-testid="hardware-category-filter-uncategorized"
+            >
+              <span className="module-category-tree__label">Sin categoría</span>
+              <span
+                className="module-category-tree__count"
+                data-testid="hardware-category-filter-count-uncategorized"
+              >
+                {categoryFilterCounts.uncategorized}
+              </span>
+            </button>
+            {hardwareCategories.length === 0 ? (
+              <p className="module-category-tree__empty">
+                Sin categorías. Usá «Editar categorías» para crear la jerarquía de herrajes.
+              </p>
+            ) : (
+              <CategoryTree
+                categories={hardwareCategories}
+                parentId={undefined}
+                depth={0}
+                categoryFilter={categoryFilter}
+                setCategoryFilter={setCategoryFilter}
+                counts={categoryFilterCounts.byCategoryId}
+              />
+            )}
+          </aside>
+        ) : null}
         {isTrulyEmpty ? (
           <EmptyState
             icon={Settings2}
@@ -855,6 +971,20 @@ export function HardwareCatalog({
         )}
       </div>
 
+      <HardwareCategoryModals
+        open={manageCategoriesOpen}
+        onClose={() => setManageCategoriesOpen(false)}
+        categories={hardwareCategories}
+        onCreateCategory={onCreateCategory}
+        onUpdateCategory={onUpdateCategory}
+        onDeleteCategory={onDeleteCategory}
+        onAfterDelete={(deletedId) => {
+          if (categoryFilter === deletedId) {
+            setCategoryFilter(null);
+          }
+        }}
+      />
+
       <HardwareFormModal
         open={modalOpen}
         identity={editingHardware ? { code: editingHardware.code, name: editingHardware.name } : undefined}
@@ -862,6 +992,7 @@ export function HardwareCatalog({
         formId={formId}
         draft={draft}
         setDraft={setDraft}
+        hardwareCategories={hardwareCategories}
         error={error}
         canMutate={canMutate}
         saving={saving}

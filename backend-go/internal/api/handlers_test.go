@@ -296,6 +296,14 @@ type stubStore struct {
 	updateMaterialCategoryCalled  bool
 	deleteMaterialCategoryCalled  bool
 	deleteMaterialCategoryErrHook error
+	// Hardware categories (#1507)
+	listHardwareCategories        []domain.HardwareCategory
+	hardwareCategoryReturnedByID  *domain.HardwareCategory
+	hardwareCategoryGetByIDErr    error
+	createHardwareCategoryErr     error
+	createHardwareCategoryOK      bool
+	updateHardwareCategoryCalled  bool
+	deleteHardwareCategoryCalled  bool
 	// Session registry hooks (#460 / SEC-1)
 	authSessions      map[string]*domain.AuthSession
 	nextAuthSessionID string
