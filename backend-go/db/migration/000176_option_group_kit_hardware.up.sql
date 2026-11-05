@@ -6,4 +6,3 @@
 -- (parts → kit, required; group → eligible accessory). Existence/active/
 -- kind-hardware validated server-side (fail-closed 422), not via FK.
 ALTER TABLE option_groups ADD COLUMN IF NOT EXISTS kit_hardware_id UUID;
-ALTER TABLE option_groups DROP COLUMN IF EXISTS kit_hardware_id;

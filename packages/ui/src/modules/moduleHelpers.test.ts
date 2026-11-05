@@ -462,7 +462,7 @@ describe('suggestPartCode / defaultOptionChoicesForModule', () => {
         variantSets: [
           {
             id: 'height-variants',
-            dimension: 'height',
+            dimension: 'height' as const,
             variants: [
               { nominalDimensionMm: 209, hardwareId: 'hw-e', commercialKitHardwareId: 'kit-mbox-e' },
               { nominalDimensionMm: 108, hardwareId: 'hw-m', commercialKitHardwareId: 'kit-mbox-m' },
