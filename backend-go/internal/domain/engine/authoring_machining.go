@@ -459,6 +459,10 @@ func deriveAuthoringMachining(
 	// #1429 slice A: rigid members declaring an external host (hostPlacement)
 	// drill that module board with their hardware's catalog machining profile.
 	deriveMemberHostMachining(assemblies, boards, catalog, &operations, &issues)
+	// #1429 slice B: an explicit manual placement that already authored the
+	// same hole wins — the member-host equivalent is suppressed instead of
+	// duplicating the hole or false-colliding in the gate below.
+	operations = dedupeMemberHostManualEquivalents(operations)
 	// #1302 / §13.3: the opening's declared side notches become routing
 	// operations derived from the SAME resolved subtraction boxes the visible
 	// geometry consumes — one definition, never a second geometric
