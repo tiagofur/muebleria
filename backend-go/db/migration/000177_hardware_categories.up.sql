@@ -1,9 +1,11 @@
 -- #1507: hierarchical hardware categories (subgrupos de herrajes, mirror of
 -- material_categories from F142 / ambient_categories from F086) plus the
 -- hardware category link and free-form brand label. organization_id is baked
--- in from day one (materials needed a later backfill in 000083). Tenant RLS
--- follows the 000094 catalog-taxonomy discipline (same policies as
--- material_categories; physical delete is part of the category ABM).
+-- in from day one (materials needed a later backfill in 000083), and so is
+-- the server-owned optimistic-concurrency version (000154 discipline — the
+-- CRUD selects it for the If-Match ETag). Tenant RLS follows the 000094
+-- catalog-taxonomy discipline (same policies as material_categories;
+-- physical delete is part of the category ABM).
 CREATE TABLE IF NOT EXISTS hardware_categories (
     id TEXT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -12,6 +14,7 @@ CREATE TABLE IF NOT EXISTS hardware_categories (
     organization_id UUID NOT NULL
         DEFAULT '00000000-0000-0000-0000-000000000001'
         REFERENCES organizations(id),
+    version BIGINT NOT NULL DEFAULT 1 CHECK (version >= 1),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
