@@ -759,6 +759,7 @@ function newKitPartMembers(
     readonly code: string;
     readonly name: string;
     readonly previewShape?: string;
+    readonly designParts?: readonly { readonly componentName: string; readonly actorMembership: string; readonly label?: string }[];
     readonly hands?: {
       readonly left?: { readonly asset?: { readonly assetId: string; readonly assetRevisionId: string } };
       readonly right?: { readonly asset?: { readonly assetId: string; readonly assetRevisionId: string } };
@@ -768,6 +769,22 @@ function newKitPartMembers(
 ): any[] {
   const cfg = resolveKitPartConfig(part, agregado);
   const safeMemberId = `part_${part.code.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
+  // #1512 (paridad Go): el pos: label de DesignParts[0] pisa el placement
+  // derivado — mismo orden de precedencia que kitPartMember en el layout Go.
+  const parsedPos = part.designParts?.[0]?.label
+    ? parseKitPartPlacementLabel(part.designParts[0]!.label)
+    : null;
+  const applyPos = (m: any): any => {
+    if (!parsedPos) return m;
+    return {
+      ...m,
+      placement: {
+        x: { ...(m.placement?.x ?? {}), ref: parsedPos.xRef, offsetMm: parsedPos.xOffsetMm },
+        y: { ...(m.placement?.y ?? {}), ref: m.placement?.y?.ref ?? 'min', offsetMm: parsedPos.yOffsetMm },
+        z: { ...(m.placement?.z ?? {}), ref: m.placement?.z?.ref ?? 'min', offsetMm: parsedPos.zOffsetMm },
+      },
+    };
+  };
   const build = (hand?: RigidMemberHand, memberIdSuffix = '') => ({
     memberId: `${safeMemberId}${memberIdSuffix}`,
     role: part.previewShape || 'part',
@@ -784,13 +801,13 @@ function newKitPartMembers(
   const hasLeft = Boolean(part.hands?.left?.asset?.assetId && part.hands.left.asset.assetRevisionId);
   const hasRight = Boolean(part.hands?.right?.asset?.assetId && part.hands.right.asset.assetRevisionId);
   if (!hasLeft && !hasRight) {
-    return [build()];
+    return [applyPos(build())];
   }
   const left = build('left', '_left');
   const right = build('right', '_right');
   left.placement.x = { ref: 'min', offsetMm: Math.abs(cfg.xOffsetMm) };
   right.placement.x = { ref: 'max', offsetMm: -Math.abs(cfg.xOffsetMm) };
-  return [left, right];
+  return [applyPos(left), applyPos(right)];
 }
 
 /**

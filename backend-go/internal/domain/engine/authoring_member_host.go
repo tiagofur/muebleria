@@ -197,10 +197,12 @@ func memberHostPlacement(member domain.ResolvedRigidMember) string {
 }
 
 // mirrorMachiningProfileForRightHand (#1512 M3) mirrors a LEFT-canonical
-// catalog profile for a right-hand member: every hole operation maps
-// x' = HW − x − ⌀ (x measured at the hole's left edge in the hardware
-// frame). Depth/inner-diameter/label ride unchanged. Returns ok=false when
-// any operation is not a hole kind — the mirror never invents a mapping.
+// catalog profile for a right-hand member. XMm is the hole CENTER in the
+// hardware frame (repo convention: seed fixtures and the Ruby projector both
+// place circles at radius ⌀/2 centered on x_mm), so the mirror is
+// x' = HW − x — a center-symmetric hole (x = HW/2) maps to itself. Depth,
+// inner diameter and label ride unchanged. Returns ok=false when any
+// operation is not a hole kind — the mirror never invents a mapping.
 func mirrorMachiningProfileForRightHand(profile *domain.HardwareMachiningProfile, hardwareWidthMm float64) (*domain.HardwareMachiningProfile, bool) {
 	mirrored := &domain.HardwareMachiningProfile{}
 	mirrored.Parts = make([]domain.HardwareMachiningPart, len(profile.Parts))
@@ -209,11 +211,14 @@ func mirrorMachiningProfileForRightHand(profile *domain.HardwareMachiningProfile
 		out.Operations = make([]domain.MachiningOperation, len(part.Operations))
 		for oi, op := range part.Operations {
 			kind := strings.ToLower(strings.TrimSpace(op.Kind))
-			if kind != "blind_hole" && kind != "through_hole" && kind != "hole" {
+			// Round-hole kinds only (the repo vocabulary): blind/through holes
+			// and screw pilots (the Blum datum profiles use screw_pilot).
+			// Anything else (grooves, slots) fails closed — no invented mapping.
+			if kind != "blind_hole" && kind != "through_hole" && kind != "hole" && kind != "screw_pilot" {
 				return nil, false
 			}
 			mirrored := op
-			mirrored.XMm = hardwareWidthMm - op.XMm - op.DiameterMm
+			mirrored.XMm = hardwareWidthMm - op.XMm
 			out.Operations[oi] = mirrored
 		}
 		mirrored.Parts[pi] = out
