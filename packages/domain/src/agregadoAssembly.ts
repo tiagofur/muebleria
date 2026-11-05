@@ -57,7 +57,12 @@ export type RigidMemberBOMRole =
 export type AssemblyAxisRef = 'min' | 'max' | 'center';
 
 export interface AssemblyAxisPlacement {
-  readonly ref: AssemblyAxisRef;
+  /**
+   * #1512 M3: opcional SOLO para miembros con mano — la mano deriva el ref X
+   * default (left → min, right → max) vía effectivePlacement. Sin mano, la
+   * validación de definición exige ref explícita (fail-closed intacto).
+   */
+  readonly ref?: AssemblyAxisRef;
   readonly offsetMm: number;
   /**
    * #1418: bounded formula (PW/PH/PD with + - * / and numbers) evaluated
@@ -640,7 +645,7 @@ export function validateAssemblyAnchorRule(rule: AssemblyAnchorRule): void {
  * declaración propia de la receta siempre gana.
  */
 export function effectivePlacement(m: Pick<AgregadoRigidMember, 'hand' | 'placement'>): AssemblyAnchorRule {
-  if ((m.hand === 'left' || m.hand === 'right') && !m.placement.x.ref) {
+  if ((m.hand === 'left' || m.hand === 'right') && m.placement.x && !m.placement.x.ref) {
     if (m.hand === 'right') {
       return {
         ...m.placement,

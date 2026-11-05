@@ -142,8 +142,11 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   // #1429 slice A: the rigid member hostPlacement derivation (backend
   // authoring_member_host.go) surfaces these on the resolve wire.
   'MEMBER_HOST_PLACEMENT_MISSING',
+  // #1512 M3: el espejo del perfil para miembros right falla cerrado.
+  'MEMBER_HOST_HAND_MIRROR_REQUIRES_DIMENSIONS',
   'MEMBER_HOST_PROFILE_REQUIRED',
   'MEMBER_HOST_BASIS_UNSUPPORTED',
+  'MEMBER_HOST_HAND_MIRROR_UNSUPPORTED_KIND',
   // #1219 joinery connection face gate + authoring resolve API rejections.
   'CONNECTION_FACE_INVALID',
   'FACTORY_POLICY_INVALID',

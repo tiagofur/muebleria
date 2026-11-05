@@ -769,7 +769,7 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 			}
 
 			// Attach visual assets and mount frames from catalog hardware to rigid members
-			attachHardwareAssetsToMembers(resolvedAssembly.RigidMembers, catalog)
+			AttachHardwareAssetsToMembers(resolvedAssembly.RigidMembers, catalog)
 
 			assemblies = append(assemblies, LayoutAssembly{
 				AssemblyInstanceID: instID,
@@ -966,10 +966,10 @@ func kitPartMember(hw domain.Hardware, agrCode string, hand string) domain.Agreg
 	}
 }
 
-// attachHardwareAssetsToMembers pins the visual asset, mount frame and name
+// AttachHardwareAssetsToMembers pins the visual asset, mount frame and name
 // from the catalog hardware onto each resolved rigid member (#668 R2) —
 // shared by the main recipe resolve and the #1502 accessory assemblies.
-func attachHardwareAssetsToMembers(members []domain.ResolvedRigidMember, catalog domain.Catalog) {
+func AttachHardwareAssetsToMembers(members []domain.ResolvedRigidMember, catalog domain.Catalog) {
 	for rIdx := range members {
 		rm := &members[rIdx]
 		if hw, ok := findHardware(catalog, rm.HardwareID); ok {

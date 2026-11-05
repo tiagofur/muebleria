@@ -181,7 +181,7 @@ func resolveAccessoryAssemblies(
 		if len(resolved.RigidMembers) == 0 {
 			continue
 		}
-		attachHardwareAssetsToMembers(resolved.RigidMembers, catalog)
+		AttachHardwareAssetsToMembers(resolved.RigidMembers, catalog)
 		assemblies = append(assemblies, LayoutAssembly{
 			AssemblyInstanceID: accInstanceID,
 			AgregadoID:         baseAgr.ID,
