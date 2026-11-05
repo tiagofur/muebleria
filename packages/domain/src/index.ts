@@ -1057,6 +1057,16 @@ export {
   type ProjectDrillingData,
 } from './partDrilling';
 
+// --- Member-host drilling (#1429 slice B): preview mirror of the Go
+// derivation. The closed host vocabulary (AGREGADO_MEMBER_HOST_PLACEMENTS)
+// rides the agregadoAssembly export above. ---
+export {
+  projectMemberHostDrilling,
+  memberHostHoleIsEquivalent,
+  type MemberHostDrillingIssue,
+  type MemberHostDrillingIssueCode,
+} from './memberHostDrilling';
+
 // --- Neutral machine-output contract (#351 foundation) ---
 export {
   AdapterSerializationBlocked,
