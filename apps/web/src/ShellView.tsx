@@ -2074,6 +2074,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onUpdate={openingProfiles.update}
           onDeactivate={openingProfiles.deactivate}
           canMutate={canMutateCatalog}
+          hardwareOptions={hardware.map((item) => ({ id: item.id, code: item.code, name: item.name, active: item.active }))}
+          componentOptions={components.map((item) => ({ id: item.id, code: item.code, name: item.name, active: item.active }))}
         />
       ) : null}
       {navId === 'finishes' ? (

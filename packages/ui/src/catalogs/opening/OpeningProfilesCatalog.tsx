@@ -34,9 +34,11 @@ import {
 } from '../catalogHelpers';
 import { ActiveBadge, CatalogTable, type CatalogColumn } from '../CatalogTable';
 import { OpeningProfileFormModal } from './OpeningProfileFormModal';
+import type { CatalogPickerOption } from '../CatalogPicker';
 import {
   bodyModifiersOfDraft,
   emptyOpeningProfileDraft,
+  isHardwareMemberRole,
   membersMapOfDraft,
   suggestOpeningProfileId,
   toOpeningProfileDraft,
@@ -82,6 +84,9 @@ export interface OpeningProfilesCatalogProps {
   readonly onSelectionChange?: (id: string | null) => void;
   /** Hide ABM when false. */
   readonly canMutate?: boolean;
+  /** #1526 — hardware and components to pick members from (search by name or code). */
+  readonly hardwareOptions?: readonly CatalogPickerOption[] | null;
+  readonly componentOptions?: readonly CatalogPickerOption[] | null;
 }
 
 const GRIP_SHORT: Readonly<Record<string, string>> = {
@@ -123,6 +128,8 @@ export function OpeningProfilesCatalog({
   openEntityId = null,
   onSelectionChange,
   canMutate = true,
+  hardwareOptions = null,
+  componentOptions = null,
 }: OpeningProfilesCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -215,7 +222,11 @@ export function OpeningProfilesCatalog({
     // #1327: members reference exactly one thing each, with unique keys.
     const seenKeys = new Set<string>();
     for (const [index, member] of draft.members.entries()) {
-      if (member.key.trim() === '') return `La clave del elemento ${index + 1} es obligatoria`;
+      if (member.key.trim() === '') {
+        return member.kind === 'hardware'
+          ? `Elige el rol del herraje ${index + 1}: Perfil, Soportes o Tapas`
+          : `La clave del elemento ${index + 1} es obligatoria`;
+      }
       if (seenKeys.has(member.key.trim())) return `La clave "${member.key.trim()}" está repetida`;
       seenKeys.add(member.key.trim());
       if (member.kind === 'component' && member.componentId.trim() === '') {
@@ -223,6 +234,26 @@ export function OpeningProfilesCatalog({
       }
       if (member.kind === 'hardware' && member.hardwareId.trim() === '') {
         return `El herraje del elemento ${index + 1} no fue indicado`;
+      }
+      // #1526: a hardware member under any other key is silently ignored by
+      // the engine. Keys saved before keep working as they did (a legacy key
+      // left untouched is preserved), but none can be created.
+      if (member.kind === 'hardware' && !isHardwareMemberRole(member.key.trim())) {
+        const existingKeys = editingProfile?.bomMemberKeys ?? [];
+        if (!existingKeys.includes(member.key.trim())) {
+          return `Elige el rol del herraje ${index + 1}: Perfil, Soportes o Tapas`;
+        }
+      }
+      if (member.rule === 'per_length') {
+        const spacing = Number(member.spacingMm);
+        if (member.spacingMm.trim() === '' || !Number.isInteger(spacing) || spacing <= 0) {
+          return `Indica cada cuántos mm va el elemento ${index + 1} (entero mayor que 0)`;
+        }
+      }
+      for (const [axisIndex, dim] of member.dims.entries()) {
+        if (dim.trim() !== '' && (!Number.isFinite(Number(dim)) || Number(dim) <= 0)) {
+          return `La medida ${axisIndex + 1} del elemento ${index + 1} debe ser mayor que 0`;
+        }
       }
     }
     if (draft.doorReductionMm !== '') {
@@ -554,6 +585,8 @@ export function OpeningProfilesCatalog({
         saving={saving}
         onSubmit={handleSubmit}
         onClose={closeModal}
+        hardwareOptions={hardwareOptions}
+        componentOptions={componentOptions}
       />
 
       <ConfirmDialog

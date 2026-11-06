@@ -1450,3 +1450,23 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* #1526 — one opening-profile member (role, catalog reference, rule,
+   spacing and envelope) as a grouped block inside the members fieldset. */
+.catalog-form__member {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.catalog-form__member + .catalog-form__member {
+  margin-top: var(--space-3);
+}
+
+.catalog-form__fieldset--inline {
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
