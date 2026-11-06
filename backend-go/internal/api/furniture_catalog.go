@@ -109,6 +109,18 @@ type workshopAgregadoRole struct {
 	Name      string   `json:"name"`
 	Required  bool     `json:"required"`
 	OptionIDs []string `json:"optionIds"`
+	// Options (#1519 F2): per-agregado accessory groups — the kit-linked
+	// hardware option groups (galería/boxcap/boxcover) each choice mounts.
+	// The plugin renders one selector right below this role's selector.
+	Options []workshopAgregadoOption `json:"options,omitempty"`
+}
+
+// workshopAgregadoOption is one agregado choice of a role with the accessory
+// groups its commercial kit(s) declare (#1519 F2). Hardware option IDs only —
+// the plugin resolves names/codes against the catalog hardware array.
+type workshopAgregadoOption struct {
+	AgregadoID      string                 `json:"agregadoId"`
+	AccessoryGroups []workshopHardwareRole `json:"accessoryGroups,omitempty"`
 }
 
 // workshopMaterial is a board of the workshop catalog for client material
@@ -727,6 +739,19 @@ func buildAgregadoRoles(m domain.Module, composition domain.Catalog) []workshopA
 					}
 				}
 			}
+			// #1519 F2: accesorios del juego por elección — los grupos de
+			// herraje vinculados al kit comercial (del agregado y de sus
+			// variantes de altura) que el plugin oferta bajo este selector.
+			for _, optionID := range entry.OptionIDs {
+				agr, ok := findAgregadoByID(optionID, composition)
+				if !ok {
+					continue
+				}
+				entry.Options = append(entry.Options, workshopAgregadoOption{
+					AgregadoID:      optionID,
+					AccessoryGroups: buildAccessoryGroupsForAgregado(agr, composition),
+				})
+			}
 			roles = append(roles, entry)
 		}
 	}
@@ -748,6 +773,90 @@ func buildAgregadoRoles(m domain.Module, composition domain.Catalog) []workshopA
 		record(structure.Agregados)
 	}
 	return roles
+}
+
+// findAgregadoByID locates an agregado of the composition by id.
+func findAgregadoByID(id string, composition domain.Catalog) (domain.Agregado, bool) {
+	for _, a := range composition.Agregados {
+		if a.ID == id {
+			return a, true
+		}
+	}
+	return domain.Agregado{}, false
+}
+
+// buildAccessoryGroupsForAgregado (#1519 F2) derives the kit-linked hardware
+// option groups of an agregado's commercial kit — the kit itself plus any
+// height-variant kit (#1493) — with their ACTIVE member hardware. Deterministic
+// order by group code; groups repeated across variant kits merge their options.
+func buildAccessoryGroupsForAgregado(agr domain.Agregado, composition domain.Catalog) []workshopHardwareRole {
+	kitIDs := make([]string, 0, 2)
+	if agr.CommercialKitHardwareID != nil && strings.TrimSpace(*agr.CommercialKitHardwareID) != "" {
+		kitIDs = append(kitIDs, *agr.CommercialKitHardwareID)
+	}
+	for _, vs := range agr.VariantSets {
+		for _, v := range vs.Variants {
+			// ProductVariant.CommercialKitHardwareID es string plano (#1493):
+			// vacío = hereda el kit del agregado.
+			if kit := strings.TrimSpace(v.CommercialKitHardwareID); kit != "" && !containsString(kitIDs, kit) {
+				kitIDs = append(kitIDs, kit)
+			}
+		}
+	}
+	if len(kitIDs) == 0 {
+		return nil
+	}
+
+	activeHardware := make(map[string]bool, len(composition.Hardware))
+	for _, h := range composition.Hardware {
+		if h.Active {
+			activeHardware[h.ID] = true
+		}
+	}
+
+	byCode := map[string]*workshopHardwareRole{}
+	order := make([]string, 0)
+	for _, kitID := range kitIDs {
+		for _, og := range composition.OptionGroups {
+			if og.Kind != "hardware" || og.KitHardwareID == nil || *og.KitHardwareID != kitID {
+				continue
+			}
+			role, ok := byCode[og.Code]
+			if !ok {
+				role = &workshopHardwareRole{
+					Code:      og.Code,
+					Name:      og.Name,
+					Required:  og.Required,
+					OptionIDs: []string{},
+				}
+				byCode[og.Code] = role
+				order = append(order, og.Code)
+			}
+			for _, optionID := range og.OptionIDs {
+				if activeHardware[optionID] && !containsString(role.OptionIDs, optionID) {
+					role.OptionIDs = append(role.OptionIDs, optionID)
+				}
+			}
+		}
+	}
+	if len(order) == 0 {
+		return nil
+	}
+	sort.Strings(order)
+	roles := make([]workshopHardwareRole, 0, len(order))
+	for _, code := range order {
+		roles = append(roles, *byCode[code])
+	}
+	return roles
+}
+
+func containsString(list []string, v string) bool {
+	for _, item := range list {
+		if item == v {
+			return true
+		}
+	}
+	return false
 }
 
 // buildDimensionParameter projects one dimension parameter from the module and its presets.

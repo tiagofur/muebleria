@@ -13,6 +13,7 @@ import {
 import type {
   Agregado,
   Hardware,
+  OptionGroup,
   HardwareCategoryNode,
   HardwareKitCreateRequest,
   HardwareKitResult,
@@ -106,6 +107,11 @@ export interface HardwareCatalogProps {
   readonly onCreateCategory?: (draft: CategoryDraft) => void;
   readonly onUpdateCategory?: (id: string, draft: CategoryDraft) => void;
   readonly onDeleteCategory?: (id: string) => void;
+  /** #1519 F2: accesorios del juego — grupos vinculados al kit + su ABM inline. */
+  readonly optionGroups?: readonly OptionGroup[];
+  readonly onCreateOptionGroup?: (draft: { code: string; name: string; required: boolean; kitHardwareId: string }) => void;
+  readonly onUpdateOptionGroup?: (id: string, draft: { code: string; name: string; required: boolean; optionIds: string[]; kitHardwareId: string }) => void;
+  readonly onDeleteOptionGroup?: (id: string) => void;
 }
 
 // K4 #1032: same workshop-facing labels as the form's shape select — the
@@ -147,6 +153,10 @@ export function HardwareCatalog({
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
+  optionGroups,
+  onCreateOptionGroup,
+  onUpdateOptionGroup,
+  onDeleteOptionGroup,
 }: HardwareCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -1001,6 +1011,10 @@ export function HardwareCatalog({
         draft={draft}
         setDraft={setDraft}
         hardwareCategories={hardwareCategories}
+        optionGroups={optionGroups}
+        onCreateOptionGroup={onCreateOptionGroup}
+        onUpdateOptionGroup={onUpdateOptionGroup}
+        onDeleteOptionGroup={onDeleteOptionGroup}
         error={error}
         canMutate={canMutate}
         saving={saving}

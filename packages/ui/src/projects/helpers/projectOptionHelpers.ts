@@ -80,6 +80,8 @@ export function groupsForModuleItem(
   baseModeOverride?: ModuleBaseMode,
   /** #1502: grupos de accesorios declarados por los kits de los agregados. */
   catalogOptionGroups?: readonly OptionGroup[],
+  /** #1519 F2: elecciones del mueble — el accesorio sigue la elección de CAJÓN. */
+  optionChoices?: OptionChoices | null,
 ): OptionGroup[] {
   if (!module) return [];
   const effectiveModule =
@@ -93,6 +95,7 @@ export function groupsForModuleItem(
     catalogStructures,
     catalogAgregados,
     catalogOptionGroups,
+    optionChoices,
   );
   const byCode = new Map(optionGroups.map((g) => [g.code, g]));
   return codes
@@ -123,6 +126,12 @@ export function canShowProjectPricePreview(
       missing.add(`módulo:${item.moduleId}`);
       continue;
     }
+    // #1519 F2: las elecciones efectivas ANTES de derivar requeridos — el
+    // accesorio del cajón elegido participa del gate (no el del default).
+    const effective = effectiveOptionChoices(
+      item.optionChoices,
+      project.projectLevelChoices,
+    );
     const required = requiredGroupCodesForModule(
       mod,
       optionGroups,
@@ -130,10 +139,7 @@ export function canShowProjectPricePreview(
       catalogStructures,
       catalogAgregados,
       catalogOptionGroups,
-    );
-    const effective = effectiveOptionChoices(
-      item.optionChoices,
-      project.projectLevelChoices,
+      effective,
     );
     // P0-2b: a plinth_board item without ZOCLO nor FRENTE explodes on accept
     // with an unresolvable synthesized zoclo — surface it at the preview gate.

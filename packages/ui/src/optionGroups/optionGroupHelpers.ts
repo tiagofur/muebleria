@@ -5,6 +5,7 @@
 import type {
   Agregado,
   Component,
+  ModuleAgregadoInstance,
   EdgeBand,
   Hardware,
   MaterialBoard,
@@ -16,6 +17,7 @@ import type {
 } from '@granete/domain';
 import {
   HINGE_DEMAND_ROLE,
+  resolveEffectiveAgregadoId,
   PATAS_ROLE,
   ZOCLO_BOARD_ROLE,
   ZOCLO_STRIP_ROLE,
@@ -117,13 +119,22 @@ function collectAgregadoRoles(
   out: Set<string>,
   // #1502: grupos declarados por los kits que la receta monta.
   catalogOptionGroups?: readonly OptionGroup[],
+  // #1519 F2: las elecciones del mueble — el accesorio sigue la ELECCIÓN de
+  // CAJÓN (misma regla que el motor: resolveEffectiveAgregadoID).
+  optionChoices?: OptionChoices | null,
 ): void {
   if (!agregadoInstances || !catalogAgregados) return;
   for (const inst of agregadoInstances) {
     if (inst.optionRole?.trim()) {
       out.add(inst.optionRole.trim());
     }
-    const effectiveId = inst.agregadoId;
+    // #1519 F2: el accesorio sigue la ELECCIÓN de CAJÓN, no el agregado
+    // default de la instancia (paridad con ResolveEffectiveAgregadoID —
+    // la función lee sólo estos 3 campos; cast estructural seguro).
+    const effectiveId = resolveEffectiveAgregadoId(
+      inst as ModuleAgregadoInstance,
+      optionChoices,
+    );
     const agregado = catalogAgregados.find((a) => a.id === effectiveId);
     if (agregado) {
       if (agregado.hardwareLines) {
@@ -290,6 +301,9 @@ export function requiredGroupCodesForModule(
   catalogAgregados?: readonly Agregado[],
   // #1502: grupos de accesorios declarados por los kits de los agregados.
   catalogOptionGroups?: readonly OptionGroup[],
+  // #1519 F2: elecciones del mueble — los accesorios siguen la elección de
+  // CAJÓN (paridad con el motor).
+  optionChoices?: OptionChoices | null,
 ): string[] {
   const usedRoles = collectUsedOptionRoles(
     module,
@@ -297,6 +311,7 @@ export function requiredGroupCodesForModule(
     catalogStructures,
     catalogAgregados,
     catalogOptionGroups,
+    optionChoices,
   );
 
   const required = optionGroups
@@ -331,6 +346,7 @@ function collectUsedOptionRoles(
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
   catalogOptionGroups?: readonly OptionGroup[],
+  optionChoices?: OptionChoices | null,
 ): Set<string> {
   const usedRoles = new Set<string>();
   for (const line of module.hardwareLines ?? []) {
@@ -338,7 +354,7 @@ function collectUsedOptionRoles(
     if (line.optionRole?.trim()) usedRoles.add(line.optionRole.trim());
   }
   collectComponentRoles(module.components, catalogComponents, usedRoles);
-  collectAgregadoRoles(module.agregados, catalogAgregados, catalogComponents, usedRoles, catalogOptionGroups);
+  collectAgregadoRoles(module.agregados, catalogAgregados, catalogComponents, usedRoles, catalogOptionGroups, optionChoices);
   if (module.structureId && catalogStructures) {
     const structure = catalogStructures.find((s) => s.id === module.structureId);
     collectComponentRoles(structure?.components, catalogComponents, usedRoles);
@@ -348,6 +364,7 @@ function collectUsedOptionRoles(
       catalogComponents,
       usedRoles,
       catalogOptionGroups,
+      optionChoices,
     );
   }
   // F087 — the base treatment consumes a role even when its part/line is
@@ -400,6 +417,8 @@ export function selectableGroupCodesForModule(
   catalogAgregados?: readonly Agregado[],
   // #1502: grupos de accesorios declarados por los kits de los agregados.
   catalogOptionGroups?: readonly OptionGroup[],
+  // #1519 F2: elecciones del mueble (el accesorio sigue la elección de CAJÓN).
+  optionChoices?: OptionChoices | null,
 ): string[] {
   const usedRoles = collectUsedOptionRoles(
     module,
@@ -407,6 +426,7 @@ export function selectableGroupCodesForModule(
     catalogStructures,
     catalogAgregados,
     catalogOptionGroups,
+    optionChoices,
   );
   return optionGroups
     .filter((g) => usedRoles.has(g.code))

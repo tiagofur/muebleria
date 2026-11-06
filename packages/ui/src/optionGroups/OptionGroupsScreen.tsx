@@ -169,12 +169,17 @@ export function OptionGroupsScreen({
     return map;
   }, [materials, edges, hardware, agregados]);
 
-  // #1502: candidatos a kit accesorio = herrajes con partes de diseño (kits),
-  // activos — cada accesorio del grupo se monta sobre el kit declarado.
+  // #1502 (fix #1519): candidatos a kit accesorio = KITS reales (unit 'set',
+  // activos, no partes de otro kit) — el filtro anterior por designParts
+  // nunca listaba los kits del asistente (no tienen designParts). Las partes
+  // de diseño internas del SKP no hacen a un kit.
   const kitCandidates = useMemo(
     () =>
       hardware.filter(
-        (h) => h.active !== false && (h.designParts?.length ?? 0) > 0,
+        (h) =>
+          h.active !== false &&
+          h.unit === 'set' &&
+          !h.kitHardwareId,
       ),
     [hardware],
   );
