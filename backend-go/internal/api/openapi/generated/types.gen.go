@@ -2986,7 +2986,7 @@ type Hardware struct {
 	VisualAsset         *map[string]any     `json:"visual_asset,omitempty"`
 	DesignParts         []map[string]any    `json:"design_parts,omitempty"`
 	KitHardwareID       *string             `json:"kit_hardware_id,omitempty"`
-	Hands               *map[string]any     `json:"hands,omitempty"`
+	Pieces              []HardwarePiece     `json:"pieces,omitempty"`
 	Active              bool                `json:"active"`
 	CreatedAt           *string             `json:"created_at,omitempty"`
 	UpdatedAt           *string             `json:"updated_at,omitempty"`
@@ -3293,8 +3293,10 @@ type WorkshopMaterialCategory struct {
 	SortOrder int64   `json:"sortOrder"`
 }
 
-type HardwareHand struct {
-	Asset map[string]any `json:"asset,omitempty"`
+type HardwarePiece struct {
+	Anchor   string         `json:"anchor"`
+	Asset    map[string]any `json:"asset,omitempty"`
+	OffsetMm map[string]any `json:"offsetMm,omitempty"`
 }
 
 type WorkshopHardwareCategory struct {

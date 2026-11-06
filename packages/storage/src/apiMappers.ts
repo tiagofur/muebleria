@@ -21,7 +21,8 @@ import type {
   ReleaseEngineeringState,
   Hardware,
   HardwareCategoryNode,
-  HardwareHand,
+  HardwarePiece,
+  HardwarePieceOffset,
   HardwareLine,
   MaterialBoard,
   MaterialCategory,
@@ -501,9 +502,9 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     design_parts: h.designParts ? h.designParts.map((p) => ({ ...p })) : null,
     // Kit link (#1422 slice 1); null = herraje independiente.
     kit_hardware_id: h.kitHardwareId ?? null,
-    // #1512 M3: manos del herraje multi-diseño — sólo identifiers en el write
-    // (los facts server-resueltos nunca re-entran al storage).
-    hands: hardwareHandsToApi(h.hands),
+    // #1518 F1: piezas del herraje multi-diseño — sólo identifiers en el
+    // write (los facts server-resueltos nunca re-entran al storage).
+    pieces: hardwarePiecesToApi(h.pieces),
     // #1507: category tree link + free-form brand; null/'' = unset.
     category_id: h.categoryId ?? null,
     brand: h.brand ?? '',
@@ -570,9 +571,9 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     ...(normalizeHardwareDesignParts(raw.design_parts ?? raw.designParts)),
     // Kit link (#1422 slice 1) — passthrough validado server-side.
     ...(kitHardwareId(raw.kit_hardware_id ?? raw.kitHardwareId)),
-    // #1512 M3: manos del herraje multi-diseño — passthrough de identifiers;
-    // los facts llegan server-resueltos y se conservan tal cual en memoria.
-    ...(normalizeHardwareHands(raw.hands)),
+    // #1518 F1: piezas del herraje multi-diseño — passthrough con facts
+    // preservados (normalizeVisualAsset por pieza) y anchors validados.
+    ...(normalizeHardwarePieces(raw.pieces)),
     // #1507: category tree link + free-form brand — unset = uncategorized.
     ...(str(raw.category_id ?? raw.categoryId)
       ? { categoryId: str(raw.category_id ?? raw.categoryId) }
@@ -4885,54 +4886,66 @@ function kitHardwareId(raw: unknown): Pick<Hardware, 'kitHardwareId'> | {} {
 }
 
 /**
- * #1512 M3: manos del herraje multi-diseño — write: sólo identifiers (los
- * facts server-resueltos nunca re-entran al storage); read: passthrough de
- * la forma validada (un objeto sin manos presentes no entra).
+ * #1518 F1 (was #1512 hands): piezas del herraje multi-diseño — write: sólo
+ * identifiers + anchor + offsets (los facts nunca re-entran al storage);
+ * read: facts PRESERVADOS por pieza (normalizeVisualAsset), anchors del
+ * vocabulario cerrado, sin duplicados. Una forma sin piezas válidas no entra.
  */
-function hardwareHandsToApi(
-  hands: Hardware['hands'],
-): Record<string, unknown> | null {
-  if (!hands) return null;
-  const handOut = (h?: HardwareHand): { asset: { assetId: string; assetRevisionId: string } } | null => {
-    const asset = h?.asset;
-    if (!asset || !asset.assetId || !asset.assetRevisionId) return null;
-    return { asset: { assetId: asset.assetId, assetRevisionId: asset.assetRevisionId } };
-  };
-  const left = handOut(hands.left);
-  const right = handOut(hands.right);
-  if (!left && !right) return null;
-  return { ...(left ? { left } : {}), ...(right ? { right } : {}) };
+function hardwarePiecesToApi(
+  pieces: Hardware['pieces'],
+): Record<string, unknown>[] | null {
+  if (!pieces || pieces.length === 0) return null;
+  const out: Record<string, unknown>[] = [];
+  for (const piece of pieces) {
+    const entry: Record<string, unknown> = { anchor: piece.anchor };
+    const asset = piece.asset;
+    if (asset && asset.assetId && asset.assetRevisionId) {
+      entry.asset = { assetId: asset.assetId, assetRevisionId: asset.assetRevisionId };
+    }
+    if (piece.offsetMm) {
+      entry.offsetMm = { x: piece.offsetMm.x, y: piece.offsetMm.y, z: piece.offsetMm.z };
+    }
+    out.push(entry);
+  }
+  return out.length > 0 ? out : null;
 }
 
-function normalizeHardwareHands(
+function normalizeHardwarePieces(
   raw: unknown,
-): Pick<Hardware, 'hands'> | {} {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  const r = raw as Record<string, unknown>;
-  // #1512 (review P2): the read path PRESERVES the server-resolved facts of
-  // each hand binding (representation/sha/mountFrame/glb) exactly like
-  // normalizeVisualAsset does for the global visualAsset — the web preview
-  // renders hands from those facts. Only a hand without usable identifiers
-  // drops (fail-honest).
-  const handIn = (v: unknown): HardwareHand | undefined => {
-    if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
-    const assetRaw = (v as Record<string, unknown>).asset;
-    if (!assetRaw || typeof assetRaw !== 'object' || Array.isArray(assetRaw)) return {};
-    const a = assetRaw as Record<string, unknown>;
-    const assetId = str(a.assetId);
-    const assetRevisionId = str(a.assetRevisionId);
-    if (!assetId || !assetRevisionId) return {};
-    return { asset: (normalizeVisualAsset(assetRaw) as Pick<Hardware, 'visualAsset'>).visualAsset };
-  };
-  const left = handIn(r.left);
-  const right = handIn(r.right);
-  const hasLeft = Boolean(left && left.asset);
-  const hasRight = Boolean(right && right.asset);
-  if (!hasLeft && !hasRight) return {};
-  return {
-    hands: {
-      ...(hasLeft ? { left } : {}),
-      ...(hasRight ? { right } : {}),
-    },
-  };
+): Pick<Hardware, 'pieces'> | {} {
+  if (!Array.isArray(raw)) return {};
+  const pieces: HardwarePiece[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const r = item as Record<string, unknown>;
+    const anchor = r.anchor;
+    if (anchor !== 'left' && anchor !== 'right' && anchor !== 'center') continue;
+    if (seen.has(anchor)) continue;
+    seen.add(anchor);
+    const assetRaw = r.asset;
+    let asset: HardwarePiece['asset'];
+    if (assetRaw && typeof assetRaw === 'object' && !Array.isArray(assetRaw)) {
+      const a = assetRaw as Record<string, unknown>;
+      const assetId = str(a.assetId);
+      const assetRevisionId = str(a.assetRevisionId);
+      if (assetId && assetRevisionId) {
+        asset = (normalizeVisualAsset(assetRaw) as Pick<Hardware, 'visualAsset'>).visualAsset;
+      }
+    }
+    const offRaw = r.offsetMm;
+    let offsetMm: HardwarePieceOffset | undefined;
+    if (offRaw && typeof offRaw === 'object' && !Array.isArray(offRaw)) {
+      const o = offRaw as Record<string, unknown>;
+      const x = num(o.x);
+      const y = num(o.y);
+      const z = num(o.z);
+      if ([x, y, z].every((v) => Number.isFinite(v))) {
+        offsetMm = { x, y, z };
+      }
+    }
+    pieces.push({ anchor, ...(asset ? { asset } : {}), ...(offsetMm ? { offsetMm } : {}) });
+  }
+  if (pieces.length === 0) return {};
+  return { pieces };
 }

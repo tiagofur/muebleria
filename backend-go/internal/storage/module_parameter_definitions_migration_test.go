@@ -111,13 +111,14 @@ func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T)
 				// kit_hardware_id joined the option groups read per #1502, re-pinned
 				// to 000177 when category_id/brand joined the hardware read per
 				// #1507, re-pinned to 000178 when hands joined the hardware read
-				// per #1512):
+				// per #1512, re-pinned to 000179 when pieces replaced hands per
+				// #1518):
 				// the typed-definition rejection under test is
 				// schema-version-independent and the catalog read scans version
 				// on modules and hardware. The pin exists only to keep this
 				// proof on a fixed, explicit schema state — bump it whenever
 				// the catalog read starts requiring newer columns.
-				identityApplyThrough(t, pool, 178)
+				identityApplyThrough(t, pool, 179)
 			_, err := pool.Exec(context.Background(), `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES (gen_random_uuid(),$1,$2,$2,$3::jsonb)`, multiOrgInitialOrgID, "BAD-"+tt.name, tt.raw)
 			if err != nil {
 				t.Fatalf("seed direct SQL: %v", err)

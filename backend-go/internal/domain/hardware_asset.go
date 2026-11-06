@@ -102,8 +102,9 @@ func (n HardwareAssetNormalization) ApplyVector(v [3]float64) [3]float64 {
 
 // DeriveAssetNormalization computes the rigid normalization transform T_norm
 // from a given MountFrame in Asset space:
-//   R_norm = R_mount^T
-//   T_norm = - R_norm * Origin_mount
+//
+//	R_norm = R_mount^T
+//	T_norm = - R_norm * Origin_mount
 func DeriveAssetNormalization(mf HardwareMountFrame) (HardwareAssetNormalization, error) {
 	if err := ValidateHardwareBasis(mf.Basis, "mountFrame.basis"); err != nil {
 		return HardwareAssetNormalization{}, err
@@ -138,14 +139,14 @@ func DeriveAssetNormalization(mf HardwareMountFrame) (HardwareAssetNormalization
 // preparation of the asset file.
 //
 // AUTHORITY & PERSISTENCE CONTRACT:
-// - MountFrame is the sole persisted geometric authority in origin.
-// - AssetNormalization is derivable as its rigid inverse:
+//   - MountFrame is the sole persisted geometric authority in origin.
+//   - AssetNormalization is derivable as its rigid inverse:
 //     DeriveAssetNormalization(*origin.MountFrame)
-// - If the client provides assetNormalization, it must match the derived normalization
-//   within strict numerical tolerance (basisTolerance), or the origin is rejected.
-// - When assetNormalization is omitted by the client, it is not duplicated in
-//   physical database rows; on read, the domain materializes the derived assetNormalization
-//   in memory so consumers and PreparationState() always have a complete normalized frame.
+//   - If the client provides assetNormalization, it must match the derived normalization
+//     within strict numerical tolerance (basisTolerance), or the origin is rejected.
+//   - When assetNormalization is omitted by the client, it is not duplicated in
+//     physical database rows; on read, the domain materializes the derived assetNormalization
+//     in memory so consumers and PreparationState() always have a complete normalized frame.
 //
 // INVARIANT: measuredBoundsMm MUST NOT live in HardwareAssetOrigin;
 // measured geometry belongs exclusively to append-only validation evidence.
@@ -546,40 +547,117 @@ type HardwareVisualAssetBinding struct {
 // HardwareVisualGlbRepresentation is the exact GLB revision a binding exposes
 // to web consumers, with the declared coordinate space of the file.
 type HardwareVisualGlbRepresentation struct {
-	RevisionID      string `json:"revisionId"`
-	SHA256          string `json:"sha256"`
+	RevisionID       string `json:"revisionId"`
+	SHA256           string `json:"sha256"`
 	SourceRevisionID string `json:"sourceRevisionId,omitempty"`
-	SizeBytes       int64  `json:"sizeBytes,omitempty"`
-	SourceUnits     string `json:"sourceUnits,omitempty"`
-	UpAxis          string `json:"upAxis,omitempty"`
+	SizeBytes        int64  `json:"sizeBytes,omitempty"`
+	SourceUnits      string `json:"sourceUnits,omitempty"`
+	UpAxis           string `json:"upAxis,omitempty"`
 }
 
-// HardwareHand is one side of a multi-design hardware (#1512 M3). The asset
-// follows the HardwareVisualAssetBinding contract: writes carry identifiers
-// only, facts are server-resolved on read. Nil asset = that hand falls back
-// to the hardware's global VisualAsset.
-type HardwareHand struct {
-	Asset *HardwareVisualAssetBinding `json:"asset,omitempty"`
+// HardwarePieceOffset is the per-piece placement override (#1518 F1),
+// interpreted FROM the piece's anchor: left → from the min edge, right →
+// from the max edge, center → from the center. Millimeters.
+type HardwarePieceOffset struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	Z float64 `json:"z"`
 }
 
-// HardwareHands declares the per-hand assets of an asymmetric hardware
-// (#1512 M3): one catalog row with its SKP per side instead of duplicated
-// -I/-D rows. Nil hands on resolve = legacy single-asset behavior.
-type HardwareHands struct {
-	Left  *HardwareHand `json:"left,omitempty"`
-	Right *HardwareHand `json:"right,omitempty"`
+// HardwarePiece is one design piece of a multi-design hardware (#1518 F1,
+// evolution of the #1512 hands): its own anchor, optional exact asset and
+// optional per-side offsets. The asset follows the
+// HardwareVisualAssetBinding contract: writes carry identifiers only, facts
+// are server-resolved on read. Nil asset = the piece falls back to the
+// hardware's global VisualAsset.
+type HardwarePiece struct {
+	Anchor   string                      `json:"anchor"` // left | right | center
+	Asset    *HardwareVisualAssetBinding `json:"asset,omitempty"`
+	OffsetMm *HardwarePieceOffset        `json:"offsetMm,omitempty"`
 }
 
-// MemberHand is the closed vocabulary of AgregadoRigidMember.Hand (#1512 M3).
+// MemberHand is the closed vocabulary of AgregadoRigidMember.Hand (#1512
+// M3, center added by #1518 F1).
 const (
-	MemberHandLeft  = "left"
-	MemberHandRight = "right"
+	MemberHandLeft   = "left"
+	MemberHandRight  = "right"
+	MemberHandCenter = "center"
 )
 
 // IsValidMemberHand reports whether h is an acceptable member hand value:
-// empty (symmetric/legacy) or one of the closed sides.
+// empty (symmetric/legacy) or one of the closed anchors.
 func IsValidMemberHand(h string) bool {
-	return h == "" || h == MemberHandLeft || h == MemberHandRight
+	return h == "" || h == MemberHandLeft || h == MemberHandRight || h == MemberHandCenter
+}
+
+// IsValidPieceAnchor reports whether a is one of the closed piece anchors.
+func IsValidPieceAnchor(a string) bool {
+	return a == MemberHandLeft || a == MemberHandRight || a == MemberHandCenter
+}
+
+// AnchorAxisRef maps a piece/member anchor onto its default X axis
+// reference (#1518 F1): left → min (does not move), right → max (moves with
+// the width), center → center (moves half).
+func AnchorAxisRef(anchor string) (AssemblyAxisRef, bool) {
+	switch anchor {
+	case MemberHandLeft:
+		return AxisRefMin, true
+	case MemberHandRight:
+		return AxisRefMax, true
+	case MemberHandCenter:
+		return AxisRefCenter, true
+	}
+	return "", false
+}
+
+// HardwarePiecesFor returns the pieces of a hardware whose anchor matches
+// the member hand, in catalog order. Empty hand returns none.
+func HardwarePiecesFor(pieces []HardwarePiece, hand string) []HardwarePiece {
+	if hand == "" {
+		return nil
+	}
+	var out []HardwarePiece
+	for _, p := range pieces {
+		if p.Anchor == hand {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// HardwarePieceByAnchor returns the first piece with the given anchor.
+func HardwarePieceByAnchor(pieces []HardwarePiece, anchor string) (HardwarePiece, bool) {
+	for _, p := range pieces {
+		if p.Anchor == anchor {
+			return p, true
+		}
+	}
+	return HardwarePiece{}, false
+}
+
+// ValidateHardwarePieces checks the structural invariants of a pieces
+// array (#1518 F1): closed anchors, unique anchors, at most one per side,
+// and finite offsets. Identifiers completeness is validated at write time by
+// the asset authority.
+func ValidateHardwarePieces(pieces []HardwarePiece) error {
+	seen := map[string]bool{}
+	for _, p := range pieces {
+		if !IsValidPieceAnchor(p.Anchor) {
+			return fmt.Errorf("pieza con ancla inválida %q (valores: left|right|center)", p.Anchor)
+		}
+		if seen[p.Anchor] {
+			return fmt.Errorf("ancla %q repetida: una pieza por lado", p.Anchor)
+		}
+		seen[p.Anchor] = true
+		if p.OffsetMm != nil {
+			for _, v := range []float64{p.OffsetMm.X, p.OffsetMm.Y, p.OffsetMm.Z} {
+				if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 100000.0 {
+					return fmt.Errorf("pieza %q: offset no finito o fuera de rango (%g)", p.Anchor, v)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // DesignRevisionHardwareAssetPin is one frozen reference written at

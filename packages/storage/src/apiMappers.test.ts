@@ -3036,7 +3036,7 @@ describe('hardwareCategoryToApi / hardwareCategoryFromApi (#1507)', () => {
   });
 });
 
-describe('hardwareToApi / hardwareFromApi — hands round-trip (#1512)', () => {
+describe('hardwareToApi / hardwareFromApi — pieces round-trip (#1518)', () => {
   const base: Hardware = {
     id: 'hw-m',
     code: 'MBOX-IGM-M',
@@ -3046,40 +3046,41 @@ describe('hardwareToApi / hardwareFromApi — hands round-trip (#1512)', () => {
     active: true,
   };
 
-  it('write lleva sólo identifiers; read conserva la forma', () => {
+  it('write lleva sólo identifiers + anchor + offsets; read conserva la forma', () => {
     const hw: Hardware = {
       ...base,
       visualAsset: { assetId: 'a0', assetRevisionId: 'r0', sha256: 'f'.repeat(64), representation: 'skp' } as Hardware['visualAsset'],
-      hands: {
-        left: { asset: { assetId: 'a1', assetRevisionId: 'r1', sha256: 'e'.repeat(64) } as Hardware['visualAsset'] },
-        right: { asset: { assetId: 'a2', assetRevisionId: 'r2' } },
-      },
+      pieces: [
+        { anchor: 'left', asset: { assetId: 'a1', assetRevisionId: 'r1', sha256: 'e'.repeat(64) } as Hardware['visualAsset'], offsetMm: { x: 10, y: 0, z: 120 } },
+        { anchor: 'right', asset: { assetId: 'a2', assetRevisionId: 'r2' } },
+        { anchor: 'center' },
+      ],
     };
     const api = hardwareToApi(hw) as Record<string, unknown>;
-    const hands = api.hands as Record<string, unknown>;
-    const left = hands.left as { asset: Record<string, unknown> };
+    const pieces = api.pieces as Record<string, unknown>[];
+    expect(pieces).toHaveLength(3);
+    expect(pieces[0]).toMatchObject({ anchor: 'left', offsetMm: { x: 10, y: 0, z: 120 } });
     // El write NUNCA persiste facts: sólo identifiers.
-    expect(left.asset).toEqual({ assetId: 'a1', assetRevisionId: 'r1' });
-    expect(Object.keys(left.asset)).toEqual(['assetId', 'assetRevisionId']);
+    expect(Object.keys(pieces[0]!.asset as Record<string, unknown>)).toEqual(['assetId', 'assetRevisionId']);
+    expect(pieces[2]).toEqual({ anchor: 'center' });
 
     const round = hardwareFromApi(api);
-    expect(round.hands?.left?.asset?.assetId).toBe('a1');
-    expect(round.hands?.right?.asset?.assetRevisionId).toBe('r2');
+    expect(round.pieces?.map((pc) => pc.anchor)).toEqual(['left', 'right', 'center']);
+    expect(round.pieces?.[0]?.offsetMm).toEqual({ x: 10, y: 0, z: 120 });
   });
 
-  it('herraje sin manos: null en wire, undefined en dominio (legacy)', () => {
+  it('herraje sin piezas: null en wire, undefined en dominio (legacy)', () => {
     const api = hardwareToApi(base) as Record<string, unknown>;
-    expect(api.hands).toBeNull();
-    expect(hardwareFromApi(api).hands).toBeUndefined();
+    expect(api.pieces).toBeNull();
+    expect(hardwareFromApi(api).pieces).toBeUndefined();
   });
 
-  it('una mano sin asset completo no entra (fail-honest)', () => {
-    const api = hardwareToApi({
+  it('anchors inválidos y duplicados no entran (fail-honest)', () => {
+    const round = hardwareFromApi({
       ...base,
-      hands: { left: { asset: { assetId: 'a1', assetRevisionId: 'r1' } } },
-    }) as Record<string, unknown>;
-    const round = hardwareFromApi({ ...api, hands: { left: { asset: { assetId: 'a1' } } } });
-    expect(round.hands).toBeUndefined();
+      pieces: [{ anchor: 'left', asset: { assetId: 'a1', assetRevisionId: 'r1' } }, { anchor: 'left' }, { anchor: 'far' }],
+    });
+    expect(round.pieces).toEqual([{ anchor: 'left', asset: { assetId: 'a1', assetRevisionId: 'r1' } }]);
   });
 });
 

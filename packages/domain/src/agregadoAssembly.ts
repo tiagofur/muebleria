@@ -118,12 +118,12 @@ export interface HardwareDimensionOverride {
  * miembro es simétrico/legacy (byte-idéntico); declarado con un herraje
  * multi-diseño (hands) selecciona asset y anclaje por lado.
  */
-export type RigidMemberHand = 'left' | 'right';
+export type RigidMemberHand = 'left' | 'right' | 'center';
 
-export const RIGID_MEMBER_HANDS: readonly RigidMemberHand[] = ['left', 'right'];
+export const RIGID_MEMBER_HANDS: readonly RigidMemberHand[] = ['left', 'right', 'center'];
 
 export function isRigidMemberHand(value: unknown): value is RigidMemberHand {
-  return value === 'left' || value === 'right';
+  return value === 'left' || value === 'right' || value === 'center';
 }
 
 export interface AgregadoRigidMember {
@@ -665,7 +665,7 @@ export function validateAssemblyAnchorRule(rule: AssemblyAnchorRule): void {
  * declaración propia de la receta siempre gana.
  */
 export function effectivePlacement(m: Pick<AgregadoRigidMember, 'hand' | 'placement'>): AssemblyAnchorRule {
-  if ((m.hand === 'left' || m.hand === 'right') && m.placement.x && !m.placement.x.ref) {
+  if (isRigidMemberHand(m.hand) && m.hand && m.placement.x && !m.placement.x.ref) {
     if (m.hand === 'right') {
       return {
         ...m.placement,
@@ -675,6 +675,9 @@ export function effectivePlacement(m: Pick<AgregadoRigidMember, 'hand' | 'placem
           offsetMm: m.placement.x.offsetMm > 0 ? -m.placement.x.offsetMm : m.placement.x.offsetMm,
         },
       };
+    }
+    if (m.hand === 'center') {
+      return { ...m.placement, x: { ...m.placement.x, ref: 'center' } };
     }
     return { ...m.placement, x: { ...m.placement.x, ref: 'min' } };
   }
@@ -720,7 +723,7 @@ export function validateAgregadoRigidMember(
   // #1512 M3: vocabulario cerrado de mano — un valor desconocido es un bug
   // de autoría (gemelo Go: IsValidMemberHand en ValidateAgregadoRigidMember).
   if (m.hand !== undefined && !isRigidMemberHand(m.hand)) {
-    throw new Error(`rigid member '${m.memberId}': hand inválida '${String(m.hand)}' (valores: left|right)`);
+    throw new Error(`rigid member '${m.memberId}': hand inválida '${String(m.hand)}' (valores: left|right|center)`);
   }
   // #1512 M3: la mano provee el anclaje X default, así que una ref X vacía es
   // válida exactamente cuando una mano la deriva — se valida la regla
@@ -1263,7 +1266,7 @@ export function resolveAgregadoAssembly(
       // simétrico/legacy (pasa siempre). El anclaje X default por mano vive
       // en effectivePlacement (autoridad única, gemelo Go).
       if (member.hand !== undefined && !isRigidMemberHand(member.hand)) {
-        throw new Error(`member ${member.memberId}: hand inválida "${String(member.hand)}" (valores: left|right)`);
+        throw new Error(`member ${member.memberId}: hand inválida "${String(member.hand)}" (valores: left|right|center)`);
       }
       const xCoord = calculateAxisPlacementCoord('x', effectivePlacement(member).x, params.widthMm, memberDims);
       const yCoord = calculateAxisPlacementCoord('y', member.placement.y, params.depthMm, memberDims);
@@ -1451,10 +1454,8 @@ export function createCatalogVisualAssetLookup(
     // sin mano, mano sin asset propio) cae al visualAsset global. Nunca una
     // sustitución silenciosa de caja: el fail-closed de attachVisualPins
     // sigue rigiendo.
-    const va =
-      (hand === 'left' ? hw.hands?.left?.asset : undefined) ??
-      (hand === 'right' ? hw.hands?.right?.asset : undefined) ??
-      hw.visualAsset;
+    const piece = hand ? hw.pieces?.find((pc) => pc.anchor === hand) : undefined;
+    const va = piece?.asset ?? hw.visualAsset;
     if (!va) return null;
     if (!va.assetId || !va.assetRevisionId) return null;
     const glbBinding = (va as unknown as { glb?: MemberGlbRepresentation }).glb;

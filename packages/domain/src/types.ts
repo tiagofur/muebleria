@@ -299,10 +299,11 @@ export interface Hardware {
    */
   readonly kitHardwareId?: string;
   /**
-   * #1512 M3: manos declaradas del herraje multi-diseño (1 fila de catálogo,
-   * SKP por lado). Nil = simétrico/monomano (comportamiento legacy).
+   * #1518 F1 (was #1512 hands): piezas de diseño del herraje multi-diseño
+   * (1 fila de catálogo, SKP por ancla izq/der/centro). Nil = simétrico
+   * (comportamiento legacy).
    */
-  readonly hands?: HardwareHands;
+  readonly pieces?: readonly HardwarePiece[];
   /**
    * #1507: category tree link (subgrupos de herrajes como los muebles F142).
    * Unset = uncategorized. FK enforced server-side.
@@ -505,25 +506,27 @@ export type AmbientCategory = CategoryNode;
 export type MaterialCategory = CategoryNode;
 
 /**
- * #1512 M3: asset EXACTO de una mano de un herraje multi-diseño. Mismo
- * contrato que `Hardware.visualAsset`: en el write sólo viajan identifiers
- * (assetId/assetRevisionId); representation/sha/mountFrame/glb son facts
- * server-resueltos en lectura. Nil asset en la mano = esa mano cae al
- * `visualAsset` global (fallback legacy).
+ * #1518 F1: offset por pieza, interpretado DESDE el ancla de la pieza
+ * (left → desde el borde mínimo, right → desde el máximo, center → desde el
+ * centro). Milímetros.
  */
-export interface HardwareHand {
-  readonly asset?: HardwareVisualAssetBinding;
+export interface HardwarePieceOffset {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
 }
 
 /**
- * #1512 M3: manos declaradas de un herraje asimétrico — 1 fila de catálogo
- * con su SKP por lado (izquierdo/derecho) en vez de filas -I/-D duplicadas.
- * Una mano ausente cae a `visualAsset` (fallback); ambas ausentes = el
- * herraje es simétrico aunque declare el contenedor.
+ * #1518 F1: una PIEZA de diseño de un herraje multi-diseño — su propio
+ * ancla (left|right|center), asset exacto opcional y offsets por lado
+ * opcionales. Mismo contrato que `Hardware.visualAsset`: en el write sólo
+ * viajan identifiers; los facts son server-resueltos en lectura. Nil asset
+ * = la pieza cae al `visualAsset` global (fallback legacy).
  */
-export interface HardwareHands {
-  readonly left?: HardwareHand;
-  readonly right?: HardwareHand;
+export interface HardwarePiece {
+  readonly anchor: 'left' | 'right' | 'center';
+  readonly asset?: HardwareVisualAssetBinding;
+  readonly offsetMm?: HardwarePieceOffset;
 }
 
 // --- Hardware categories (#1507: subgrupos de herrajes) ---

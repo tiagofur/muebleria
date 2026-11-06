@@ -404,10 +404,10 @@ describe('plantillas del taller editables (#1422 slice 2 — fixture compartido 
           id: 'hw-perfil',
           code: 'MBOX-IGM-M',
           name: 'Perfil MERIVOBOX M',
-          hands: {
-            left: { asset: { assetId: 'a1', assetRevisionId: 'r1' } },
-            right: { asset: { assetId: 'a2', assetRevisionId: 'r2' } },
-          },
+          pieces: [
+            { anchor: 'left', asset: { assetId: 'a1', assetRevisionId: 'r1' } },
+            { anchor: 'right', asset: { assetId: 'a2', assetRevisionId: 'r2' } },
+          ],
         },
       ];
 

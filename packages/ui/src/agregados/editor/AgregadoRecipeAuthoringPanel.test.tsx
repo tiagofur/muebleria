@@ -26,7 +26,10 @@ const catalogHardware: readonly Hardware[] = [
   { id: 'hw-parte', code: 'KIT-CAJ-PARTE', name: 'Riel fijo izq', unit: 'piece', costPerUnit: 20, active: true, kitHardwareId: 'hw-kit' },
   { id: 'hw-bis', code: 'HER-BIS', name: 'Bisagra', unit: 'piece', costPerUnit: 5, active: true },
   // #1512 S2: herraje multi-diseño — el miembro pide mano al elegirlo.
-  { id: 'hw-perfil-m', code: 'MBOX-IGM-M', name: 'Perfil MERIVOBOX M', unit: 'piece', costPerUnit: 80, active: true, hands: { left: { asset: { assetId: 'a1', assetRevisionId: 'r1' } }, right: { asset: { assetId: 'a2', assetRevisionId: 'r2' } } } },
+  { id: 'hw-perfil-m', code: 'MBOX-IGM-M', name: 'Perfil MERIVOBOX M', unit: 'piece', costPerUnit: 80, active: true, pieces: [
+    { anchor: 'left', asset: { assetId: 'a1', assetRevisionId: 'r1' } },
+    { anchor: 'right', asset: { assetId: 'a2', assetRevisionId: 'r2' } },
+  ] },
 ];
 
 function Harness({ onChange, initial }: { onChange?: (d: AgregadoDraft) => void; initial?: Partial<AgregadoDraft> }): ReactNode {

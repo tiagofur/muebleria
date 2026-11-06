@@ -1,6 +1,10 @@
 {
-  "$comment": "#1512 M3: paridad TS↔Go del herraje multi-diseño (hands). Datos NEUTROS — cada lado construye sus objetos tipados desde este JSON (patrón accessoryKitParity: TS packages/domain/src/handsAssemblyParity.test.ts · Go backend-go/internal/domain/engine/hands_assembly_parity_test.go). Los miembros declaran mano y refs Y/Z; la ref X va VACÍA a propósito: el default por mano (left→min/+, right→max/−) es lo bajo prueba.",
-  "assembly": { "widthMm": 570, "depthMm": 530, "heightMm": 108 },
+  "$comment": "#1518 F1: paridad TS↔Go del herraje multi-diseño (pieces, evolución del par D/I de #1512). Datos NEUTROS — cada lado construye sus objetos tipados (patrón accessoryKitParity: TS packages/domain/src/handsAssemblyParity.test.ts · Go backend-go/internal/domain/engine/hands_assembly_parity_test.go). Los miembros declaran ancla y refs Y/Z; la ref X va VACÍA: el default por ancla (left→min, right→max, center→centro) es lo bajo prueba. La pieza center declara offsets x/y/z propios (interpretados desde su lado).",
+  "assembly": {
+    "widthMm": 570,
+    "depthMm": 530,
+    "heightMm": 108
+  },
   "hardware": [
     {
       "id": "hw-perfil-m",
@@ -9,22 +13,89 @@
       "widthMm": 91,
       "heightMm": 22,
       "depthMm": 530,
-      "globalAsset": { "assetId": "asset-global", "assetRevisionId": "rev-global", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
-      "hands": {
-        "left": { "assetId": "asset-left", "assetRevisionId": "rev-left", "sha256": "1111111111111111111111111111111111111111111111111111111111111111" },
-        "right": { "assetId": "asset-right", "assetRevisionId": "rev-right", "sha256": "2222222222222222222222222222222222222222222222222222222222222222" }
-      }
+      "globalAsset": {
+        "assetId": "asset-global",
+        "assetRevisionId": "rev-global",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "pieces": [
+        {
+          "anchor": "left",
+          "assetId": "asset-left",
+          "assetRevisionId": "rev-left",
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        {
+          "anchor": "right",
+          "assetId": "asset-right",
+          "assetRevisionId": "rev-right",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        {
+          "anchor": "center",
+          "assetId": "asset-center",
+          "assetRevisionId": "rev-center",
+          "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+          "offsetMm": {
+            "x": 0,
+            "y": 0,
+            "z": 40
+          }
+        }
+      ]
     }
   ],
   "members": [
-    { "memberId": "perfil-izq", "role": "slide", "hardwareId": "hw-perfil-m", "hand": "left", "yRef": "min", "zRef": "min" },
-    { "memberId": "perfil-der", "role": "slide", "hardwareId": "hw-perfil-m", "hand": "right", "yRef": "min", "zRef": "min" }
+    {
+      "memberId": "perfil-izq",
+      "role": "slide",
+      "hardwareId": "hw-perfil-m",
+      "hand": "left",
+      "yRef": "min",
+      "zRef": "min"
+    },
+    {
+      "memberId": "perfil-der",
+      "role": "slide",
+      "hardwareId": "hw-perfil-m",
+      "hand": "right",
+      "yRef": "min",
+      "zRef": "min"
+    },
+    {
+      "memberId": "perfil-centro",
+      "role": "guide",
+      "hardwareId": "hw-perfil-m",
+      "hand": "center",
+      "yRef": "min",
+      "zRef": "min",
+      "zOffsetMm": 40
+    }
   ],
   "expected": {
-    "$comment": "xCoord = ref derivado de la mano + offsetMm declarado (0 aquí: el default NO inventa offsets — la negación del offset positivo se cubre en el unit test del resolver Go).",
+    "$comment": "xCoord = ref derivado del ancla + offset declarado del MIEMBRO (0 en X aquí: el default NO inventa offsets; la negación del offset positivo right se cubre en el unit test del resolver Go). El miembro centro declara su propio zOffset (la receta gana); los offsets por PIEZA se ejercen en la expansión de partes de kit (kitPieceMember).",
     "members": [
-      { "memberId": "perfil-izq", "hand": "left", "xCoordMm": 0, "assetId": "asset-left" },
-      { "memberId": "perfil-der", "hand": "right", "xCoordMm": 570, "assetId": "asset-right" }
+      {
+        "memberId": "perfil-izq",
+        "hand": "left",
+        "xCoordMm": 0,
+        "zCoordMm": 0,
+        "assetId": "asset-left"
+      },
+      {
+        "memberId": "perfil-der",
+        "hand": "right",
+        "xCoordMm": 570,
+        "zCoordMm": 0,
+        "assetId": "asset-right"
+      },
+      {
+        "memberId": "perfil-centro",
+        "hand": "center",
+        "xCoordMm": 285,
+        "zCoordMm": 40,
+        "assetId": "asset-center"
+      }
     ]
   }
 }

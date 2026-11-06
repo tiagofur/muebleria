@@ -189,7 +189,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
         ...hardwarePreviewFields(draft),
         ...hardwareMachiningField(draft),
         ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
-        ...(draft.hands ? { hands: draft.hands } : {}),
+        ...(draft.pieces ? { pieces: draft.pieces } : {}),
       };
       return ctx.saveAndToast(
         (c) => {
@@ -236,7 +236,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               kitHardwareId: _dkid,
               categoryId: _dcat,
               brand: _dbrand,
-              hands: _dhands,
+              pieces: _dpieces,
               ...rest
             } = h;
             return {
@@ -253,7 +253,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               ...hardwarePreviewFields(draft),
               ...hardwareMachiningField(draft),
               ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
-              ...(draft.hands ? { hands: draft.hands } : {}),
+              ...(draft.pieces ? { pieces: draft.pieces } : {}),
             };
           });
           const affectedKitIds = new Set<string>();
