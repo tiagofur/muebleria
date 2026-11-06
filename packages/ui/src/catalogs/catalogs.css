@@ -538,22 +538,10 @@
   min-width: 12rem;
 }
 
-/* #1519 F3: dentro del editor de agregados los pickers viven en celdas de
+/* #1520 F3: dentro del editor de agregados los pickers viven en celdas de
    grid estrechas — el min-width global de 12rem desbordaba la tarjeta. */
 .agregado-editor .catalog-picker__trigger {
   min-width: 0;
-}
-
-/* La fila del picker no se comprime a ilegible: mínimo por columna del grid
-   genérico (el placeholder a 16px era el «campo a medias» restante). */
-.agregado-editor__item-fields--grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-/* La fila identidad del miembro (Herraje + X + Y + Z): el picker manda —
-   4 columnas con el picker dominante, colapsando a 2 con wrap a bajo ancho. */
-.agregado-editor__item-row--block > .agregado-editor__item-fields--grid {
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .catalog-picker__trigger:hover:not(:disabled) {

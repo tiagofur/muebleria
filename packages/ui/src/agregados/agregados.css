@@ -304,11 +304,26 @@
 }
 
 /* Three-field grid (Componente / Cantidad / Ubicación) for agregado pieces,
-   overriding the default 1fr-auto-auto row used by the hardware tab. */
+   overriding the default 1fr-auto-auto row used by the hardware tab.
+   #1520: mínimo por columna (el placeholder a 16px era el «campo a medias»). */
 .agregado-editor__item-fields--grid {
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--space-3);
   align-items: flex-start;
+}
+
+/* #1520: la fila identidad del miembro (Herraje + X + Y + Z) usa un grid
+   dedicado de 4 columnas con el picker dominante — el auto-fit de arriba lo
+   comprimía a 16px. Sin sort: 2 columnas con wrap a bajo ancho. */
+.agregado-editor__item-row--block > .agregado-editor__item-fields--grid {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+/* Fallback a 2 columnas en el miembro cuando el ancho no da para 4. */
+@media (max-width: 1400px) {
+  .agregado-editor__item-row--block > .agregado-editor__item-fields--grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
 }
 
 /* ── Hardware tab: unified 3D placements section ─────────────────── */
