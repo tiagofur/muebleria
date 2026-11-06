@@ -472,6 +472,36 @@ Datasheet fixtures (SCILM pp. 8–9, `r = 1.5`, `H = 720`):
 - Precision represents half millimetres. The remainder policy is fixed by #1529.
 - Pins of contract v1 keep their v1 arithmetic until #1532 migrates them, so no historical design changes silently.
 
+#### 14.4.1. Implemented: A3 engine (#1529)
+
+- **Contract v2** `granete.opening-front.v2`: `ResolveOpeningEdgeStack` (Go) and `resolveOpeningEdgeStack` (TS), shared fixture `contracts/openingFrontEdgeStack.contract.json`. It has the 7 datasheet cases, the Italian cases and the 3-drawer column.
+- **Precision and remainder:**
+  - every input is a multiple of 0.5 mm, and the math runs in integer half millimetres;
+  - each row gets `floor(remaining × weight / Σ weights)`;
+  - the leftover half millimetres go to the lowest row first, moving up.
+- **Stack:** read from the resolved poses of the door and drawer-front boards, never from names or order.
+  - Fronts whose vertical extents overlap share a row (doors side by side).
+  - The row weight is its catalog height.
+  - The reveals and gaps come from the same geometry, so a front without a grip keeps its catalog size.
+  - The body floor is the base panel (or z = 0).
+  - A front next to a stacked column is not one stack and stays blocked (`OPENING_STACKED_FRONTS_UNSUPPORTED`).
+- **One measure:** the layout writes the A3 pose on each front board. The cut list resolves the same furniture's boards and copies each measure by part id. `BoardPart.LengthMm` is decimal since #1529; authored template parts stay whole millimetres.
+- **Inputs:**
+  - `OpeningResolvedFront.EdgeGrips` (v2: top, between and overhang) always resolves with A3. #1532 produces it.
+  - A v1 pin keeps the v1 arithmetic on fronts side by side.
+  - A v1 pin over stacked fronts, blocked by #1528, now resolves with A3, using its discount at the top and its overhang at the bottom. No resolved design changes.
+  - A v1 bottom gola over a stack stays blocked.
+- **Notch and bevel at the stack's edges:**
+  - top → the top row;
+  - bottom → the lowest row;
+  - between → the bevel cuts the top edge of every front below a between edge, and the side notch hangs from the bottom edge of the front above it, one notch per between edge.
+- **Not in #1529:**
+  - the design-level report (`ResolveDesignOpening` still reports the v1 single zone);
+  - the hardware BOM of between edges;
+  - the producer of `EdgeGrips`, the project grip.
+
+  These arrive with #1532.
+
 ### 14.5. Bottom overhang
 
 - The overhang is a `bottom_overhang` style mode with `overhangMm`: 20 by default, editable in the style and overridable per furniture.
