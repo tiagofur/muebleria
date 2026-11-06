@@ -30,6 +30,7 @@ import {
 import type { HardwareAssetService } from '@granete/storage';
 import { CatalogImage, Modal } from '../../common';
 import { Hardware3DSection } from './Hardware3DSection';
+import { HardwareHandsSection } from './HardwareHandsSection';
 import { HardwareMachiningSection } from './HardwareMachiningSection';
 import { HardwareDesignPartsSection } from './HardwareDesignPartsSection';
 import { UNIT_LABELS, type HardwareDraft } from './hardwareDraft';
@@ -652,6 +653,17 @@ export function HardwareFormModal({
           canMutate={canMutate}
           assetService={assetService}
         />
+
+        {/* #1512 M3 S2: manos (par D/I) — un herraje multi-diseño dibuja su
+            SKP por lado. Un kit (unit set) no lleva manos. */}
+        {!isKit ? (
+          <HardwareHandsSection
+            draft={draft}
+            setDraft={setDraft}
+            canMutate={canMutate}
+            assetService={assetService}
+          />
+        ) : null}
 
         {/* F127: CNC machining footprint (parts + drilling operations). */}
         <HardwareMachiningSection

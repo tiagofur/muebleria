@@ -3,7 +3,7 @@
  * screen and its form modal.
  */
 
-import type { Hardware, HardwareMachiningProfile, HardwareUnit, HardwareVisualAssetBinding } from '@granete/domain';
+import type { Hardware, HardwareHands, HardwareMachiningProfile, HardwareUnit, HardwareVisualAssetBinding } from '@granete/domain';
 
 export const UNIT_LABELS: Record<HardwareUnit, string> = {
   piece: 'Pieza',
@@ -73,6 +73,12 @@ export type HardwareDraft = {
    * editar una parte NO borre su link).
    */
   kitHardwareId?: string;
+  /**
+   * #1512 M3 S2: manos del herraje multi-diseño (asset por lado). Absente =
+   * simétrico/legacy. Estructura idéntica al dominio (binding completo con
+   * facts; el write sólo persiste identifiers — disciplina del store).
+   */
+  hands?: HardwareHands;
   /**
    * #1507: subgrupo del catálogo de herrajes ('' = sin categoría). El select
    * lista el árbol `hardwareCategories` de la org.
@@ -152,6 +158,7 @@ export function toDraft(item: Hardware): HardwareDraft {
       finishKey: p.finishKey ?? '',
     })),
     kitHardwareId: item.kitHardwareId,
+    ...(item.hands ? { hands: item.hands } : {}),
     categoryId: item.categoryId ?? '',
     brand: item.brand ?? '',
   };

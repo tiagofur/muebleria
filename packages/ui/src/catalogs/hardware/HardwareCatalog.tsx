@@ -506,6 +506,14 @@ export function HardwareCatalog({
                   Parte de {kit.code}
                 </span>
               ) : null}
+              {r.hands ? (
+                <span
+                  className="catalog-badge catalog-badge--kit"
+                  data-testid={`hardware-hands-badge-${r.code}`}
+                >
+                  Par D/I
+                </span>
+              ) : null}
             </span>
           );
         },
