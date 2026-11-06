@@ -557,6 +557,39 @@ The 1 mm clearance is added to both notch dimensions, as the owner confirmed in 
 
 Every migration runs on fresh and upgraded databases and writes a per-row report attached to its issue.
 
+#### 14.9.0. Implemented: grip styles (#1531)
+
+- **Table `grip_styles`** (migration 000181), tenant-owned:
+  - RLS read/insert/update/delete on `app_current_organization_id()`;
+  - inventory row and grants;
+  - **at most one default per organization**, enforced by the partial unique index `grip_styles_one_default_per_org`;
+  - a default is always offered;
+  - every style declares `inferior`, `superior` and `alto`.
+- **Recipe per type:**
+  - `handle`, with an optional hardware;
+  - `gola`, with a top profile and an optional between profile, each active and usable at that position (#1530 use rule);
+  - `bottom_overhang`, in whole millimetres > 0, with 20 when omitted (A4).
+- **API** `/api/catalog/grip-styles`:
+  - CRUD with If-Match; writes need the catalog role;
+  - 422 in Spanish for invalid writes and 412 for version conflicts;
+  - making a style the default replaces the previous one in the same transaction, after locking the organization's rows;
+  - the default cannot be deleted, nor unset by itself.
+- **Audit:** `grip_style_created`, `grip_style_updated` and `grip_style_deleted` in `security_audit_events`, in the same transaction. The repository has no outbox.
+- **Seed:** «Jaladera» (all types handle) for every organization, by backfill and by an `AFTER INSERT ON organizations` trigger.
+- **Blob conversion:**
+  - the per-type default system of `opening.capabilities` becomes the style «Agarre del taller (migrado)», using the standard L or the first usable curated profile for gola, and the blob's millimetres (or 20) for the overhang;
+  - an overhang that was not the default anywhere becomes «Rebase (migrado)»;
+  - the report sits in `migration_report`;
+  - then both keys are removed from the overlays, and the down migration puts them back.
+- **Retired:**
+  - the `opening.` overlay namespace, `ParseOpeningCapabilities` and `ParseOpeningOverhangRule` (Go and TS) and their fixtures;
+  - `POST /catalog/opening-configuration/validate`, which had no consumer;
+  - `OPENING_OVERHANG_EVIDENCE_PENDING`: a resolve without millimetres is `OPENING_LAYOUT_INVALID`;
+  - the old web section, now a notice pointing to the styles (the editor is #1533).
+- **Projection kept for current consumers:**
+  - `GET /catalog/opening-capabilities` (the SketchUp extension) and the design-opening write gate read `OpeningCapabilitiesFromGripStyles`;
+  - v1 `bottom_overhang` selections take their millimetres from `OpeningOverhangRuleFromGripStyles`: the default style (wall cabinets first), then the first offered style, then 20.
+
 #### 14.9.1. Implemented: gola profile v2 (#1530)
 
 - **Migration 000180** adds `material`, `positions`, `front_discount_top_mm`, `front_discount_between_mm` and `v2_migration` to `opening_profiles`. The RLS classification is unchanged.
