@@ -139,6 +139,7 @@
   margin: 0;
   max-height: 460px;
   overflow-y: auto;
+  overflow-x: clip;
 }
 
 .agregado-editor__item-row {
@@ -150,7 +151,8 @@
   border-radius: var(--radius-md);
   background: var(--surface-card);
   transition: border-color 120ms ease;
-}
+
+  flex-wrap: wrap;}
 
 .agregado-editor__item-row:hover {
   border-color: var(--brand-300);
@@ -159,9 +161,16 @@
 .agregado-editor__item-fields {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--space-2);
   align-items: end;
+}
+
+/* #1519 F3 (review owner): los hijos del grid NO imponen min-content — el
+   mínimo estructural del CatalogPicker (12rem) desbordaba la tarjeta y
+   producía el «campo a medias» con scroll horizontal a 1280px. */
+.agregado-editor__item-fields > * {
+  min-width: 0;
 }
 
 .agregado-editor__item-hint {
@@ -295,11 +304,26 @@
 }
 
 /* Three-field grid (Componente / Cantidad / Ubicación) for agregado pieces,
-   overriding the default 1fr-auto-auto row used by the hardware tab. */
+   overriding the default 1fr-auto-auto row used by the hardware tab.
+   #1520: mínimo por columna (el placeholder a 16px era el «campo a medias»). */
 .agregado-editor__item-fields--grid {
-  grid-template-columns: 1fr 100px 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--space-3);
   align-items: flex-start;
+}
+
+/* #1520: la fila identidad del miembro (Herraje + X + Y + Z) usa un grid
+   dedicado de 4 columnas con el picker dominante — el auto-fit de arriba lo
+   comprimía a 16px. Sin sort: 2 columnas con wrap a bajo ancho. */
+.agregado-editor__item-row--block > .agregado-editor__item-fields--grid {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+/* Fallback a 2 columnas en el miembro cuando el ancho no da para 4. */
+@media (max-width: 1400px) {
+  .agregado-editor__item-row--block > .agregado-editor__item-fields--grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
 }
 
 /* ── Hardware tab: unified 3D placements section ─────────────────── */
@@ -516,6 +540,7 @@
 
 .agregado-recipe__axis {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
@@ -532,9 +557,14 @@
 
 .agregado-recipe__variant {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
+}
+
+.agregado-recipe__variant > * {
+  min-width: 0;
 }
 
 /* #1493: juego comercial opcional por variante — compacto junto al herraje. */
