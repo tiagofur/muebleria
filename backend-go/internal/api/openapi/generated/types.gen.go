@@ -3408,7 +3408,7 @@ type LayoutComponent struct {
 	Transform                   LayoutTransform            `json:"transform"`
 	DimensionsMm                []float64                  `json:"dimensionsMm"`
 	LocalTransform              LayoutLocalTransform       `json:"localTransform"`
-	LengthMm                    int64                      `json:"lengthMm"`
+	LengthMm                    float64                    `json:"lengthMm"`
 	WidthMm                     int64                      `json:"widthMm"`
 	ThicknessMm                 int64                      `json:"thicknessMm"`
 	AuthoringCapability         *LayoutAuthoringCapability `json:"authoringCapability,omitempty"`

@@ -320,7 +320,7 @@ func TestResolveFurnitureLayout_EffectiveThickness_BodySelected16(t *testing.T) 
 		t.Fatalf("left side thickness = %d, want 16 (selected material)", left.ThicknessMm)
 	}
 	if left.LengthMm != 688 || left.WidthMm != 560 {
-		t.Fatalf("left side L/W = %d/%d, want 688/560 (T=16)", left.LengthMm, left.WidthMm)
+		t.Fatalf("left side L/W = %v/%v, want 688/560 (T=16)", left.LengthMm, left.WidthMm)
 	}
 	if left.DimensionsMm != [3]float64{16, 560, 688} {
 		t.Fatalf("left side AABB = %v, want [16 560 688]", left.DimensionsMm)
@@ -344,7 +344,7 @@ func TestResolveFurnitureLayout_EffectiveThickness_BodySelected16(t *testing.T) 
 		t.Fatalf("base thickness = %d, want 16 (selected material beats nominal 18)", baseComp.ThicknessMm)
 	}
 	if baseComp.LengthMm != 568 || baseComp.WidthMm != 544 {
-		t.Fatalf("base L/W = %d/%d, want 568/544 (T=16)", baseComp.LengthMm, baseComp.WidthMm)
+		t.Fatalf("base L/W = %v/%v, want 568/544 (T=16)", baseComp.LengthMm, baseComp.WidthMm)
 	}
 	if baseComp.DimensionsMm != [3]float64{568, 544, 16} {
 		t.Fatalf("base AABB = %v, want [568 544 16]", baseComp.DimensionsMm)
@@ -399,7 +399,7 @@ func TestResolveFurnitureLayout_EffectiveThickness_MixedRoles(t *testing.T) {
 				t.Errorf("BACK panel = %d mm (%s), want 6 (mat-back6)", c.ThicknessMm, c.MaterialID)
 			}
 			if c.LengthMm != 708 || c.WidthMm != 588 {
-				t.Errorf("back L/W = %d/%d, want 708/588 (T=6)", c.LengthMm, c.WidthMm)
+				t.Errorf("back L/W = %v/%v, want 708/588 (T=6)", c.LengthMm, c.WidthMm)
 			}
 			if c.DimensionsMm != [3]float64{588, 6, 708} {
 				t.Errorf("back AABB = %v, want [588 6 708] with T=6", c.DimensionsMm)

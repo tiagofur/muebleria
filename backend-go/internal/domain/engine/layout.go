@@ -127,9 +127,11 @@ type LayoutComponent struct {
 	Transform             LayoutTransform      `json:"transform"`
 	DimensionsMm          [3]float64           `json:"dimensionsMm"`
 	LocalTransform        LayoutLocalTransform `json:"localTransform"`
-	LengthMm              int                  `json:"lengthMm"`
-	WidthMm               int                  `json:"widthMm"`
-	ThicknessMm           int                  `json:"thicknessMm"`
+	// LengthMm is decimal since #1529: an A3 front measures half millimetres
+	// (202.5) and the host box must equal the cut list exactly.
+	LengthMm    float64 `json:"lengthMm"`
+	WidthMm     int     `json:"widthMm"`
+	ThicknessMm int     `json:"thicknessMm"`
 	// #1464: assemblyInstanceId del ensamble dueño de esta pieza cuando el
 	// board nace de un agregado — el mismo id que `assemblies[]`. Sin él el
 	// host no puede agrupar la caja del cajón con su frente y sus rieles
@@ -473,7 +475,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			Transform:             LayoutTransform{TranslationMm: min},
 			DimensionsMm:          size,
 			LocalTransform:        local,
-			LengthMm:              int(math.Round(board.lengthMm)),
+			LengthMm:              roundLayoutLengthMm(board.lengthMm),
 			WidthMm:               int(math.Round(board.widthMm)),
 			ThicknessMm:           int(math.Round(board.thicknessMm)),
 			OptionRole:            board.optionRole,
@@ -2701,4 +2703,11 @@ func colorForOptionRole(role string) string {
 	default:
 		return "#c8b89a"
 	}
+}
+
+// roundLayoutLengthMm publishes the board length at the A3 precision (half
+// millimetre, #1529), absorbing float noise; whole-millimetre boards publish
+// exactly as before.
+func roundLayoutLengthMm(lengthMm float64) float64 {
+	return math.Round(lengthMm*2) / 2
 }

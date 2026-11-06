@@ -144,7 +144,7 @@ func TestResolveFurnitureLayoutCompleteComposition(t *testing.T) {
 		t.Fatalf("missing lateral_izquierdo: %+v", layout.Components)
 	}
 	if left.LengthMm != 684 || left.WidthMm != 560 || left.ThicknessMm != 18 {
-		t.Fatalf("left side L/W/T = %d/%d/%d, want 684/560/18", left.LengthMm, left.WidthMm, left.ThicknessMm)
+		t.Fatalf("left side L/W/T = %v/%v/%v, want 684/560/18", left.LengthMm, left.WidthMm, left.ThicknessMm)
 	}
 	// AABB of the rotated side: workshop size (T × D × H) = 18 × 560 × 684 at (0,0,0).
 	if left.DimensionsMm != [3]float64{18, 560, 684} {
@@ -166,7 +166,7 @@ func TestResolveFurnitureLayoutCompleteComposition(t *testing.T) {
 		t.Fatalf("missing puerta: %+v", layout.Components)
 	}
 	if door.LengthMm != 716 || door.WidthMm != 596 {
-		t.Fatalf("door L/W = %d/%d, want 716/596", door.LengthMm, door.WidthMm)
+		t.Fatalf("door L/W = %v/%v, want 716/596", door.LengthMm, door.WidthMm)
 	}
 	// Rotated [90,180,0] door: AABB spans (W along X, T along Y, L along Z).
 	if door.DimensionsMm != [3]float64{596, 18, 716} {

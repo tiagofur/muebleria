@@ -74,7 +74,7 @@ func TestOpeningFrontsConstrainDoorBoards(t *testing.T) {
 	}
 	door = findComponentByID(layout.Components, "puerta")
 	if door.LengthMm != 646 {
-		t.Fatalf("bottom-grip door length = %d, want 646", door.LengthMm)
+		t.Fatalf("bottom-grip door length = %v, want 646", door.LengthMm)
 	}
 	if door.Transform.TranslationMm != [3]float64{2, 560, 72} {
 		t.Fatalf("bottom-grip door min corner = %v, want [2 560 72] (lifted by the consumption)", door.Transform.TranslationMm)
@@ -88,7 +88,7 @@ func TestOpeningFrontsConstrainDoorBoards(t *testing.T) {
 	}
 	door = findComponentByID(layout.Components, "puerta")
 	if door.LengthMm != 736 || door.Transform.TranslationMm != [3]float64{2, 560, -18} {
-		t.Fatalf("overhang door = L %d @ %v, want 736 @ [2 560 -18]", door.LengthMm, door.Transform.TranslationMm)
+		t.Fatalf("overhang door = L %v @ %v, want 736 @ [2 560 -18]", door.LengthMm, door.Transform.TranslationMm)
 	}
 
 	// Fail-closed: a consumption that leaves no valid height rejects the
@@ -156,7 +156,7 @@ func TestOpeningFrontsSupersedeAuthoredTranslation(t *testing.T) {
 		t.Fatalf("missing door-01: %+v", opened.Layout.Components)
 	}
 	if door.LengthMm != 646 || door.Transform.TranslationMm[2] == 200 {
-		t.Fatalf("the opening must supersede the authored z (200): L=%d T=%v", door.LengthMm, door.Transform.TranslationMm)
+		t.Fatalf("the opening must supersede the authored z (200): L=%v T=%v", door.LengthMm, door.Transform.TranslationMm)
 	}
 	floor := findBoard(opened.Layout, "floor-01")
 	if floor == nil || floor.Transform.TranslationMm[2] != 10 {

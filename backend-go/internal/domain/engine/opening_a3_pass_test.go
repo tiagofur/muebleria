@@ -66,8 +66,8 @@ func TestOpeningA3ReportedEqualsLayoutEqualsCutList(t *testing.T) {
 		reportedByID[baseBoards[index].id] = pose[1]
 	}
 
-	// Geometry: the layout with the opening.
-	_, boards, err := resolveFurnitureLayoutOpts(module, catalog, &LayoutDims{WidthMm: 600, HeightMm: 720, DepthMm: 560}, nil, resolveOptions{fronts: fronts})
+	// Geometry: the layout with the opening (boards and published components).
+	layout, boards, err := resolveFurnitureLayoutOpts(module, catalog, &LayoutDims{WidthMm: 600, HeightMm: 720, DepthMm: 560}, nil, resolveOptions{fronts: fronts})
 	if err != nil {
 		t.Fatalf("layout with v2 opening: %v", err)
 	}
@@ -93,10 +93,28 @@ func TestOpeningA3ReportedEqualsLayoutEqualsCutList(t *testing.T) {
 	if len(reportedByID) != 3 || len(layoutByID) != 3 || len(cutByID) != 3 {
 		t.Fatalf("3 fronts each: reported %v layout %v cut %v", reportedByID, layoutByID, cutByID)
 	}
-	for id, reportedMm := range reportedByID {
-		if layoutByID[id] != reportedMm || cutByID[id] != reportedMm {
-			t.Fatalf("%s: reported %g, layout %g, cut %g — must be one number", id, reportedMm, layoutByID[id], cutByID[id])
+	publishedByID := map[string]float64{}
+	for _, component := range layout.Components {
+		if _, front := layoutByID[component.ComponentInstanceID]; front {
+			publishedByID[component.ComponentInstanceID] = component.LengthMm
 		}
+	}
+	for id, reportedMm := range reportedByID {
+		if layoutByID[id] != reportedMm || cutByID[id] != reportedMm || publishedByID[id] != reportedMm {
+			t.Fatalf("%s: reported %g, layout %g, published %g, cut %g — must be one number",
+				id, reportedMm, layoutByID[id], publishedByID[id], cutByID[id])
+		}
+	}
+	// The column resolves to 202.5 / 202.5 / 203 (H 720, reveal 2): the half
+	// millimetre reaches the host component and the cut list unrounded.
+	halves := 0
+	for _, mm := range publishedByID {
+		if mm != float64(int(mm)) {
+			halves++
+		}
+	}
+	if halves == 0 {
+		t.Fatalf("expected half-millimetre fronts in the published layout: %v", publishedByID)
 	}
 }
 
