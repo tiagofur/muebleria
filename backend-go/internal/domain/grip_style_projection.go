@@ -15,9 +15,23 @@ import "sort"
 //   - the default system per furniture type is the default style's mode;
 //   - gola placements per type: top, plus between when a style declares it.
 //
-// nil = the organization has no styles (the library ladder governs).
+// nil = no offered style uses gola or the overhang (the seeded «Jaladera»
+// alone, or no styles): the workshop has made no opening decision yet and
+// the library ladder governs new authoring, exactly as an organization
+// without the retired blob did before #1531.
 func OpeningCapabilitiesFromGripStyles(styles []GripStyle, profiles []OpeningProfile) *OpeningCapabilities {
-	if len(styles) == 0 {
+	decided := false
+	for _, style := range styles {
+		if !style.Offered {
+			continue
+		}
+		for _, recipe := range style.ByFurnitureType {
+			if recipe.Mode != GripModeHandle {
+				decided = true
+			}
+		}
+	}
+	if !decided {
 		return nil
 	}
 	shapeByID := map[string]string{}

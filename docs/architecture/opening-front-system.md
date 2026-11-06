@@ -587,7 +587,7 @@ Every migration runs on fresh and upgraded databases and writes a per-row report
   - `OPENING_OVERHANG_EVIDENCE_PENDING`: a resolve without millimetres is `OPENING_LAYOUT_INVALID`;
   - the old web section, now a notice pointing to the styles (the editor is #1533).
 - **Projection kept for current consumers:**
-  - `GET /catalog/opening-capabilities` (the SketchUp extension) and the design-opening write gate read `OpeningCapabilitiesFromGripStyles`;
+  - `GET /catalog/opening-capabilities` (the SketchUp extension) and the design-opening write gate read `OpeningCapabilitiesFromGripStyles`. While no offered style uses gola or the overhang (the seeded «Jaladera» alone), the projection is `nil` and the library ladder governs, as it did for an organization without the blob;
   - v1 `bottom_overhang` selections take their millimetres from `OpeningOverhangRuleFromGripStyles`: the default style (wall cabinets first), then the first offered style, then 20.
 
 #### 14.9.1. Implemented: gola profile v2 (#1530)
