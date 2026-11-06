@@ -362,6 +362,17 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		OpeningMembers:            openingMembers,
 		OpeningBodyModifiers:      openingBodyModifiers,
 	})
+	var openingErr *engine.OpeningResolutionError
+	if errors.As(err, &openingErr) && openingErr.Code == engine.OpeningErrStackedFronts {
+		// #1528: a grip over stacked fronts is a known blocked state with its
+		// own code, not a generic geometry failure.
+		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
+			Code: openingErr.Code, Message: openingErr.Message,
+			Severity: domain.IssueSeverityError, Path: "furniture.designId",
+			Remediation: "Por ahora usa jaladera en este mueble, o gola sólo en muebles con frentes lado a lado.",
+		}})
+		return
+	}
 	if err != nil {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
 			Code: "RESOLVE_GEOMETRY_INVALID", Message: err.Error(),

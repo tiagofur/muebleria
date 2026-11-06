@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -351,5 +352,83 @@ func TestOpeningMembersHostOnTheCarcassBoard(t *testing.T) {
 					hw.PlacementID, component.ComponentInstanceID)
 			}
 		}
+	}
+}
+
+// #1528 — a grip over STACKED fronts (a drawer column) must not shorten
+// every front by the whole consumption: it blocks until the multi-zone
+// resolver (#1529). Fronts side by side keep the v1 arithmetic.
+func stackedDrawerBoards() []layoutBoard {
+	return []layoutBoard{
+		{id: "frente-1", placement: string(domain.PlacementFrenteCajon), z: 482, lengthMm: 236, widthMm: 596},
+		{id: "frente-2", placement: string(domain.PlacementFrenteCajon), z: 242, lengthMm: 236, widthMm: 596},
+		{id: "frente-3", placement: string(domain.PlacementFrenteCajon), z: 2, lengthMm: 236, widthMm: 596},
+		{id: "lateral", placement: string(domain.PlacementLateralIzquierdo), z: 0, lengthMm: 684, widthMm: 560},
+	}
+}
+
+func TestOpeningFrontsBlockStackedDrawerFronts(t *testing.T) {
+	for _, boundary := range []string{"top", "bottom"} {
+		boards := stackedDrawerBoards()
+		_, err := applyOpeningFrontsToBoards(boards, openingPassFront(boundary, 40))
+		var openingErr *OpeningResolutionError
+		if !errors.As(err, &openingErr) || openingErr.Code != OpeningErrStackedFronts {
+			t.Fatalf("%s grip over 3 stacked drawer fronts must block with %s, got %v", boundary, OpeningErrStackedFronts, err)
+		}
+		for _, board := range boards {
+			if board.placement == string(domain.PlacementFrenteCajon) && board.lengthMm != 236 {
+				t.Fatalf("a blocked resolve must not touch the fronts: %s = %g, want 236", board.id, board.lengthMm)
+			}
+		}
+	}
+	// An overhang (negative consumption) over stacked fronts blocks too.
+	if _, err := applyOpeningFrontsToBoards(stackedDrawerBoards(), openingPassFront("bottom", -20)); err == nil {
+		t.Fatal("an overhang over stacked fronts must block")
+	}
+	// No grip consumption: nothing to block, fronts untouched.
+	if _, err := applyOpeningFrontsToBoards(stackedDrawerBoards(), openingPassFront("top", 0)); err != nil {
+		t.Fatalf("zero consumption must not block: %v", err)
+	}
+}
+
+func TestOpeningFrontsSideBySideDoorsKeepV1Arithmetic(t *testing.T) {
+	boards := []layoutBoard{
+		{id: "puerta-izq", placement: string(domain.PlacementPuerta), x: 2, z: 2, lengthMm: 716, widthMm: 296},
+		{id: "puerta-der", placement: string(domain.PlacementPuerta), x: 302, z: 2, lengthMm: 716, widthMm: 296},
+	}
+	constrained, err := applyOpeningFrontsToBoards(boards, openingPassFront("top", 40))
+	if err != nil {
+		t.Fatalf("two doors side by side must resolve: %v", err)
+	}
+	for i, board := range boards {
+		if board.lengthMm != 676 || board.z != 2 || !constrained[i] {
+			t.Fatalf("door %s = L %g @ z %g (constrained %v), want 676 @ 2", board.id, board.lengthMm, board.z, constrained[i])
+		}
+	}
+}
+
+func TestOpeningBomPartsBlockStackedFronts(t *testing.T) {
+	drawers := []domain.BoardPart{
+		{ID: "frente-cajon", Placement: string(domain.PlacementFrenteCajon), Quantity: 3, LengthMm: 236},
+	}
+	var openingErr *OpeningResolutionError
+	if err := applyOpeningFrontsToBomParts(drawers, openingPassFront("top", 40)); !errors.As(err, &openingErr) || openingErr.Code != OpeningErrStackedFronts {
+		t.Fatalf("3 drawer fronts in the cut list must block, got %v", err)
+	}
+	if drawers[0].LengthMm != 236 {
+		t.Fatalf("a blocked cut list must not touch the part: %d", drawers[0].LengthMm)
+	}
+	mixed := []domain.BoardPart{
+		{ID: "frente-cajon", Placement: string(domain.PlacementFrenteCajon), Quantity: 1, LengthMm: 150},
+		{ID: "puerta", Placement: string(domain.PlacementPuerta), Quantity: 1, LengthMm: 560},
+	}
+	if err := applyOpeningFrontsToBomParts(mixed, openingPassFront("top", 40)); !errors.As(err, &openingErr) {
+		t.Fatalf("a drawer above a door must block, got %v", err)
+	}
+	doors := []domain.BoardPart{
+		{ID: "puerta", Placement: string(domain.PlacementPuerta), Quantity: 2, LengthMm: 716},
+	}
+	if err := applyOpeningFrontsToBomParts(doors, openingPassFront("top", 40)); err != nil || doors[0].LengthMm != 676 {
+		t.Fatalf("two doors side by side keep v1: err %v, length %d", err, doors[0].LengthMm)
 	}
 }

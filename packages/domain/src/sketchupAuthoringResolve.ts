@@ -176,6 +176,8 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   'OPENING_PROFILE_NOT_APPLICABLE',
   'OPENING_PROFILE_NOT_CURATED',
   'OPENING_PROFILE_REQUIRED',
+  // #1528: gola o rebase sobre frentes apilados (cajonera) — bloqueado hasta el motor multi-zona (#1529).
+  'OPENING_STACKED_FRONTS_UNSUPPORTED',
   'OPENING_SYSTEM_UNAVAILABLE',
   'OPENING_SYSTEM_UNKNOWN',
   // #1502 kit accesorio elegible: una bahía monta un kit con grupo de

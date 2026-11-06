@@ -30,6 +30,8 @@ const (
 	OpeningErrDatasheetPending     = "OPENING_PROFILE_DATASHEET_PENDING"
 	OpeningErrProfileUnknown       = "OPENING_PROFILE_UNKNOWN"
 	OpeningErrOverhangEvidencePend = "OPENING_OVERHANG_EVIDENCE_PENDING"
+	// #1528: a grip over stacked fronts waits for the multi-zone resolver (#1529).
+	OpeningErrStackedFronts = "OPENING_STACKED_FRONTS_UNSUPPORTED"
 )
 
 // OpeningResolutionError carries the contract's fail-closed codes.
