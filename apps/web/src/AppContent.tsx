@@ -1141,6 +1141,7 @@ export function AppContent({
   const updateEdge = catalogActions.updateEdge;
   const setEdgeActive = catalogActions.setEdgeActive;
   const createHardware = catalogActions.createHardware;
+  const createHardwareKitSystem = catalogActions.createHardwareKitSystem;
   const updateHardware = catalogActions.updateHardware;
   const setHardwareActive = catalogActions.setHardwareActive;
   const createAmbientMaterial = catalogActions.createAmbientMaterial;
@@ -2038,6 +2039,7 @@ export function AppContent({
     createHardwareCategory,
     updateHardwareCategory,
     deleteHardwareCategory,
+    createHardwareKitSystem,
     setItemFloorStatus,
     setMaterialActive,
     setShowOnboardingTour,

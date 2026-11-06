@@ -15,8 +15,10 @@ import {
   validateHardwareKitInput,
   validateHardwareKitLink,
   KIT_TEMPLATE_DRAWER_HANDS_ID,
+  planHardwareKitSystem,
   validateHardwareKitTemplate,
   type HardwareKitPlanInput,
+  type HardwareKitSystemInput,
   type HardwareKitTemplate,
 } from './hardwareKit';
 
@@ -696,5 +698,93 @@ describe('#1518 regresión: pos: label no aplasta piezas multi-diseño (sync TS)
     const left = synced.rigidMembers.find((m: any) => m.hand === 'left');
     expect(left).toBeDefined();
     expect(left.placement.x.ref).toBe('min');
+  });
+});
+
+describe('planHardwareKitSystem (#1546 M4 — sistema generador)', () => {
+  const systemInput: HardwareKitSystemInput = {
+    code: 'MBOX-IRIDIUN',
+    name: 'Merivobox Iridium',
+    kitCostPerUnit: 420,
+    widthMm: 570,
+    depthMm: 530,
+    heights: [
+      { code: 'N', labelEs: 'N', khMinMm: 85.5, include: false },
+      { code: 'M', labelEs: 'M', khMinMm: 108, include: true },
+      { code: 'K', labelEs: 'K', khMinMm: 146, include: false },
+      { code: 'E', labelEs: 'E', khMinMm: 209, include: true },
+    ],
+    accessoriesE: [
+      { suffix: 'GALERIA', name: 'Galería Gris Iridium', anchors: ['left', 'right'] },
+    ],
+  };
+
+  it('genera un kit multi-diseño POR ALTURA con códigos systemCode-ALTURA', () => {
+    const plan = planHardwareKitSystem(systemInput, noExisting);
+    expect(plan.kits.map((k) => k.code)).toEqual(['MBOX-IRIDIUN-M', 'MBOX-IRIDIUN-E']);
+    // Cada kit lleva la estructura drawer-hands: FIJ y MOV con piezas por ancla.
+    for (const kit of plan.kits) {
+      const fij = kit.designs.find((d) => d.code.endsWith('-FIJ'));
+      const mov = kit.designs.find((d) => d.code.endsWith('-MOV'));
+      expect(fij?.handsParts?.map((p) => p.hand)).toEqual(['left', 'right']);
+      expect(mov?.handsParts?.map((p) => p.hand)).toEqual(['left', 'right']);
+    }
+  });
+
+  it('el agregado del sistema usa variantes de altura y NO lleva miembros de kit fijos', () => {
+    const plan = planHardwareKitSystem(systemInput, noExisting);
+    expect(plan.agregado.code).toBe('MBOX-IRIDIUN-CAJON');
+    expect(plan.agregado.variants).toEqual([
+      { heightCode: 'M', khMinMm: 108, kitCode: 'MBOX-IRIDIUN-M' },
+      { heightCode: 'E', khMinMm: 209, kitCode: 'MBOX-IRIDIUN-E' },
+    ]);
+    // El sync por bahía materializa las partes del kit efectivo (paridad #1493):
+    // el plan no genera miembros fijos de ningún kit.
+  });
+
+  it('el grupo de accesorios se vincula al kit E con los herrajes accesorios como opciones', () => {
+    const plan = planHardwareKitSystem(systemInput, noExisting);
+    expect(plan.accessoryGroup).toEqual({
+      code: 'MBOX-IRIDIUN_LATERAL_E',
+      name: 'Lateral superior E',
+      required: false,
+      kitCode: 'MBOX-IRIDIUN-E',
+      optionIds: ['MBOX-IRIDIUN-E-GALERIA'],
+    });
+    expect(plan.accessories[0]).toMatchObject({
+      code: 'MBOX-IRIDIUN-E-GALERIA',
+      anchors: ['left', 'right'],
+      exists: false,
+    });
+  });
+
+  it('sin E incluida no genera accesorios ni grupo', () => {
+    const plan = planHardwareKitSystem(
+      { ...systemInput, heights: systemInput.heights.map((h) => (h.code === 'E' ? { ...h, include: false } : h)) },
+      noExisting,
+    );
+    expect(plan.accessories).toEqual([]);
+    expect(plan.accessoryGroup).toBeNull();
+    expect(plan.kits.map((k) => k.code)).toEqual(['MBOX-IRIDIUN-M']);
+  });
+
+  it('fail-closed: sin alturas incluidas o código vacío', () => {
+    expect(() =>
+      planHardwareKitSystem(
+        { ...systemInput, heights: systemInput.heights.map((h) => ({ ...h, include: false })) },
+        noExisting,
+      ),
+    ).toThrow('Incluí al menos una altura');
+    expect(() => planHardwareKitSystem({ ...systemInput, code: '  ' }, noExisting)).toThrow(
+      'El código del sistema no puede estar vacío',
+    );
+  });
+
+  it('blockedCode refleja un agregado existente con el código del sistema', () => {
+    const plan = planHardwareKitSystem(systemInput, {
+      hardwareCodes: new Set(),
+      agregadoCodes: new Set(['MBOX-IRIDIUN-CAJON']),
+    });
+    expect(plan.blockedCode).toBe('MBOX-IRIDIUN-CAJON');
   });
 });

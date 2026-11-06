@@ -134,6 +134,10 @@ export interface CatalogState {
   readonly createHardwareCategory: (draft: CategoryDraft) => void;
   readonly updateHardwareCategory: (id: string, draft: CategoryDraft) => void;
   readonly deleteHardwareCategory: (id: string) => Promise<void>;
+  /** #1546 M4: sistema generador de cajones. */
+  readonly createHardwareKitSystem: (
+    req: import('@granete/domain').HardwareKitSystemCreateRequest,
+  ) => Promise<import('@granete/domain').HardwareKitResult>;
 
   // --- Ambient materials (presentation-only: finishes & scene textures) ---
   /** K1 #1032: settle promises so screens can await the save. */
