@@ -35,6 +35,7 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	// técnica respaldada; escrituras If-Match.
 	mux.Handle("GET /api/catalog/opening-profiles", authMW(http.HandlerFunc(server.HandleOpeningProfiles)))
 	mux.Handle("POST /api/catalog/opening-profiles", authMW(http.HandlerFunc(server.HandleOpeningProfiles)))
+	mux.Handle("GET /api/catalog/opening-profiles/suggestions", authMW(http.HandlerFunc(server.HandleOpeningProfileSuggestions)))
 	mux.Handle("GET /api/catalog/opening-profiles/{id}", authMW(http.HandlerFunc(server.HandleOpeningProfileByID)))
 	mux.Handle("PUT /api/catalog/opening-profiles/{id}", authMW(http.HandlerFunc(server.HandleOpeningProfileByID)))
 	mux.Handle("DELETE /api/catalog/opening-profiles/{id}", authMW(http.HandlerFunc(server.HandleOpeningProfileByID)))

@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
@@ -25,10 +26,13 @@ func (s *Server) HandleOpeningProfiles(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "opening profiles list")
 			return
 		}
+		for i := range list {
+			list[i].WithUsage()
+		}
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tienes permiso para modificar el catálogo") {
 			return
 		}
 		var profile domain.OpeningProfile
@@ -40,9 +44,13 @@ func (s *Server) HandleOpeningProfiles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.Store.CreateOpeningProfile(r.Context(), &profile); err != nil {
+			if respondOpeningProfileInvalid(w, err) {
+				return
+			}
 			respondWithInternalError(w, err, "opening profile create")
 			return
 		}
+		profile.WithUsage()
 		respondWithJSON(w, http.StatusCreated, profile)
 
 	default:
@@ -67,10 +75,11 @@ func (s *Server) HandleOpeningProfileByID(w http.ResponseWriter, r *http.Request
 			respondWithInternalError(w, err, "opening profile read")
 			return
 		}
+		profile.WithUsage()
 		respondWithJSON(w, http.StatusOK, profile)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tienes permiso para modificar el catálogo") {
 			return
 		}
 		expectedVersion, ok := RequireIfMatch(w, r)
@@ -83,20 +92,24 @@ func (s *Server) HandleOpeningProfileByID(w http.ResponseWriter, r *http.Request
 		}
 		if err := s.Store.UpdateOpeningProfile(r.Context(), id, expectedVersion, &profile); err != nil {
 			if errors.Is(err, storage.ErrVersionConflict) {
-				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recarga y vuelve a intentar", nil)
 				return
 			}
 			if errors.Is(err, storage.ErrOpeningProfileNotFound) {
 				respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "perfil de apertura inexistente", nil)
 				return
 			}
+			if respondOpeningProfileInvalid(w, err) {
+				return
+			}
 			respondWithInternalError(w, err, "opening profile update")
 			return
 		}
+		profile.WithUsage()
 		respondWithJSON(w, http.StatusOK, profile)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tienes permiso para modificar el catálogo") {
 			return
 		}
 		expectedVersion, ok := RequireIfMatch(w, r)
@@ -105,7 +118,7 @@ func (s *Server) HandleOpeningProfileByID(w http.ResponseWriter, r *http.Request
 		}
 		if err := s.Store.DeactivateOpeningProfile(r.Context(), id, expectedVersion); err != nil {
 			if errors.Is(err, storage.ErrVersionConflict) {
-				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recarga y vuelve a intentar", nil)
 				return
 			}
 			if errors.Is(err, storage.ErrOpeningProfileNotFound) {
@@ -120,4 +133,30 @@ func (s *Server) HandleOpeningProfileByID(w http.ResponseWriter, r *http.Request
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// respondOpeningProfileInvalid answers a rejected write with 422 and the
+// Spanish message (#1530). It reports whether it wrote the response.
+func respondOpeningProfileInvalid(w http.ResponseWriter, err error) bool {
+	if !domain.IsOpeningProfileValidationError(err) {
+		return false
+	}
+	respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeBadRequest, err.Error(), nil)
+	return true
+}
+
+// HandleOpeningProfileSuggestions serves the manufacturer and owner defaults
+// a new gola profile starts from (#1530). profile_depth_mm, when given, fills
+// the Italian bevel size (depth − 2).
+func (s *Server) HandleOpeningProfileSuggestions(w http.ResponseWriter, r *http.Request) {
+	var depth *float64
+	if raw := strings.TrimSpace(r.URL.Query().Get("profile_depth_mm")); raw != "" {
+		value, err := strconv.ParseFloat(raw, 64)
+		if err != nil || value <= 0 {
+			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "la profundidad del perfil debe ser un número mayor a 0", nil)
+			return
+		}
+		depth = &value
+	}
+	respondWithJSON(w, http.StatusOK, domain.GolaProfileSuggestions(depth))
 }

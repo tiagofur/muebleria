@@ -270,7 +270,8 @@ func (s *stubStore) CreateOpeningProfile(_ context.Context, profile *domain.Open
 	if s.openingProfileErr != nil {
 		return s.openingProfileErr
 	}
-	// El store real valida en el write boundary — el stub respeta el contrato.
+	// El store real normaliza y valida en el write boundary — el stub respeta el contrato.
+	domain.NormalizeOpeningProfileWrite(profile, nil)
 	if err := domain.ValidateOpeningProfile(*profile); err != nil {
 		return err
 	}
@@ -282,6 +283,7 @@ func (s *stubStore) UpdateOpeningProfile(_ context.Context, _ string, _ int64, p
 	if s.openingProfileErr != nil {
 		return s.openingProfileErr
 	}
+	domain.NormalizeOpeningProfileWrite(profile, nil)
 	return domain.ValidateOpeningProfile(*profile)
 }
 
