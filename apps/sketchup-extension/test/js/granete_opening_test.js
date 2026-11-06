@@ -213,7 +213,9 @@ test('los frentes son read-only: la resolución del servidor se renderiza tal cu
   const front = findDeep(body, (child) => child.attributes['data-testid'] === 'opening-front-1');
   assert.ok(front, 'the resolved front must render');
   assert.ok(front.textContent.includes('600 × 720 mm'), 'front dims must come verbatim from the server');
-  assert.ok(front.textContent.includes('read-only'));
+  // #1527: no English in the card; the number is the server's calculation.
+  assert.ok(front.textContent.includes('(calculado)'));
+  assert.ok(!front.textContent.includes('read-only'));
 });
 
 test('sin medidas explícitas: ausencia veraz, ninguna resolución inventada', () => {
@@ -299,7 +301,11 @@ test('INVALID_OPENING_CONFIGURATION: el draft queda editable, la selección pers
 
   const error = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-error');
   assert.ok(error, 'the actionable error must render');
-  assert.ok(error.textContent.includes('ficha técnica'), 'the server message must reach the user');
+  // #1527: the reason becomes workshop words with the place to fix it —
+  // never the raw OPENING_* code.
+  assert.ok(error.textContent.includes('ficha completa'), 'the reason must reach the user in workshop words');
+  assert.ok(error.textContent.includes('Perfiles de apertura'), 'the message names where it is fixed');
+  assert.ok(!/OPENING_/.test(error.textContent), 'no internal code in the card');
   // The draft stays editable (still gola) and the persisted handle stays
   // visible.
   assert.strictEqual(opening._state().draft.system, 'gola');
@@ -803,6 +809,85 @@ test('#1330: getSummary reporta la versión pineada y degrada al código del pin
   assert.strictEqual(degraded.profileName, 'GOLA-L-SCILM-8006');
   assert.strictEqual(degraded.profileVersion, 8);
 });
+
+// #1527 — «Entre frentes» is never offered (the v1 resolve refuses it).
+function golaFormWith(profile) {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening({
+    ...READY_ANSWER,
+    capabilities: { version: 1, grips: { handle: { enabled: true }, gola: { enabled: true } } },
+    profiles: [profile]
+  });
+  const body = elementsById['design-inspector-opening-body'];
+  const systemSelect = findDeep(body, (child) => child.id === 'opening-system-select');
+  systemSelect.value = 'gola';
+  systemSelect.onchange();
+  const profileSelect = findDeep(elementsById['design-inspector-opening-body'], (child) => child.id === 'opening-profile-select');
+  profileSelect.value = profile.id;
+  profileSelect.onchange();
+  return { opening, body: elementsById['design-inspector-opening-body'] };
+}
+
+test('#1527: la lista Posición nunca ofrece «Entre frentes»', () => {
+  const { body } = golaFormWith({
+    id: 'profile.gola-x', name: 'Gola X', datasheet_status: 'verified',
+    compatible_placements: ['top', 'between', 'bottom']
+  });
+  const placementSelect = findDeep(body, (child) => child.id === 'opening-placement-select');
+  assert.ok(placementSelect, 'two selectable placements keep the select');
+  const values = placementSelect.children.map((option) => option.value);
+  assert.deepStrictEqual(values, ['', 'top', 'bottom']);
+  assert.ok(!placementSelect.children.some((option) => option.textContent === 'Entre frentes'));
+});
+
+test('#1527: un perfil top + between queda con una sola posición y no muestra la lista', () => {
+  const { body } = golaFormWith({
+    id: 'profile.gola-y', name: 'Gola Y', datasheet_status: 'verified',
+    compatible_placements: ['top', 'between']
+  });
+  assert.strictEqual(findDeep(body, (child) => child.id === 'opening-placement-select'), null);
+});
+
+test('#1527: cada código OPENING_* del contrato tiene texto en español y ninguno llega crudo a la tarjeta', () => {
+  const schemaPath = path.resolve(__dirname, '../../../../contracts/sketchupAuthoringResolve.schema.json');
+  const schemaText = fs.readFileSync(schemaPath, 'utf8');
+  const codes = Array.from(new Set(schemaText.match(/"OPENING_[A-Z_]+"/g).map((code) => code.slice(1, -1))));
+  assert.ok(codes.length >= 20, 'the contract lists the OPENING_* family');
+  for (const reason of codes) {
+    const bridgeCalls = [];
+    const { opening, elementsById } = initModule(bridgeCalls);
+    opening.refresh('d-1', 'v1');
+    opening.onDesignOpening({ ...READY_ANSWER, resolution: { state: 'blocked', reason } });
+    const blocked = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-blocked');
+    assert.ok(blocked, `blocked state for ${reason} must render`);
+    assert.ok(!/OPENING_/.test(blocked.textContent), `${reason} must not reach the card raw`);
+    assert.ok(!blocked.textContent.includes('No se pudo resolver la apertura'), `${reason} needs its own text, not the generic one`);
+  }
+});
+
+test('#1527: un código desconocido muestra el texto genérico y no el código', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening({ ...READY_ANSWER, resolution: { state: 'blocked', reason: 'OPENING_FUTURE_THING' } });
+  const blocked = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-blocked');
+  assert.ok(blocked.textContent.includes('No se pudo resolver la apertura'));
+  assert.ok(!blocked.textContent.includes('OPENING_FUTURE_THING'));
+});
+
+test('#1527: el rebase sin milímetros dice qué falta y dónde se configura', () => {
+  const bridgeCalls = [];
+  const { opening, elementsById } = initModule(bridgeCalls);
+  opening.refresh('d-1', 'v1');
+  opening.onDesignOpening({ ...READY_ANSWER, resolution: { state: 'blocked', reason: 'OPENING_OVERHANG_EVIDENCE_PENDING' } });
+  const blocked = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-blocked');
+  assert.ok(blocked.textContent.includes('cuántos mm baja la puerta'));
+  assert.ok(blocked.textContent.includes('Ajustes › Apertura'));
+  assert.ok(!blocked.textContent.includes('evidencia'));
+});
+
 
 console.log(JSON.stringify({ success: true, testsPassed }));
 
