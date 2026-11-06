@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.memberHostDrilling.v1",
+  "comment": "#1429 slice B — paridad TS↔Go de la proyección member-host: un miembro rígido de la receta con hostPlacement taladra la pieza EXTERNA del módulo con el perfil de mecanizado de catálogo del herraje (autoridad Go del slice A, espejo TS en resolveProjectDrilling). Forma MERIVOBOX: guías fijas → laterales del mueble (filas Blum 37/69/197/229/261/293 a 33.5 sobre el fondo del cajón), correderas móviles → frente del cajón (20.5 de cada borde a 33.5/65.5 PANEL-LOCAL). Los expected son board-local (face/xMm/yMm): Go es el autor golden (ResolveAuthoringLayout), TS consume el mismo JSON (resolveProjectDrilling). Drift 0 exigido por la aceptación de la issue.",
+  "module": { "widthMm": 400, "heightMm": 720, "depthMm": 500 },
+  "carcase": {
+    "thicknessMm": 18,
+    "components": [
+      { "id": "comp-side", "code": "LAT", "name": "Lateral", "placement": "lateral_izquierdo", "lengthFormula": "PH", "widthFormula": "PD", "optionRole": "LATERAL" },
+      { "id": "comp-side-r", "code": "LAT-R", "name": "Lateral Derecho", "placement": "lateral_derecho", "lengthFormula": "PH", "widthFormula": "PD", "optionRole": "LATERAL" },
+      { "id": "comp-front", "code": "FRE", "name": "Frente Cajón", "placement": "frente_cajon", "lengthFormula": "PH", "widthFormula": "PW", "optionRole": "FRENTE" }
+    ]
+  },
+  "drawer": {
+    "agregadoId": "agr-mbox",
+    "code": "CAJON-MBOX",
+    "name": "Cajón MERIVOBOX",
+    "widthMm": 400,
+    "heightMm": 81,
+    "depthMm": 500,
+    "members": [
+      { "memberId": "fixed_rail_left", "role": "fixed_rail", "hardwareId": "hw-rail-fij-l", "hostPlacement": "lateral_izquierdo", "xRef": "min", "yOffsetMm": 136 },
+      { "memberId": "fixed_rail_right", "role": "fixed_rail", "hardwareId": "hw-rail-fij-r", "hostPlacement": "lateral_derecho", "xRef": "max", "yOffsetMm": 136 },
+      { "memberId": "moving_rail_left", "role": "moving_rail", "hardwareId": "hw-rail-mov-l", "hostPlacement": "frente_cajon", "xRef": "min" },
+      { "memberId": "moving_rail_right", "role": "moving_rail", "hardwareId": "hw-rail-mov-r", "hostPlacement": "frente_cajon", "xRef": "max" }
+    ]
+  },
+  "hardware": [
+    {
+      "id": "hw-rail-fij-l", "code": "RAIL-FIJ-L", "name": "Guía fija izquierda",
+      "operations": [
+        { "id": "pilot-1", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 37, "yMm": 33.5 },
+        { "id": "pilot-2", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 69, "yMm": 33.5 },
+        { "id": "pilot-3", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 197, "yMm": 33.5 },
+        { "id": "pilot-4", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 229, "yMm": 33.5 },
+        { "id": "pilot-5", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 261, "yMm": 33.5 },
+        { "id": "pilot-6", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 293, "yMm": 33.5 }
+      ]
+    },
+    {
+      "id": "hw-rail-fij-r", "code": "RAIL-FIJ-R", "name": "Guía fija derecha",
+      "operations": [
+        { "id": "pilot-1", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 37, "yMm": 33.5 },
+        { "id": "pilot-2", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 69, "yMm": 33.5 },
+        { "id": "pilot-3", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 197, "yMm": 33.5 },
+        { "id": "pilot-4", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 229, "yMm": 33.5 },
+        { "id": "pilot-5", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 261, "yMm": 33.5 },
+        { "id": "pilot-6", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 293, "yMm": 33.5 }
+      ]
+    },
+    {
+      "id": "hw-rail-mov-l", "code": "RAIL-MOV-L", "name": "Corredera móvil izquierda",
+      "operations": [
+        { "id": "pilot-low", "kind": "screw_pilot", "diameterMm": 2.7, "depthMm": 8, "xMm": 20.5, "yMm": 33.5 },
+        { "id": "pilot-high", "kind": "screw_pilot", "diameterMm": 2.7, "depthMm": 8, "xMm": 20.5, "yMm": 65.5 }
+      ]
+    },
+    {
+      "id": "hw-rail-mov-r", "code": "RAIL-MOV-R", "name": "Corredera móvil derecha",
+      "operations": [
+        { "id": "pilot-low", "kind": "screw_pilot", "diameterMm": 2.7, "depthMm": 8, "xMm": -20.5, "yMm": 33.5 },
+        { "id": "pilot-high", "kind": "screw_pilot", "diameterMm": 2.7, "depthMm": 8, "xMm": -20.5, "yMm": 65.5 }
+      ]
+    }
+  ],
+  "expected": {
+    "byMember": {
+      "fixed_rail_left": {
+        "hostPlacement": "lateral_izquierdo",
+        "holes": [
+          { "face": "front", "xMm": 207, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+          { "face": "front", "xMm": 239, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+          { "face": "front", "xMm": 271, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+          { "face": "front", "xMm": 303, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+          { "face": "front", "xMm": 431, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+          { "face": "front", "xMm": 463, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 }
+        ]
+      },
+      "fixed_rail_right": {
+        "hostPlacement": "lateral_derecho",
+        "holes": [
+          { "face": "back", "xMm": 207, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+          { "face": "back", "xMm": 239, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+          { "face": "back", "xMm": 271, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+          { "face": "back", "xMm": 303, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+          { "face": "back", "xMm": 431, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+          { "face": "back", "xMm": 463, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 }
+        ]
+      },
+      "moving_rail_left": {
+        "hostPlacement": "frente_cajon",
+        "holes": [
+          { "face": "back", "xMm": 381.5, "yMm": 33.5, "diameterMm": 2.7, "depthMm": 8 },
+          { "face": "back", "xMm": 381.5, "yMm": 65.5, "diameterMm": 2.7, "depthMm": 8 }
+        ]
+      },
+      "moving_rail_right": {
+        "hostPlacement": "frente_cajon",
+        "holes": [
+          { "face": "back", "xMm": 22.5, "yMm": 33.5, "diameterMm": 2.7, "depthMm": 8 },
+          { "face": "back", "xMm": 22.5, "yMm": 65.5, "diameterMm": 2.7, "depthMm": 8 }
+        ]
+      }
+    }
+  }
+}

@@ -174,7 +174,7 @@ func deriveMemberHostMachining(
 							})
 						}
 						*operations = append(*operations, ResolvedMachiningOperation{
-							OperationID: fmt.Sprintf("%s:%s:%s:op-%s", assembly.AssemblyInstanceID, memberID, board.id, op.ID),
+							OperationID:             fmt.Sprintf("%s:%s:%s:op-%s", assembly.AssemblyInstanceID, memberID, board.id, op.ID),
 							HostComponentInstanceID: board.id,
 							Provenance: ResolvedMachiningProvenance{
 								SourceKind:         "assemblyMemberHost",
@@ -188,6 +188,53 @@ func deriveMemberHostMachining(
 			}
 		}
 	}
+}
+
+// dedupeMemberHostManualEquivalents (#1429 slice B) suppresses member-host
+// operations whose hole was already authored by an EXPLICIT manual placement
+// on the same host board: the owner's authoring wins, so an equivalent hole
+// neither duplicates in the output nor false-collides in the gate.
+// Equivalence = same host board, same face, center within 0.1mm per axis
+// (Chebyshev box; the TS deduplicateHoles uses the equivalent 0.1mm
+// euclidean radius), diameter and depth within 0.1mm. Non-equivalent holes
+// keep BOTH operations and the collision gate stays fail-closed: another
+// depth at the same spot is a physical contradiction, never a silent merge.
+func dedupeMemberHostManualEquivalents(operations []ResolvedMachiningOperation) []ResolvedMachiningOperation {
+	manualHoles := make(map[string][]ResolveHole)
+	for _, op := range operations {
+		if op.Provenance.SourceKind != "manualHardwarePlacement" {
+			continue
+		}
+		manualHoles[op.HostComponentInstanceID] = append(manualHoles[op.HostComponentInstanceID], op.Holes...)
+	}
+	if len(manualHoles) == 0 {
+		return operations
+	}
+	equivalent := func(h ResolveHole, candidates []ResolveHole) bool {
+		for _, m := range candidates {
+			if h.Face != m.Face {
+				continue
+			}
+			if math.Abs(h.XMm-m.XMm) > 0.1 || math.Abs(h.YMm-m.YMm) > 0.1 {
+				continue
+			}
+			if math.Abs(h.DiameterMm-m.DiameterMm) > 0.1 || math.Abs(h.DepthMm-m.DepthMm) > 0.1 {
+				continue
+			}
+			return true
+		}
+		return false
+	}
+	kept := make([]ResolvedMachiningOperation, 0, len(operations))
+	for _, op := range operations {
+		if op.Provenance.SourceKind == "assemblyMemberHost" &&
+			len(op.Holes) == 1 &&
+			equivalent(op.Holes[0], manualHoles[op.HostComponentInstanceID]) {
+			continue
+		}
+		kept = append(kept, op)
+	}
+	return kept
 }
 
 // memberHostPlacement reads the declared external host from either the new
@@ -338,7 +385,6 @@ func faceNormalTowardInterior(m [9]float64, group [3]float64, board *layoutBoard
 	dz := drawerCenter[2] - centerWorld[2]
 	return normalWorld[0]*dx+normalWorld[1]*dy+normalWorld[2]*dz > 0
 }
-
 
 // memberHostHoleType mirrors the TS inferHoleType precedence for the
 // catalog-profile path: part role first, then the hardware name — the name

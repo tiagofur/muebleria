@@ -17,7 +17,10 @@ import type {
   AssemblyAxisRef,
   Hardware,
 } from '@granete/domain';
-import { isHardwareKitPart } from '@granete/domain';
+import {
+  AGREGADO_MEMBER_HOST_PLACEMENTS,
+  isHardwareKitPart,
+} from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import { isKitDerivedMember, kitPartsOf } from './KitCommercialPicker';
@@ -42,6 +45,13 @@ const AXIS_REFS: { value: AssemblyAxisRef; label: string }[] = [
   { value: 'max', label: 'Máximo' },
   { value: 'center', label: 'Centro' },
 ];
+
+// #1429 slice B: copy español del vocabulario cerrado de anfitriones.
+const HOST_PLACEMENT_LABELS: Record<string, string> = {
+  lateral_izquierdo: 'Lateral izquierdo del mueble',
+  lateral_derecho: 'Lateral derecho del mueble',
+  frente_cajon: 'Frente de cajón',
+};
 
 const AXIS_NAMES = ['x', 'y', 'z'] as const;
 
@@ -331,6 +341,11 @@ export function AgregadoRecipeAuthoringPanel({
                                     kind,
                                     variant: { variantSetId: sets[0]?.id ?? '' },
                                   },
+                                  // #1429 slice B: el anfitrión externo sólo
+                                  // existe para fuente fija — el cambio a
+                                  // variante lo limpia (la validación lo
+                                  // rechazaría con el select oculto).
+                                  hostPlacement: undefined,
                                 },
                           );
                         }}
@@ -501,6 +516,35 @@ export function AgregadoRecipeAuthoringPanel({
                           }
                           data-testid={`${testId}-member-${idx}-membership-actor`}
                         />
+                      </div>
+                    ) : null}
+                    {m.source.kind === 'fixed' ? (
+                      <div className="catalog-form__field">
+                        <label className="catalog-form__label">Pieza anfitriona (fuera del agregado)</label>
+                        <select
+                          className="catalog-form__select"
+                          value={m.hostPlacement ?? ''}
+                          onChange={(e) =>
+                            updateMember(idx, {
+                              hostPlacement: e.target.value.trim() || undefined,
+                            })
+                          }
+                          data-testid={`${testId}-member-${idx}-host-placement`}
+                        >
+                          <option value="">Sin pieza anfitriona</option>
+                          {AGREGADO_MEMBER_HOST_PLACEMENTS.map((role) => (
+                            <option key={role} value={role}>
+                              {HOST_PLACEMENT_LABELS[role]}
+                            </option>
+                          ))}
+                        </select>
+                        {m.hostPlacement ? (
+                          <p className="catalog-form__hint">
+                            El perfil de mecanizado del herraje taladra la pieza del
+                            mueble con ese rol (p. ej. la guía fija perfora el costado).
+                            Si el mueble no tiene esa pieza, el resolve falla visible.
+                          </p>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
