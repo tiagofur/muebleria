@@ -4909,6 +4909,11 @@ function normalizeHardwareHands(
 ): Pick<Hardware, 'hands'> | {} {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const r = raw as Record<string, unknown>;
+  // #1512 (review P2): the read path PRESERVES the server-resolved facts of
+  // each hand binding (representation/sha/mountFrame/glb) exactly like
+  // normalizeVisualAsset does for the global visualAsset — the web preview
+  // renders hands from those facts. Only a hand without usable identifiers
+  // drops (fail-honest).
   const handIn = (v: unknown): HardwareHand | undefined => {
     if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
     const assetRaw = (v as Record<string, unknown>).asset;
@@ -4917,7 +4922,7 @@ function normalizeHardwareHands(
     const assetId = str(a.assetId);
     const assetRevisionId = str(a.assetRevisionId);
     if (!assetId || !assetRevisionId) return {};
-    return { asset: { assetId, assetRevisionId } };
+    return { asset: (normalizeVisualAsset(assetRaw) as Pick<Hardware, 'visualAsset'>).visualAsset };
   };
   const left = handIn(r.left);
   const right = handIn(r.right);

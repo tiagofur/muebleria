@@ -380,6 +380,44 @@ export function AgregadoRecipeAuthoringPanel({
                             bloquea el guardado.
                           </p>
                         ) : null}
+                        {(() => {
+                          // #1512 M3 S2: un herraje multi-diseño (hands) pide
+                          // la mano del miembro — el asset y el anclaje X
+                          // default se derivan de ella en el resolve.
+                          const hwId = m.source.fixed?.hardwareId;
+                          const hw = hwId
+                            ? catalogHardware.find((h) => h.id === hwId)
+                            : undefined;
+                          if (!hw?.hands) return null;
+                          return (
+                            <div className="catalog-form__field">
+                              <label
+                                className="catalog-form__label"
+                                htmlFor={`${testId}-member-${idx}-hand`}
+                              >
+                                Mano
+                              </label>
+                              <select
+                                id={`${testId}-member-${idx}-hand`}
+                                className="catalog-form__select"
+                                value={m.hand ?? ''}
+                                onChange={(e) =>
+                                  updateMember(idx, {
+                                    hand: (e.target.value || undefined) as
+                                      | 'left'
+                                      | 'right'
+                                      | undefined,
+                                  })
+                                }
+                                data-testid={`${testId}-member-${idx}-hand`}
+                              >
+                                <option value="">Sin mano</option>
+                                <option value="left">Izquierda</option>
+                                <option value="right">Derecha</option>
+                              </select>
+                            </div>
+                          );
+                        })()}
                       </div>
                     ) : (
                       <div className="catalog-form__field">

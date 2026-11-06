@@ -25,6 +25,8 @@ const catalogHardware: readonly Hardware[] = [
   // #1506: parte de diseño del kit — nunca elegible por sí sola.
   { id: 'hw-parte', code: 'KIT-CAJ-PARTE', name: 'Riel fijo izq', unit: 'piece', costPerUnit: 20, active: true, kitHardwareId: 'hw-kit' },
   { id: 'hw-bis', code: 'HER-BIS', name: 'Bisagra', unit: 'piece', costPerUnit: 5, active: true },
+  // #1512 S2: herraje multi-diseño — el miembro pide mano al elegirlo.
+  { id: 'hw-perfil-m', code: 'MBOX-IGM-M', name: 'Perfil MERIVOBOX M', unit: 'piece', costPerUnit: 80, active: true, hands: { left: { asset: { assetId: 'a1', assetRevisionId: 'r1' } }, right: { asset: { assetId: 'a2', assetRevisionId: 'r2' } } } },
 ];
 
 function Harness({ onChange, initial }: { onChange?: (d: AgregadoDraft) => void; initial?: Partial<AgregadoDraft> }): ReactNode {
@@ -95,6 +97,32 @@ describe('AgregadoRecipeAuthoringPanel (#1412 autoría de receta)', () => {
     expect(optionText).toContain('HER-BIS');
     expect(optionText).toContain('KIT-CAJ');
     expect(optionText).not.toContain('KIT-CAJ-PARTE');
+  });
+
+  it('un herraje con manos pide la mano del miembro y la escribe en el draft (#1512 S2)', async () => {
+    const user = userEvent.setup();
+    let latest: AgregadoDraft | undefined;
+    render(<Harness onChange={(d) => (latest = d)} />);
+
+    await user.click(screen.getByTestId('agregado-tab-recipe-authoring-add-member'));
+    // Herraje simétrico: NO hay select de mano.
+    const root = screen.getByTestId('agregado-tab-recipe-authoring-member-0-source-hardware');
+    await user.click(root.querySelector('button')!);
+    await user.click(
+      screen.getAllByRole('option').find((o) => o.textContent?.includes('HER-BIS'))!,
+    );
+    expect(screen.queryByTestId('agregado-tab-recipe-authoring-member-0-hand')).toBeNull();
+
+    // Herraje multi-diseño: el select aparece y escribe la mano.
+    await user.click(root.querySelector('button')!);
+    await user.click(
+      screen.getAllByRole('option').find((o) => o.textContent?.includes('MBOX-IGM-M'))!,
+    );
+    const handSelect = screen.getByTestId('agregado-tab-recipe-authoring-member-0-hand');
+    await user.selectOptions(handSelect, 'left');
+    expect(latest?.rigidMembers[0]?.hand).toBe('left');
+    await user.selectOptions(handSelect, '');
+    expect(latest?.rigidMembers[0]?.hand).toBeUndefined();
   });
 
   it('membresía fijo/móvil (#1376): body y actor:<id> se componen sobre el miembro', async () => {

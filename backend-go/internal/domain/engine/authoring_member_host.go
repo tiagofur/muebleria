@@ -114,9 +114,10 @@ func deriveMemberHostMachining(
 				continue
 			}
 			// #1512 M3: a right-hand member consumes the LEFT-canonical
-			// catalog profile mirrored — hole x' = HW − x − ⌀. Requires the
-			// canonical hardware width; non-hole kinds fail closed (no
-			// invented mapping), same contract as the TS partDrilling twin.
+			// catalog profile mirrored — hole center x' = HW − x (XMm is the
+			// hole CENTER in the repo convention; see the mirror helper).
+			// Requires the canonical hardware width; non-hole kinds fail
+			// closed (no invented mapping).
 			if member.Hand == domain.MemberHandRight {
 				widthMm, _, _ := HardwareFormulaDims(&hw)
 				if widthMm <= 0 {
