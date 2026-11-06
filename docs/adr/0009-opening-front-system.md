@@ -1,7 +1,7 @@
 # ADR-0009 — Opening / Front System separated from Body Construction
 
-- Status: **Proposed**
-- Date: 2026-10-05
+- Status: **Proposed** — [Amendment 1 (Grip styles, 2026-11-06)](#amendment-1--grip-styles-2026-11-06) proposed in [#1524](https://github.com/tiagofur/muebleria/issues/1524)
+- Date: 2026-10-05 (amended 2026-11-06)
 - Decision owners: Granete architecture
 - Canonical detail: [`docs/architecture/opening-front-system.md`](../architecture/opening-front-system.md)
 
@@ -95,3 +95,96 @@ This ADR establishes the architecture and authority boundaries for opening/front
 The concrete data contracts, compatibility matrix, profile schema, resolver rules, migration details and implementation sequence are defined in:
 
 [`docs/architecture/opening-front-system.md`](../architecture/opening-front-system.md)
+
+## Amendment 1 — Grip styles (2026-11-06)
+
+- Status: **Proposed**. The owner's answers are recorded in [#1524](https://github.com/tiagofur/muebleria/issues/1524), and the owner approves this amendment through the PR that adds it.
+- Epic: [#1522](https://github.com/tiagofur/muebleria/issues/1522). Delivery: phases 1–5 (#1525–#1537).
+- Scope: this amendment replaces decision 7 for grip and front behaviour, and restates parts of decisions 5 and 9. Every other decision above still applies.
+- Canonical detail: [`opening-front-system.md` §14](../architecture/opening-front-system.md#14-amendment-1--grip-styles-target).
+
+### Context
+
+The pilot implementation of this ADR (#1129–#1393) passed issue by issue, but the result is hard to use as a whole. The review in #1522 found:
+
+- **Factory capability controls nothing reads.** The per-furniture-type restrictions and both "default" controls are never consumed: the design opening write does not pass the furniture type to the validator, and no client reads `default`.
+- **A bottom overhang that cannot be configured.** It can be enabled, but nothing writes `opening.bottom-overhang`, so every selection resolves to `OPENING_OVERHANG_EVIDENCE_PENDING`.
+- **Grip data in five places:** the profile catalog, `opening.capabilities`, `opening.bottom-overhang`, the design selection with its partial pin, and the legacy `jaladera-gola-*` options.
+- **A profile editor that takes raw UUIDs and free-text member keys,** while the engine only reads the exact keys `profile`, `supports` and `endCaps`.
+- **Per-furniture selection only.** The common industry pattern (Cabinet Vision, Mozaik, ML Cabinets) decides the grip once per job and lets each cabinet inherit it.
+- **Two different front heights.** The geometry subtracts the discount from a front that already carries its catalog reveal (built `H − reveal − discount`), while the resolution reports `H − discount`.
+
+### Decisions
+
+**A1. Vocabulary.** The user-facing concept for handle, gola and bottom overhang is **Grip** («Agarre»). «Apertura» is reserved for door swing and presentation (#529/#1377). New entities use `grip` names. Existing `opening_*` identifiers are renamed only where a migration already touches them.
+
+**A2. Three concepts replace the capability overlay (decision 7):**
+
+1. **Gola profile.** A workshop-owned catalog record, with organization-scoped rows as today.
+   - Material: `aluminum | melamine`. The melamine variant is the Italian gola.
+   - Positions: `top | between`, available to both materials.
+   - Required before use: height, depth, and the **front discount** for each position the profile declares.
+   - Manufacturer values are only suggestions at creation (SCILM 8006 L top: 40; 8007 C between: 36). The workshop may change them, because its number is a declared workshop fact, versioned and auditable. `geometryOrigin` becomes informational.
+   - Body effects are declared data, consistent with §13.6:
+     - top depth reduction (full top) or front-manguete retraction, chosen by the declared Construction Variant;
+     - an optional side notch;
+     - an optional door bevel (Italian gola: 45°).
+   - Parts are chosen from the catalogs by fixed role: `profile`, `supports` (with spacing), `endCaps`, and for the Italian gola the `strip` panel component (70 mm by default, editable).
+2. **Grip style.** A workshop setting: a named recipe for each `FurnitureType`, with one of these modes:
+   - `handle`: the default handle hardware;
+   - `gola`: a top profile, plus an optional between profile;
+   - `bottom_overhang`: a value in millimetres, 20 by default and editable.
+
+   Each style is offered or not, and exactly one style is the default.
+3. **Project grip.** The project selects a style in the SketchUp Inspector with nothing selected, and every furniture inherits it. A furniture may carry an override, either another style or custom values, chosen in the Inspector with that furniture selected.
+
+**A3. Front discount semantics.** This replaces the §5 formula and closes the §13.4 investigation. Discounts are measured from the cabinet height, as the datasheet does:
+
+- **Top grip with discount `D_top`.** The top edge of the topmost front sits at `H − D_top + r_bottom`, where `r_bottom` is the catalog's normal bottom reveal of the stack. A single front therefore measures exactly `H − D_top`, and its bottom edge does not move.
+- **Between grip with discount `D_between`.** The gap between the two adjacent fronts is `D_between`, replacing the normal gap.
+- **Bottom overhang of `X` mm.** The bottom edge of the lowest front sits `X` below the bottom of the body.
+- **Edges without a grip** keep the catalog's normal reveals.
+- **Remaining height** is split by the zone ratios.
+
+The discount is never added on top of the normal reveal. Clients show the built front dimensions, which are the values the geometry uses.
+
+Parity fixtures for Go and TS, from the SCILM datasheet with a reveal of 1.5:
+
+| Case | Front height |
+| --- | --- |
+| No grip, 1 front | `H − 3` |
+| No grip, 2 fronts | `(H − 6)/2` |
+| Top L | `H − 40` |
+| Between C only | `(H − 39)/2` |
+| Top L + between C | `(H − 76)/2` |
+| Overhang 20 | `H − 1.5 + 20` |
+
+The resolution precision must represent half millimetres. The rounding and remainder policy is fixed in the contract issue (#1529).
+
+**A4. Bottom overhang no longer waits for field evidence.** Its millimetres are a style parameter: 20 mm by default (an owner decision), editable in the style and overridable per furniture.
+
+**A5. Retired after migration (phase 2):**
+
+- `opening.capabilities` (enabled, default, curated profiles, standard per section, per-type placements and defaults);
+- `opening.bottom-overhang` and `OPENING_OVERHANG_EVIDENCE_PENDING`;
+- grip types in the profile that are not profiles (`handle`, `bottom_reveal`, `none`);
+- the legacy pair of front reduction and grip clearance;
+- the code branches for pins authored before #1263, #1283 and #1287, once the pilot data is migrated;
+- the placement select in clients. Position now derives from the style, the furniture type and the front stack.
+
+**A6. Kept unchanged:**
+
+- the server resolve is the authority, and React and Ruby never compute fronts;
+- a missing required value is an explicit blocked state with an actionable Spanish message;
+- available ≠ valid;
+- notch and bevel have one definition, shared by geometry and CNC;
+- components are addressed by constructive role, never by name.
+
+**A7. Freezing.** The project's style and each override are frozen as one complete snapshot, holding the style values and the profile values they use, at the moment they are applied. Later workshop edits never change existing projects. The Inspector offers an explicit «Actualizar a los valores actuales del taller». Quotes and production releases consume the snapshot.
+
+### Rejected alternatives (amendment)
+
+- **Store a per-edge gap (for example 38.5) instead of the front discount.** The owner rejected it: workshops think in the datasheet's front discount (`H − 40`), and A3 derives the edge gap from it.
+- **Keep the six capability controls and add consumers.** The decision users actually make is a style, not a capability matrix.
+- **Gate workshop values on a verified datasheet.** Workshops deviate from manufacturer values and use other profiles (#1524, Q5). The workshop's declared number is the authoritative input, and a missing number still blocks.
+- **Keep `opening.bottom-overhang` as a separate overlay blob.** It hid the only required value from every screen.

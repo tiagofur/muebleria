@@ -6,8 +6,14 @@
   values) and OQ-3 (overhang evidence) still gate the verified-pilot path;
   multi-zone layouts and release-pinned profile blobs remain explicit
   follow-up scope.
+- **Target: Amendment 1 — Grip styles** (2026-11-06, proposed in
+  [#1524](https://github.com/tiagofur/muebleria/issues/1524), epic
+  [#1522](https://github.com/tiagofur/muebleria/issues/1522)). See
+  [§14](#14-amendment-1--grip-styles-target). Sections marked *Superseded
+  by §14* describe what is implemented today. They stay until the phase 2
+  migration retires it.
 - Decision record: [ADR-0009](../adr/0009-opening-front-system.md)
-- Epic: [#1128](https://github.com/tiagofur/muebleria/issues/1128)
+- Epic: [#1128](https://github.com/tiagofur/muebleria/issues/1128) (pilot), [#1522](https://github.com/tiagofur/muebleria/issues/1522) (grip styles)
 - Related: [`manufacturing-library-platform.md`](manufacturing-library-platform.md) (ADR-0008),
   [`factory-construction-and-joinery.md`](factory-construction-and-joinery.md) (#875/#1052),
   [`catalog-option-selector.md`](catalog-option-selector.md),
@@ -123,6 +129,10 @@ Rules:
 
 ## 5. Opening Layout and grip boundaries
 
+> *Superseded by §14.4 for the height formula.* Zones, ratios and grip
+> boundaries stay. The discount is measured from the cabinet height and
+> replaces the edge's normal reveal instead of being added to it.
+
 ```yaml
 openingLayout:
   id: layout.drawers-1-1-2
@@ -163,6 +173,11 @@ family enum is introduced.
 Open questions that block fixtures (see §12): OQ-2 (datasheet values), OQ-3 (case C overhang value and body interaction). OQ-1 is resolved by the dual-cavity mechanism of Gola C.
 
 ## 7. Library, factory capabilities and selection
+
+> *Superseded by §14.2–§14.3.* The `opening.capabilities` overlay
+> (enabled, default, curated profiles, standard per section, per-type
+> placements and defaults) is replaced by Grip Styles and the Project grip.
+> Its per-type restrictions and defaults never had a consumer (#1522).
 
 ```text
 Granete Standard (defines what exists)
@@ -213,6 +228,10 @@ grip-governed dimension is an authoring error, not a silent precedence rule.
 
 ## 10. Surfaces
 
+> *Superseded by §14.7.* The Inspector no longer offers a placement select.
+> «Apertura» is reserved for door swing and presentation, and the grip card
+> is named «Agarre».
+
 - **Server (Go)**: resolve authority, validation, overlay reading.
 - **TS domain**: parity reading for editor previews; never a second resolver.
 - **Web (React)**: factory capability settings; library authoring of profiles
@@ -238,6 +257,10 @@ grip-governed dimension is an authoring error, not a silent precedence rule.
 11. [#1139](https://github.com/tiagofur/muebleria/issues/1139) Construction Variants for the body (separate track; same overlay pattern).
 
 ## 12. Open questions
+
+> *Resolved by Amendment 1 (#1524).* OQ-2: the values are workshop
+> parameters, with the datasheet values as suggestions (§14.2). OQ-3: the
+> overhang is a style parameter, 20 mm by default (§14.5).
 
 - **OQ-1 (Resolved)** Case B: with gola at `top` (L) and `between(z2,z3)` (C), drawer 2
   is gripped from below using the upward recess cavity of the C profile, while drawer 3
@@ -289,6 +312,13 @@ Use constructive roles and stable component-instance identities, never part name
 
 ### 13.4. Door-height adjustment: 30 mm versus 40 mm
 
+> *Resolved by §14.4.* The SCILM datasheet (p. 8) defines `H − 40` for
+> 8006, which is 38.5 above the door plus 1.5 below. The value is a
+> workshop parameter measured from the cabinet height, so a workshop that
+> uses 30 declares 30. The implemented engine adds the discount on top of
+> the catalog front's reveal, which probably explains part of the reported
+> difference.
+
 A factory has reported using a 30 mm door-height adjustment where a manual/reference is understood to indicate 40 mm. This is an open investigation, not a decision that either value is universally correct.
 
 Before setting a default, document what each number measures and its reference geometry: physical profile height, installation envelope, door/front reduction, grip clearance, or a total adjustment that may include other clearances. Confirm the exact profile/SKU and source document. Do not change the physical profile dimensions to make a door formula match a factory adjustment.
@@ -334,4 +364,163 @@ The exact mapping for “manguete” to the repository's canonical `Constructive
 - Missing profile depth, missing reference frame, unknown body variant or missing target role blocks the affected resolve; no zero/default depth or name-based fallback.
 - The body geometry, side notch/CNC feature (when the exact profile requires it), and BOM/placement output remain consistent after resolve, rebuild and synchronization.
 - Go/server resolve is authoritative; TS parity fixtures mirror the contract, while SketchUp sends the selected construction/opening intent and consumes resolved output.
+
+## 14. Amendment 1 — Grip styles (target)
+
+Decision: [ADR-0009, Amendment 1](../adr/0009-opening-front-system.md#amendment-1--grip-styles-2026-11-06).
+The owner's answers are in [#1524](https://github.com/tiagofur/muebleria/issues/1524), and the epic is [#1522](https://github.com/tiagofur/muebleria/issues/1522).
+This section is the **target**. Sections 1–13 describe the implemented pilot until phase 2 migrates it.
+
+### 14.1. Why
+
+The pilot works issue by issue, but users cannot operate it as a whole:
+
+- six factory controls cover one decision, and several of them have no consumer;
+- the bottom overhang cannot be configured;
+- profile parts are entered as raw UUIDs with exact free-text keys;
+- the grip is chosen per furniture with three selects;
+- the engine adds the discount to the catalog reveal.
+
+Mature cabinet software expresses the same domain as a *reveal* at an edge of the front, chosen once per job and inherited by each cabinet. Every grip system reduces to one rule: **each edge of the front stack has a gap, and the grip says what fills the body behind it.**
+
+### 14.2. Gola profile (workshop catalog record)
+
+```yaml
+golaProfile:                         # org-scoped row (opening_profiles today)
+  code: GOLA-L-8006
+  name: Gola L Cymisa 8006
+  manufacturer: SCILM                # informational
+  material: aluminum                 # aluminum | melamine (Italian gola)
+  positions: [top]                   # top | between (both materials)
+  heightMm: 56.5                     # required
+  depthMm: 27.2                      # required
+  frontDiscountTopMm: 40             # required if positions ∋ top
+  frontDiscountBetweenMm: null       # required if positions ∋ between
+  geometryOrigin: "SCILM 2022-04-01 p. 42"   # optional, informational
+  body:
+    topSetback: true                 # full top shortens OR front manguete retracts (§13.6)
+    sideNotch: false
+    doorBevelMm: null                # Italian gola: 45° bevel size
+  parts:                             # fixed roles; references picked from catalogs
+    profile:  { hardwareId: <sku>, rule: interior_width }
+    supports: { hardwareId: <sku>, rule: per_length, spacingMm: 600, dimensionsMm: [..] }
+    endCaps:  { hardwareId: <sku>, rule: per_exposed_end }
+    strip:    { componentId: <panel>, heightMm: 70 }   # Italian gola only
+```
+
+- Manufacturer values are suggestions when the profile is created: 8006 L top, 40; 8007 C between, 36. The workshop may change them, and no range limit applies.
+- A missing required value blocks the profile **for that position only**, with a Spanish message that names the field.
+- There is no "verified datasheet" gate. The workshop's declared number is the authoritative input, and every change is versioned and audited.
+- Grip types that are not profiles (`handle`, `bottom_reveal`, `none`) do not exist in this catalog.
+
+### 14.3. Grip style and project grip
+
+```yaml
+gripStyle:                           # new org-scoped table (#1531)
+  name: Gola negra Cymisa
+  offered: true
+  isDefault: true                    # exactly one per organization (DB-enforced)
+  byFurnitureType:
+    inferior: { mode: gola, top: GOLA-L-8006, between: GOLA-C-8007 }
+    superior: { mode: bottom_overhang, overhangMm: 20 }
+    alto:     { mode: handle, handleHardwareId: <sku> }
+
+project:
+  gripStyleId: <style>               # chosen in the SketchUp Inspector with no selection
+  gripSnapshot: { ...style + profile values, frozen when applied }
+furniture:
+  gripOverride: null | { styleId } | { custom }   # Inspector with the furniture selected
+  gripSnapshot: { ... }              # only when overridden
+```
+
+The server resolves the inheritance. A furniture without an override uses the project's snapshot. Placement is never chosen by the user:
+
+- the top edge receives the style's top profile, or the overhang for `bottom_overhang`;
+- every between edge of a stacked front column receives the between profile when the style defines one;
+- otherwise, between edges keep the normal gap.
+
+### 14.4. Front discount rule
+
+The discount is measured from the cabinet height `H`, as the datasheet does, and replaces the edge's normal reveal:
+
+| Edge | Position of the edge |
+| --- | --- |
+| Top, with gola `D_top` | top edge of the topmost front = `H − D_top + r_bottom` |
+| Top, without grip | catalog normal (`H − r_top`) |
+| Between, with gola `D_between` | gap between the two fronts = `D_between` |
+| Between, without grip | catalog normal gap |
+| Bottom, with overhang `X` | bottom edge = `−X` (below the body bottom) |
+| Bottom, otherwise | catalog normal (`r_bottom`) |
+
+Front heights = (top edge − bottom edge − Σ between gaps) × ratioᵢ / Σ ratios. Width is unchanged (`W − 3` in the datasheet).
+
+Datasheet fixtures (SCILM pp. 8–9, `r = 1.5`, `H = 720`):
+
+| Case | Formula | 720 |
+| --- | --- | --- |
+| No grip, 1 front | `H − 3` | 717 |
+| No grip, 2 fronts | `(H − 6)/2` | 357 |
+| Top L (40) | `H − 40` | 680 |
+| Between C (36) only | `(H − 39)/2` | 340.5 |
+| Top L + between C | `(H − 76)/2` | 322 |
+| Wall cabinet, overhang 20 | `H − 1.5 + 20` | 738.5 |
+
+- The resolution reports the **built** front dimensions, the same numbers the boards use.
+- Precision represents half millimetres. The remainder policy is fixed by #1529.
+- Pins of contract v1 keep their v1 arithmetic until #1532 migrates them, so no historical design changes silently.
+
+### 14.5. Bottom overhang
+
+- The overhang is a `bottom_overhang` style mode with `overhangMm`: 20 by default, editable in the style and overridable per furniture.
+- No profile and no hardware are involved, and the body is unchanged.
+- The value is the workshop's declaration, so the blocked state "waiting for field evidence" disappears.
+
+### 14.6. Italian gola
+
+- The Italian gola is a gola profile with `material: melamine`, available at the **top and between** positions.
+- Its `strip` part is a panel component, 70 mm high by default and running the full width, and it goes to the cut list with its material.
+- The door edge at that boundary gets a 45° bevel toward the back, so the face stays full. Bevel geometry and CNC share one definition (#1327).
+- At the top, its body effect is the same as gola L: the full top shortens, or the front manguete retracts, according to the Construction Variant (§13.6).
+- Its front discounts are workshop values. There is no manufacturer default.
+
+### 14.7. Surfaces
+
+- **Web › Ajustes › Agarres** (#1533): the list of styles, an editor with one row per furniture type, and a server-computed preview such as «Mueble de 720 → puerta de 680».
+- **Web › Catálogo › Perfiles de gola** (#1534): material, positions, discounts with a live server preview, a schematic section drawing, and parts by role (#1526).
+- **SketchUp Inspector** (#1535):
+  - with no selection, it shows «Agarre del proyecto», the offered styles as options with a drawing;
+  - with a furniture selected, it shows the «Agarre» card: inherited, «Cambiar sólo este mueble» and «Volver al del proyecto»;
+  - with several furniture selected, the change applies to all of them;
+  - «Apertura» is reserved for door swing and presentation.
+- **SketchUp host** (#1536): the L and C profiles, the Italian strip at the top and between drawers, the bevel and the overhang, all drawn from server output.
+
+### 14.8. Freezing and validity
+
+- Applying a style to the project, or an override to a furniture, freezes one complete snapshot.
+- Later edits to profiles or styles never change existing projects until the user chooses «Actualizar a los valores actuales del taller».
+- Quotes and production releases consume the snapshot.
+- Disabling «Ofrecer» hides the style for new choices only (available ≠ valid).
+
+### 14.9. Migration and retirement (phase 2)
+
+| Retired | Replaced by | Issue |
+| --- | --- | --- |
+| `opening.capabilities` blob | `grip_styles` | #1531 |
+| `opening.bottom-overhang` blob, `OPENING_OVERHANG_EVIDENCE_PENDING` | `bottom_overhang` mode in the style | #1531 |
+| `handle` / `bottom_reveal` / `none` profile grip types | style modes | #1530 |
+| front + clearance pair, `door_reduction_mm` | `frontDiscountTopMm` / `frontDiscountBetweenMm` | #1530 |
+| `DesignOpeningSelection` + partial pin + pre-#1263/#1283/#1287 branches | project grip + override snapshots | #1532 |
+| placement select, «Apertura del diseño» cards | «Agarre» card | #1535 |
+
+Every migration runs on fresh and upgraded databases and writes a per-row report attached to its issue.
+
+### 14.10. Delivery
+
+| Phase | Issues |
+| --- | --- |
+| 1. Immediate fixes, no model change | #1525, #1526, #1527, #1528 |
+| 2. Backend | #1529 (engine), #1530 (profile v2), #1531 (styles), #1532 (project grip) |
+| 3. Web | #1533 (styles), #1534 (profile editor) |
+| 4. SketchUp | #1535 (Inspector), #1536 (host render) |
+| 5. Verification | #1537 |
 
