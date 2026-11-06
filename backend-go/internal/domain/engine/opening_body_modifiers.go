@@ -394,9 +394,17 @@ func resolveOpeningBodyModifierEffect(
 		}
 		switch modifier.BevelAt {
 		case OpeningNotchAtTopFront:
-			if boundaryKind != "top" {
+			// #1532: at a between boundary the bevel cuts the TOP edge of
+			// every front just below the edge (§14.4.1). The layout pass
+			// reads the real edge from the boards' stack.
+			if boundaryKind != "top" && boundaryKind != "between" {
 				return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
 					fmt.Sprintf("el bisel top_front no aplica en la frontera %s", boundaryKind))
+			}
+		case OpeningNotchAtFrontBoundary:
+			if boundaryKind != "between" {
+				return ResolvedOpeningBodyModifier{}, openingFail(OpeningErrBodyModifierInvalid,
+					fmt.Sprintf("el bisel front_boundary no aplica en la frontera %s", boundaryKind))
 			}
 		case OpeningNotchAtBottomFront:
 			if boundaryKind != "bottom" {
@@ -432,7 +440,11 @@ func resolveOpeningNotchOffset(
 ) (int, *OpeningResolutionError) {
 	switch notchAt {
 	case OpeningNotchAtTopFront:
-		if boundaryKind != "top" {
+		// #1532: at a between boundary the side notch hangs from the bottom
+		// edge of the front above each between edge (§14.4.1) — the layout
+		// pass reads the real edges from the boards' stack, so the resolved
+		// offset stays 0 (the geometry consumer rejects a non-zero offset).
+		if boundaryKind != "top" && boundaryKind != "between" {
 			return 0, openingFail(OpeningErrBodyModifierInvalid,
 				fmt.Sprintf("el saque top_front no aplica en la frontera %s", boundaryKind))
 		}
@@ -447,6 +459,12 @@ func resolveOpeningNotchOffset(
 		if boundaryKind != "between" {
 			return 0, openingFail(OpeningErrBodyModifierInvalid,
 				fmt.Sprintf("el saque front_boundary no aplica en la frontera %s", boundaryKind))
+		}
+		if fronts == nil {
+			// The project grip's stack producer (#1532): the offset is read
+			// from the boards by the geometry consumer, never precomputed
+			// against a synthetic zone.
+			return 0, nil
 		}
 		// The boundary sits at the end of the zone it grips from below.
 		for _, front := range fronts {
