@@ -3,6 +3,7 @@ import { GraneteApiClient, type LibraryOverlayDetail } from '@granete/storage';
 import {
   DEFAULT_OPENING_CAPABILITIES,
   parseOpeningCapabilities,
+  parseOpeningOverhangRule,
   type OpeningCapabilities,
 } from '@granete/domain';
 
@@ -31,6 +32,9 @@ export function useOpeningCapabilities({
   const [activeOverlay, setActiveOverlay] = useState<LibraryOverlayDetail | null>(null);
   const [capabilities, setCapabilities] = useState<OpeningCapabilities>(DEFAULT_OPENING_CAPABILITIES);
   const [decided, setDecided] = useState(false);
+  // #1525: the bottom-overhang millimetres as the input string the form
+  // edits; '' = no value declared (rebase stays blocked in SketchUp).
+  const [overhangMm, setOverhangMm] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +51,8 @@ export function useOpeningCapabilities({
       .then((overlay) => {
         if (cancelled) return;
         setActiveOverlay(overlay);
+        const overhang = parseOpeningOverhangRule(overlay?.overrides ?? null);
+        setOverhangMm(overhang.ok && overhang.rule ? String(overhang.rule.overhangMm) : '');
         const parse = parseOpeningCapabilities(overlay?.overrides ?? null);
         if (!parse.ok) {
           setError(parse.message);
@@ -79,9 +85,21 @@ export function useOpeningCapabilities({
       setSaving(true);
       setError(null);
       try {
+        const trimmed = overhangMm.trim();
+        let overhang: number | null = null;
+        if (trimmed !== '') {
+          overhang = Number(trimmed);
+          if (!Number.isInteger(overhang) || overhang <= 0) {
+            const message = 'Los milímetros del rebase deben ser un número entero mayor que 0.';
+            setError(message);
+            throw new Error(message);
+          }
+        }
         const client = new GraneteApiClient(baseUrl);
-        const updated = await client.saveOpeningCapabilities(token, next, activeOverlay);
+        const updated = await client.saveOpeningCapabilities(token, next, activeOverlay, undefined, overhang);
         setActiveOverlay(updated);
+        const savedOverhang = parseOpeningOverhangRule((updated.overrides ?? {}) as Record<string, unknown>);
+        setOverhangMm(savedOverhang.ok && savedOverhang.rule ? String(savedOverhang.rule.overhangMm) : '');
         const parse = parseOpeningCapabilities((updated.overrides ?? {}) as Record<string, unknown>);
         if (parse.ok && parse.capabilities) {
           setCapabilities(parse.capabilities);
@@ -99,7 +117,7 @@ export function useOpeningCapabilities({
         setSaving(false);
       }
     },
-    [baseUrl, token, activeOverlay],
+    [baseUrl, token, activeOverlay, overhangMm],
   );
 
   return {
@@ -107,6 +125,8 @@ export function useOpeningCapabilities({
     setCapabilities,
     activeOverlay,
     decided,
+    overhangMm,
+    setOverhangMm,
     loading,
     saving,
     error,

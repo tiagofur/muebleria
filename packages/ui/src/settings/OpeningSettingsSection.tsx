@@ -6,18 +6,23 @@
  * system hides/blocks NEW selection only — existing designs keep resolving
  * against their pinned release, and this section says so.
  *
- * The overlay carries NO dimensions: profile geometry lives in the
- * OpeningProfile catalog; this section never edits millimetres.
+ * The capabilities blob carries NO dimensions: profile geometry lives in the
+ * OpeningProfile catalog. The one millimetre value here is the bottom
+ * overhang (#1525), saved in its own `opening.bottom-overhang` key in the
+ * same overlay write.
+ *
+ * #1525: the per-furniture-type restrictions and the «preselected» system
+ * have no consumer today (the design opening write never sends the furniture
+ * type and no client reads `default`), so they are not rendered. Saving keeps
+ * whatever the overlay already stores for them; the grip-style model of
+ * #1531 replaces them.
  */
 import type { ReactNode } from 'react';
 import { Factory } from 'lucide-react';
 import {
-  availableOpeningSystems,
-  type FurnitureTypeKey,
   type OpeningCapabilities,
   type OpeningGolaSectionKey,
   type OpeningGripSystem,
-  type OpeningPlacementKey,
 } from '@granete/domain';
 
 /** #1329 — the catalog projection the standard mark needs: enough to name
@@ -46,27 +51,16 @@ export interface OpeningSettingsSectionProps {
    * the per-section standard radios. Null/absent = catalog not loaded — the
    * curation list falls back to raw ids (today's behavior). */
   readonly profiles?: readonly OpeningStandardProfileOption[] | null;
+  /** #1525 — the bottom-overhang millimetres as typed ('' = none declared). */
+  readonly overhangMm?: string;
+  readonly onOverhangChange?: (value: string) => void;
 }
 
 const SYSTEM_LABELS: readonly { readonly id: OpeningGripSystem; readonly label: string; readonly description: string }[] = [
-  { id: 'handle', label: 'Jaladera', description: 'Tirador o perilla montado en el frente (baseline).' },
-  { id: 'gola', label: 'Gola (perfil integrado)', description: 'Perfil continuo que crea el agarre: modifica cuerpo, frentes y BOM.' },
-  { id: 'bottom_overhang', label: 'Rebase inferior', description: 'El frente rebasa el gabinete por abajo para agarrar por debajo (espera evidencia de campo).' },
+  { id: 'handle', label: 'Jaladera', description: 'Tirador o perilla montado en el frente.' },
+  { id: 'gola', label: 'Gola', description: 'Perfil continuo que forma el agarre. Cambia el cuerpo, los frentes y la lista de materiales.' },
+  { id: 'bottom_overhang', label: 'Rebase inferior', description: 'La puerta baja unos milímetros por debajo del mueble para tomarla por abajo. Se usa en alacenas.' },
 ];
-
-const TYPE_LABELS: readonly { readonly id: FurnitureTypeKey; readonly label: string }[] = [
-  { id: 'inferior', label: 'Inferiores' },
-  { id: 'superior', label: 'Superiores (alacenas)' },
-  { id: 'alto', label: 'Altos' },
-];
-
-const PLACEMENTS: readonly OpeningPlacementKey[] = ['top', 'between', 'bottom'];
-
-const PLACEMENT_LABELS: Record<OpeningPlacementKey, string> = {
-  top: 'Superior',
-  between: 'Entre frentes',
-  bottom: 'Inferior',
-};
 
 const GOLA_SECTION_LABELS: Record<OpeningGolaSectionKey, string> = {
   L: 'L',
@@ -84,11 +78,9 @@ export function OpeningSettingsSection({
   disabled = false,
   error = null,
   profiles = null,
+  overhangMm = '',
+  onOverhangChange,
 }: OpeningSettingsSectionProps): ReactNode {
-  const offered = availableOpeningSystems(capabilities);
-  const defaultSystem = (Object.keys(capabilities.grips) as OpeningGripSystem[]).find(
-    (system) => capabilities.grips[system]?.default,
-  );
 
   const updateSystem = (system: OpeningGripSystem, patch: Partial<NonNullable<OpeningCapabilities['grips'][OpeningGripSystem]>>) => {
     const grips = { ...capabilities.grips };
@@ -102,15 +94,6 @@ export function OpeningSettingsSection({
     onChange({ ...capabilities, version: 1, grips });
   };
 
-  const setDefaultSystem = (system: OpeningGripSystem) => {
-    const grips = { ...capabilities.grips };
-    for (const key of Object.keys(grips) as OpeningGripSystem[]) {
-      const current = grips[key];
-      if (!current) continue;
-      grips[key] = { ...current, default: key === system };
-    }
-    onChange({ ...capabilities, version: 1, grips });
-  };
 
   // #1329: one standard per (gola) section — marking another profile of the
   // same section replaces the mark; clearing the last one omits the key so
@@ -134,36 +117,17 @@ export function OpeningSettingsSection({
     onChange({ ...capabilities, version: 1, grips });
   };
 
-  const updateTypeGrip = (
-    type: FurnitureTypeKey,
-    system: OpeningGripSystem,
-    patch: { placements?: readonly OpeningPlacementKey[]; default?: boolean },
-  ) => {
-    const byType = { ...(capabilities.byFurnitureType ?? {}) };
-    const typeCaps = { ...(byType[type] ?? { grips: {} }) };
-    const grips = { ...(typeCaps.grips ?? {}) };
-    const current = grips[system] ?? {};
-    const next = { ...current, ...patch };
-    if (!next.placements?.length && next.default === undefined) {
-      delete grips[system];
-    } else {
-      grips[system] = next;
-    }
-    typeCaps.grips = grips;
-    byType[type] = typeCaps;
-    onChange({ ...capabilities, version: 1, byFurnitureType: byType });
-  };
 
   return (
     <section className="settings-section" data-testid="settings-section-opening">
       <h3>
-        <Factory size={16} aria-hidden /> Apertura — qué ofrece la fábrica
+        <Factory size={16} aria-hidden /> Apertura — qué ofrece el taller
       </h3>
       <p className="settings-hint">
         {decided
-          ? 'Decisión de fábrica activa: gobierna qué sistemas puede elegir una autoría NUEVA.'
-          : 'Sin decisión de fábrica todavía: se muestran los valores heredados de la biblioteca.'}{' '}
-        Deshabilitar un sistema no toca los diseños existentes — siguen resolviendo contra su biblioteca fijada.
+          ? 'Estos son los sistemas de agarre que se pueden elegir en SketchUp.'
+          : 'Todavía no guardaste esta configuración: se muestran los valores iniciales de Granete.'}{' '}
+        Dejar de ofrecer un sistema no cambia los muebles que ya lo usan.
       </p>
 
       <div className="settings-grid" data-testid="opening-systems">
@@ -172,34 +136,23 @@ export function OpeningSettingsSection({
           return (
             <div key={id} className="catalog-card" data-testid={`opening-system-${id}`}>
               <div className="catalog-form__field">
+                <h4 style={{ margin: 0 }} id={`opening-system-${id}-title`}>{label}</h4>
+                <p className="settings-hint" style={{ margin: 0 }}>{description}</p>
                 <label>
                   <input
                     type="checkbox"
                     checked={capability.enabled}
                     onChange={(e) => updateSystem(id, { enabled: e.target.checked })}
                     disabled={disabled || saving}
+                    aria-describedby={`opening-system-${id}-title`}
                     data-testid={`opening-system-${id}-enabled`}
                   />{' '}
-                  {label} {offered.includes(id) ? '' : '(no disponible para nueva autoría)'}
-                </label>
-                <p className="settings-hint" style={{ margin: 0 }}>{description}</p>
-              </div>
-              <div className="catalog-form__field">
-                <label>
-                  <input
-                    type="radio"
-                    name="opening-default-system"
-                    checked={defaultSystem === id}
-                    disabled={disabled || saving || !capability.enabled}
-                    onChange={() => setDefaultSystem(id)}
-                    data-testid={`opening-system-${id}-default`}
-                  />{' '}
-                  Sistema preseleccionado
+                  Ofrecer en SketchUp
                 </label>
               </div>
               {id === 'gola' && (
                 <div className="catalog-form__field" data-testid="opening-gola-profiles">
-                  <label>Perfiles curados y estándar del taller</label>
+                  <label>Perfiles que se ofrecen y estándar por sección</label>
                   {capability.profiles?.length ? (
                     <>
                       <ul className="settings-hint" style={{ margin: 0, listStyle: 'none', padding: 0 }}>
@@ -270,10 +223,33 @@ export function OpeningSettingsSection({
                     </>
                   ) : (
                     <p className="settings-hint" style={{ margin: 0 }}>
-                      Sin curaduría todavía: la gola se ofrece, pero los perfiles exactos se eligen del catálogo
-                      (los pendientes de ficha bloquean su selección).
+                      Todavía no elegiste perfiles: en SketchUp aparecen todos los perfiles de gola con la ficha
+                      completa.
                     </p>
                   )}
+                </div>
+              )}
+              {id === 'bottom_overhang' && (
+                <div className="catalog-form__field" data-testid="opening-overhang">
+                  <label htmlFor="opening-overhang-mm">¿Cuántos mm baja la puerta por debajo del mueble?</label>
+                  <input
+                    id="opening-overhang-mm"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    step={1}
+                    value={overhangMm}
+                    placeholder="20"
+                    disabled={disabled || saving || !onOverhangChange}
+                    onChange={(e) => onOverhangChange?.(e.target.value)}
+                    aria-describedby="opening-overhang-hint"
+                    data-testid="opening-overhang-mm"
+                  />
+                  <p id="opening-overhang-hint" className="settings-hint" style={{ margin: 0 }} data-testid="opening-overhang-hint">
+                    {overhangMm.trim() === ''
+                      ? 'Sin milímetros, el rebase queda bloqueado en SketchUp. Lo común es 10 o 20 mm.'
+                      : 'Número entero en milímetros. Lo común es 10 o 20 mm.'}
+                  </p>
                 </div>
               )}
             </div>
@@ -281,64 +257,6 @@ export function OpeningSettingsSection({
         })}
       </div>
 
-      <h4>Restricciones por tipo de mueble</h4>
-      <table data-testid="opening-by-furniture-type">
-        <thead>
-          <tr>
-            <th>Tipo</th>
-            <th>Sistema</th>
-            <th>Posiciones permitidas</th>
-            <th>Default del tipo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {TYPE_LABELS.map(({ id: type, label }) =>
-            SYSTEM_LABELS.filter(({ id: system }) => capabilities.grips[system]?.enabled).map(({ id: system, label: systemLabel }) => {
-              const grip = capabilities.byFurnitureType?.[type]?.grips?.[system];
-              return (
-                <tr key={`${type}-${system}`} data-testid={`opening-type-${type}-${system}`}>
-                  <td>{label}</td>
-                  <td>{systemLabel}</td>
-                  <td>
-                    {PLACEMENTS.map((placement) => {
-                      const checked = grip?.placements?.includes(placement) ?? false;
-                      return (
-                        <label key={placement} style={{ marginRight: 12 }}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={disabled || saving}
-                            data-testid={`opening-type-${type}-${system}-${placement}`}
-                            onChange={(e) => {
-                              const next = new Set(grip?.placements ?? []);
-                              if (e.target.checked) {
-                                next.add(placement);
-                              } else {
-                                next.delete(placement);
-                              }
-                              updateTypeGrip(type, system, { placements: [...next] });
-                            }}
-                          />{' '}
-                          {PLACEMENT_LABELS[placement]}
-                        </label>
-                      );
-                    })}
-                  </td>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={grip?.default === true}
-                      disabled={disabled || saving}
-                      data-testid={`opening-type-${type}-${system}-default`}
-                      onChange={(e) => updateTypeGrip(type, system, { default: e.target.checked })}
-                    />
-                  </td>
-                </tr>
-              );
-            }),
-          )}
-        </tbody>
-      </table>
 
       {error ? (
         <p className="settings-hint" role="alert" data-testid="opening-capabilities-error">
@@ -353,7 +271,7 @@ export function OpeningSettingsSection({
           disabled={disabled || saving}
           data-testid="opening-capabilities-save"
         >
-          {saving ? 'Guardando…' : 'Guardar capacidades de apertura'}
+          {saving ? 'Guardando…' : 'Guardar apertura'}
         </button>
       </div>
     </section>
