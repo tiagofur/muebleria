@@ -173,6 +173,9 @@ func TestPilotReadiness_BackupRestore(t *testing.T) {
 func runTool(t *testing.T, path string, args ...string) error {
 	t.Helper()
 	cmd := exec.Command(path, args...)
+	// Force English messages: the tolerance below matches pg_restore's stderr
+	// text, which is translated under a non-English system locale.
+	cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C", "LC_MESSAGES=C")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
