@@ -109,6 +109,18 @@ export interface HardwareKitPlanInput {
   readonly templateId?: string;
 }
 
+/** #1512 S2b: un slot dentro de un grupo multi-diseño (miembro con mano). */
+export interface HardwareKitPlanHandsPart {
+  /** Slot key — the wizard's upload key for THIS hand's SKP. */
+  readonly slot: string;
+  readonly hand: RigidMemberHand;
+  readonly memberId: string;
+  readonly role: string;
+  readonly membership: string;
+  /** Signed offset in mm; the X ref derives from the hand (EffectivePlacement). */
+  readonly offsetMm: number;
+}
+
 export interface HardwareKitPlanDesignEntry {
   readonly slot: string;
   readonly code: string;
@@ -123,6 +135,13 @@ export interface HardwareKitPlanDesignEntry {
   };
   /** True when a hardware with this code already exists → reuse, don't create. */
   readonly exists: boolean;
+  /**
+   * #1512 S2b: presente SOLO en un grupo multi-diseño — la fila compartida
+   * lleva hands (asset por mano) y la receta genera un miembro por parte con
+   * `hand` y ref X vacía (el default por mano deriva el anclaje). Ausente =
+   * parte legacy de 1 hardware por slot.
+   */
+  readonly handsParts?: readonly HardwareKitPlanHandsPart[];
 }
 
 /**
@@ -145,9 +164,26 @@ export interface HardwareKitSlotTemplate {
   readonly anchorXRef: 'min' | 'max' | 'center';
   readonly offsetSign: 1 | -1;
   readonly defaultOffsetMm: number;
+  /**
+   * #1512 S2b (built-in templates only): la mano del miembro dentro de su
+   * grupo multi-diseño. Los slots con el MISMO partGroup producen UNA fila
+   * de catálogo con hands (el SKP de cada slot se vincula como la mano).
+   */
+  readonly hand?: RigidMemberHand;
+  readonly partGroup?: string;
 }
 
 export type HardwareKitTemplateMotion = 'translate' | 'rotate_left' | 'rotate_right' | 'none';
+
+/** #1512 S2b: metadata de un grupo multi-diseño (una fila con hands). */
+export interface HardwareKitPartGroupInfo {
+  /** Group key shared by the grouped slots. */
+  readonly group: string;
+  /** Code suffix of the SHARED hardware (kitCode + suffix). */
+  readonly codeSuffix: string;
+  /** Workshop-facing label of the shared hardware. */
+  readonly labelEs: string;
+}
 
 export interface HardwareKitTemplate {
   readonly id: string;
@@ -162,6 +198,12 @@ export interface HardwareKitTemplate {
   readonly motion: HardwareKitTemplateMotion;
   /** Prefijo del nombre del agregado generado («Cajón X», «Puerta X»…). */
   readonly agregadoLabelEs: string;
+  /**
+   * #1512 S2b: grupos multi-diseño (v1 BUILT-IN only — la validación de
+   * plantillas del taller rechaza hand/partGroup; el plan agrupa por estos).
+   * El orden declara el orden de las filas generadas.
+   */
+  readonly partGroups?: readonly HardwareKitPartGroupInfo[];
 }
 
 // --- #1422 slice 2: plantillas de juego editables por taller ---
@@ -206,6 +248,11 @@ export function validateHardwareKitTemplate(
   const issues: HardwareKitTemplateIssue[] = [];
   const add = (message: string, path: string) =>
     issues.push({ code: 'KIT_TEMPLATE_INVALID', message, severity: 'error', entityId: template.id, path });
+  // #1512 S2b v1: partGroups es built-in only (ver el guard de slots más
+  // abajo) — una plantilla del taller con grouping falla cerrado.
+  if (template.partGroups !== undefined) {
+    add('kit templates cannot declare partGroups: multi-design grouping is built-in only (v1)', 'partGroups');
+  }
 
   //typeof guards: from the wire a missing key is `undefined` — String
   // coercion would make "undefined" MATCH the key patterns, diverging from
@@ -261,6 +308,12 @@ export function validateHardwareKitTemplate(
       add(`suffix ${slot.suffix} appears more than once: part codes would collide`, `${path}.suffix`);
     }
     seenSuffixes.add(slot.suffix as string);
+    // #1512 S2b v1: la agrupación multi-diseño es BUILT-IN only — una
+    // plantilla del taller con hand/partGroup/partGroups falla cerrado (el
+    // plan agrupado exige metadatos que el taller aún no autoría).
+    if (slot.hand !== undefined || slot.partGroup !== undefined) {
+      add('kit template slots cannot declare hand/partGroup: multi-design grouping is built-in only (v1)', `${path}.hand`);
+    }
     if (typeof slot.labelEs !== 'string' || slot.labelEs === '') {
       add('kit template slot needs a non-blank labelEs', `${path}.labelEs`);
     }
@@ -288,6 +341,14 @@ export function validateHardwareKitTemplate(
   });
   return issues;
 }
+
+/**
+ * #1512 S2b: cajón multi-diseño — los perfiles fijo y móvil son UNA fila de
+ * catálogo cada uno con hands (asset por mano), en vez de 4 filas -I/-D.
+ * Built-in only: la validación de plantillas del taller rechaza
+ * hand/partGroup (v1).
+ */
+export const KIT_TEMPLATE_DRAWER_HANDS_ID = 'drawer-hands';
 
 export const HARDWARE_KIT_TEMPLATES: readonly HardwareKitTemplate[] = [
   {
@@ -358,6 +419,73 @@ export const HARDWARE_KIT_TEMPLATES: readonly HardwareKitTemplate[] = [
       },
     ],
   },
+  {
+    // #1512 S2b: mismo cajón que 'drawer-slides' pero los perfiles fijo y
+    // móvil son UNA fila cada uno con hands (asset por lado) — 2 filas en
+    // vez de 4. La ref X del miembro va vacía: el default por mano deriva.
+    id: KIT_TEMPLATE_DRAWER_HANDS_ID,
+    labelEs: 'Cajón multi-diseño (par D/I — 2 filas)',
+    motion: 'translate',
+    agregadoLabelEs: 'Cajón',
+    partGroups: [
+      { group: 'fixed', codeSuffix: '-FIJ', labelEs: 'Perfil fijo' },
+      { group: 'moving', codeSuffix: '-MOV', labelEs: 'Perfil móvil' },
+    ],
+    slots: [
+      {
+        slot: 'fixed_left',
+        memberId: 'fixed_rail_left',
+        suffix: '-FIJ-I',
+        labelEs: 'Perfil fijo — mano izquierda',
+        role: 'fixed_rail',
+        membership: 'body',
+        anchorXRef: 'min',
+        offsetSign: 1,
+        defaultOffsetMm: 10,
+        hand: 'left',
+        partGroup: 'fixed',
+      },
+      {
+        slot: 'fixed_right',
+        memberId: 'fixed_rail_right',
+        suffix: '-FIJ-D',
+        labelEs: 'Perfil fijo — mano derecha',
+        role: 'fixed_rail',
+        membership: 'body',
+        anchorXRef: 'max',
+        offsetSign: -1,
+        defaultOffsetMm: 10,
+        hand: 'right',
+        partGroup: 'fixed',
+      },
+      {
+        slot: 'moving_left',
+        memberId: 'moving_rail_left',
+        suffix: '-MOV-I',
+        labelEs: 'Perfil móvil — mano izquierda',
+        role: 'moving_rail',
+        membership: 'actor:drawer',
+        anchorXRef: 'min',
+        offsetSign: 1,
+        defaultOffsetMm: 35,
+        hand: 'left',
+        partGroup: 'moving',
+      },
+      {
+        slot: 'moving_right',
+        memberId: 'moving_rail_right',
+        suffix: '-MOV-D',
+        labelEs: 'Perfil móvil — mano derecha',
+        role: 'moving_rail',
+        membership: 'actor:drawer',
+        anchorXRef: 'max',
+        offsetSign: -1,
+        defaultOffsetMm: 35,
+        hand: 'right',
+        partGroup: 'moving',
+      },
+    ],
+  },
 ];
 
 export function hardwareKitTemplateById(
@@ -381,6 +509,7 @@ export function hardwareKitTemplateById(
 
 /** La plantilla por defecto (cajón) mantiene el comportamiento de #1416. */
 export const DEFAULT_KIT_TEMPLATE_ID = 'drawer-slides';
+
 
 export interface HardwareKitPlan {
   readonly kit: {
@@ -460,32 +589,73 @@ export function planHardwareKit(
     input.templateId ?? DEFAULT_KIT_TEMPLATE_ID,
     customTemplates,
   );
-  const isDrawer = template.id === DEFAULT_KIT_TEMPLATE_ID;
+  // #1512 S2b: la plantilla hands es también un cajón — los offsets legacy
+  // del input aplican igual (compat #1416).
+  const isDrawer = template.id === DEFAULT_KIT_TEMPLATE_ID || template.id === KIT_TEMPLATE_DRAWER_HANDS_ID;
   const agregadoCode =
     input.agregadoCode?.trim() || defaultAgregadoCode(kitCode, template.agregadoLabelEs);
 
-  const designs: HardwareKitPlanDesignEntry[] = template.slots.map((slot) => {
-    // Los offsets del input solo aplican al template del cajón (compat #1416);
-    // el resto de plantillas usa el default del slot.
-    const legacyOffset =
-      slot.membership === 'body' ? input.fixedOffsetMm : input.movingOffsetMm;
-    const offset = isDrawer && legacyOffset !== undefined ? legacyOffset : slot.defaultOffsetMm;
-    const code = `${kitCode}${slot.suffix}`;
-    return {
-      slot: slot.slot,
-      code,
-      name: `${kitName} — ${slot.labelEs}`,
-      role: slot.role,
-      memberId: slot.memberId,
-      membership: slot.membership,
-      placement: {
-        x: { ref: slot.anchorXRef, offsetMm: slot.offsetSign * offset },
-        y: { ref: 'min', offsetMm: 0 },
-        z: { ref: 'min', offsetMm: 0 },
-      },
-      exists: existing.hardwareCodes.has(code),
-    };
-  });
+  const designs: HardwareKitPlanDesignEntry[] = template.partGroups
+    ? // #1512 S2b: un GRUPO multi-diseño = UNA fila de catálogo con hands.
+      // La ref X del miembro va vacía — el default por mano (EffectivePlacement)
+      // deriva el anclaje; el offset del slot viaja firmado.
+      template.partGroups.map((group) => {
+        const slots = template.slots.filter((s) => s.partGroup === group.group);
+        if (slots.length === 0) {
+          throw new Error(`Plantilla ${template.id}: el grupo «${group.group}» no tiene slots.`);
+        }
+        const code = `${kitCode}${group.codeSuffix}`;
+        const handsParts = slots.map((slot) => {
+          const legacyOffset =
+            slot.membership === 'body' ? input.fixedOffsetMm : input.movingOffsetMm;
+          const offset = isDrawer && legacyOffset !== undefined ? legacyOffset : slot.defaultOffsetMm;
+          return {
+            slot: slot.slot,
+            hand: slot.hand as RigidMemberHand,
+            memberId: slot.memberId,
+            role: slot.role,
+            membership: slot.membership,
+            offsetMm: slot.offsetSign * offset,
+          };
+        });
+        return {
+          slot: `group:${group.group}`,
+          code,
+          name: `${kitName} — ${group.labelEs}`,
+          role: slots[0]!.role,
+          memberId: slots[0]!.memberId,
+          membership: slots[0]!.membership,
+          placement: {
+            x: { ref: slots[0]!.anchorXRef, offsetMm: slots[0]!.offsetSign * slots[0]!.defaultOffsetMm },
+            y: { ref: 'min', offsetMm: 0 },
+            z: { ref: 'min', offsetMm: 0 },
+          },
+          exists: existing.hardwareCodes.has(code),
+          handsParts,
+        };
+      })
+    : template.slots.map((slot) => {
+        // Los offsets del input solo aplican al template del cajón (compat #1416);
+        // el resto de plantillas usa el default del slot.
+        const legacyOffset =
+          slot.membership === 'body' ? input.fixedOffsetMm : input.movingOffsetMm;
+        const offset = isDrawer && legacyOffset !== undefined ? legacyOffset : slot.defaultOffsetMm;
+        const code = `${kitCode}${slot.suffix}`;
+        return {
+          slot: slot.slot,
+          code,
+          name: `${kitName} — ${slot.labelEs}`,
+          role: slot.role,
+          memberId: slot.memberId,
+          membership: slot.membership,
+          placement: {
+            x: { ref: slot.anchorXRef, offsetMm: slot.offsetSign * offset },
+            y: { ref: 'min', offsetMm: 0 },
+            z: { ref: 'min', offsetMm: 0 },
+          },
+          exists: existing.hardwareCodes.has(code),
+        };
+      });
 
   return {
     kit: {

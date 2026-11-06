@@ -123,6 +123,17 @@ describe('AgregadoRecipeAuthoringPanel (#1412 autoría de receta)', () => {
     expect(latest?.rigidMembers[0]?.hand).toBe('left');
     await user.selectOptions(handSelect, '');
     expect(latest?.rigidMembers[0]?.hand).toBeUndefined();
+
+    // #1512 S2b (review S2a P2): cambiar herraje resetea la mano residual —
+    // una hand sobre un herraje simétrico sería autoridad invisible.
+    await user.selectOptions(handSelect, 'left');
+    expect(latest?.rigidMembers[0]?.hand).toBe('left');
+    await user.click(root.querySelector('button')!);
+    await user.click(
+      screen.getAllByRole('option').find((o) => o.textContent?.includes('HER-BIS'))!,
+    );
+    expect(latest?.rigidMembers[0]?.hand).toBeUndefined();
+    expect(screen.queryByTestId('agregado-tab-recipe-authoring-member-0-hand')).toBeNull();
   });
 
   it('membresía fijo/móvil (#1376): body y actor:<id> se componen sobre el miembro', async () => {

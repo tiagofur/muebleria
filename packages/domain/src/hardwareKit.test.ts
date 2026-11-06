@@ -14,6 +14,7 @@ import {
   syncAgregadoWithKitParts,
   validateHardwareKitInput,
   validateHardwareKitLink,
+  KIT_TEMPLATE_DRAWER_HANDS_ID,
   validateHardwareKitTemplate,
   type HardwareKitPlanInput,
   type HardwareKitTemplate,
@@ -36,6 +37,54 @@ const noExisting = {
 };
 
 describe('planHardwareKit (#1416)', () => {
+  it('#1512 S2b: la plantilla drawer-hands agrupa 4 slots en 2 filas con handsParts', () => {
+    const plan = planHardwareKit(
+      { ...baseInput, templateId: KIT_TEMPLATE_DRAWER_HANDS_ID },
+      noExisting,
+    );
+
+    expect(plan.designs.map((d) => d.code)).toEqual([
+      'HER-CORR-TEL-50-FIJ',
+      'HER-CORR-TEL-50-MOV',
+    ]);
+
+    const fij = plan.designs[0]!;
+    expect(fij.handsParts).toHaveLength(2);
+    expect(fij.handsParts?.map((p) => p.hand)).toEqual(['left', 'right']);
+    expect(fij.handsParts?.map((p) => p.memberId)).toEqual(['fixed_rail_left', 'fixed_rail_right']);
+    expect(fij.handsParts?.map((p) => p.offsetMm)).toEqual([10, -10]);
+    expect(fij.handsParts?.every((p) => p.membership === 'body')).toBe(true);
+
+    const mov = plan.designs[1]!;
+    expect(mov.handsParts?.map((p) => p.hand)).toEqual(['left', 'right']);
+    expect(mov.handsParts?.map((p) => p.offsetMm)).toEqual([35, -35]);
+    expect(mov.handsParts?.every((p) => p.membership === 'actor:drawer')).toBe(true);
+
+    // El agregado es idéntico al drawer legacy (mismo motion/label).
+    expect(plan.agregado.code).toBe('HER-CORR-TEL-50-CAJON');
+    expect(plan.agregado.motion).toBe('translate');
+  });
+
+  it('#1512 S2b: los offsets legacy del input honran en la plantilla hands', () => {
+    const plan = planHardwareKit(
+      {
+        ...baseInput,
+        templateId: KIT_TEMPLATE_DRAWER_HANDS_ID,
+        fixedOffsetMm: 12,
+        movingOffsetMm: 40,
+      },
+      noExisting,
+    );
+    expect(plan.designs[0]!.handsParts?.map((p) => p.offsetMm)).toEqual([12, -12]);
+    expect(plan.designs[1]!.handsParts?.map((p) => p.offsetMm)).toEqual([40, -40]);
+  });
+
+  it('#1512 S2b: la plantilla legacy drawer-slides sigue byte-idéntica (4 filas, sin handsParts)', () => {
+    const plan = planHardwareKit(baseInput, noExisting);
+    expect(plan.designs).toHaveLength(4);
+    expect(plan.designs.every((d) => d.handsParts === undefined)).toBe(true);
+  });
+
   it('deriva kit + 4 herrajes de diseño + agregado con códigos predecibles', () => {
     const plan = planHardwareKit(baseInput, noExisting);
 
@@ -207,6 +256,33 @@ describe('plantillas de juego (#1422 slice 2)', () => {
     expect(() =>
       validateHardwareKitInput({ ...baseInput, templateId: 'levantadza-mágica' }),
     ).toThrow('Plantilla de juego desconocida');
+  });
+
+  it('#1512 S2b: plantillas del taller rechazan partGroups/hand (built-in only, v1)', () => {
+    const base = { id: 'custom-x', labelEs: 'Custom', motion: 'none' as const, agregadoLabelEs: 'Frente' };
+    const slot = {
+      slot: 'p1',
+      memberId: 'p1',
+      suffix: '-P1',
+      labelEs: 'P1',
+      role: 'handle',
+      membership: 'body',
+      anchorXRef: 'min' as const,
+      offsetSign: 1 as const,
+      defaultOffsetMm: 0,
+    };
+    const withPartGroups = validateHardwareKitTemplate({
+      ...base,
+      partGroups: [{ group: 'g', codeSuffix: '-G', labelEs: 'Grupo' }],
+      slots: [slot],
+    });
+    expect(withPartGroups.some((i) => i.path === 'partGroups')).toBe(true);
+
+    const withHand = validateHardwareKitTemplate({
+      ...base,
+      slots: [{ ...slot, hand: 'left', partGroup: 'g' }],
+    });
+    expect(withHand.some((i) => i.path.endsWith('.hand'))).toBe(true);
   });
 
   it('el cajón sigue honrando los offsets legacy del input (#1416 compat)', () => {

@@ -11,6 +11,7 @@
 
 import type {
   Agregado,
+  AgregadoRigidMember,
   Hardware,
   HardwareKitCreateRequest,
   HardwareKitResult,
@@ -105,6 +106,37 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           continue;
         }
         const binding = req.designs?.[design.slot];
+        // #1512 S2b: un grupo multi-diseño crea UNA fila con hands — el SKP
+        // de cada slot del grupo se vincula como la mano correspondiente.
+        // La mano sin upload queda sin entry: cae al visualAsset global
+        // (box preview hasta que el taller suba el SKP, como en legacy).
+        if (design.handsParts) {
+          const leftPart = design.handsParts.find((p) => p.hand === 'left');
+          const rightPart = design.handsParts.find((p) => p.hand === 'right');
+          const left = leftPart ? req.designs?.[leftPart.slot] : undefined;
+          const right = rightPart ? req.designs?.[rightPart.slot] : undefined;
+          newHardware.push({
+            id: idFor(design.code),
+            code: design.code,
+            name: design.name,
+            unit: 'piece',
+            costPerUnit: 0,
+            active: true,
+            previewShape: 'slide',
+            notes: DESIGN_NOTES(plan.kit.code),
+            kitHardwareId: kitId,
+            ...((left || right)
+              ? {
+                  hands: {
+                    ...(left ? { left: { asset: left } } : {}),
+                    ...(right ? { right: { asset: right } } : {}),
+                  },
+                }
+              : {}),
+          });
+          createdCodes.push(design.code);
+          continue;
+        }
         newHardware.push({
           id: idFor(design.code),
           code: design.code,
@@ -141,14 +173,37 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         // cálculo único (#1428 rev S5) — el E2E del wizard lo assertiona
         // (presentation_motion {kind: translate} en el readback).
         ...(presentationMotion ? { presentationMotion } : {}),
-        rigidMembers: plan.designs.map((design) => ({
-          memberId: design.memberId,
-          role: design.role,
-          source: { kind: 'fixed', fixed: { hardwareId: idFor(design.code) } },
-          placement: design.placement,
-          bomRole: 'included_in_kit',
-          actorMembership: design.membership,
-        })),
+        rigidMembers: plan.designs.flatMap((design): AgregadoRigidMember[] => {
+          // #1512 S2b: un grupo multi-diseño genera un MIEMBRO POR MANO —
+          // todos apuntando a la fila compartida; la ref X va vacía y el
+          // default por mano (EffectivePlacement) deriva el anclaje.
+          if (design.handsParts) {
+            const sharedId = idFor(design.code);
+            return design.handsParts.map((part) => ({
+              memberId: part.memberId,
+              role: part.role,
+              source: { kind: 'fixed' as const, fixed: { hardwareId: sharedId } },
+              placement: {
+                x: { offsetMm: part.offsetMm },
+                y: { ref: 'min' as const, offsetMm: 0 },
+                z: { ref: 'min' as const, offsetMm: 0 },
+              },
+              bomRole: 'included_in_kit' as const,
+              actorMembership: part.membership,
+              hand: part.hand,
+            }));
+          }
+          return [
+            {
+              memberId: design.memberId,
+              role: design.role,
+              source: { kind: 'fixed', fixed: { hardwareId: idFor(design.code) } },
+              placement: design.placement,
+              bomRole: 'included_in_kit',
+              actorMembership: design.membership,
+            },
+          ];
+        }),
       };
 
       await ctx.saveAndToast(

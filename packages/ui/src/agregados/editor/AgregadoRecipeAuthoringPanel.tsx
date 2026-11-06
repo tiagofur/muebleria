@@ -373,6 +373,11 @@ export function AgregadoRecipeAuthoringPanel({
                                 kind: 'fixed',
                                 fixed: { hardwareId },
                               },
+                              // #1512 S2b (review S2a P2): cambiar herraje
+                              // resetea la mano — una hand residual sobre un
+                              // herraje simétrico sería autoridad invisible
+                              // del anclaje/mecanizado.
+                              hand: undefined,
                             })
                           }
                           items={catalogHardware
