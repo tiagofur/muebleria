@@ -71,7 +71,7 @@
       "expected": { "state": "invalid", "reason": "OPENING_PROFILE_DATASHEET_PENDING" }
     },
     {
-      "name": "rebase disponible queda BLOQUEADO por evidencia: estado veraz, no error",
+      "name": "rebase disponible es válido: los milímetros salen de los estilos de agarre (#1531, A4)",
       "selection": { "system": "bottom_overhang" },
       "capabilities": {
         "version": 1,
@@ -81,7 +81,7 @@
         }
       },
       "profiles": [],
-      "expected": { "state": "blocked", "reason": "OPENING_OVERHANG_EVIDENCE_PENDING" }
+      "expected": { "state": "valid" }
     },
     {
       "name": "placement fuera de la restricción del tipo de mueble",

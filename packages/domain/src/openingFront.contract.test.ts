@@ -38,7 +38,7 @@ interface ResolutionCase {
   readonly name: string;
   readonly cabinetFrontHeightMm: number;
   readonly positioning: 'overlay' | 'inset' | 'partial_overlay' | 'bottom_overhang';
-  /** #1138: the backed `opening.bottom-overhang` rule value for this case. */
+  /** #1138: the overhang millimetres for this case (grip styles since #1531). */
   readonly overhangMm?: number;
   readonly layout: { readonly direction: 'vertical' | 'horizontal'; readonly zones: readonly ZoneCase[] };
   readonly grips: readonly GripCase[];

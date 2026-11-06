@@ -53,7 +53,6 @@ export const OPENING_REASON = {
   placementRestricted: 'OPENING_PLACEMENT_RESTRICTED',
   placementIncompatible: 'OPENING_PLACEMENT_INCOMPATIBLE',
   furnitureTypeUnknown: 'OPENING_FURNITURE_TYPE_UNKNOWN',
-  overhangEvidencePending: 'OPENING_OVERHANG_EVIDENCE_PENDING',
 } as const;
 
 const GRIP_SYSTEMS: readonly string[] = ['handle', 'gola', 'bottom_overhang'];
@@ -67,7 +66,7 @@ export function validateOpeningConfiguration(
   selection: OpeningConfigurationSelection,
   capabilities: OpeningCapabilities | null,
   profiles: readonly OpeningProfileSelectionData[],
-  // #1138: the factory's BACKED overhang rule (parsed `opening.bottom-overhang`
+  // #1138: the factory's BACKED overhang rule (from the grip styles since #1531
   // blob). Absent = case C stays a truthful BLOCKED state; present = the
   // selection is gateable like any other system.
   overhangRule: OpeningOverhangRule | null = null,
@@ -90,9 +89,9 @@ export function validateOpeningConfiguration(
     // it the physical behaviour waits for OQ-3 field evidence — blocked is a
     // truthful state, not an error. With it, the gate keeps applying the
     // furniture-type/placement checks below.
-    if (!overhangRule) {
-      return { state: 'blocked', reason: OPENING_REASON.overhangEvidencePending };
-    }
+    // #1531 (A4): the millimetres come from the grip styles; no rule no
+    // longer blocks.
+    void overhangRule;
   }
   if (selection.system === 'handle') {
     if (selection.profileId) {
@@ -176,8 +175,6 @@ export function openingSelectionReasonMessage(reason: string): string {
       return 'el perfil no es compatible con la posición pedida';
     case OPENING_REASON.furnitureTypeUnknown:
       return 'tipo de mueble desconocido';
-    case OPENING_REASON.overhangEvidencePending:
-      return 'el rebase inferior espera evidencia de campo (OQ-3)';
   }
   return reason;
 }

@@ -6489,6 +6489,188 @@
         }
       }
     },
+    "/catalog/grip-styles": {
+      "get": {
+        "operationId": "listGripStyles",
+        "summary": "List the workshop's grip styles (#1531); the default comes first",
+        "responses": {
+          "200": {
+            "description": "Grip styles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GripStyle"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createGripStyle",
+        "summary": "Create a grip style; a new default replaces the previous one in the same transaction (audited)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GripStyleWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Style created; version starts at 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GripStyle"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/catalog/grip-styles/{gripStyleId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/GripStyleId"
+        }
+      ],
+      "get": {
+        "operationId": "getGripStyle",
+        "summary": "Get one grip style",
+        "responses": {
+          "200": {
+            "description": "The grip style",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GripStyle"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateGripStyle",
+        "summary": "Update a grip style (If-Match); the default stays the default until another style is made default (audited)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GripStyleWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Style updated; version incremented",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GripStyle"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteGripStyle",
+        "summary": "Delete a grip style (If-Match); the default cannot be deleted (audited)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Style deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GripStyleDeleted"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/catalog/opening-profiles": {
       "get": {
         "operationId": "listOpeningProfiles",
@@ -7132,6 +7314,16 @@
           "type": "string",
           "format": "uuid"
         }
+      },
+      "GripStyleId": {
+        "name": "gripStyleId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "Grip style id."
       },
       "OpeningProfileId": {
         "name": "profileId",
@@ -19103,6 +19295,184 @@
           "bom_members"
         ],
         "description": "#1530 — a starting point for a new gola profile (manufacturer and owner defaults, #1524). Suggestions only: nothing is stored until the workshop saves."
+      },
+      "GripStyleRecipe": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "handle",
+              "gola",
+              "bottom_overhang"
+            ]
+          },
+          "handleHardwareId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "handle only: the handle hardware; absent = the furniture keeps its catalog option."
+          },
+          "topProfileId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "gola only (required): an active gola profile usable at the top."
+          },
+          "betweenProfileId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "gola only (optional): an active gola profile usable between fronts."
+          },
+          "overhangMm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "bottom_overhang only: whole millimetres > 0; 20 when omitted (A4)."
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "description": "#1531 — the grip of one furniture type."
+      },
+      "GripStyleWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "offered": {
+            "type": "boolean"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "byFurnitureType": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "inferior": {
+                "$ref": "#/components/schemas/GripStyleRecipe"
+              },
+              "superior": {
+                "$ref": "#/components/schemas/GripStyleRecipe"
+              },
+              "alto": {
+                "$ref": "#/components/schemas/GripStyleRecipe"
+              }
+            },
+            "required": [
+              "inferior",
+              "superior",
+              "alto"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "offered",
+          "isDefault",
+          "byFurnitureType"
+        ],
+        "description": "#1531 — authorable fields; id/organization/version/timestamps/migrationReport are server-owned."
+      },
+      "GripStyle": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "organizationId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "offered": {
+            "type": "boolean"
+          },
+          "isDefault": {
+            "type": "boolean",
+            "description": "Exactly one default per organization (database-enforced)."
+          },
+          "byFurnitureType": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "inferior": {
+                "$ref": "#/components/schemas/GripStyleRecipe"
+              },
+              "superior": {
+                "$ref": "#/components/schemas/GripStyleRecipe"
+              },
+              "alto": {
+                "$ref": "#/components/schemas/GripStyleRecipe"
+              }
+            },
+            "required": [
+              "inferior",
+              "superior",
+              "alto"
+            ]
+          },
+          "migrationReport": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "description": "Per-row report of migration 000181 (conversion of the retired overlay blobs). Read-only."
+          },
+          "version": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "name",
+          "offered",
+          "isDefault",
+          "byFurnitureType",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "description": "#1531 (ADR-0009 A2.2) — a workshop's named grip recipe per furniture type."
+      },
+      "GripStyleDeleted": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted",
+          "id"
+        ]
       },
       "OpeningProfileWrite": {
         "type": "object",

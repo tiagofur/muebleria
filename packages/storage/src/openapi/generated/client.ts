@@ -57,6 +57,9 @@ import type {
   FurnitureDefinitionLayout,
   FurnitureInstance,
   GolaProfileSuggestion,
+  GripStyle,
+  GripStyleDeleted,
+  GripStyleWrite,
   Hardware,
   HardwareAsset,
   HardwareAssetRevision,
@@ -367,6 +370,11 @@ export abstract class GeneratedGraneteApiClient {
   getHardwareProfile(token: string, profileId: string, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("GET", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, signal }); }
   updateHardwareProfile(token: string, profileId: string, version: number, body: HardwareProfileWrite, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("PUT", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, ifMatch: version, bodySchema: "HardwareProfileWrite", body, signal }); }
   deactivateHardwareProfile(token: string, profileId: string, version: number, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("DELETE", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, ifMatch: version, signal }); }
+  listGripStyles(token: string, signal?: AbortSignal): Promise<ReadonlyArray<GripStyle>> { return this.request("GET", "/catalog/grip-styles", { arrayOf: "GripStyle", token, signal }); }
+  createGripStyle(token: string, body: GripStyleWrite, signal?: AbortSignal): Promise<GripStyle> { return this.request("POST", "/catalog/grip-styles", { schema: "GripStyle", token, bodySchema: "GripStyleWrite", body, signal }); }
+  getGripStyle(token: string, gripStyleId: string, signal?: AbortSignal): Promise<GripStyle> { return this.request("GET", `/catalog/grip-styles/${encodeURIComponent(gripStyleId)}`, { schema: "GripStyle", token, signal }); }
+  updateGripStyle(token: string, gripStyleId: string, version: number, body: GripStyleWrite, signal?: AbortSignal): Promise<GripStyle> { return this.request("PUT", `/catalog/grip-styles/${encodeURIComponent(gripStyleId)}`, { schema: "GripStyle", token, ifMatch: version, bodySchema: "GripStyleWrite", body, signal }); }
+  deleteGripStyle(token: string, gripStyleId: string, version: number, signal?: AbortSignal): Promise<GripStyleDeleted> { return this.request("DELETE", `/catalog/grip-styles/${encodeURIComponent(gripStyleId)}`, { schema: "GripStyleDeleted", token, ifMatch: version, signal }); }
   listOpeningProfiles(token: string, signal?: AbortSignal): Promise<ReadonlyArray<OpeningProfile>> { return this.request("GET", "/catalog/opening-profiles", { arrayOf: "OpeningProfile", token, signal }); }
   createOpeningProfile(token: string, body: OpeningProfileWrite, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("POST", "/catalog/opening-profiles", { schema: "OpeningProfile", token, bodySchema: "OpeningProfileWrite", body, signal }); }
   listOpeningProfileSuggestions(token: string, signal?: AbortSignal): Promise<ReadonlyArray<GolaProfileSuggestion>> { return this.request("GET", "/catalog/opening-profiles/suggestions", { arrayOf: "GolaProfileSuggestion", token, signal }); }
