@@ -494,7 +494,7 @@ Italian gola fixtures (`H = 720`, `r = 1.5`):
 | 1 door, Italian top 36 | `H − 36` | 684 |
 | 2 fronts, Italian top 36 + between 36 | `(H − 72)/2` | 324 |
 
-The 1 mm clearance is added to both notch dimensions, so a 16 mm strip gets a 71 × 17 mm notch. If the workshop means something else, #1530 fixes it in the contract before implementation.
+The 1 mm clearance is added to both notch dimensions, as the owner confirmed in #1524. A 16 mm strip gets a 71 × 17 mm notch.
 
 ### 14.7. Surfaces
 
