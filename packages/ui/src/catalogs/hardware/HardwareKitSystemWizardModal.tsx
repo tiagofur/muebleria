@@ -7,15 +7,17 @@
  * lo re-deriva contra el catálogo real antes de persistir.
  */
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   HARDWARE_KIT_SYSTEM_HEIGHTS,
   planHardwareKitSystem,
   type HardwareKitSystemInput,
   type HardwareKitSystemPlan,
+  type HardwareKitResult,
   type HardwareVisualAssetBinding,
 } from '@granete/domain';
 import { Modal } from '../../common';
+import { uploadKitWizardDesigns, useKitWizardRun, type KitWizardRunTask } from './useKitWizardRun';
 
 export type SystemFileBuckets = Record<string, File>;
 
@@ -25,16 +27,21 @@ export interface HardwareKitSystemWizardModalProps {
   readonly onSubmit: (req: import('@granete/domain').HardwareKitSystemCreateRequest) => Promise<import('@granete/domain').HardwareKitResult>;
   readonly existingHardwareCodes?: ReadonlySet<string>;
   readonly existingAgregadoCodes?: ReadonlySet<string>;
-  /** Sube un SKP y devuelve el binding exacto (identifiers). */
-  readonly uploadDesign: (
+  /**
+   * Sube un SKP y devuelve el binding exacto (identifiers). Opcional: sin
+   * servicio de recursos en la sesión igual se puede crear el sistema, sólo
+   * sin subir diseños (#1552 — antes reventaba con TypeError).
+   */
+  readonly uploadDesign?: (
     file: File,
     displayName: string,
   ) => Promise<HardwareVisualAssetBinding>;
 }
 
+/** Parseo estricto: lo inválido es NaN y el planner lo rechaza con mensaje. */
 const num = (v: string): number => {
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? n : 0;
+  const n = Number(v.trim());
+  return Number.isFinite(n) ? n : Number.NaN;
 };
 
 export function HardwareKitSystemWizardModal({
@@ -56,10 +63,27 @@ export function HardwareKitSystemWizardModal({
   // Accesorios del E: nombre + anclas fijo L/R (el par D/I del lateral).
   const [accessories, setAccessories] = useState<{ name: string }[]>([]);
   const [files, setFiles] = useState<SystemFileBuckets>({});
-  const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<string | null>(null);
-  const [phase, setPhase] = useState<'form' | 'running' | 'done'>('form');
-  const [result, setResult] = useState<{ createdCodes: readonly string[] } | null>(null);
+  const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Reset de los campos propios del asistente; la máquina de fases la resetea
+  // el hook (#1552: antes el modal quedaba en «done» para siempre).
+  const resetForm = useCallback(() => {
+    setCode('');
+    setName('');
+    setPrice('');
+    setWidthMm('570');
+    setDepthMm('530');
+    setHeights(Object.fromEntries(HARDWARE_KIT_SYSTEM_HEIGHTS.map((h) => [h.code, h.include])));
+    setAccessories([]);
+    setFiles({});
+    for (const input of Object.values(fileInputsRef.current)) {
+      if (input) input.value = '';
+    }
+  }, []);
+
+  // Máquina compartida con el wizard de kit: cierre en vuelo guardado y
+  // reabrir tras «Listo» muestra el formulario limpio, no el resultado viejo.
+  const wizard = useKitWizardRun<HardwareKitResult>({ open, onClose, resetForm });
 
   const systemInput = useMemo<HardwareKitSystemInput | null>(() => {
     const c = code.trim();
@@ -95,81 +119,121 @@ export function HardwareKitSystemWizardModal({
     };
   }, [code, name, price, widthMm, depthMm, heights, accessories]);
 
-  const plan: HardwareKitSystemPlan | null = useMemo(() => {
-    if (!systemInput) return null;
+  // Plan + su problema visible (#1552): los rechazos del planner (cero
+  // alturas, medidas, accesorios duplicados) se muestran con role="alert"
+  // en vez de borrar la vista previa en silencio. Sin plan no hay submit.
+  const planned = useMemo<{ plan: HardwareKitSystemPlan | null; problem: string | null }>(() => {
+    if (!systemInput) return { plan: null, problem: null };
+    // Dos accesorios con el mismo sufijo generan el mismo código → 409 crudo
+    // del servidor; se detecta acá con mensaje amable.
+    const suffixCounts = new Map<string, number>();
+    for (const acc of systemInput.accessoriesE ?? []) {
+      suffixCounts.set(acc.suffix, (suffixCounts.get(acc.suffix) ?? 0) + 1);
+    }
+    const duplicated = [...suffixCounts.entries()].find(([, count]) => count > 1);
+    if (duplicated) {
+      return {
+        plan: null,
+        problem: `Dos accesorios generarían el mismo código (…-${duplicated[0]}): renombrá uno para diferenciarlos.`,
+      };
+    }
     try {
-      return planHardwareKitSystem(systemInput, {
-        hardwareCodes: existingHardwareCodes ?? new Set(),
-        agregadoCodes: existingAgregadoCodes ?? new Set(),
-      });
-    } catch {
-      return null;
+      return {
+        plan: planHardwareKitSystem(systemInput, {
+          hardwareCodes: existingHardwareCodes ?? new Set(),
+          agregadoCodes: existingAgregadoCodes ?? new Set(),
+        }),
+        problem: null,
+      };
+    } catch (err) {
+      return {
+        plan: null,
+        problem:
+          err instanceof Error ? err.message : 'El plan no se pudo generar con estos datos.',
+      };
     }
   }, [systemInput, existingHardwareCodes, existingAgregadoCodes]);
+  const plan = planned.plan;
 
   const fileKey = (kitCode: string, hand: string, partCode: string): string =>
     `${kitCode}:${hand}:${partCode}`;
   const accFileKey = (accCode: string, anchor: string): string => `${accCode}:${anchor}`;
 
   const submit = async (): Promise<void> => {
-    if (!systemInput || !plan) return;
+    if (!systemInput || !plan || wizard.running) return;
     if (plan.blockedCode) {
-      setError(`Ya existe un ensamble con el código «${plan.blockedCode}». Cambiá el código del sistema.`);
+      wizard.setError(`Ya existe un ensamble con el código «${plan.blockedCode}». Cambiá el código del sistema.`);
       return;
     }
-    setPhase('running');
-    try {
-      const designs: Record<string, HardwareVisualAssetBinding> = {};
-      for (const kit of plan.kits) {
-        for (const design of kit.designs) {
-          if (!design.handsParts) continue;
-          for (const part of design.handsParts) {
-            const file = files[fileKey(kit.code, part.hand, design.code)];
-            if (!file) continue;
-            setProgress(`Subiendo ${design.name} — ${part.hand === 'left' ? 'izq' : 'der'}…`);
-            designs[fileKey(kit.code, part.hand, design.code)] = await uploadDesign(
-              file,
-              design.name,
-            );
-          }
-        }
-      }
-      for (const acc of plan.accessories) {
-        for (const anchor of acc.anchors) {
-          const file = files[accFileKey(acc.code, anchor)];
+    // Subidas pendientes como lista plana: kits por mano + accesorios por ancla.
+    const handLabel = (hand: string): string =>
+      hand === 'left' ? 'izq' : hand === 'right' ? 'der' : 'centro';
+    const tasks: KitWizardRunTask[] = [];
+    for (const kit of plan.kits) {
+      for (const design of kit.designs) {
+        if (!design.handsParts) continue;
+        for (const part of design.handsParts) {
+          const file = files[fileKey(kit.code, part.hand, design.code)];
           if (!file) continue;
-          setProgress(`Subiendo ${acc.name} — ${anchor === 'left' ? 'izq' : 'der'}…`);
-          designs[accFileKey(acc.code, anchor)] = await uploadDesign(file, acc.name);
+          tasks.push({
+            key: fileKey(kit.code, part.hand, design.code),
+            file,
+            label: `${design.name} — ${handLabel(part.hand)}`,
+            displayName: design.name,
+          });
         }
       }
-      setProgress('Creando el sistema…');
+    }
+    for (const acc of plan.accessories) {
+      for (const anchor of acc.anchors) {
+        const file = files[accFileKey(acc.code, anchor)];
+        if (!file) continue;
+        tasks.push({
+          key: accFileKey(acc.code, anchor),
+          file,
+          label: `${acc.name} — ${handLabel(anchor)}`,
+          displayName: acc.name,
+        });
+      }
+    }
+    if (tasks.length > 0 && !uploadDesign) {
+      wizard.setError('El servicio de recursos 3D no está disponible en esta sesión; quitá los archivos SKP o reintentá más tarde.');
+      return;
+    }
+    wizard.begin();
+    try {
+      // Con uploadDesign ausente la lista de tareas es vacía (guard de
+      // arriba): cero subidas, el sistema se crea sin diseños.
+      const designs =
+        tasks.length > 0 && uploadDesign
+          ? await uploadKitWizardDesigns(tasks, uploadDesign, wizard.setProgress)
+          : {};
+      wizard.setProgress('Creando el sistema…');
       const created = await onSubmit({ input: systemInput, designs });
-      setResult(created);
-      setPhase('done');
-      setProgress(null);
+      wizard.complete(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo crear el sistema.');
-      setPhase('form');
-      setProgress(null);
+      wizard.fail(err, 'No se pudo crear el sistema.');
     }
   };
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={wizard.handleClose}
       title="Nuevo sistema de cajones"
       size="lg"
       dataTestId="hardware-system-wizard-modal"
     >
-      {phase === 'done' && result ? (
+      {wizard.phase === 'done' && wizard.result ? (
         <div data-testid="hardware-system-wizard-result">
           <p className="catalog-form__section-title">✓ Sistema creado</p>
           <p>
             Filas generadas:{' '}
-            {result.createdCodes.length > 0 ? result.createdCodes.join(', ') : '—'}
+            {wizard.result.createdCodes.length > 0
+              ? wizard.result.createdCodes.join(', ')
+              : '—'}
           </p>
-          <button type="button" className="btn btn--primary" onClick={onClose}>
+          <button type="button" className="btn btn--primary" onClick={wizard.handleClose}>
             Listo
           </button>
         </div>
@@ -181,9 +245,22 @@ export function HardwareKitSystemWizardModal({
             void submit();
           }}
         >
-          {error ? (
-            <p className="catalog-form__error" role="alert">
-              {error}
+          {planned.problem ? (
+            <p
+              className="catalog-form__error"
+              role="alert"
+              data-testid="hardware-system-wizard-plan-error"
+            >
+              {planned.problem}
+            </p>
+          ) : null}
+          {wizard.error ? (
+            <p
+              className="catalog-form__error"
+              role="alert"
+              data-testid="hardware-system-wizard-error"
+            >
+              {wizard.error}
             </p>
           ) : null}
           <div className="catalog-form__field">
@@ -214,6 +291,7 @@ export function HardwareKitSystemWizardModal({
             <input
               id="system-price"
               type="number"
+              min={0}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               data-testid="hardware-system-wizard-price"
@@ -224,6 +302,7 @@ export function HardwareKitSystemWizardModal({
             <input
               id="system-width"
               type="number"
+              min={0}
               value={widthMm}
               onChange={(e) => setWidthMm(e.target.value)}
               data-testid="hardware-system-wizard-width"
@@ -234,6 +313,7 @@ export function HardwareKitSystemWizardModal({
             <input
               id="system-depth"
               type="number"
+              min={0}
               value={depthMm}
               onChange={(e) => setDepthMm(e.target.value)}
               data-testid="hardware-system-wizard-depth"
@@ -282,6 +362,9 @@ export function HardwareKitSystemWizardModal({
                         id={slotId}
                         type="file"
                         accept=".skp,.glb"
+                        ref={(el) => {
+                          fileInputsRef.current[key] = el;
+                        }}
                         onChange={(e) =>
                           setFiles((prev) => {
                             const next = { ...prev };
@@ -312,6 +395,9 @@ export function HardwareKitSystemWizardModal({
                       id={slotId}
                       type="file"
                       accept=".skp,.glb"
+                      ref={(el) => {
+                        fileInputsRef.current[key] = el;
+                      }}
                       onChange={(e) =>
                         setFiles((prev) => {
                           const next = { ...prev };
@@ -353,7 +439,7 @@ export function HardwareKitSystemWizardModal({
                 />
                 <button
                   type="button"
-                  className="btn btn--sm btn--ghost"
+                  className="btn btn--small btn--ghost"
                   onClick={() => setAccessories((prev) => prev.filter((_, i) => i !== idx))}
                   data-testid={`hardware-system-accessory-${idx}-remove`}
                 >
@@ -385,6 +471,15 @@ export function HardwareKitSystemWizardModal({
                 {plan.agregado.variants.map((v) => v.heightCode).join('/')})
                 {plan.accessoryGroup ? ` + grupo ${plan.accessoryGroup.code}` : ''}.
               </p>
+              {plan.blockedCode ? (
+                <p
+                  className="catalog-form__error"
+                  role="alert"
+                  data-testid="hardware-system-wizard-blocked"
+                >
+                  El ensamble «{plan.blockedCode}» ya existe: cambiá el código del sistema.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -392,12 +487,12 @@ export function HardwareKitSystemWizardModal({
             <button
               type="submit"
               className="btn btn--primary"
-              disabled={!systemInput || !plan || plan.blockedCode !== null || phase === 'running'}
+              disabled={!systemInput || !plan || plan.blockedCode !== null || wizard.running}
               data-testid="hardware-system-wizard-submit"
             >
-              {phase === 'running' ? (progress ?? 'Creando…') : 'Crear sistema'}
+              {wizard.phase === 'running' ? (wizard.progress ?? 'Creando…') : 'Crear sistema'}
             </button>
-            <button type="button" className="btn" onClick={onClose}>
+            <button type="button" className="btn" onClick={wizard.handleClose}>
               Cancelar
             </button>
           </div>
