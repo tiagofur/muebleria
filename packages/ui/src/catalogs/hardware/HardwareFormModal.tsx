@@ -23,6 +23,7 @@ import {
   resolveKitPartConfig,
   type Agregado,
   type Hardware,
+  type OptionGroup,
   type HardwareCategoryNode,
   type HardwareUnit,
   type KitPartPlacementConfig,
@@ -30,6 +31,7 @@ import {
 import type { HardwareAssetService } from '@granete/storage';
 import { CatalogImage, Modal } from '../../common';
 import { Hardware3DSection } from './Hardware3DSection';
+import { HardwareKitAccessoriesSection } from './HardwareKitAccessoriesSection';
 import { HardwarePiecesSection } from './HardwarePiecesSection';
 import { HardwareMachiningSection } from './HardwareMachiningSection';
 import { HardwareDesignPartsSection } from './HardwareDesignPartsSection';
@@ -81,6 +83,11 @@ export interface HardwareFormModalProps {
   readonly onUpdateKitPartConfig?: (part: Hardware, next: KitPartPlacementConfig) => void;
   /** #1507: árbol de subgrupos de herrajes para el select de categoría. */
   readonly hardwareCategories?: readonly HardwareCategoryNode[];
+  /** #1519 F2: accesorios del juego — grupos vinculados al kit + su ABM inline. */
+  readonly optionGroups?: readonly OptionGroup[];
+  readonly onCreateOptionGroup?: (draft: { code: string; name: string; required: boolean; kitHardwareId: string }) => void;
+  readonly onUpdateOptionGroup?: (id: string, draft: { code: string; name: string; required: boolean; optionIds: string[]; kitHardwareId: string }) => void;
+  readonly onDeleteOptionGroup?: (id: string) => void;
 }
 
 export function HardwareFormModal({
@@ -107,6 +114,10 @@ export function HardwareFormModal({
   onLinkExistingPart,
   onUpdateKitPartConfig,
   hardwareCategories = [],
+  optionGroups,
+  onCreateOptionGroup,
+  onUpdateOptionGroup,
+  onDeleteOptionGroup,
 }: HardwareFormModalProps): ReactNode {
   const isKit = draft.unit === 'set' || Boolean(kitParts && kitParts.length > 0);
   const isKitChildPart = Boolean(draft.kitHardwareId);
@@ -663,6 +674,21 @@ export function HardwareFormModal({
             setDraft={setDraft}
             canMutate={canMutate}
             assetService={assetService}
+          />
+        ) : null}
+
+        {/* #1519 F2: accesorios del juego (galería/boxcap/boxcover…) — SOLO
+            kits: se declaran aquí y el mueble elige por cajón. */}
+        {isKit && editingId ? (
+          <HardwareKitAccessoriesSection
+            kitId={editingId}
+            kitCode={draft.code}
+            optionGroups={optionGroups}
+            hardware={availableHardware ?? []}
+            canMutate={canMutate}
+            onCreateGroup={onCreateOptionGroup}
+            onUpdateGroup={onUpdateOptionGroup}
+            onDeleteGroup={onDeleteOptionGroup}
           />
         ) : null}
 

@@ -2050,6 +2050,20 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onCreateCategory={canMutateCatalog ? createHardwareCategory : undefined}
           onUpdateCategory={canMutateCatalog ? updateHardwareCategory : undefined}
           onDeleteCategory={canMutateCatalog ? deleteHardwareCategory : undefined}
+          optionGroups={optionGroups}
+          onCreateOptionGroup={
+            canMutateCatalog
+              ? (draft) =>
+                  createOptionGroup({ ...draft, kind: 'hardware', optionIds: [] })
+              : undefined
+          }
+          onUpdateOptionGroup={
+            canMutateCatalog
+              ? (id, draft) =>
+                  updateOptionGroup(id, { ...draft, kind: 'hardware', code: draft.code })
+              : undefined
+          }
+          onDeleteOptionGroup={canMutateCatalog ? deleteOptionGroup : undefined}
           onUploadImage={
             canMutateCatalog && session === 'auth' && authToken
               ? uploadCatalogImage
