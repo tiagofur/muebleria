@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "schemaId": "granete.memberHostDrilling.v1",
-  "comment": "#1429 slice B — paridad TS↔Go de la proyección member-host: un miembro rígido de la receta con hostPlacement taladra la pieza EXTERNA del módulo con el perfil de mecanizado de catálogo del herraje (autoridad Go del slice A, espejo TS en resolveProjectDrilling). Forma MERIVOBOX: guías fijas → laterales del mueble (filas Blum 37/69/197/229/261/293 a 33.5 sobre el fondo del cajón), correderas móviles → frente del cajón (20.5 de cada borde a 33.5/65.5 PANEL-LOCAL). Los expected son board-local (face/xMm/yMm): Go es el autor golden (ResolveAuthoringLayout), TS consume el mismo JSON (resolveProjectDrilling). Drift 0 exigido por la aceptación de la issue.",
+  "comment": "#1429 slice B + #1554 — paridad TS↔Go de la proyección member-host: un miembro rígido de la receta con hostPlacement taladra la pieza EXTERNA del módulo con el perfil de mecanizado de catálogo del herraje (autoridad Go del slice A, espejo TS en resolveProjectDrilling). Forma MERIVOBOX: guías fijas → laterales del mueble (filas Blum 37/69/197/229/261/293 a 33.5 sobre el fondo del cajón), correderas móviles → frente del cajón (20.5 de cada borde a 33.5/65.5 PANEL-LOCAL). #1554: hand_rail_canonical ejercita el espejo right-hand (hand=right + herraje LEFT-canonical ÚNICO con W=91 y ops asimétricas x={20,55} → espejadas x'={71,36}; sin espejo caerían en x={20,55} y el golden NO coincide). Los expected son board-local (face/xMm/yMm): Go es el autor golden (ResolveAuthoringLayout), TS consume el mismo JSON (resolveProjectDrilling). Drift 0 exigido por la aceptación de la issue.",
   "module": { "widthMm": 400, "heightMm": 720, "depthMm": 500 },
   "carcase": {
     "thicknessMm": 18,
@@ -22,7 +22,8 @@
       { "memberId": "fixed_rail_left", "role": "fixed_rail", "hardwareId": "hw-rail-fij-l", "hostPlacement": "lateral_izquierdo", "xRef": "min", "yOffsetMm": 136 },
       { "memberId": "fixed_rail_right", "role": "fixed_rail", "hardwareId": "hw-rail-fij-r", "hostPlacement": "lateral_derecho", "xRef": "max", "yOffsetMm": 136 },
       { "memberId": "moving_rail_left", "role": "moving_rail", "hardwareId": "hw-rail-mov-l", "hostPlacement": "frente_cajon", "xRef": "min" },
-      { "memberId": "moving_rail_right", "role": "moving_rail", "hardwareId": "hw-rail-mov-r", "hostPlacement": "frente_cajon", "xRef": "max" }
+      { "memberId": "moving_rail_right", "role": "moving_rail", "hardwareId": "hw-rail-mov-r", "hostPlacement": "frente_cajon", "xRef": "max" },
+      { "memberId": "hand_rail_canonical", "role": "fixed_rail", "hardwareId": "hw-rail-canonical", "hostPlacement": "lateral_izquierdo", "xRef": "min", "yOffsetMm": 136, "hand": "right" }
     ]
   },
   "hardware": [
@@ -60,6 +61,14 @@
       "operations": [
         { "id": "pilot-low", "kind": "screw_pilot", "diameterMm": 2.7, "depthMm": 8, "xMm": -20.5, "yMm": 33.5 },
         { "id": "pilot-high", "kind": "screw_pilot", "diameterMm": 2.7, "depthMm": 8, "xMm": -20.5, "yMm": 65.5 }
+      ]
+    },
+    {
+      "id": "hw-rail-canonical", "code": "RAIL-CANON", "name": "Guía canónica única (LEFT-canonical, consumida espejada por hand right)",
+      "dimensions": { "widthMm": 91 },
+      "operations": [
+        { "id": "pilot-a", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 20, "yMm": 33.5 },
+        { "id": "pilot-b", "kind": "screw_pilot", "diameterMm": 3.2, "depthMm": 12, "xMm": 55, "yMm": 33.5 }
       ]
     }
   ],
@@ -99,6 +108,13 @@
         "holes": [
           { "face": "back", "xMm": 22.5, "yMm": 33.5, "diameterMm": 2.7, "depthMm": 8 },
           { "face": "back", "xMm": 22.5, "yMm": 65.5, "diameterMm": 2.7, "depthMm": 8 }
+        ]
+      },
+      "hand_rail_canonical": {
+        "hostPlacement": "lateral_izquierdo",
+        "holes": [
+          { "face": "front", "xMm": 429, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+          { "face": "front", "xMm": 464, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 }
         ]
       }
     }
