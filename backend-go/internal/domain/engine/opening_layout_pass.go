@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -42,6 +43,13 @@ func applyOpeningFrontsToBoards(boards []layoutBoard, fronts []OpeningResolvedFr
 	for _, grip := range front.Grips {
 		consumedByBoundary[grip.Boundary] += grip.ConsumedMm
 		totalConsumed += grip.ConsumedMm
+	}
+	// #1528: the v1 arithmetic shortens EVERY front by the whole consumption,
+	// which is only right for fronts side by side (one row). Stacked fronts
+	// (a drawer column) need the multi-zone resolver (#1529); until then the
+	// resolve blocks instead of cutting every drawer short.
+	if totalConsumed != 0 && layoutFrontsStacked(boards) {
+		return nil, stackedFrontsError()
 	}
 	constrained := map[int]bool{}
 	for i := range boards {
@@ -155,6 +163,14 @@ func applyOpeningFrontsToBomParts(parts []domain.BoardPart, fronts []OpeningReso
 	if totalConsumed == 0 {
 		return nil
 	}
+	// #1528: the BOM carries no pose, so it cannot see a vertical stack the
+	// way the layout does. It blocks on the structural signature instead:
+	// two or more drawer fronts, or a drawer front next to a door, are
+	// always a stack. Two doors stacked in one tall unit are caught by the
+	// layout pass, which runs before any authoring is accepted.
+	if bomFrontsStacked(parts) {
+		return stackedFrontsError()
+	}
 	for i := range parts {
 		if !bomPartIsOpeningFront(&parts[i]) {
 			continue
@@ -167,6 +183,60 @@ func applyOpeningFrontsToBomParts(parts []domain.BoardPart, fronts []OpeningReso
 		parts[i].LengthMm -= totalConsumed
 	}
 	return nil
+}
+
+// openingStackToleranceMm absorbs formula rounding when two fronts share a
+// row: their vertical extents must overlap by more than this to count as
+// side by side.
+const openingStackToleranceMm = 0.5
+
+// stackedFrontsError is the #1528 fail-closed state: a grip over stacked
+// fronts waits for the multi-zone resolver instead of shortening each front.
+func stackedFrontsError() *OpeningResolutionError {
+	return openingFail(OpeningErrStackedFronts,
+		"la gola o el rebase en muebles con frentes apilados (cajoneras) llega con la gola entre cajones; por ahora sólo se resuelven frentes lado a lado")
+}
+
+// layoutFrontsStacked reports whether two opening fronts sit one above the
+// other (their vertical extents do not overlap), using the resolved pose.
+func layoutFrontsStacked(boards []layoutBoard) bool {
+	var fronts []*layoutBoard
+	for i := range boards {
+		if boardIsOpeningFront(&boards[i]) {
+			fronts = append(fronts, &boards[i])
+		}
+	}
+	for i := 0; i < len(fronts); i++ {
+		for j := i + 1; j < len(fronts); j++ {
+			a, b := fronts[i], fronts[j]
+			overlap := math.Min(a.z+a.lengthMm, b.z+b.lengthMm) - math.Max(a.z, b.z)
+			if overlap <= openingStackToleranceMm {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// bomFrontsStacked is the pose-free signature of a stack (#1528): two or
+// more drawer fronts, or a drawer front together with a door.
+func bomFrontsStacked(parts []domain.BoardPart) bool {
+	drawers, doors := 0, 0
+	for i := range parts {
+		if !bomPartIsOpeningFront(&parts[i]) {
+			continue
+		}
+		qty := parts[i].Quantity
+		if qty < 1 {
+			qty = 1
+		}
+		if parts[i].Placement == string(domain.PlacementFrenteCajon) {
+			drawers += qty
+		} else {
+			doors += qty
+		}
+	}
+	return drawers >= 2 || (drawers >= 1 && doors >= 1)
 }
 
 // bomPartIsOpeningFront is the BOM twin of boardIsOpeningFront: the SAME
