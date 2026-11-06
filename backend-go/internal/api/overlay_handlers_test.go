@@ -1215,3 +1215,46 @@ func TestHandleSaveAndActivatePolicyDraft(t *testing.T) {
 		}
 	})
 }
+
+// #1525 — a malformed opening blob is rejected at the write boundary (422)
+// with the same parser the resolve runs; a valid overhang is stored.
+func TestHandleUpdateLibraryOverlayValidatesOpeningBlobs(t *testing.T) {
+	standardID := uuid.MustParse(domain.GraneteStandardLibraryID)
+	orgA := uuid.New()
+	userID := uuid.New()
+	overlayID := uuid.New()
+	newOverlay := func() *domain.LibraryOverlay {
+		return &domain.LibraryOverlay{
+			ID: overlayID, OrganizationID: orgA, LibraryID: standardID, BaseReleaseID: uuid.New(),
+			Status: "active", Version: 1, Overrides: json.RawMessage(`{}`),
+			CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+		}
+	}
+	patch := func(overrides map[string]any) *httptest.ResponseRecorder {
+		srv := &Server{Store: &stubStore{overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{overlayID: newOverlay()}}}
+		bodyBytes, _ := json.Marshal(openapi.UpdateLibraryOverlayRequest{Overrides: overrides})
+		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
+		req.SetPathValue("id", overlayID.String())
+		req.Header.Set("If-Match", FormatVersionETag(1))
+		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
+		rr := httptest.NewRecorder()
+		srv.HandleUpdateLibraryOverlay(rr, req)
+		return rr
+	}
+
+	for name, overhang := range map[string]any{
+		"zero": 0, "negative": -5, "decimal": 12.5, "text": "20",
+	} {
+		rr := patch(map[string]any{"opening.bottom-overhang": map[string]any{"version": 1, "overhangMm": overhang}})
+		if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "OPENING_OVERHANG_RULE_INVALID") {
+			t.Fatalf("overhang %s must be 422 OPENING_OVERHANG_RULE_INVALID, got %d: %s", name, rr.Code, rr.Body.String())
+		}
+	}
+	rr := patch(map[string]any{"opening.capabilities": map[string]any{"version": 1, "grips": map[string]any{"handle": map[string]any{"enabled": true, "mm": 40}}}})
+	if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "OPENING_CAPABILITIES_INVALID") {
+		t.Fatalf("capabilities with an unknown key must be 422, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if rr := patch(map[string]any{"opening.bottom-overhang": map[string]any{"version": 1, "overhangMm": 20}}); rr.Code != http.StatusOK {
+		t.Fatalf("a valid 20 mm overhang must be stored, got %d: %s", rr.Code, rr.Body.String())
+	}
+}

@@ -11,6 +11,7 @@ import (
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/application"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
@@ -64,6 +65,9 @@ func (s *Server) HandleCreateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		overridesRaw = bytes
+	}
+	if !validateOpeningOverlayOverrides(w, overridesRaw) {
+		return
 	}
 
 	var customResUUIDs []uuid.UUID
@@ -245,6 +249,9 @@ func (s *Server) HandleUpdateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		overridesRaw = bytes
+	}
+	if !validateOpeningOverlayOverrides(w, overridesRaw) {
+		return
 	}
 
 	var customResUUIDs []uuid.UUID
@@ -704,4 +711,31 @@ func mapOverlayConflictToOpenAPI(c *domain.LibraryOverlayConflict) openapi.Libra
 		dto.ResolvedAt = &tStr
 	}
 	return dto
+}
+
+// validateOpeningOverlayOverrides (#1525) rejects a malformed opening blob at
+// the write boundary with 422, using the same parsers the resolve runs. Before
+// this, a bad `opening.bottom-overhang` was stored and every later design
+// opening read failed with 500.
+func validateOpeningOverlayOverrides(w http.ResponseWriter, overrides json.RawMessage) bool {
+	if len(overrides) == 0 {
+		return true
+	}
+	if _, err := engine.ParseOpeningCapabilities(overrides); err != nil {
+		respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"code":    "INVALID_OPENING_CONFIGURATION",
+			"message": "las capacidades de apertura no son válidas: " + err.Error(),
+			"details": map[string]any{"reason": "OPENING_CAPABILITIES_INVALID"},
+		})
+		return false
+	}
+	if _, err := engine.ParseOpeningOverhangRule(overrides); err != nil {
+		respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"code":    "INVALID_OPENING_CONFIGURATION",
+			"message": "los milímetros del rebase deben ser un entero mayor que 0",
+			"details": map[string]any{"reason": "OPENING_OVERHANG_RULE_INVALID"},
+		})
+		return false
+	}
+	return true
 }

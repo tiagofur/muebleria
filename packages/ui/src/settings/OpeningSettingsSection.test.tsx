@@ -69,9 +69,14 @@ describe('OpeningSettingsSection (#1134)', () => {
     expect(screen.getByTestId('opening-system-handle-enabled')).toHaveProperty('checked', true);
     expect(screen.getByTestId('opening-system-gola-enabled')).toHaveProperty('checked', true);
     expect(screen.getByTestId('opening-system-bottom_overhang-enabled')).toHaveProperty('checked', true);
-    expect(screen.getByText(/Sin decisión de fábrica todavía/)).toBeTruthy();
-    // Gola sin curaduría: la oferta existe, los perfiles exactos quedan pendientes.
-    expect(screen.getByTestId('opening-gola-profiles').textContent).toContain('Sin curaduría todavía');
+    expect(screen.getByText(/Todavía no guardaste esta configuración/)).toBeTruthy();
+    // Gola sin perfiles elegidos: la oferta existe, aparecen todos los de ficha completa.
+    expect(screen.getByTestId('opening-gola-profiles').textContent).toContain('Todavía no elegiste perfiles');
+    // #1525: no internal jargon left in the section.
+    const text = screen.getByTestId('settings-section-opening').textContent ?? '';
+    for (const jargon of ['biblioteca fijada', 'curaduría', 'evidencia de campo', 'autoría']) {
+      expect(text).not.toContain(jargon);
+    }
   });
 
   it('marca como no disponible un sistema deshabilitado sin tocar los demás', async () => {
@@ -97,41 +102,86 @@ describe('OpeningSettingsSection (#1134)', () => {
     );
   });
 
-  it('mantiene un único sistema preseleccionado', async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
+  it('#1525 cada sistema dice qué habilita el check: «Ofrecer en SketchUp»', () => {
     render(
       <OpeningSettingsSection
         capabilities={DEFAULT_OPENING_CAPABILITIES}
         decided
-        onChange={onChange}
+        onChange={vi.fn()}
         onSave={vi.fn()}
       />,
     );
-
-    await user.click(screen.getByTestId('opening-system-gola-default'));
-    const payload = onChange.mock.calls[0]?.[0] as OpeningCapabilities;
-    const defaults = Object.values(payload.grips).filter((g) => g?.default);
-    expect(defaults).toHaveLength(1);
-    expect(payload.grips.gola?.default).toBe(true);
-    expect(payload.grips.handle?.default).toBe(false);
+    for (const system of ['handle', 'gola', 'bottom_overhang']) {
+      const checkbox = screen.getByTestId(`opening-system-${system}-enabled`);
+      expect(checkbox.closest('label')?.textContent).toContain('Ofrecer en SketchUp');
+    }
   });
 
-  it('restringe placements por tipo de mueble', async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
+  it('#1525 no muestra los controles sin efecto (preselección y restricciones por tipo)', () => {
     render(
       <OpeningSettingsSection
         capabilities={DEFAULT_OPENING_CAPABILITIES}
         decided
-        onChange={onChange}
+        onChange={vi.fn()}
         onSave={vi.fn()}
       />,
     );
+    expect(screen.queryByTestId('opening-by-furniture-type')).toBeNull();
+    expect(screen.queryByTestId('opening-system-gola-default')).toBeNull();
+    expect(screen.queryByText(/Sistema preseleccionado/)).toBeNull();
+    expect(screen.queryByText(/Restricciones por tipo de mueble/)).toBeNull();
+  });
 
-    await user.click(screen.getByTestId('opening-type-superior-gola-top'));
+  it('#1525 cambiar un sistema conserva byFurnitureType y default ya guardados', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const stored: OpeningCapabilities = {
+      version: 1,
+      grips: {
+        handle: { enabled: true, default: true },
+        gola: { enabled: true, default: false },
+        bottom_overhang: { enabled: true, default: false },
+      },
+      byFurnitureType: { superior: { grips: { gola: { placements: ['top'], default: true } } } },
+    };
+    render(<OpeningSettingsSection capabilities={stored} decided onChange={onChange} onSave={vi.fn()} />);
+
+    await user.click(screen.getByTestId('opening-system-bottom_overhang-enabled'));
     const payload = onChange.mock.calls[0]?.[0] as OpeningCapabilities;
-    expect(payload.byFurnitureType?.superior?.grips?.gola?.placements).toEqual(['top']);
+    expect(payload.byFurnitureType).toEqual(stored.byFurnitureType);
+    expect(payload.grips.handle?.default).toBe(true);
+    expect(payload.grips.bottom_overhang?.enabled).toBe(false);
+  });
+
+  it('#1525 el rebase pide los milímetros y avisa que sin ellos queda bloqueado', async () => {
+    const user = userEvent.setup();
+    const onOverhangChange = vi.fn();
+    const { rerender } = render(
+      <OpeningSettingsSection
+        capabilities={DEFAULT_OPENING_CAPABILITIES}
+        decided
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        overhangMm=""
+        onOverhangChange={onOverhangChange}
+      />,
+    );
+    expect(screen.getByTestId('opening-overhang-hint').textContent).toContain('queda bloqueado en SketchUp');
+    await user.type(screen.getByTestId('opening-overhang-mm'), '2');
+    expect(onOverhangChange).toHaveBeenLastCalledWith('2');
+
+    rerender(
+      <OpeningSettingsSection
+        capabilities={DEFAULT_OPENING_CAPABILITIES}
+        decided
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        overhangMm="20"
+        onOverhangChange={onOverhangChange}
+      />,
+    );
+    expect(screen.getByTestId('opening-overhang-mm')).toHaveProperty('value', '20');
+    expect(screen.getByTestId('opening-overhang-hint').textContent).not.toContain('bloqueado');
   });
 
   it('#1329 nombra los perfiles curados con fabricante y sección', () => {
