@@ -679,4 +679,79 @@ describe('selectableGroupCodesForModule (F087)', () => {
       selectableGroupCodesForModule(bareModule, kitGroups, [], [], [agrConKit], kitGroups),
     ).not.toContain('LATERAL_E');
   });
+
+  // #1519 F2: los accesorios SIGUEN la elección de CAJÓN — con la elección
+  // del mueble, el grupo accesorio del agregado ELEGIDO entra al selector y
+  // el del default queda fuera; sin elección, el default manda (paridad con
+  // ResolveEffectiveAgregadoID del motor).
+  it('el accesorio sigue la elección de CAJÓN con optionChoices (#1519)', () => {
+    const agrDefault = {
+      id: 'agr-mbox-m',
+      code: 'AGR-MBOX-M',
+      name: 'MERIVOBOX M',
+      commercialKitHardwareId: 'kit-mbox-m',
+      components: [],
+      hardwareLines: [],
+    } as unknown as Agregado;
+    const agrElegido = {
+      id: 'agr-mbox-e',
+      code: 'AGR-MBOX-E',
+      name: 'MERIVOBOX E',
+      commercialKitHardwareId: 'kit-mbox-e',
+      components: [],
+      hardwareLines: [],
+    } as unknown as Agregado;
+    const kitGroups: OptionGroup[] = [
+      ...baseGroups,
+      {
+        id: 'og-m',
+        code: 'ACC_M',
+        name: 'Accesorio del kit M',
+        kind: 'hardware',
+        required: false,
+        optionIds: ['kit-acc-m'],
+        kitHardwareId: 'kit-mbox-m',
+      },
+      {
+        id: 'og-e',
+        code: 'LATERAL_E',
+        name: 'Lateral superior E',
+        kind: 'hardware',
+        required: true,
+        optionIds: ['kit-acc-gal'],
+        kitHardwareId: 'kit-mbox-e',
+      },
+    ];
+    // La instancia monta el M por default, pero el CAJÓN del mueble eligió el E.
+    const moduleConAgregado = {
+      hardwareLines: [],
+      components: [],
+      agregados: [{ agregadoId: 'agr-mbox-m', optionRole: 'CAJON' }],
+    };
+
+    // Con la elección CAJON=agr-mbox-e: el accesorio del kit E entra, el del M fuera.
+    const conEleccion = selectableGroupCodesForModule(
+      moduleConAgregado,
+      kitGroups,
+      [],
+      [],
+      [agrDefault, agrElegido],
+      kitGroups,
+      { CAJON: 'agr-mbox-e' },
+    );
+    expect(conEleccion).toContain('LATERAL_E');
+    expect(conEleccion).not.toContain('ACC_M');
+
+    // Sin elecciones: el default (kit M) manda.
+    const sinEleccion = selectableGroupCodesForModule(
+      moduleConAgregado,
+      kitGroups,
+      [],
+      [],
+      [agrDefault, agrElegido],
+      kitGroups,
+    );
+    expect(sinEleccion).toContain('ACC_M');
+    expect(sinEleccion).not.toContain('LATERAL_E');
+  });
 });
