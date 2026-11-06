@@ -78,12 +78,12 @@ func TestHingeDemandBandsContract(t *testing.T) {
 		if tc.WidthMm != nil {
 			width = *tc.WidthMm
 		}
-		if got := domain.HingesForDoor(tc.HeightMm, width, &fixturePolicy); got != tc.ExpectedHinges {
+		if got := domain.HingesForDoor(float64(tc.HeightMm), width, &fixturePolicy); got != tc.ExpectedHinges {
 			t.Fatalf("%s: HingesForDoor(%d,%d,fixture) = %d, want %d", tc.Name, tc.HeightMm, width, got, tc.ExpectedHinges)
 		}
 		// The library default IS the fixture policy: the no-policy call must
 		// agree (the ladder falls back whole — bands AND surge).
-		if got := domain.HingesForDoor(tc.HeightMm, width, nil); got != tc.ExpectedHinges {
+		if got := domain.HingesForDoor(float64(tc.HeightMm), width, nil); got != tc.ExpectedHinges {
 			t.Fatalf("%s: HingesForDoor(%d,%d,nil) = %d, want %d", tc.Name, tc.HeightMm, width, got, tc.ExpectedHinges)
 		}
 	}
@@ -95,7 +95,7 @@ func TestHingeDemandBandsContract(t *testing.T) {
 			if tc.WidthMm != nil {
 				width = *tc.WidthMm
 			}
-			if got := domain.HingesForDoor(tc.HeightMm, width, &policy); got != tc.ExpectedHinges {
+			if got := domain.HingesForDoor(float64(tc.HeightMm), width, &policy); got != tc.ExpectedHinges {
 				t.Fatalf("%s (%dmm): HingesForDoor = %d, want %d", oc.Name, tc.HeightMm, got, tc.ExpectedHinges)
 			}
 		}

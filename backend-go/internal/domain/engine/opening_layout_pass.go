@@ -175,12 +175,12 @@ func applyOpeningFrontsToBomParts(parts []domain.BoardPart, fronts []OpeningReso
 		if !bomPartIsOpeningFront(&parts[i]) {
 			continue
 		}
-		if parts[i].LengthMm-totalConsumed <= 0 {
+		if parts[i].LengthMm-float64(totalConsumed) <= 0 {
 			return fmt.Errorf(
-				"la apertura deja el frente %s sin altura válida (consumo %d mm sobre %d mm)",
+				"la apertura deja el frente %s sin altura válida (consumo %d mm sobre %g mm)",
 				parts[i].ID, totalConsumed, parts[i].LengthMm)
 		}
-		parts[i].LengthMm -= totalConsumed
+		parts[i].LengthMm -= float64(totalConsumed)
 	}
 	return nil
 }

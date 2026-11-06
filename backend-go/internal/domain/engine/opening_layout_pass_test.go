@@ -416,7 +416,7 @@ func TestOpeningBomPartsBlockStackedFronts(t *testing.T) {
 		t.Fatalf("3 drawer fronts in the cut list must block, got %v", err)
 	}
 	if drawers[0].LengthMm != 236 {
-		t.Fatalf("a blocked cut list must not touch the part: %d", drawers[0].LengthMm)
+		t.Fatalf("a blocked cut list must not touch the part: %g", drawers[0].LengthMm)
 	}
 	mixed := []domain.BoardPart{
 		{ID: "frente-cajon", Placement: string(domain.PlacementFrenteCajon), Quantity: 1, LengthMm: 150},
@@ -429,6 +429,6 @@ func TestOpeningBomPartsBlockStackedFronts(t *testing.T) {
 		{ID: "puerta", Placement: string(domain.PlacementPuerta), Quantity: 2, LengthMm: 716},
 	}
 	if err := applyOpeningFrontsToBomParts(doors, openingPassFront("top", 40)); err != nil || doors[0].LengthMm != 676 {
-		t.Fatalf("two doors side by side keep v1: err %v, length %d", err, doors[0].LengthMm)
+		t.Fatalf("two doors side by side keep v1: err %v, length %g", err, doors[0].LengthMm)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"math"
 	"strings"
 )
 
@@ -289,7 +290,9 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 		var p domain.BoardPart
 		var code *string
 		var l1, l2, w1, w2 bool
-		err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2)
+		var lengthMm int
+		err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &lengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2)
+		p.LengthMm = float64(lengthMm)
 		if err == nil {
 			if code != nil {
 				p.Code = *code
@@ -438,6 +441,10 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 
 	// Insertar BoardParts
 	for _, p := range m.BoardParts {
+		authoredLengthMm, lengthErr := authoredPartLengthMm(p.LengthMm)
+		if lengthErr != nil {
+			return lengthErr
+		}
 		var l1, l2, w1, w2 bool
 		for _, e := range p.Edges {
 			switch e.Side {
@@ -462,13 +469,13 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, partQuery, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx)).Scan(&p.ID)
+			err = tx.QueryRow(ctx, partQuery, m.ID, p.Code, p.Description, p.Quantity, authoredLengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx)).Scan(&p.ID)
 		} else {
 			partQuery := `
 				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, organization_id)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 			`
-			_, err = tx.Exec(ctx, partQuery, partID, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx))
+			_, err = tx.Exec(ctx, partQuery, partID, m.ID, p.Code, p.Description, p.Quantity, authoredLengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx))
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting board part: %w", err)
@@ -634,6 +641,10 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, expectedVer
 
 	// Insertar BoardParts
 	for _, p := range m.BoardParts {
+		authoredLengthMm, lengthErr := authoredPartLengthMm(p.LengthMm)
+		if lengthErr != nil {
+			return lengthErr
+		}
 		var l1, l2, w1, w2 bool
 		for _, e := range p.Edges {
 			switch e.Side {
@@ -657,13 +668,13 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, expectedVer
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, partQuery, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx)).Scan(&p.ID)
+			err = tx.QueryRow(ctx, partQuery, id, p.Code, p.Description, p.Quantity, authoredLengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx)).Scan(&p.ID)
 		} else {
 			partQuery := `
 				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, organization_id)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 			`
-			_, err = tx.Exec(ctx, partQuery, partID, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx))
+			_, err = tx.Exec(ctx, partQuery, partID, id, p.Code, p.Description, p.Quantity, authoredLengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx))
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting board part: %w", err)
@@ -758,3 +769,14 @@ func nullDateArg(d *string) any {
 // SetProjectItemFloorStatus atomically advances one item's shop-floor status
 // (PROD-3.1 / F089-RN). Single-row UPDATE — no full project rewrite, so a
 // phone scan can never clobber concurrent edits elsewhere in the project.
+
+// authoredPartLengthMm keeps authored template parts in whole millimetres
+// (board_parts.length_mm is INTEGER). Since #1529 BoardPart.LengthMm is a
+// decimal because resolved opening fronts can measure half millimetres; an
+// authored decimal is rejected here instead of being rounded silently.
+func authoredPartLengthMm(lengthMm float64) (int, error) {
+	if lengthMm != math.Trunc(lengthMm) || math.IsInf(lengthMm, 0) || math.IsNaN(lengthMm) {
+		return 0, fmt.Errorf("el largo de la pieza debe ser un número entero de milímetros (%g)", lengthMm)
+	}
+	return int(lengthMm), nil
+}

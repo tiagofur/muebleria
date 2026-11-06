@@ -6,6 +6,7 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
+	"math"
 	"net/http"
 	"strings"
 )
@@ -60,6 +61,15 @@ func (s *Server) validateModuleHardwareLines(w http.ResponseWriter, r *http.Requ
 // furnitureType "panel" (a declared axis on a non-panel module is a drafting
 // error we fail closed instead of persisting as dead data).
 func (s *Server) validateModulePanelFields(w http.ResponseWriter, m *domain.Module) bool {
+	// #1529: BoardPart.LengthMm is a decimal because resolved opening fronts
+	// can measure half millimetres; authored template parts stay whole mm.
+	for _, part := range m.BoardParts {
+		if part.LengthMm != math.Trunc(part.LengthMm) {
+			respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeBadRequest,
+				"El largo de cada pieza debe ser un número entero de milímetros.", nil)
+			return false
+		}
+	}
 	switch m.PanelThicknessDim {
 	case "", "width", "height", "depth":
 	default:

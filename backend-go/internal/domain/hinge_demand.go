@@ -70,7 +70,7 @@ func DefaultHingeDemandPolicy() HingeDemandPolicy {
 // nil policy = the whole library default (bands AND surge). A present policy
 // owns its bands; an omitted surge inherits the default rule and an explicit
 // zero disables it. A non-positive height demands nothing.
-func HingesForDoor(doorHeightMm, doorWidthMm int, policy *HingeDemandPolicy) int {
+func HingesForDoor(doorHeightMm float64, doorWidthMm int, policy *HingeDemandPolicy) int {
 	if doorHeightMm <= 0 {
 		return 0
 	}
@@ -89,7 +89,7 @@ func HingesForDoor(doorHeightMm, doorWidthMm int, policy *HingeDemandPolicy) int
 	hinges := 0
 	matched := false
 	for _, band := range bands {
-		if float64(doorHeightMm) <= band.UpToHeightMm {
+		if doorHeightMm <= band.UpToHeightMm {
 			if band.Hinges > 0 {
 				hinges = band.Hinges
 			}

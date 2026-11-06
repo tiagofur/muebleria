@@ -61,11 +61,11 @@ func CalcBoardLineMetrics(part domain.BoardPart, qtyMultiplier int) (float64, fl
 	qty := part.Quantity * qtyMultiplier
 	flags := edgeFlags(part.Edges)
 
-	areaM2 := float64(qty*part.LengthMm*part.WidthMm) / 1000000.0
+	areaM2 := float64(qty) * part.LengthMm * float64(part.WidthMm) / 1000000.0
 
 	lSum := flags["L1"] + flags["L2"]
 	wSum := flags["W1"] + flags["W2"]
-	edgeMl := float64(qty*(lSum*part.LengthMm+wSum*part.WidthMm)) / 1000.0
+	edgeMl := float64(qty) * (float64(lSum)*part.LengthMm + float64(wSum*part.WidthMm)) / 1000.0
 
 	return areaM2, edgeMl
 }
@@ -149,7 +149,7 @@ func ResolveHardware(line domain.HardwareLine, optionChoices map[string]string, 
 func CalcBoardLineCost(part domain.BoardPart, material domain.MaterialBoard, edgeBand *domain.EdgeBand, qtyMultiplier int) (BoardLineCost, error) {
 	if part.LengthMm <= 0 || part.WidthMm <= 0 {
 		return BoardLineCost{}, fmt.Errorf(
-			"board part dimensions must be > 0 (lengthMm=%d, widthMm=%d)",
+			"board part dimensions must be > 0 (lengthMm=%g, widthMm=%d)",
 			part.LengthMm, part.WidthMm,
 		)
 	}
@@ -300,7 +300,7 @@ func CalcProjectBreakdownWithProfileDemand(
 				Code:        part.Code,
 				Description: part.Description,
 				Quantity:    part.Quantity,
-				LengthMm:    int(math.Round(part.LengthMm)),
+				LengthMm:    math.Round(part.LengthMm),
 				WidthMm:     int(math.Round(part.WidthMm)),
 				Edges:       part.Edges,
 				OptionRole:  part.OptionRole,
