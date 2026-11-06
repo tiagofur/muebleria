@@ -10,7 +10,7 @@
  * re-running the wizard over an existing kit never duplicates records.
  */
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 
 import type {
   Hardware,
@@ -28,6 +28,7 @@ import {
 } from '@granete/domain';
 import { Modal } from '../../common';
 import { uploadHardwareAssetBinding, type HardwareAssetService, type WorkshopKitTemplateRow } from '@granete/storage';
+import { uploadKitWizardDesigns, useKitWizardRun, type KitWizardRunTask } from './useKitWizardRun';
 
 export interface HardwareKitWizardModalProps {
   readonly open: boolean;
@@ -45,8 +46,6 @@ export interface HardwareKitWizardModalProps {
   /** Carga/estado de las plantillas del taller (loading + aviso de error). */
   readonly templatesStatus?: { readonly loading: boolean; readonly notice: string | null };
 }
-
-type WizardPhase = 'form' | 'running' | 'done';
 
 function parseNumber(value: string): number {
   const n = Number(value.trim());
@@ -97,11 +96,28 @@ export function HardwareKitWizardModal({
 
   const selectedWorkshopTemplate = customTemplates.find((t) => t.id === templateId) ?? null;
   const [files, setFiles] = useState<Record<string, File | null>>({});
-  const [phase, setPhase] = useState<WizardPhase>('form');
-  const [progress, setProgress] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<HardwareKitResult | null>(null);
   const filesResetRef = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Reset de los campos propios del asistente; la máquina de fases la resetea
+  // el hook (reabrir tras «Listo» muestra el formulario limpio, #1552).
+  const resetForm = useCallback(() => {
+    setCode('');
+    setName('');
+    setPrice('');
+    setWidth('400');
+    setHeight('150');
+    setDepth('500');
+    setFixedOffset(String(DEFAULT_FIXED_OFFSET_MM));
+    setMovingOffset(String(DEFAULT_MOVING_OFFSET_MM));
+    setAgregadoCode('');
+    setTemplateId('drawer-slides');
+    setFiles({});
+    for (const input of Object.values(filesResetRef.current)) {
+      if (input) input.value = '';
+    }
+  }, []);
+
+  const wizard = useKitWizardRun<HardwareKitResult>({ open, onClose, resetForm });
 
   const existing = useMemo(
     () => ({
@@ -144,36 +160,11 @@ export function HardwareKitWizardModal({
     }
   }, [code, name, price, width, height, depth, fixedOffset, movingOffset, agregadoCode, templateId, existing, customTemplates]);
 
-  const running = phase === 'running';
+  const running = wizard.running;
 
   const slotTestId = (slot: string): string => slot.replaceAll('_', '-');
 
-  const resetAfterDone = () => {
-    setCode('');
-    setName('');
-    setPrice('');
-    setWidth('400');
-    setHeight('150');
-    setDepth('500');
-    setFixedOffset(String(DEFAULT_FIXED_OFFSET_MM));
-    setMovingOffset(String(DEFAULT_MOVING_OFFSET_MM));
-    setAgregadoCode('');
-    setTemplateId('drawer-slides');
-    setFiles({});
-    for (const input of Object.values(filesResetRef.current)) {
-      if (input) input.value = '';
-    }
-    setPhase('form');
-    setProgress(null);
-    setError(null);
-    setResult(null);
-  };
-
-  const handleClose = () => {
-    if (running) return; // Sin cancelación en vuelo (#1416 v1): los botones quedan deshabilitados.
-    if (phase === 'done') resetAfterDone();
-    onClose();
-  };
+  const handleClose = wizard.handleClose;
 
   const onFileChange = (slot: string) => (e: ChangeEvent<HTMLInputElement>) => {
     setFiles((prev) => ({ ...prev, [slot]: e.target.files?.[0] ?? null }));
@@ -182,7 +173,6 @@ export function HardwareKitWizardModal({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (running) return;
-    setError(null);
 
     const w = parseNumber(width);
     const h = parseNumber(height);
@@ -206,7 +196,7 @@ export function HardwareKitWizardModal({
       // Strict validation happens inside the planner; surface its message.
       const plan = planHardwareKit(input, existing, customTemplates);
       if (plan.blockedCode) {
-        setError(
+        wizard.setError(
           `Ya existe un ensamble con el código «${plan.blockedCode}». Cambiá el código del ensamble para continuar.`,
         );
         return;
@@ -215,33 +205,35 @@ export function HardwareKitWizardModal({
         (design) => !design.exists && files[design.slot],
       );
       if (withFiles.length > 0 && !assetService) {
-        setError('El servicio de recursos 3D no está disponible en esta sesión; quitá los archivos SKP o reintentá más tarde.');
+        wizard.setError('El servicio de recursos 3D no está disponible en esta sesión; quitá los archivos SKP o reintentá más tarde.');
         return;
       }
 
-      setPhase('running');
-      const designs: NonNullable<HardwareKitCreateRequest['designs']> = {};
+      const tasks: KitWizardRunTask[] = [];
       for (const design of withFiles) {
         const slotLabel =
           template.slots.find((s) => s.slot === design.slot)?.labelEs ?? design.slot;
-        setProgress(`Subiendo diseño: ${slotLabel}…`);
         const file = files[design.slot];
         if (!file) continue;
-        designs[design.slot] = await uploadHardwareAssetBinding(assetService!, {
+        tasks.push({
+          key: design.slot,
           file,
+          label: `diseño: ${slotLabel}`,
           displayName: design.name,
         });
       }
+      wizard.begin();
+      const designs = await uploadKitWizardDesigns(
+        tasks,
+        (file, displayName) => uploadHardwareAssetBinding(assetService!, { file, displayName }),
+        wizard.setProgress,
+      );
 
-      setProgress('Creando el juego y su ensamble…');
+      wizard.setProgress('Creando el juego y su ensamble…');
       const created = await onCreateKit({ input, designs });
-      setResult(created);
-      setPhase('done');
-      setProgress(null);
+      wizard.complete(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo crear el juego.');
-      setPhase('form');
-      setProgress(null);
+      wizard.fail(err, 'No se pudo crear el juego.');
     }
   };
 
@@ -253,7 +245,7 @@ export function HardwareKitWizardModal({
       size="lg"
       dataTestId="hardware-kit-wizard"
       footer={
-        phase === 'done' ? (
+        wizard.phase === 'done' ? (
           <button
             type="button"
             className="btn btn--primary"
@@ -286,20 +278,20 @@ export function HardwareKitWizardModal({
         )
       }
     >
-      {phase === 'done' && result ? (
+      {wizard.phase === 'done' && wizard.result ? (
         <div data-testid="hardware-kit-wizard-result" className="catalog-form">
           <p role="status">
-            Juego creado. Ensamble <strong>{result.agregadoCode}</strong> con las
+            Juego creado. Ensamble <strong>{wizard.result.agregadoCode}</strong> con las
             piezas de diseño y su kit comercial.
           </p>
-          {result.createdCodes.length > 0 ? (
+          {wizard.result.createdCodes.length > 0 ? (
             <p>
-              <strong>Creados:</strong> {result.createdCodes.join(', ')}
+              <strong>Creados:</strong> {wizard.result.createdCodes.join(', ')}
             </p>
           ) : null}
-          {result.reusedCodes.length > 0 ? (
+          {wizard.result.reusedCodes.length > 0 ? (
             <p>
-              <strong>Reutilizados:</strong> {result.reusedCodes.join(', ')}
+              <strong>Reutilizados:</strong> {wizard.result.reusedCodes.join(', ')}
             </p>
           ) : null}
           <p className="catalog-form__hint">
@@ -315,14 +307,14 @@ export function HardwareKitWizardModal({
           onSubmit={handleSubmit}
           data-testid="hardware-kit-wizard-form"
         >
-          {error ? (
+          {wizard.error ? (
             <p className="catalog-form__error" role="alert" data-testid="hardware-kit-wizard-error">
-              {error}
+              {wizard.error}
             </p>
           ) : null}
-          {progress ? (
+          {wizard.progress ? (
             <p role="status" data-testid="hardware-kit-wizard-progress">
-              {progress}
+              {wizard.progress}
             </p>
           ) : null}
 

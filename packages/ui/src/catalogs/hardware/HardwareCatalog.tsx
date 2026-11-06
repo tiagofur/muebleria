@@ -1075,8 +1075,11 @@ export function HardwareCatalog({
           onClose={() => setSystemWizardOpen(false)}
           existingHardwareCodes={new Set(hardware.map((h) => h.code))}
           existingAgregadoCodes={new Set(agregadoCodes)}
-          uploadDesign={(file, displayName) =>
-            uploadHardwareAssetBinding(assetService!, { file, displayName })
+          uploadDesign={
+            assetService
+              ? (file, displayName) =>
+                  uploadHardwareAssetBinding(assetService, { file, displayName })
+              : undefined
           }
           onSubmit={onCreateKitSystem}
         />

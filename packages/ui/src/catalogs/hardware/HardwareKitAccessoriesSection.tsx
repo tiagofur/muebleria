@@ -151,7 +151,7 @@ export function HardwareKitAccessoriesSection({
                 <div className="catalog-hw-part__actions">
                   <button
                     type="button"
-                    className="btn btn--sm"
+                    className="btn btn--small"
                     onClick={() => setMemberPickFor(memberPickFor === og.id ? null : og.id)}
                     data-testid={`hardware-accessory-${og.code}-add`}
                   >
@@ -159,7 +159,7 @@ export function HardwareKitAccessoriesSection({
                   </button>
                   <button
                     type="button"
-                    className="btn btn--sm btn--ghost"
+                    className="btn btn--small btn--ghost"
                     onClick={() => {
                       setMemberPickFor(null);
                       onDeleteGroup?.(og.id);
@@ -224,7 +224,7 @@ export function HardwareKitAccessoriesSection({
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
-                className="btn btn--sm btn--primary"
+                className="btn btn--small btn--primary"
                 onClick={createGroup}
                 disabled={!newName.trim() || !groupCodeFromName(kitCode + ' ' + newName)}
                 data-testid="hardware-accessory-new-create"
@@ -233,7 +233,7 @@ export function HardwareKitAccessoriesSection({
               </button>
               <button
                 type="button"
-                className="btn btn--sm btn--ghost"
+                className="btn btn--small btn--ghost"
                 onClick={() => setCreating(false)}
                 data-testid="hardware-accessory-new-cancel"
               >
