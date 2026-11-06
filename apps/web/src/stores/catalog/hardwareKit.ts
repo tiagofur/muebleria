@@ -13,6 +13,7 @@ import type {
   Agregado,
   AgregadoRigidMember,
   Hardware,
+  HardwarePiece,
   HardwareKitCreateRequest,
   HardwareKitResult,
 } from '@granete/domain';
@@ -106,15 +107,17 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           continue;
         }
         const binding = req.designs?.[design.slot];
-        // #1512 S2b: un grupo multi-diseño crea UNA fila con hands — el SKP
-        // de cada slot del grupo se vincula como la mano correspondiente.
-        // La mano sin upload queda sin entry: cae al visualAsset global
-        // (box preview hasta que el taller suba el SKP, como en legacy).
+        // #1518 F1 (was #1512 S2b hands): un grupo multi-diseño crea UNA
+        // fila con pieces — el SKP de cada slot del grupo se vincula como la
+        // pieza de ese ancla. El ancla sin upload queda sin asset: cae al
+        // visualAsset global (box preview hasta subir el SKP, honesto).
         if (design.handsParts) {
-          const leftPart = design.handsParts.find((p) => p.hand === 'left');
-          const rightPart = design.handsParts.find((p) => p.hand === 'right');
-          const left = leftPart ? req.designs?.[leftPart.slot] : undefined;
-          const right = rightPart ? req.designs?.[rightPart.slot] : undefined;
+          const pieces: HardwarePiece[] = design.handsParts
+            .map((part) => {
+              const binding = req.designs?.[part.slot];
+              return binding ? ({ anchor: part.hand, asset: binding } as HardwarePiece) : null;
+            })
+            .filter((pc): pc is HardwarePiece => pc !== null);
           newHardware.push({
             id: idFor(design.code),
             code: design.code,
@@ -125,14 +128,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
             previewShape: 'slide',
             notes: DESIGN_NOTES(plan.kit.code),
             kitHardwareId: kitId,
-            ...((left || right)
-              ? {
-                  hands: {
-                    ...(left ? { left: { asset: left } } : {}),
-                    ...(right ? { right: { asset: right } } : {}),
-                  },
-                }
-              : {}),
+            ...(pieces.length > 0 ? { pieces } : {}),
           });
           createdCodes.push(design.code);
           continue;

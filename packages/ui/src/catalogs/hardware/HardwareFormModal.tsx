@@ -30,7 +30,7 @@ import {
 import type { HardwareAssetService } from '@granete/storage';
 import { CatalogImage, Modal } from '../../common';
 import { Hardware3DSection } from './Hardware3DSection';
-import { HardwareHandsSection } from './HardwareHandsSection';
+import { HardwarePiecesSection } from './HardwarePiecesSection';
 import { HardwareMachiningSection } from './HardwareMachiningSection';
 import { HardwareDesignPartsSection } from './HardwareDesignPartsSection';
 import { UNIT_LABELS, type HardwareDraft } from './hardwareDraft';
@@ -654,10 +654,11 @@ export function HardwareFormModal({
           assetService={assetService}
         />
 
-        {/* #1512 M3 S2: manos (par D/I) — un herraje multi-diseño dibuja su
-            SKP por lado. Un kit (unit set) no lleva manos. */}
+        {/* #1518 F1 (was #1512 manos): piezas de diseño (izq/der/centro) —
+            un herraje multi-diseño dibuja un SKP por lado. Un kit (unit set)
+            no lleva piezas. */}
         {!isKit ? (
-          <HardwareHandsSection
+          <HardwarePiecesSection
             draft={draft}
             setDraft={setDraft}
             canMutate={canMutate}

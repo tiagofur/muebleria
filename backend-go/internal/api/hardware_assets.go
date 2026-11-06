@@ -1066,21 +1066,20 @@ func (s *Server) resolveHardwareVisualBindingForWrite(r *http.Request, w http.Re
 		}
 		h.VisualAsset = binding
 	}
-	// #1512 M3: each declared hand resolves its binding through the SAME
-	// authority — a hand pointing at a nonexistent/retired/foreign revision
-	// fails the write here, never at first resolve.
-	if h.Hands != nil {
-		for _, hand := range []*domain.HardwareHand{h.Hands.Left, h.Hands.Right} {
-			if hand == nil || hand.Asset == nil {
-				continue
-			}
-			binding, err := s.Store.ResolveHardwareVisualAssetBinding(r.Context(), hand.Asset.AssetID, hand.Asset.AssetRevisionID)
-			if err != nil {
-				respondWithHardwareAssetError(w, err)
-				return false
-			}
-			hand.Asset = binding
+	// #1518 F1 (was #1512 hands): each declared piece resolves its binding
+	// through the SAME authority — a piece pointing at a nonexistent/retired/
+	// foreign revision fails the write here, never at first resolve.
+	for i := range h.Pieces {
+		piece := &h.Pieces[i]
+		if piece.Asset == nil {
+			continue
 		}
+		binding, err := s.Store.ResolveHardwareVisualAssetBinding(r.Context(), piece.Asset.AssetID, piece.Asset.AssetRevisionID)
+		if err != nil {
+			respondWithHardwareAssetError(w, err)
+			return false
+		}
+		piece.Asset = binding
 	}
 	return true
 }

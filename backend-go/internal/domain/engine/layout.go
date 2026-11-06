@@ -119,17 +119,17 @@ type LayoutComponent struct {
 	// never the host-generated SketchUp definition GUID and never implicitly
 	// the catalog component ID (catalogComponentId, when a schema publishes
 	// it, stays a separate field).
-	ComponentDefinitionID       string                     `json:"componentDefinitionId"`
-	SlotID                      string                     `json:"slotId"`
-	Role                        string                     `json:"role,omitempty"`
-	Name                        string                     `json:"name"`
-	Kind                        string                     `json:"kind"`
-	Transform                   LayoutTransform            `json:"transform"`
-	DimensionsMm                [3]float64                 `json:"dimensionsMm"`
-	LocalTransform              LayoutLocalTransform       `json:"localTransform"`
-	LengthMm                    int                        `json:"lengthMm"`
-	WidthMm                     int                        `json:"widthMm"`
-	ThicknessMm                 int                        `json:"thicknessMm"`
+	ComponentDefinitionID string               `json:"componentDefinitionId"`
+	SlotID                string               `json:"slotId"`
+	Role                  string               `json:"role,omitempty"`
+	Name                  string               `json:"name"`
+	Kind                  string               `json:"kind"`
+	Transform             LayoutTransform      `json:"transform"`
+	DimensionsMm          [3]float64           `json:"dimensionsMm"`
+	LocalTransform        LayoutLocalTransform `json:"localTransform"`
+	LengthMm              int                  `json:"lengthMm"`
+	WidthMm               int                  `json:"widthMm"`
+	ThicknessMm           int                  `json:"thicknessMm"`
 	// #1464: assemblyInstanceId del ensamble dueño de esta pieza cuando el
 	// board nace de un agregado — el mismo id que `assemblies[]`. Sin él el
 	// host no puede agrupar la caja del cajón con su frente y sus rieles
@@ -306,13 +306,13 @@ type layoutBoard struct {
 	// the SAME id the assemblies[] path derives (shared helper), so the host
 	// groups caja + frente + rieles of one drawer together.
 	assemblyInstanceID string
-	x, y, z          float64 // workshop min corner of the AABB
-	rotX, rotY       float64
-	rotZ             float64
-	widthMm          float64 // local X
-	thicknessMm      float64 // local Y
-	lengthMm         float64 // local Z
-	hardware         []domain.HardwarePlacement
+	x, y, z            float64 // workshop min corner of the AABB
+	rotX, rotY         float64
+	rotZ               float64
+	widthMm            float64 // local X
+	thicknessMm        float64 // local Y
+	lengthMm           float64 // local Z
+	hardware           []domain.HardwarePlacement
 	// notches carries the opening's DECLARED side notch subtraction boxes in
 	// the board's local frame (#1287 / §13.3) — structured data on a valid
 	// AABB, never a shrunk surrogate board.
@@ -841,19 +841,26 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 	for _, rm := range agr.RigidMembers {
 		if rm.Source.Fixed != nil && rm.Source.Fixed.HardwareID != "" {
 			existingHwIDs[rm.Source.Fixed.HardwareID] = true
-			if hw, ok := findHardware(catalog, rm.Source.Fixed.HardwareID); ok && len(hw.DesignParts) > 0 {
+			hw, hwOK := findHardware(catalog, rm.Source.Fixed.HardwareID)
+			if hwOK && len(hw.DesignParts) > 0 {
 				dp := hw.DesignParts[0]
 				if strings.TrimSpace(dp.ActorMembership) != "" {
 					rm.ActorMembership = strings.TrimSpace(dp.ActorMembership)
 				}
-				if xRef, xOff, yOff, zOff, okPos := parseKitPartPlacementLabelGo(dp.Label); okPos {
-					rm.Placement.X.Ref = xRef
-					rm.Placement.X.OffsetMm = xOff
-					rm.Placement.X.OffsetFormula = nil
-					rm.Placement.Y.OffsetMm = yOff
-					rm.Placement.Y.OffsetFormula = nil
-					rm.Placement.Z.OffsetMm = zOff
-					rm.Placement.Z.OffsetFormula = nil
+				// #1518 F1: multi-piece hardware NEVER takes the pos: label
+				// override — each piece declares its own anchor + offsets on
+				// the catalog row. The single-pos label used to flatten BOTH
+				// sides onto the same X (superposed SKPs).
+				if !(hwOK && len(hw.Pieces) > 0) {
+					if xRef, xOff, yOff, zOff, okPos := parseKitPartPlacementLabelGo(dp.Label); okPos {
+						rm.Placement.X.Ref = xRef
+						rm.Placement.X.OffsetMm = xOff
+						rm.Placement.X.OffsetFormula = nil
+						rm.Placement.Y.OffsetMm = yOff
+						rm.Placement.Y.OffsetFormula = nil
+						rm.Placement.Z.OffsetMm = zOff
+						rm.Placement.Z.OffsetFormula = nil
+					}
 				}
 			}
 		}
@@ -868,16 +875,14 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 			if existingHwIDs[hw.ID] {
 				continue
 			}
-			// #1512 M3: a multi-design kit part (hands) expands to TWO members
-			// — one per side — sharing the same catalog row; each member
-			// binds its hand's asset and derives its X anchor from the hand.
-			// Legacy -I/-D parts keep the single-member path untouched.
-			if hw.Hands != nil && (handHasAsset(hw.Hands.Left) || handHasAsset(hw.Hands.Right)) {
-				for _, hand := range []string{domain.MemberHandLeft, domain.MemberHandRight} {
-					m := kitPartMember(hw, agr.Code, hand)
-					m.MemberID = m.MemberID + "_" + hand
-					m.Hand = hand
-					members = append(members, m)
+			// #1518 F1 (was #1512 hands): a multi-design kit part expands to
+			// ONE MEMBER PER PIECE sharing the same catalog row; each member
+			// binds its piece's asset and takes its placement from the piece
+			// (anchor + per-side offsets). Legacy -I/-D parts keep the
+			// single-member path untouched.
+			if len(hw.Pieces) > 0 {
+				for _, piece := range hw.Pieces {
+					members = append(members, kitPieceMember(hw, piece, agr.Code))
 				}
 				continue
 			}
@@ -889,9 +894,68 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 	return agr
 }
 
-// handHasAsset reports whether a declared hand carries its own asset binding.
-func handHasAsset(h *domain.HardwareHand) bool {
-	return h != nil && h.Asset != nil && h.Asset.AssetID != "" && h.Asset.AssetRevisionID != ""
+// kitPieceMember (#1518 F1) builds the rigid member that draws ONE design
+// piece of a multi-design kit part: the placement comes from the piece itself
+// (anchor → axis ref; x/y/z offsets from its side) with actor membership and
+// fallback offsets from the part's own declaration — the code/name regex
+// never runs for pieces (the side is DATA).
+func kitPieceMember(hw domain.Hardware, piece domain.HardwarePiece, agrCode string) domain.AgregadoRigidMember {
+	actor := "body"
+	upperCode := strings.ToUpper(hw.Code)
+	lowerName := strings.ToLower(hw.Name)
+	isMoving := strings.Contains(upperCode, "-MOV") || strings.Contains(upperCode, "-BRAZO") ||
+		strings.Contains(lowerName, "móvil") || strings.Contains(lowerName, "movil") || strings.Contains(lowerName, "brazo")
+	if isMoving {
+		if strings.Contains(strings.ToUpper(agrCode), "PUERTA") || strings.Contains(strings.ToUpper(agrCode), "PUE") {
+			actor = "actor:door"
+		} else {
+			actor = "actor:drawer"
+		}
+	}
+	xRef, okRef := domain.AnchorAxisRef(piece.Anchor)
+	if !okRef {
+		xRef = domain.AxisRefMin
+	}
+	xOff := 10.0
+	if isMoving && actor == "actor:drawer" {
+		xOff = 35.0
+	}
+	if xRef == domain.AxisRefMax {
+		xOff = -xOff
+	}
+	yOff, zOff := 0.0, 0.0
+	if piece.OffsetMm != nil {
+		xOff = piece.OffsetMm.X
+		yOff = piece.OffsetMm.Y
+		zOff = piece.OffsetMm.Z
+	}
+	if len(hw.DesignParts) > 0 {
+		dp := hw.DesignParts[0]
+		if strings.TrimSpace(dp.ActorMembership) != "" {
+			actor = strings.TrimSpace(dp.ActorMembership)
+		}
+	}
+	safeID := "part_" + strings.ToLower(strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(hw.Code))
+	role := "part"
+	if hw.PreviewShape != nil && *hw.PreviewShape != "" {
+		role = *hw.PreviewShape
+	}
+	return domain.AgregadoRigidMember{
+		MemberID: safeID + "_" + piece.Anchor,
+		Role:     role,
+		Source: domain.RigidMemberSource{
+			Kind:  domain.RigidMemberSourceFixed,
+			Fixed: &domain.FixedHardwareSource{HardwareID: hw.ID},
+		},
+		Placement: domain.AssemblyAnchorRule{
+			X: domain.AssemblyAxisPlacement{Ref: xRef, OffsetMm: xOff},
+			Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: yOff},
+			Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: zOff},
+		},
+		BOMRole:         domain.BOMRoleIncludedInKit,
+		ActorMembership: actor,
+		Hand:            piece.Anchor,
+	}
 }
 
 // kitPartMember builds the rigid member that draws one kit design part
@@ -974,21 +1038,15 @@ func AttachHardwareAssetsToMembers(members []domain.ResolvedRigidMember, catalog
 		rm := &members[rIdx]
 		if hw, ok := findHardware(catalog, rm.HardwareID); ok {
 			rm.Name = hw.Name
-			// #1512 M3: a member with an explicit hand binds THAT hand's asset
-			// when the hardware declares hands; any other case (symmetric
-			// hardware, hand-less member, hand without its own asset) falls
-			// back to the global visualAsset. No silent box substitution.
+			// #1518 F1 (was #1512 hands): a member with an explicit anchor
+			// binds THAT piece's asset when the hardware declares pieces; any
+			// other case (symmetric hardware, anchor-less member, piece
+			// without its own asset) falls back to the global visualAsset. No
+			// silent box substitution.
 			binding := hw.VisualAsset
-			if hw.Hands != nil {
-				switch rm.Hand {
-				case domain.MemberHandLeft:
-					if hw.Hands.Left != nil && hw.Hands.Left.Asset != nil {
-						binding = hw.Hands.Left.Asset
-					}
-				case domain.MemberHandRight:
-					if hw.Hands.Right != nil && hw.Hands.Right.Asset != nil {
-						binding = hw.Hands.Right.Asset
-					}
+			if rm.Hand != "" {
+				if piece, ok := domain.HardwarePieceByAnchor(hw.Pieces, rm.Hand); ok && piece.Asset != nil {
+					binding = piece.Asset
 				}
 			}
 			if binding != nil {

@@ -178,12 +178,13 @@ type Hardware struct {
 	// representation, digest and validation state are resolved server-side.
 	// Nil = no exact model associated (generic procedural preview).
 	VisualAsset *HardwareVisualAssetBinding `json:"visual_asset,omitempty"`
-	// Hands (#1512 M3): per-hand assets of a multi-design hardware — one
-	// catalog row with its SKP per side instead of duplicated -I/-D rows.
-	// Same contract as VisualAsset: writes carry identifiers only, facts are
-	// server-resolved on read. Nil = symmetric/legacy. A hand without an
-	// asset falls back to VisualAsset at resolve time.
-	Hands *HardwareHands `json:"hands,omitempty"`
+	// Pieces (#1518 F1): the design pieces of a multi-design hardware — one
+	// catalog row with its SKP per side (and/or center) instead of duplicated
+	// -I/-D rows. Each piece carries its own anchor (left|right|center) and
+	// optional per-side offsets. Same contract as VisualAsset: writes carry
+	// identifiers only, facts are server-resolved on read. Nil = symmetric/
+	// legacy. A piece without an asset falls back to VisualAsset at resolve.
+	Pieces []HardwarePiece `json:"pieces,omitempty"`
 	// DesignParts declares internal parts of the pinned SKP by component
 	// name (#1417): per-part presentation membership and optional finish
 	// key. Nil = monolithic hardware (legacy behavior, exactly as before).

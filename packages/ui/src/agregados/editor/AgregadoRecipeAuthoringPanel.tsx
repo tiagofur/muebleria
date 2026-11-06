@@ -401,14 +401,14 @@ export function AgregadoRecipeAuthoringPanel({
                           </p>
                         ) : null}
                         {(() => {
-                          // #1512 M3 S2: un herraje multi-diseño (hands) pide
-                          // la mano del miembro — el asset y el anclaje X
-                          // default se derivan de ella en el resolve.
+                          // #1518 F1 (was #1512): un herraje multi-diseño
+                          // (pieces) pide el ancla del miembro — el asset y
+                          // el anclaje X default se derivan de ella.
                           const hwId = m.source.fixed?.hardwareId;
                           const hw = hwId
                             ? catalogHardware.find((h) => h.id === hwId)
                             : undefined;
-                          if (!hw?.hands) return null;
+                          if (!hw?.pieces || hw.pieces.length === 0) return null;
                           return (
                             <div className="catalog-form__field">
                               <label
@@ -431,9 +431,10 @@ export function AgregadoRecipeAuthoringPanel({
                                 }
                                 data-testid={`${testId}-member-${idx}-hand`}
                               >
-                                <option value="">Sin mano</option>
+                                <option value="">Sin ancla</option>
                                 <option value="left">Izquierda</option>
                                 <option value="right">Derecha</option>
+                                <option value="center">Centro</option>
                               </select>
                             </div>
                           );

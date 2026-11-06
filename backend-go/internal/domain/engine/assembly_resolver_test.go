@@ -1671,7 +1671,9 @@ func TestResolveAgregadoAssemblyHandSemantics_1512(t *testing.T) {
 	})
 
 	t.Run("mano inválida falla cerrado", func(t *testing.T) {
-		_, err := engine.ResolveAgregadoAssembly(buildAgregado("center", "", 10), engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 530, HeightMm: 300})
+		// #1518 F1: "center" es vocabulario válido desde F1 — el inválido de
+		// este test es un valor fuera del vocabulario cerrado.
+		_, err := engine.ResolveAgregadoAssembly(buildAgregado("far", "", 10), engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 530, HeightMm: 300})
 		if err == nil || !strings.Contains(err.Error(), "hand inválida") {
 			t.Fatalf("expected typed hand error, got %v", err)
 		}

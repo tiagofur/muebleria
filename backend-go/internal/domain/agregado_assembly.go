@@ -125,18 +125,22 @@ type AgregadoRigidMember struct {
 }
 
 // EffectivePlacement returns the member's anchor with the #1512 M3 default
-// applied: a declared hand provides the X anchor (left → min with a positive
-// offset, right → max with a negated positive offset) when the member
-// declares no explicit X ref. The recipe's own declaration always wins.
+// applied (center added by #1518 F1): a declared hand provides the X anchor
+// (left → min, right → max with a negated positive offset, center → center)
+// when the member declares no explicit X ref. The recipe's own declaration
+// always wins.
 func (m AgregadoRigidMember) EffectivePlacement() AssemblyAnchorRule {
 	p := m.Placement
-	if (m.Hand == MemberHandLeft || m.Hand == MemberHandRight) && p.X.Ref == "" {
-		if m.Hand == MemberHandRight {
+	if IsValidPieceAnchor(m.Hand) && p.X.Ref == "" {
+		switch m.Hand {
+		case MemberHandRight:
 			p.X.Ref = AxisRefMax
 			if p.X.OffsetMm > 0 {
 				p.X.OffsetMm = -p.X.OffsetMm
 			}
-		} else {
+		case MemberHandCenter:
+			p.X.Ref = AxisRefCenter
+		default:
 			p.X.Ref = AxisRefMin
 		}
 	}

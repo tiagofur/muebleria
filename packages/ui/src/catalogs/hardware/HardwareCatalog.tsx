@@ -506,12 +506,12 @@ export function HardwareCatalog({
                   Parte de {kit.code}
                 </span>
               ) : null}
-              {r.hands ? (
+              {r.pieces && r.pieces.length > 0 ? (
                 <span
                   className="catalog-badge catalog-badge--kit"
-                  data-testid={`hardware-hands-badge-${r.code}`}
+                  data-testid={`hardware-pieces-badge-${r.code}`}
                 >
-                  Par D/I
+                  {r.pieces.length} pieza{r.pieces.length === 1 ? '' : 's'} D/I/C
                 </span>
               ) : null}
             </span>

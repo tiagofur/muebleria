@@ -106,13 +106,12 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 		if h.VisualAsset != nil && h.VisualAsset.AssetRevisionID != "" {
 			revisionIDs = append(revisionIDs, h.VisualAsset.AssetRevisionID)
 		}
-		// #1512 M3: per-hand bindings resolve their facts in the same batch —
-		// the layout engine copies them per member by hand.
-		if h.Hands != nil {
-			for _, hand := range []*domain.HardwareHand{h.Hands.Left, h.Hands.Right} {
-				if hand != nil && hand.Asset != nil && hand.Asset.AssetRevisionID != "" {
-					revisionIDs = append(revisionIDs, hand.Asset.AssetRevisionID)
-				}
+		// #1518 F1 (was #1512 hands): per-piece bindings resolve their facts
+		// in the same batch — the layout engine copies them per member by
+		// piece anchor.
+		for _, piece := range h.Pieces {
+			if piece.Asset != nil && piece.Asset.AssetRevisionID != "" {
+				revisionIDs = append(revisionIDs, piece.Asset.AssetRevisionID)
 			}
 		}
 	}
@@ -262,13 +261,8 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 	}
 	for i := range items {
 		applyFacts(items[i].VisualAsset)
-		if items[i].Hands != nil {
-			if items[i].Hands.Left != nil {
-				applyFacts(items[i].Hands.Left.Asset)
-			}
-			if items[i].Hands.Right != nil {
-				applyFacts(items[i].Hands.Right.Asset)
-			}
+		for pi := range items[i].Pieces {
+			applyFacts(items[i].Pieces[pi].Asset)
 		}
 	}
 	return nil
