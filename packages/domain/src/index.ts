@@ -880,6 +880,9 @@ export type {
   OpeningProfileDatasheetStatus,
   OpeningBodyModifier,
   OpeningBOMMember,
+  GolaProfileMaterial,
+  GolaProfilePosition,
+  GolaProfilePositionUsage,
 } from './types';
 
 // --- Opening / Front contract v1 (#1129) ---

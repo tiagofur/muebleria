@@ -6553,6 +6553,44 @@
         }
       }
     },
+    "/catalog/opening-profiles/suggestions": {
+      "get": {
+        "operationId": "listOpeningProfileSuggestions",
+        "summary": "Suggested starting values for a new gola profile (#1530): SCILM 8006 L top 40, 8007 C between 36, Italian 36/36 with strip 70, notch 70 × strip thickness + 1 and bevel 45° of depth − 2",
+        "parameters": [
+          {
+            "name": "profile_depth_mm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "When given, fills the Italian bevel size (depth − 2)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GolaProfileSuggestion"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/catalog/opening-profiles/{profileId}": {
       "parameters": [
         {
@@ -18835,6 +18873,20 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "notch_depth_source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#1530 — strip_thickness: the notch depth is the resolved thickness of the fronts' material (never a constant); notch_depth_mm stays null."
+          },
+          "notch_clearance_mm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "#1530 — clearance added to both notch dimensions (Italian gola: 1)."
+          },
           "role": {
             "type": "string",
             "description": "Constructive role addressed (#1052 vocabulary: horizontal | lateral | shelf | back | door | divider | custom) — never a name."
@@ -18899,6 +18951,13 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "height_mm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "#1530 — strip height (strip role only); 70 by default for the Italian gola, editable."
+          },
           "hardware_id": {
             "type": "string"
           },
@@ -18941,10 +19000,153 @@
           "rule"
         ]
       },
+      "OpeningProfilePositionUsage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "usable": {
+            "type": "boolean"
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Wire names of the missing fields (profile_height_mm, profile_depth_mm, front_discount_top_mm, front_discount_between_mm)."
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Spanish explanation when not usable; names what is missing."
+          }
+        },
+        "required": [
+          "usable",
+          "missing"
+        ],
+        "description": "#1530 — the server's answer to whether a gola profile can be used at one position."
+      },
+      "GolaProfileSuggestion": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "manufacturer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "material": {
+            "type": "string",
+            "enum": [
+              "aluminum",
+              "melamine"
+            ]
+          },
+          "cross_section_shape": {
+            "type": "string"
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "top",
+                "between"
+              ]
+            }
+          },
+          "front_discount_top_mm": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "front_discount_between_mm": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "body_modifiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpeningProfileBodyModifier"
+            }
+          },
+          "bom_members": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OpeningProfileBOMMember"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "source",
+          "material",
+          "cross_section_shape",
+          "positions",
+          "body_modifiers",
+          "bom_members"
+        ],
+        "description": "#1530 — a starting point for a new gola profile (manufacturer and owner defaults, #1524). Suggestions only: nothing is stored until the workshop saves."
+      },
       "OpeningProfileWrite": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "material": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "aluminum",
+              "melamine"
+            ],
+            "description": "#1530 — aluminum | melamine (Italian gola). Present = v2-shaped write: grip_type becomes gola, compatible_placements mirrors positions and door_reduction_mm mirrors front_discount_top_mm until #1529/#1534. Absent = legacy-shaped write: the server derives the v2 fields (bridge until #1534)."
+          },
+          "positions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "top",
+                "between"
+              ]
+            },
+            "description": "#1530 — top | between; a profile may declare both."
+          },
+          "front_discount_top_mm": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "#1530 — the workshop's front discount at the top edge, measured from the cabinet height (ADR-0009 A3). > 0, no upper bound. Null = not declared: the profile cannot be used at the top."
+          },
+          "front_discount_between_mm": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "#1530 — the workshop's front discount between fronts. > 0, no upper bound. Null = not declared: the profile cannot be used between fronts."
+          },
           "id": {
             "type": "string",
             "description": "Client-named profile id on create (e.g. profile.gola-l.8006); ignored on update."
@@ -18965,7 +19167,7 @@
           },
           "grip_type": {
             "type": "string",
-            "description": "gola | handle | bottom_reveal | none."
+            "description": "gola only for writes since #1530 (handle | bottom_reveal | none are rejected with 422); optional on v2-shaped writes. Retired by #1534."
           },
           "cross_section_shape": {
             "type": [
@@ -19019,7 +19221,7 @@
               "string",
               "null"
             ],
-            "description": "Auditable datasheet reference; required when datasheet_status is verified."
+            "description": "Informational datasheet reference (#1530: no longer required)."
           },
           "datasheet_status": {
             "type": "string",
@@ -19042,7 +19244,7 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/OpeningProfileBOMMember"
             },
-            "description": "Keyed by member role (profile | supports | endCaps) — references to catalog hardware, never copies."
+            "description": "#1530 — fixed roles only: profile, supports and endCaps reference catalog hardware; strip references a panel component (melamine only). Any other key is rejected with 422."
           },
           "active": {
             "type": "boolean"
@@ -19050,17 +19252,57 @@
         },
         "required": [
           "code",
-          "name",
-          "grip_type",
-          "compatible_placements",
-          "datasheet_status"
+          "name"
         ],
-        "description": "Authorable fields: id/organization/version/timestamps are server-owned; verified datasheet requires the four geometry parameters plus origin."
+        "description": "Authorable fields: id/organization/version/timestamps/usage/v2_migration are server-owned. #1530: the use rule is per position (height, depth and that position's front discount); the datasheet status and origin are data only."
       },
       "OpeningProfile": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "material": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#1530 — aluminum | melamine. Null only on rows 000180 deactivated (non-profile grip types)."
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "#1530 — top | between."
+          },
+          "front_discount_top_mm": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "#1530 — the workshop's front discount at the top edge, measured from the cabinet height (ADR-0009 A3). > 0, no upper bound. Null = not declared: the profile cannot be used at the top."
+          },
+          "front_discount_between_mm": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "#1530 — the workshop's front discount between fronts. > 0, no upper bound. Null = not declared: the profile cannot be used between fronts."
+          },
+          "v2_migration": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "description": "#1530 — per-row report written by migration 000180 (action converted | deactivated, reason, sources). Read-only."
+          },
+          "usage": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OpeningProfilePositionUsage"
+            },
+            "description": "#1530 — server-computed on every read, never stored: for each declared position, whether the profile can be used there and which fields are missing."
+          },
           "id": {
             "type": "string"
           },
@@ -19177,6 +19419,7 @@
           "grip_type",
           "compatible_placements",
           "datasheet_status",
+          "positions",
           "active",
           "version",
           "created_at",

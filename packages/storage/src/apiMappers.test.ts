@@ -1395,6 +1395,76 @@ describe('openingProfileFromApi/ToApi (#1130)', () => {
   });
 });
 
+describe('openingProfileFromApi/ToApi — gola v2 (#1530)', () => {
+  it('lee material, posiciones, descuentos, uso del servidor y la tira; reescribe la forma v2', () => {
+    const profile = openingProfileFromApi({
+      id: 'op-it',
+      code: 'GOLA-IT',
+      name: 'Gola italiana',
+      grip_type: 'gola',
+      cross_section_shape: 'flat',
+      compatible_placements: ['top', 'between'],
+      datasheet_status: 'pending',
+      door_reduction_mm: 36,
+      material: 'melamine',
+      positions: ['top', 'between', 'bottom'],
+      front_discount_top_mm: 36,
+      front_discount_between_mm: null,
+      usage: {
+        top: { usable: true, missing: [] },
+        between: {
+          usable: false,
+          missing: ['front_discount_between_mm'],
+          message: 'Para usar el perfil entre frentes falta el descuento del frente entre frentes.',
+        },
+      },
+      body_modifiers: [
+        { role: 'lateral', notch_height_mm: 70, notch_depth_source: 'strip_thickness', notch_clearance_mm: 1 },
+      ],
+      bom_members: { strip: { hardware_id: '', component_id: 'comp-tira', rule: 'interior_width', height_mm: 70 } },
+      active: true,
+      version: 2,
+    });
+    expect(profile.material).toBe('melamine');
+    expect(profile.positions).toEqual(['top', 'between']);
+    expect(profile.frontDiscountTopMm).toBe(36);
+    expect(profile.frontDiscountBetweenMm).toBeUndefined();
+    expect(profile.usage?.between?.usable).toBe(false);
+    expect(profile.usage?.between?.missing).toEqual(['front_discount_between_mm']);
+    expect(profile.usage?.top?.usable).toBe(true);
+    expect(profile.bomMembers?.strip?.componentId).toBe('comp-tira');
+    expect(profile.bomMembers?.strip?.heightMm).toBe(70);
+    expect(profile.bodyModifiers?.[0]?.notchDepthSource).toBe('strip_thickness');
+
+    const wire = openingProfileToApi(profile) as Record<string, unknown>;
+    expect(wire.material).toBe('melamine');
+    expect(wire.positions).toEqual(['top', 'between']);
+    expect(wire.front_discount_top_mm).toBe(36);
+    expect(wire.front_discount_between_mm).toBeNull();
+    const strip = (wire.bom_members as Record<string, Record<string, unknown>>).strip;
+    expect(strip).toMatchObject({ component_id: 'comp-tira', height_mm: 70 });
+    const notch = (wire.body_modifiers as Record<string, unknown>[])[0];
+    expect(notch).toMatchObject({ notch_depth_source: 'strip_thickness', notch_clearance_mm: 1 });
+  });
+
+  it('sin material escribe la forma heredada (el servidor deriva los campos v2)', () => {
+    const profile = openingProfileFromApi({
+      id: 'op-old',
+      code: 'GOLA-OLD',
+      name: 'Gola vieja',
+      grip_type: 'handle',
+      compatible_placements: ['top'],
+      datasheet_status: 'pending',
+      active: false,
+      version: 2,
+    });
+    expect(profile.material).toBeUndefined();
+    expect(profile.positions).toEqual([]);
+    const wire = openingProfileToApi(profile) as Record<string, unknown>;
+    expect('material' in wire).toBe(false);
+  });
+});
+
 describe('catalogFromApi — construcción policy (#1218)', () => {
   it('mapea la política de fábrica con surge tri-estado y filtrado de excepciones vacías', () => {
     const cat = catalogFromApi({

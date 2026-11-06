@@ -136,6 +136,17 @@ export type OpeningProfileGripType = 'gola' | 'handle' | 'bottom_reveal' | 'none
 export type OpeningProfileCrossSection = 'L' | 'C' | 'J' | 'flat';
 export type OpeningProfilePlacement = 'top' | 'between' | 'bottom';
 export type OpeningProfileDatasheetStatus = 'pending' | 'verified';
+/** #1530 — gola profile v2 (ADR-0009 A2.1): melamine = Italian gola. */
+export type GolaProfileMaterial = 'aluminum' | 'melamine';
+export type GolaProfilePosition = 'top' | 'between';
+
+/** #1530 — the server's per-position use rule (computed on read, never in
+ * the client). `missing` lists the wire names of the absent fields. */
+export type GolaProfilePositionUsage = {
+  readonly usable: boolean;
+  readonly missing: readonly string[];
+  readonly message?: string;
+};
 
 export type OpeningBodyModifier = {
   /** Constructive role, never a name (#1052). */
@@ -144,6 +155,10 @@ export type OpeningBodyModifier = {
   readonly notchHeightMm?: number;
   readonly notchDepthMm?: number;
   readonly notchAt?: string;
+  /** #1530 — 'strip_thickness': depth = resolved thickness of the fronts. */
+  readonly notchDepthSource?: string;
+  /** #1530 — added to both notch dimensions (Italian gola: 1). */
+  readonly notchClearanceMm?: number;
 };
 
 export type OpeningBOMMember = {
@@ -155,6 +170,10 @@ export type OpeningBOMMember = {
    * datasheet (#1283 / §13.2). Nil = the member declares no geometry and the
    * layout places nothing for it (fail-closed, never an engine default). */
   readonly dimensionsMm?: readonly [number, number, number];
+  /** #1530 — the panel component of the `strip` role (Italian gola). */
+  readonly componentId?: string;
+  /** #1530 — strip height (strip role only; 70 by default). */
+  readonly heightMm?: number;
 };
 
 export interface OpeningProfile {
@@ -175,6 +194,14 @@ export interface OpeningProfile {
   readonly bomMembers?: Readonly<Record<string, OpeningBOMMember>>;
   readonly active: boolean;
   readonly version: number;
+  /** #1530 — v2 fields. Absent material = row deactivated by 000180. */
+  readonly material?: GolaProfileMaterial;
+  readonly positions?: readonly GolaProfilePosition[];
+  /** Workshop front discount per position (A3); absent = not declared. */
+  readonly frontDiscountTopMm?: number;
+  readonly frontDiscountBetweenMm?: number;
+  /** Server-computed use rule per declared position (read-only). */
+  readonly usage?: Readonly<Partial<Record<GolaProfilePosition, GolaProfilePositionUsage>>>;
 }
 
 export interface EdgeBand {
