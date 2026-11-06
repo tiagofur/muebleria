@@ -1111,3 +1111,196 @@ export function ensureAgregadoKitParts(
     rigidMembers: [...currentMembers, ...newMembers],
   };
 }
+
+// ── #1546 M4: sistema generador de cajones (MERIVOBOX N/M/K/E + accesorios) ──
+
+/** Altura Blum del sistema (#1546): autoridad numérica del fixture #1493. */
+export interface HardwareKitSystemHeight {
+  readonly code: 'N' | 'M' | 'K' | 'E';
+  readonly labelEs: string;
+  /** KH mínimo (espacio interior en mueble): 85.5 / 108 / 146 / 209. */
+  readonly khMinMm: number;
+  readonly include: boolean;
+}
+
+/** Accesorio del cajón E declarado en el sistema (#1519: galería/boxcap/boxcover). */
+export interface HardwareKitSystemAccessory {
+  /** Código del herraje accesorio generado: systemCode + '-' + suffix. */
+  readonly suffix: string;
+  readonly name: string;
+  /** Anclas de las piezas del accesorio (típicamente left+right). */
+  readonly anchors: readonly ('left' | 'right' | 'center')[];
+}
+
+export interface HardwareKitSystemInput {
+  /** Código base del sistema (e.g. MBOX-IRIDIUN): kits = code-N/M/K/E. */
+  readonly code: string;
+  readonly name: string;
+  readonly kitCostPerUnit: number;
+  readonly widthMm: number;
+  readonly depthMm: number;
+  /** Alturas a incluir (del autoritario HARDWARE_KIT_SYSTEM_HEIGHTS). */
+  readonly heights: readonly HardwareKitSystemHeight[];
+  /** Accesorios del cajón E (vacío = sistema sin accesorios). */
+  readonly accessoriesE?: readonly HardwareKitSystemAccessory[];
+  readonly fixedOffsetMm?: number;
+  readonly movingOffsetMm?: number;
+}
+
+/** Autoridad Blum de alturas (fixture merivobox-pilot-canonical.json #1493). */
+export const HARDWARE_KIT_SYSTEM_HEIGHTS: readonly (HardwareKitSystemHeight & { include: boolean })[] = [
+  { code: 'N', labelEs: 'N (85.5 mm — cubertero bajo)', khMinMm: 85.5, include: false },
+  { code: 'M', labelEs: 'M (108 mm — estándar)', khMinMm: 108, include: true },
+  { code: 'K', labelEs: 'K (146 mm — intermedio)', khMinMm: 146, include: false },
+  { code: 'E', labelEs: 'E (209 mm — cacerolero)', khMinMm: 209, include: false },
+];
+
+export interface HardwareKitSystemPlan {
+  /** Un kit multi-diseño por altura incluida (drawer-hands: FIJ + MOV). */
+  readonly kits: readonly {
+    readonly code: string;
+    readonly name: string;
+    readonly heightCode: string;
+    readonly khMinMm: number;
+    readonly exists: boolean;
+    /** Filas multi-diseño del kit (FIJ/MOV, cada una con piezas por ancla). */
+    readonly designs: readonly HardwareKitPlanDesignEntry[];
+  }[];
+  /** Herrajes accesorios del cajón E (cada uno con piezas por ancla). */
+  readonly accessories: readonly {
+    readonly code: string;
+    readonly name: string;
+    readonly exists: boolean;
+    readonly anchors: readonly ('left' | 'right' | 'center')[];
+  }[];
+  /** Grupo de accesorios vinculado al kit E (solo si E incluida y hay accesorios). */
+  readonly accessoryGroup: {
+    readonly code: string;
+    readonly name: string;
+    readonly required: boolean;
+    readonly kitCode: string;
+    readonly optionIds: readonly string[];
+  } | null;
+  /** Un agregado con variantes de altura — el sync materializa por bahía. */
+  readonly agregado: {
+    readonly code: string;
+    readonly name: string;
+    readonly widthMm: number;
+    readonly depthMm: number;
+    /** Variante = KH mínimo de la altura (nominal del variant set). */
+    readonly variants: readonly { readonly heightCode: string; readonly khMinMm: number; readonly kitCode: string }[];
+    readonly motion: HardwareKitTemplate['motion'];
+  };
+  readonly blockedCode: string | null;
+}
+
+/**
+ * #1546 M4: plan del SISTEMA de cajones — kits por altura (drawer-hands),
+ * herrajes accesorios del E con piezas por ancla (F1), grupo de accesorios
+ * vinculado al kit E (#1519) y UN agregado con variantes de altura (#1493)
+ * cuya receta NO lleva miembros de kit fijos: el sync por bahía materializa
+ * las partes del kit efectivo (cambiar la altura cambia kit y accesorios
+ * coherentes). Código de kit: systemCode-ALTURA; accesorio: systemCode-E-SUFIX.
+ */
+export function planHardwareKitSystem(
+  input: HardwareKitSystemInput,
+  existing: HardwareKitPlanExisting,
+): HardwareKitSystemPlan {
+  const systemCode = input.code.trim();
+  if (!systemCode) throw new Error('El código del sistema no puede estar vacío.');
+  const systemName = input.name.trim();
+  if (!systemName) throw new Error('El nombre del sistema no puede estar vacío.');
+
+  const included = input.heights.filter((h) => h.include);
+  if (included.length === 0) {
+    throw new Error('Incluí al menos una altura (N/M/K/E) para el sistema.');
+  }
+  const seenHeights = new Set<string>();
+  for (const h of included) {
+    if (seenHeights.has(h.code)) {
+      throw new Error(`Altura ${h.code} repetida en el sistema.`);
+    }
+    seenHeights.add(h.code);
+  }
+
+  const blockedCode = existing.agregadoCodes.has(`${systemCode}-CAJON`)
+    ? `${systemCode}-CAJON`
+    : null;
+
+  const heightByCode = new Map(input.heights.map((h) => [h.code, h] as const));
+
+  // Kits por altura — cada uno con la estructura drawer-hands (FIJ/MOV con
+  // piezas por ancla), código systemCode-ALTURA.
+  const kits = included.map((height) => {
+    const code = `${systemCode}-${height.code}`;
+    const subPlan = planHardwareKit(
+      {
+        code,
+        name: `${systemName} ${height.code}`,
+        kitCostPerUnit: input.kitCostPerUnit,
+        widthMm: input.widthMm,
+        heightMm: height.khMinMm,
+        depthMm: input.depthMm,
+        templateId: KIT_TEMPLATE_DRAWER_HANDS_ID,
+        fixedOffsetMm: input.fixedOffsetMm,
+        movingOffsetMm: input.movingOffsetMm,
+      },
+      existing,
+    );
+    return {
+      code,
+      name: `${systemName} ${height.code}`,
+      heightCode: height.code,
+      khMinMm: height.khMinMm,
+      exists: subPlan.kit.exists,
+      designs: subPlan.designs,
+    };
+  });
+
+  // Accesorios del E (F1: herraje con piezas por ancla). Sólo si E incluida.
+  const eKit = kits.find((k) => k.heightCode === 'E');
+  const accessories = (eKit ? (input.accessoriesE ?? []) : []).map((acc) => ({
+    code: `${systemCode}-E-${acc.suffix}`,
+    name: `${systemName} E — ${acc.name}`,
+    exists: existing.hardwareCodes.has(`${systemCode}-E-${acc.suffix}`),
+    anchors: acc.anchors,
+  }));
+
+  // Grupo de accesorios del kit E — los herrajes accesorios como opciones.
+  const accessoryGroup =
+    eKit && accessories.length > 0
+      ? {
+          code: `${systemCode}_LATERAL_E`,
+          name: 'Lateral superior E',
+          required: false,
+          kitCode: eKit.code,
+          optionIds: accessories.map((a) => a.code),
+        }
+      : null;
+
+  return {
+    kits,
+    accessories,
+    accessoryGroup,
+    agregado: {
+      code: `${systemCode}-CAJON`,
+      name: `Cajón ${systemName}`,
+      widthMm: input.widthMm,
+      depthMm: input.depthMm,
+      variants: kits.map((k) => ({
+        heightCode: k.heightCode,
+        khMinMm: heightByCode.get(k.heightCode)!.khMinMm,
+        kitCode: k.code,
+      })),
+      motion: 'translate',
+    },
+    blockedCode,
+  };
+}
+
+/** #1546 M4: request del asistente de sistema — uploads por slot de pieza. */
+export interface HardwareKitSystemCreateRequest {
+  readonly input: HardwareKitSystemInput;
+  /** Uploads de SKP: clave `${kitCode}:${pieceAnchor}:${partSuffix}` → binding. */
+  readonly designs?: Record<string, HardwareVisualAssetBinding>;
+}

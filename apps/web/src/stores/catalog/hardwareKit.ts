@@ -17,12 +17,20 @@ import type {
   HardwareKitCreateRequest,
   HardwareKitResult,
 } from '@granete/domain';
-import { planHardwareKit, type HardwareKitTemplate } from '@granete/domain';
+import {
+  planHardwareKit,
+  planHardwareKitSystem,
+  type HardwareKitSystemCreateRequest,
+  type HardwareKitTemplate,
+  type OptionGroup,
+} from '@granete/domain';
 
 import type { CatalogStoreCtx } from './shared';
 
 export type HardwareKitSlice = {
   readonly createHardwareKit: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
+  /** #1546 M4: sistema generador — kits por altura + accesorios del E + agregado con variantes. */
+  readonly createHardwareKitSystem: (req: HardwareKitSystemCreateRequest) => Promise<HardwareKitResult>;
 };
 
 const DESIGN_NOTES = (kitCode: string): string =>
@@ -212,6 +220,185 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           agregados: [...(c.agregados ?? []), agregado],
         }),
         `✓ Juego «${plan.kit.code}» creado`,
+      );
+
+      return {
+        createdCodes,
+        reusedCodes,
+        agregadoCode: agregado.code,
+        agregadoId: agregado.id,
+      };
+    },
+
+    // #1546 M4: sistema generador — ejecuta el plan del sistema: un kit
+    // multi-diseño por altura, herrajes accesorios del E con piezas por
+    // ancla, grupo de accesorios vinculado al kit E y UN agregado con
+    // variantes de altura cuya receta NO lleva miembros de kit fijos (el
+    // sync por bahía materializa las partes del kit efectivo — paridad #1493).
+    createHardwareKitSystem: async (req): Promise<HardwareKitResult> => {
+      const catalog = ctx.get().catalog;
+      if (!catalog) {
+        throw new Error('El catálogo no está cargado.');
+      }
+      const hardwareList = catalog.hardware ?? [];
+      const existing = {
+        hardwareCodes: new Set(hardwareList.map((h) => h.code)),
+        agregadoCodes: new Set((catalog.agregados ?? []).map((a) => a.code)),
+      };
+      const plan = planHardwareKitSystem(req.input, existing);
+      if (plan.blockedCode) {
+        throw new Error(
+          `Ya existe un ensamble con el código «${plan.blockedCode}». Cambiá el código del sistema para continuar.`,
+        );
+      }
+
+      const idByCode = new Map(hardwareList.map((h) => [h.code, h.id] as const));
+      const idFor = (code: string): string => {
+        const existingId = idByCode.get(code);
+        if (existingId) return existingId;
+        const fresh = ctx.newId();
+        idByCode.set(code, fresh);
+        return fresh;
+      };
+
+      const createdCodes: string[] = [];
+      const reusedCodes: string[] = [];
+      const newHardware: Hardware[] = [];
+      const systemKitIds = new Map<string, string>(); // heightCode → kit id
+
+      // 1. Kit multi-diseño por altura (FIJ/MOV con pieces por ancla).
+      for (const kit of plan.kits) {
+        const kitId = idFor(kit.code);
+        systemKitIds.set(kit.heightCode, kitId);
+        if (kit.exists) {
+          reusedCodes.push(kit.code);
+        } else {
+          newHardware.push({
+            id: kitId,
+            code: kit.code,
+            name: kit.name,
+            unit: 'set',
+            costPerUnit: req.input.kitCostPerUnit,
+            active: true,
+            notes: `Juego ${kit.heightCode} del sistema ${req.input.code.trim()} (M4).`,
+          });
+          createdCodes.push(kit.code);
+        }
+        // Filas multi-diseño del kit (FIJ/MOV): pieces desde los uploads.
+        for (const design of kit.designs) {
+          if (!design.handsParts) continue;
+          if (design.exists) {
+            reusedCodes.push(design.code);
+            continue;
+          }
+          const pieces = design.handsParts
+            .map((part) => {
+              const binding = req.designs?.[`${kit.code}:${part.hand}:${design.code}`];
+              return binding ? ({ anchor: part.hand, asset: binding } as HardwarePiece) : null;
+            })
+            .filter((pc): pc is HardwarePiece => pc !== null);
+          newHardware.push({
+            id: idFor(design.code),
+            code: design.code,
+            name: design.name,
+            unit: 'piece',
+            costPerUnit: 0,
+            active: true,
+            previewShape: 'slide',
+            notes: DESIGN_NOTES(kit.code),
+            kitHardwareId: kitId,
+            ...(pieces.length > 0 ? { pieces } : {}),
+          });
+          createdCodes.push(design.code);
+        }
+      }
+
+      // 2. Herrajes accesorios del E con piezas por ancla (F1).
+      const accessoryIds: string[] = [];
+      for (const acc of plan.accessories) {
+        const accId = idFor(acc.code);
+        accessoryIds.push(accId);
+        if (acc.exists) {
+          reusedCodes.push(acc.code);
+          continue;
+        }
+        const pieces = acc.anchors
+          .map((anchor) => {
+            const binding = req.designs?.[`${acc.code}:${anchor}`];
+            return binding ? ({ anchor, asset: binding } as HardwarePiece) : null;
+          })
+          .filter((pc): pc is HardwarePiece => pc !== null);
+        newHardware.push({
+          id: accId,
+          code: acc.code,
+          name: acc.name,
+          unit: 'piece',
+          costPerUnit: 0,
+          active: true,
+          notes: `Accesorio del cajón E del sistema ${req.input.code.trim()} (#1519): se elige por mueble y el motor lo monta por cajón.`,
+          ...(pieces.length > 0 ? { pieces } : {}),
+        });
+        createdCodes.push(acc.code);
+      }
+
+      // 3. Grupo de accesorios del kit E (#1519).
+      // 4. UN agregado con variantes de altura — receta SIN miembros de kit
+      // fijos: el sync por bahía (syncAgregadoRigidMembersFromCatalog con el
+      // kit efectivo) materializa las partes de la altura elegida (#1493).
+      const presentationMotion = presentationMotionFor(plan.agregado.motion, plan.agregado.depthMm);
+      const baseKit = plan.kits[0]!;
+      const agregado: Agregado = {
+        id: ctx.newId(),
+        code: plan.agregado.code,
+        name: plan.agregado.name,
+        active: true,
+        externalDims: {
+          width: plan.agregado.widthMm,
+          height: Math.max(...plan.agregado.variants.map((v) => v.khMinMm)),
+          depth: plan.agregado.depthMm,
+        },
+        commercialKitHardwareId: idFor(baseKit.code),
+        ...(presentationMotion ? { presentationMotion } : {}),
+        variantSets: [
+          {
+            id: `${req.input.code.trim()}-heights`,
+            dimension: 'height',
+            variants: plan.agregado.variants.map((v) => ({
+              nominalDimensionMm: v.khMinMm,
+              hardwareId: idFor(v.kitCode),
+              commercialKitHardwareId: idFor(v.kitCode),
+            })),
+          },
+        ],
+      };
+
+      // 5. Grupo de accesorios del E como opción (kind hardware, link al kit E).
+      let accessoryGroupDraft: OptionGroup | null = null;
+      if (plan.accessoryGroup) {
+        const eKitId = systemKitIds.get('E');
+        if (eKitId) {
+          accessoryGroupDraft = {
+            id: ctx.newId(),
+            code: plan.accessoryGroup.code,
+            name: plan.accessoryGroup.name,
+            kind: 'hardware',
+            required: plan.accessoryGroup.required,
+            optionIds: accessoryIds,
+            kitHardwareId: eKitId,
+          };
+        }
+      }
+
+      await ctx.saveAndToast(
+        (c) => ({
+          ...c,
+          hardware: [...(c.hardware ?? []), ...newHardware],
+          agregados: [...(c.agregados ?? []), agregado],
+          ...(accessoryGroupDraft
+            ? { optionGroups: [...(c.optionGroups ?? []), accessoryGroupDraft] }
+            : {}),
+        }),
+        `✓ Sistema «${req.input.code.trim()}» creado (${plan.kits.length} alturas)`,
       );
 
       return {

@@ -290,6 +290,9 @@ export interface ShellViewCtx {
   readonly createFromTemplate: (templateId: string, draft: ProjectDraft) => void;
   readonly createHardware: (draft: HardwareDraft) => void;
   readonly createHardwareKit: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
+  readonly createHardwareKitSystem: (
+    req: import('@granete/domain').HardwareKitSystemCreateRequest,
+  ) => Promise<HardwareKitResult>;
   readonly kitTemplates: readonly WorkshopKitTemplateRow[];
   readonly kitTemplatesLoading: boolean;
   readonly kitTemplatesError: string | null;
@@ -634,6 +637,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     createFromTemplate,
     createHardware,
     createHardwareKit,
+    createHardwareKitSystem,
     createMaterial,
     createMaterialCategory,
     createHardwareCategory,
@@ -2050,6 +2054,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onCreateCategory={canMutateCatalog ? createHardwareCategory : undefined}
           onUpdateCategory={canMutateCatalog ? updateHardwareCategory : undefined}
           onDeleteCategory={canMutateCatalog ? deleteHardwareCategory : undefined}
+          onCreateKitSystem={canMutateCatalog ? createHardwareKitSystem : undefined}
           optionGroups={optionGroups}
           onCreateOptionGroup={
             canMutateCatalog

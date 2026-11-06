@@ -58,6 +58,8 @@ import {
 import { ActiveBadge, CatalogTable, type CatalogColumn } from '../CatalogTable';
 import { HardwareFormModal } from './HardwareFormModal';
 import { HardwareKitWizardModal } from './HardwareKitWizardModal';
+import { HardwareKitSystemWizardModal } from './HardwareKitSystemWizardModal';
+import { uploadHardwareAssetBinding } from '@granete/storage';
 import { KitTemplateEditorModal } from './KitTemplateEditorModal';
 import {
   UNIT_LABELS,
@@ -112,6 +114,10 @@ export interface HardwareCatalogProps {
   readonly onCreateOptionGroup?: (draft: { code: string; name: string; required: boolean; kitHardwareId: string }) => void;
   readonly onUpdateOptionGroup?: (id: string, draft: { code: string; name: string; required: boolean; optionIds: string[]; kitHardwareId: string }) => void;
   readonly onDeleteOptionGroup?: (id: string) => void;
+  /** #1546 M4: sistema generador — asistente + acción del store. */
+  readonly onCreateKitSystem?: (
+    req: import('@granete/domain').HardwareKitSystemCreateRequest,
+  ) => Promise<import('@granete/domain').HardwareKitResult>;
 }
 
 // K4 #1032: same workshop-facing labels as the form's shape select — the
@@ -157,6 +163,7 @@ export function HardwareCatalog({
   onCreateOptionGroup,
   onUpdateOptionGroup,
   onDeleteOptionGroup,
+  onCreateKitSystem,
 }: HardwareCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -186,6 +193,8 @@ export function HardwareCatalog({
   const [readbackError, setReadbackError] = useState<string | null>(null);
   // #1416: kit wizard («Juego de herraje»).
   const [kitWizardOpen, setKitWizardOpen] = useState(false);
+  // #1546 M4: asistente del sistema generador.
+  const [systemWizardOpen, setSystemWizardOpen] = useState(false);
   // #1422 slice 2: editor de plantillas del taller (desde el asistente).
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WorkshopKitTemplateRow | null>(null);
@@ -579,6 +588,16 @@ export function HardwareCatalog({
             >
               <PackagePlus size={16} strokeWidth={1.5} aria-hidden />
               Juego de herraje
+            </button>
+          ) : canMutate && !isTrulyEmpty && onCreateKitSystem ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setSystemWizardOpen(true)}
+              data-testid="hardware-system-wizard-open"
+            >
+              <PackagePlus size={16} strokeWidth={1.5} aria-hidden />
+              Nuevo sistema
             </button>
           ) : undefined
         }
@@ -1043,6 +1062,19 @@ export function HardwareCatalog({
         }
         onUpdateKitPartConfig={canMutate ? updateKitPartConfig : undefined}
       />
+
+      {onCreateKitSystem ? (
+        <HardwareKitSystemWizardModal
+          open={systemWizardOpen}
+          onClose={() => setSystemWizardOpen(false)}
+          existingHardwareCodes={new Set(hardware.map((h) => h.code))}
+          existingAgregadoCodes={new Set(agregadoCodes)}
+          uploadDesign={(file, displayName) =>
+            uploadHardwareAssetBinding(assetService!, { file, displayName })
+          }
+          onSubmit={onCreateKitSystem}
+        />
+      ) : null}
 
       {onCreateKit ? (
         <HardwareKitWizardModal
