@@ -61,27 +61,27 @@ func TestOpeningProfilesRBACAndCRUD(t *testing.T) {
 	req = withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/opening-profiles", strings.NewReader(body)), "eng", string(domain.RoleIngeniero))
 	rr = httptest.NewRecorder()
 	srv.HandleOpeningProfiles(rr, req)
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("manufacturer-too-long status = %d, want 500 (domain validation rejects)", rr.Code)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("manufacturer-too-long status = %d, want 422 (domain validation rejects)", rr.Code)
 	}
 }
 
 func TestOpeningProfilesVerifiedRequiresCompleteGeometry(t *testing.T) {
 	srv := &Server{Store: &stubStore{}}
-	// verified SIN geometría completa ni origen: el write falla (la validación
+	// verified SIN geometría completa: el write falla con 422 (la validación
 	// de dominio impide el estado que colaría el gate pending).
 	body := `{"id":"op-bad","code":"GOLA-BAD","name":"Gola mala","grip_type":"gola","cross_section_shape":"L","compatible_placements":["top"],"datasheet_status":"verified","active":true}`
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/opening-profiles", strings.NewReader(body)), "eng", string(domain.RoleIngeniero))
 	rr := httptest.NewRecorder()
 	srv.HandleOpeningProfiles(rr, req)
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("verified-incomplete status = %d, want 500 (domain validation rejects)", rr.Code)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("verified-incomplete status = %d, want 422 (domain validation rejects)", rr.Code)
 	}
 }
 
 // B4 (review #1130): version conflicts answer 412 VERSION_CONFLICT and
 // missing rows 404 — like the rest of the If-Match catalog family — so the
-// web client's "recargá y reintentá" path works instead of a 500 that
+// web client's "recarga y vuelve a intentar" path works instead of a 500 that
 // strands a concurrent editor.
 func TestHandleOpeningProfileByIDConflictMaps412(t *testing.T) {
 	srv := &Server{Store: &stubStore{openingProfileErr: storage.ErrVersionConflict}}
@@ -120,5 +120,53 @@ func TestHandleOpeningProfileByIDMissingMaps404(t *testing.T) {
 	srv.HandleOpeningProfileByID(getRR, getReq)
 	if getRR.Code != http.StatusNotFound {
 		t.Fatalf("GET status = %d, want %d", getRR.Code, http.StatusNotFound)
+	}
+}
+
+// #1530 — v2 writes: unknown roles and invalid discounts answer 422 with the
+// Spanish message; reads carry the server-computed usage per position.
+func TestOpeningProfilesV2WriteRulesAnd422(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	post := func(body string) *httptest.ResponseRecorder {
+		req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/opening-profiles", strings.NewReader(body)), "eng", string(domain.RoleIngeniero))
+		rr := httptest.NewRecorder()
+		srv.HandleOpeningProfiles(rr, req)
+		return rr
+	}
+	base := `"id":"op-v2","code":"GOLA-L","name":"Gola L","material":"aluminum","cross_section_shape":"L","positions":["top"],"profile_height_mm":56.5,"profile_depth_mm":27.2,"active":true`
+
+	rr := post(`{` + base + `,"front_discount_top_mm":52,"bom_members":{"tira":{"hardware_id":"hw","rule":"interior_width"}}}`)
+	if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "no existe") {
+		t.Fatalf("unknown role: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	rr = post(`{` + base + `,"front_discount_top_mm":0}`)
+	if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "descuento del frente arriba") {
+		t.Fatalf("zero discount: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	rr = post(`{` + base + `,"positions":["top","between"],"front_discount_top_mm":52}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, want := range []string{`"door_reduction_mm":52`, `"grip_type":"gola"`, `"usage":`, `"front_discount_between_mm"`, `descuento del frente entre frentes`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("create readback missing %s: %s", want, body)
+		}
+	}
+}
+
+func TestOpeningProfileSuggestionsEndpoint(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/opening-profiles/suggestions?profile_depth_mm=27", nil), "v1", string(domain.RoleVendedor))
+	rr := httptest.NewRecorder()
+	srv.HandleOpeningProfileSuggestions(rr, req)
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"bevel_size_mm":25`) || !strings.Contains(rr.Body.String(), `"front_discount_top_mm":40`) {
+		t.Fatalf("suggestions: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	req = withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/opening-profiles/suggestions?profile_depth_mm=-3", nil), "v1", string(domain.RoleVendedor))
+	rr = httptest.NewRecorder()
+	srv.HandleOpeningProfileSuggestions(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("negative depth: status=%d", rr.Code)
 	}
 }

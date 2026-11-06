@@ -56,6 +56,23 @@ type OpeningProfile struct {
 	Version         int64                       `json:"version"`
 	CreatedAt       time.Time                   `json:"created_at"`
 	UpdatedAt       time.Time                   `json:"updated_at"`
+
+	// #1530 — gola profile v2 (ADR-0009 A2.1, §14.2). See opening_profile_v2.go.
+	// Material is aluminum | melamine (Italian gola). Empty on a write means
+	// the client sent the legacy shape (bridge until #1534).
+	Material string `json:"material,omitempty"`
+	// Positions is top | between; a profile may declare both.
+	Positions []string `json:"positions"`
+	// The workshop's front discount per position, measured from the cabinet
+	// height (A3). nil = not declared: the profile cannot be used there.
+	FrontDiscountTopMm     *int `json:"front_discount_top_mm,omitempty"`
+	FrontDiscountBetweenMm *int `json:"front_discount_between_mm,omitempty"`
+	// V2Migration is the per-row report written by migration 000180.
+	// Server-owned and read-only: writes ignore it.
+	V2Migration map[string]any `json:"v2_migration,omitempty"`
+	// Usage is computed by the server on every read (never stored): for each
+	// position, whether the profile can be used there and what is missing.
+	Usage map[string]OpeningProfilePositionUsage `json:"usage,omitempty"`
 }
 
 // OpeningBodyModifier declares (data, not logic) how the profile modifies a
@@ -81,6 +98,12 @@ type OpeningBodyModifier struct {
 	BevelAngleDeg *float64 `json:"bevel_angle_deg,omitempty"`
 	BevelSizeMm   *float64 `json:"bevel_size_mm,omitempty"`
 	BevelAt       string   `json:"bevel_at,omitempty"`
+	// #1530 (§14.6): the Italian side notch follows the strip. NotchDepthSource
+	// "strip_thickness" means the notch depth is the resolved thickness of the
+	// fronts' material (never a typed constant), so NotchDepthMm stays nil.
+	// NotchClearanceMm is added to both notch dimensions (owner: 1 mm).
+	NotchDepthSource string   `json:"notch_depth_source,omitempty"`
+	NotchClearanceMm *float64 `json:"notch_clearance_mm,omitempty"`
 }
 
 // OpeningBOMMember is a BOM reference/rule (exact SKU + length rule), never a
@@ -102,6 +125,9 @@ type OpeningBOMMember struct {
 	// not declare geometry and the layout places nothing for it (fail-closed,
 	// never an engine default).
 	DimensionsMm *[3]float64 `json:"dimensions_mm,omitempty"`
+	// HeightMm is the strip height (#1530, `strip` role only): 70 mm by
+	// default for the Italian gola, editable by the workshop.
+	HeightMm *float64 `json:"height_mm,omitempty"`
 }
 
 var (
@@ -110,10 +136,11 @@ var (
 	OpeningProfilePlacements = []string{"top", "between", "bottom"}
 )
 
-// AuthoringReady reports whether the profile may participate in authoring:
-// a verified datasheet with every required geometry value present AND its
-// auditable origin. Anything less is a blocked state (the contract's
-// OPENING_PROFILE_DATASHEET_PENDING keeps real authoring out).
+// AuthoringReady reports whether the profile may participate in the LEGACY
+// design-opening authoring (pins of contract v1): a verified datasheet with
+// height, depth and an effective door discount. #1530: the geometry origin is
+// informational and no longer part of the gate (ADR-0009 A2.1). The v2 use
+// rule, per position, is UsageAt (opening_profile_v2.go).
 func (p *OpeningProfile) AuthoringReady() bool {
 	if p == nil || p.DatasheetStatus != "verified" {
 		return false
@@ -122,9 +149,7 @@ func (p *OpeningProfile) AuthoringReady() bool {
 	// legacy datasheet pair.
 	discount := p.DoorReductionMm != nil ||
 		(p.FrontReductionMm != nil && p.GripClearanceMm != nil)
-	return discount &&
-		p.ProfileHeightMm != nil && p.ProfileDepthMm != nil &&
-		strings.TrimSpace(p.GeometryOrigin) != ""
+	return discount && p.ProfileHeightMm != nil && p.ProfileDepthMm != nil
 }
 
 // AuthoringBlocker names the explicit reason a profile is not authorable
@@ -136,33 +161,39 @@ func (p *OpeningProfile) AuthoringBlocker() string {
 	if p.DatasheetStatus != "verified" {
 		return "falta la ficha técnica verificada del proveedor (OQ-2)"
 	}
-	for missing, value := range map[string]*int{
-		"front_reduction_mm": p.FrontReductionMm,
-		"grip_clearance_mm":  p.GripClearanceMm,
-	} {
-		if value == nil {
-			return fmt.Sprintf("falta el parámetro de ficha %s", missing)
-		}
+	if p.ProfileHeightMm == nil {
+		return "falta el alto del perfil"
 	}
-	for missing, value := range map[string]*float64{
-		"profile_height_mm": p.ProfileHeightMm,
-		"profile_depth_mm":  p.ProfileDepthMm,
-	} {
-		if value == nil {
-			return fmt.Sprintf("falta el parámetro de ficha %s", missing)
-		}
+	if p.ProfileDepthMm == nil {
+		return "falta la profundidad del perfil"
 	}
-	if strings.TrimSpace(p.GeometryOrigin) == "" {
-		return "los valores de ficha sin origen auditable no son utilizables"
-	}
-	return "perfil no apto para authoring"
+	return "falta el descuento del frente"
 }
 
 // ValidateOpeningProfile enforces the write-time shape: identity, known
-// enums, placement vocabulary, and the verified-implies-complete rule (a
-// profile cannot claim a verified datasheet with missing geometry or missing
-// origin — that state would silently pass the pending gate).
+// enums, placement vocabulary, the verified-implies-complete rule (a profile
+// cannot claim a verified datasheet with missing geometry — that state would
+// silently pass the pending gate) and the v2 rules (#1530). Every rejection
+// is an *OpeningProfileValidationError, which the API answers with 422.
 func ValidateOpeningProfile(p OpeningProfile) error {
+	// p is a copy: a caller that skipped the write bridge (legacy shape)
+	// is validated as the store would persist it.
+	if p.IsLegacyShapedWrite() {
+		p.BOMMembers = cloneOpeningMembers(p.BOMMembers)
+		NormalizeOpeningProfileWrite(&p, nil)
+	}
+	// v2 first: on a v2 write the legacy door discount is a mirror of the
+	// top discount, so the v2 message is the one that names the field.
+	if err := validateOpeningProfileV2(p); err != nil {
+		return err
+	}
+	if err := validateOpeningProfileLegacy(p); err != nil {
+		return invalidOpeningProfile("%s", err.Error())
+	}
+	return nil
+}
+
+func validateOpeningProfileLegacy(p OpeningProfile) error {
 	if strings.TrimSpace(p.Code) == "" {
 		return fmt.Errorf("el código del perfil de apertura es obligatorio")
 	}
@@ -174,8 +205,10 @@ func ValidateOpeningProfile(p OpeningProfile) error {
 	if len([]rune(p.Manufacturer)) > 120 {
 		return fmt.Errorf("el fabricante del perfil debe tener como máximo 120 caracteres")
 	}
-	if !containsString(OpeningGripTypes, p.GripType) {
-		return fmt.Errorf("el tipo de grip %q no es válido", p.GripType)
+	// #1530 (A5): handle, bottom_reveal and none are not profiles. They
+	// stay in the vocabulary only so legacy rows keep reading.
+	if p.GripType != "gola" {
+		return fmt.Errorf("sólo se registran perfiles de gola; la jaladera, el rebase y «sin agarre» se eligen en el estilo de agarre")
 	}
 	if p.GripType == "gola" && !containsString(OpeningCrossSections, p.CrossSectionShape) {
 		return fmt.Errorf("el perfil gola declara una sección desconocida (%q)", p.CrossSectionShape)
@@ -191,7 +224,10 @@ func ValidateOpeningProfile(p OpeningProfile) error {
 	if p.DatasheetStatus != "pending" && p.DatasheetStatus != "verified" {
 		return fmt.Errorf("el estado de ficha %q no es válido", p.DatasheetStatus)
 	}
-	if p.DatasheetStatus == "verified" {
+	// #1530: the verified rule protects the legacy design pin, which only
+	// consumes top/bottom profiles. A between-only v2 profile is outside it.
+	legacyUsable := containsString(p.CompatiblePlacements, "top") || containsString(p.CompatiblePlacements, "bottom")
+	if p.DatasheetStatus == "verified" && legacyUsable {
 		// #1316: the workshop-facing requirement is the ENVELOPE (height,
 		// depth, origin) plus an EFFECTIVE door discount — the declared
 		// single number, or the legacy datasheet pair as documentation.
@@ -211,21 +247,11 @@ func ValidateOpeningProfile(p OpeningProfile) error {
 		if p.DoorReductionMm == nil && *p.GripClearanceMm < 0 {
 			return fmt.Errorf("un perfil con ficha verificada no puede declarar una holgura de grip negativa")
 		}
-		if strings.TrimSpace(p.GeometryOrigin) == "" {
-			return fmt.Errorf("un perfil con ficha verificada requiere el origen auditable de sus valores")
-		}
 	}
-	// #1316: the workshop-facing door discount is a positive measure — the
-	// UI scopes 30–40 for the metal gola, the contract only refuses nonsense.
+	// #1316: the workshop-facing door discount is a positive measure. #1530:
+	// no upper bound (the workshop's number is the authority).
 	if p.DoorReductionMm != nil && *p.DoorReductionMm <= 0 {
 		return fmt.Errorf("el descuento de puerta debe ser mayor a 0")
-	}
-	// #1327: a member references exactly ONE thing — a hardware SKU or a
-	// catalog component, never both.
-	for key, member := range p.BOMMembers {
-		if member.HardwareID != "" && member.ComponentID != "" {
-			return fmt.Errorf("el miembro %q no puede referenciar herraje y componente a la vez", key)
-		}
 	}
 	return nil
 }
@@ -237,4 +263,15 @@ func containsString(list []string, value string) bool {
 		}
 	}
 	return false
+}
+
+func cloneOpeningMembers(members map[string]OpeningBOMMember) map[string]OpeningBOMMember {
+	if members == nil {
+		return nil
+	}
+	cloned := make(map[string]OpeningBOMMember, len(members))
+	for key, member := range members {
+		cloned[key] = member
+	}
+	return cloned
 }

@@ -33,10 +33,8 @@ func TestOpeningProfile_roundTripAndIfMatch(t *testing.T) {
 				// #1327 slice 3: the declared door bevel rides the same JSONB.
 				{Role: "door", BevelAngleDeg: openingFloatPtr(45), BevelSizeMm: openingFloatPtr(18), BevelAt: "top_front"},
 			},
-			BOMMembers: map[string]domain.OpeningBOMMember{
-				"profile":  {HardwareID: "", Rule: "interior_width", Unit: "meter"},
-				"supports": {HardwareID: "", Rule: "per_length", SpacingMm: openingIntPtr(300)},
-			},
+			// #1530: hardware roles need a real catalog hardware; members are
+			// covered by opening_profile_v2_test.go and the quote tests.
 			Active: true,
 		}
 		if err := store.CreateOpeningProfile(txCtx, &profile); err != nil {
@@ -266,6 +264,15 @@ func TestOpeningProfile_componentMemberRoundTrip(t *testing.T) {
 	suffix := time.Now().Format("150405.000000")
 
 	withinInitialOrganization(t, store, func(txCtx context.Context) error {
+		// #1530: the strip references a real catalog component.
+		strip := &domain.Component{
+			Code: "CMP-TIRA-" + suffix, Name: "Tira gola italiana", Placement: domain.PlacementLateralIzquierdo,
+			GeometryKind: "rectangular_board", LengthMm: 600, WidthMm: 70, ThicknessMm: 16,
+			OptionRoles: []string{"FRENTES"}, Active: true,
+		}
+		if err := store.CreateComponent(txCtx, strip); err != nil {
+			return err
+		}
 		profile := domain.OpeningProfile{
 			ID:                   "op-comp-" + suffix,
 			Code:                 "GOLA-IT-TIRA",
@@ -281,7 +288,7 @@ func TestOpeningProfile_componentMemberRoundTrip(t *testing.T) {
 			GeometryOrigin:       "Tira de taller #1327",
 			DoorReductionMm:      openingIntPtr(32),
 			BOMMembers: map[string]domain.OpeningBOMMember{
-				"tira": {ComponentID: "comp-tira-gola-it", Rule: "interior_width", Unit: "piece"},
+				"strip": {ComponentID: strip.ID, Rule: "interior_width", Unit: "piece"},
 			},
 			Active: true,
 		}
@@ -292,15 +299,15 @@ func TestOpeningProfile_componentMemberRoundTrip(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		tira := loaded.BOMMembers["tira"]
-		if tira.ComponentID != "comp-tira-gola-it" || tira.HardwareID != "" {
+		tira := loaded.BOMMembers["strip"]
+		if tira.ComponentID != strip.ID || tira.HardwareID != "" || loaded.Material != domain.GolaMaterialMelamine {
 			t.Fatalf("component member drifted: %+v", tira)
 		}
 
 		// Both references at once: the ambiguity fails closed.
 		ambiguous := *loaded
 		ambiguous.BOMMembers = map[string]domain.OpeningBOMMember{
-			"tira": {HardwareID: "hw-x", ComponentID: "comp-tira-gola-it", Rule: "interior_width"},
+			"strip": {HardwareID: "hw-x", ComponentID: strip.ID, Rule: "interior_width"},
 		}
 		if err := store.UpdateOpeningProfile(txCtx, profile.ID, loaded.Version, &ambiguous); err == nil {
 			t.Fatal("miembro con herraje Y componente debe fallar cerrado")

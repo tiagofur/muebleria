@@ -56,6 +56,7 @@ import type {
   FactoryOrganization,
   FurnitureDefinitionLayout,
   FurnitureInstance,
+  GolaProfileSuggestion,
   Hardware,
   HardwareAsset,
   HardwareAssetRevision,
@@ -368,6 +369,7 @@ export abstract class GeneratedGraneteApiClient {
   deactivateHardwareProfile(token: string, profileId: string, version: number, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("DELETE", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, ifMatch: version, signal }); }
   listOpeningProfiles(token: string, signal?: AbortSignal): Promise<ReadonlyArray<OpeningProfile>> { return this.request("GET", "/catalog/opening-profiles", { arrayOf: "OpeningProfile", token, signal }); }
   createOpeningProfile(token: string, body: OpeningProfileWrite, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("POST", "/catalog/opening-profiles", { schema: "OpeningProfile", token, bodySchema: "OpeningProfileWrite", body, signal }); }
+  listOpeningProfileSuggestions(token: string, signal?: AbortSignal): Promise<ReadonlyArray<GolaProfileSuggestion>> { return this.request("GET", "/catalog/opening-profiles/suggestions", { arrayOf: "GolaProfileSuggestion", token, signal }); }
   getOpeningProfile(token: string, profileId: string, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("GET", `/catalog/opening-profiles/${encodeURIComponent(profileId)}`, { schema: "OpeningProfile", token, signal }); }
   updateOpeningProfile(token: string, profileId: string, version: number, body: OpeningProfileWrite, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("PUT", `/catalog/opening-profiles/${encodeURIComponent(profileId)}`, { schema: "OpeningProfile", token, ifMatch: version, bodySchema: "OpeningProfileWrite", body, signal }); }
   deactivateOpeningProfile(token: string, profileId: string, version: number, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("DELETE", `/catalog/opening-profiles/${encodeURIComponent(profileId)}`, { schema: "OpeningProfile", token, ifMatch: version, signal }); }

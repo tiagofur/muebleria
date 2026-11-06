@@ -134,6 +134,9 @@ import type {
   OpeningProfileCrossSection,
   OpeningProfilePlacement,
   OpeningProfileDatasheetStatus,
+  GolaProfileMaterial,
+  GolaProfilePosition,
+  GolaProfilePositionUsage,
   OpeningBodyModifier,
   OpeningBOMMember,
 } from '@granete/domain';
@@ -776,6 +779,25 @@ export function openingProfileFromApi(raw: Record<string, unknown>): OpeningProf
       unit: str(member.unit ?? member.Unit) || undefined,
       spacingMm: openingProfileInt(member.spacing_mm ?? member.spacingMm),
       dimensionsMm: dims,
+      componentId: str(member.component_id ?? member.componentId) || undefined,
+      heightMm: openingProfileInt(member.height_mm ?? member.heightMm),
+    };
+  }
+  const materialRaw = str(raw.material);
+  const material: GolaProfileMaterial | undefined =
+    materialRaw === 'aluminum' || materialRaw === 'melamine' ? materialRaw : undefined;
+  const positions = openingProfilePlacementList(raw.positions).filter(
+    (p): p is GolaProfilePosition => p === 'top' || p === 'between',
+  );
+  const usage: Partial<Record<GolaProfilePosition, GolaProfilePositionUsage>> = {};
+  const usageRaw = (raw.usage ?? {}) as Record<string, Record<string, unknown>>;
+  for (const position of positions) {
+    const entry = usageRaw[position];
+    if (!entry || typeof entry !== 'object') continue;
+    usage[position] = {
+      usable: bool(entry.usable, false),
+      missing: Array.isArray(entry.missing) ? entry.missing.map(String) : [],
+      message: str(entry.message) || undefined,
     };
   }
   return {
@@ -801,10 +823,17 @@ export function openingProfileFromApi(raw: Record<string, unknown>): OpeningProf
       notchHeightMm: openingProfileInt(m.notch_height_mm ?? m.notchHeightMm),
       notchDepthMm: openingProfileInt(m.notch_depth_mm ?? m.notchDepthMm),
       notchAt: str(m.notch_at ?? m.notchAt) || undefined,
+      notchDepthSource: str(m.notch_depth_source ?? m.notchDepthSource) || undefined,
+      notchClearanceMm: openingProfileInt(m.notch_clearance_mm ?? m.notchClearanceMm),
     })),
     bomMembers,
     active: bool(raw.active, true),
     version: typeof raw.version === 'number' ? raw.version : 1,
+    material,
+    positions,
+    frontDiscountTopMm: openingProfileInt(raw.front_discount_top_mm ?? raw.frontDiscountTopMm),
+    frontDiscountBetweenMm: openingProfileInt(raw.front_discount_between_mm ?? raw.frontDiscountBetweenMm),
+    usage,
   };
 }
 
@@ -817,10 +846,12 @@ export function openingProfileToApi(profile: OpeningProfile): Record<string, unk
     for (const [key, member] of Object.entries(profile.bomMembers)) {
       bomMembers[key] = {
         hardware_id: member.hardwareId,
+        ...(member.componentId ? { component_id: member.componentId } : {}),
         rule: member.rule,
         unit: member.unit ?? null,
         spacing_mm: member.spacingMm ?? null,
         dimensions_mm: member.dimensionsMm ? [...member.dimensionsMm] : null,
+        ...(member.heightMm !== undefined ? { height_mm: member.heightMm } : {}),
       };
     }
   }
@@ -837,9 +868,27 @@ export function openingProfileToApi(profile: OpeningProfile): Record<string, unk
     grip_clearance_mm: profile.gripClearanceMm ?? null,
     profile_height_mm: profile.profileHeightMm ?? null,
     profile_depth_mm: profile.profileDepthMm ?? null,
-    body_modifiers: profile.bodyModifiers ? [...profile.bodyModifiers] : [],
+    body_modifiers: (profile.bodyModifiers ?? []).map((m) => ({
+      role: m.role,
+      depth_reduction_mm: m.depthReductionMm ?? null,
+      notch_height_mm: m.notchHeightMm ?? null,
+      notch_depth_mm: m.notchDepthMm ?? null,
+      notch_at: m.notchAt ?? null,
+      ...(m.notchDepthSource ? { notch_depth_source: m.notchDepthSource } : {}),
+      ...(m.notchClearanceMm !== undefined ? { notch_clearance_mm: m.notchClearanceMm } : {}),
+    })),
     bom_members: bomMembers,
     active: profile.active,
+    // #1530: a profile that carries its material writes the v2 shape (the
+    // server mirrors the legacy fields); without it the write stays legacy.
+    ...(profile.material
+      ? {
+          material: profile.material,
+          positions: [...(profile.positions ?? [])],
+          front_discount_top_mm: profile.frontDiscountTopMm ?? null,
+          front_discount_between_mm: profile.frontDiscountBetweenMm ?? null,
+        }
+      : {}),
   };
 }
 
