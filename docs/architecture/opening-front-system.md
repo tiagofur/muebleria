@@ -527,6 +527,29 @@ The 1 mm clearance is added to both notch dimensions, as the owner confirmed in 
 
 Every migration runs on fresh and upgraded databases and writes a per-row report attached to its issue.
 
+#### 14.9.1. Implemented: gola profile v2 (#1530)
+
+- **Migration 000180** adds `material`, `positions`, `front_discount_top_mm`, `front_discount_between_mm` and `v2_migration` to `opening_profiles`. The RLS classification is unchanged.
+- **Data migration**, with the report in each row's `v2_migration`:
+  - `handle`, `bottom_reveal` and `none` rows are deactivated (`reason: grip_type_not_profile`);
+  - gola rows get `positions = compatible_placements ∩ {top, between}`, and a row left without a position is deactivated (`reason: no_v2_position`);
+  - `front_discount_top_mm` takes `door_reduction_mm`, or the pair `front_reduction_mm + grip_clearance_mm`. The number is copied as is: A3 measures it from `H`, and the engine change is #1529;
+  - `front_discount_between_mm` stays empty (`missing`), because no legacy field declares it;
+  - the only component member moves to the `strip` role, with `height_mm: 70` when absent. Unknown roles are reported, never dropped.
+- **Use rule:** `domain.OpeningProfile.UsageAt(position)` and the read-only `usage` map in every API read. A profile is usable at a position when it is active, declares the position, and has height, depth and that position's front discount. `datasheet_status` and `geometry_origin` are data only.
+- **Writes:** fixed roles (`profile`, `supports` and `endCaps` take a catalog hardware; `strip` takes a catalog component and only in melamine), discounts `> 0` with no upper bound, and references checked against the caller's catalog under RLS. Any rejection answers 422 with a Spanish message.
+- **Suggestions:** `GET /api/catalog/opening-profiles/suggestions` serves 8006 L (top 40), 8007 C (between 36) and the Italian gola (36/36, strip 70, notch 70 × strip thickness + 1, bevel 45° of `depth − 2`).
+- **Bridge until the legacy readers retire:**
+  - a write with `material` is v2-shaped: `grip_type = gola`, `compatible_placements = positions` and `door_reduction_mm = front_discount_top_mm`;
+  - a write without `material` (the #1526 editor) is legacy-shaped: the server derives the v2 fields and keeps the ones the client cannot express.
+
+| Still readable | Read by | Retired in |
+| --- | --- | --- |
+| `door_reduction_mm`, `front_reduction_mm`, `grip_clearance_mm` | engine, design pin | #1529, #1532 |
+| `grip_type`, `compatible_placements` | design selection and pin, #1526 editor | #1532, #1534 |
+| `datasheet_status` gate in the legacy selection, pin and engine | `DesignOpeningSelection` | #1532 (with the selection itself) |
+| legacy-shaped write bridge | #1526 editor | #1534 |
+
 ### 14.10. Delivery
 
 | Phase | Issues |
