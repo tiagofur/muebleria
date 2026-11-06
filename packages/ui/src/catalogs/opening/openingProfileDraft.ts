@@ -121,6 +121,33 @@ export function emptyMemberDraft(): OpeningProfileMemberDraft {
   return { key: '', kind: 'hardware', hardwareId: '', componentId: '', rule: 'interior_width', unit: 'piece', spacingMm: '', dims: ['', '', ''] };
 }
 
+/**
+ * #1526 — the hardware member roles the engine reads by exact key
+ * (OpeningMembersFromFrozenPin: profile, supports, endCaps). Any other key on
+ * a hardware member is silently ignored by the engine, so the editor only
+ * offers these.
+ */
+export const HARDWARE_MEMBER_ROLES = ['profile', 'supports', 'endCaps'] as const;
+export type HardwareMemberRole = (typeof HARDWARE_MEMBER_ROLES)[number];
+
+export function isHardwareMemberRole(key: string): key is HardwareMemberRole {
+  return (HARDWARE_MEMBER_ROLES as readonly string[]).includes(key);
+}
+
+/** #1526 — the rule and unit each role resolves with by default. */
+export function defaultsForHardwareRole(role: string): Pick<OpeningProfileMemberDraft, 'rule' | 'unit'> {
+  switch (role) {
+    case 'profile':
+      return { rule: 'interior_width', unit: 'meter' };
+    case 'supports':
+      return { rule: 'per_length', unit: 'piece' };
+    case 'endCaps':
+      return { rule: 'per_exposed_end', unit: 'piece' };
+    default:
+      return { rule: 'interior_width', unit: 'piece' };
+  }
+}
+
 export interface OpeningProfileRowLike {
   readonly id: string;
   readonly code: string;
