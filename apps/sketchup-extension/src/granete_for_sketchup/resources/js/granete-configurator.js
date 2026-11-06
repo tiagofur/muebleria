@@ -470,6 +470,90 @@
       block.appendChild(preview);
 
       libAgregadosContainer.appendChild(block);
+
+      // #1519 F2: accesorios del juego — una fila por grupo accesorio del
+      // agregado ELEGIDO de este rol (galería/boxcap/boxcover), justo debajo
+      // del selector del cajón. La elección viaja en el mismo mapa de
+      // materialChoices con el código del grupo accesorio.
+      var accOptions = (role.options || []).filter(function (opt) {
+        return chosenId && opt.agregadoId === chosenId &&
+               opt.accessoryGroups && opt.accessoryGroups.length > 0;
+      });
+      accOptions.forEach(function (opt) {
+        opt.accessoryGroups.forEach(function (acc) {
+          var accBlock = document.createElement("div");
+          accBlock.className = "material-role-block";
+          accBlock.style.marginLeft = "var(--space-3)";
+
+          var accHeader = document.createElement("div");
+          accHeader.className = "material-role-header";
+          var accTitle = document.createElement("span");
+          accTitle.className = "material-role-title";
+          accTitle.textContent = acc.name || acc.code;
+          accHeader.appendChild(accTitle);
+          if (acc.required) {
+            var accReq = document.createElement("span");
+            accReq.className = "status-badge neutral";
+            accReq.textContent = "requerido";
+            accHeader.appendChild(accReq);
+          }
+          accBlock.appendChild(accHeader);
+
+          var accPreview = document.createElement("button");
+          accPreview.type = "button";
+          accPreview.className = "material-selected-preview";
+          accPreview.style.marginTop = "var(--space-1)";
+          accPreview.title = "Clic para elegir un accesorio del catálogo";
+
+          var accTile = document.createElement("span");
+          accTile.className = "material-swatch material-swatch--hardware";
+          accTile.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="8" rx="2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>';
+          accPreview.appendChild(accTile);
+
+          var accInfo = document.createElement("span");
+          accInfo.className = "material-selected-info";
+          var accName = document.createElement("span");
+          accName.className = "material-selected-name";
+          var accChosenId = libMaterialChoices[acc.code] || null;
+          var accChosen = accChosenId ? hardwareEntryById(accChosenId) : null;
+          accName.textContent = accChosen ? (accChosen.name || accChosen.code) : (accChosenId || "--");
+          accInfo.appendChild(accName);
+          var accMeta = document.createElement("span");
+          accMeta.className = "material-selected-meta";
+          accMeta.textContent = (acc.optionIds && acc.optionIds.length > 0)
+            ? "Clic para elegir un accesorio del catálogo"
+            : "Sin miembros activos en el catálogo";
+          accInfo.appendChild(accMeta);
+          accPreview.appendChild(accInfo);
+
+          var accChevron = document.createElement("span");
+          accChevron.className = "material-chevron";
+          accChevron.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
+          accPreview.appendChild(accChevron);
+
+          var accOpen = function () {
+            if (!acc.optionIds || acc.optionIds.length === 0) return;
+            if (window.sketchup && typeof window.sketchup.open_hardware_selector === "function") {
+              window.sketchup.open_hardware_selector(JSON.stringify({
+                groupCode: acc.code,
+                groupLabel: (role.name || role.code) + " · " + (acc.name || acc.code),
+                rows: acc.optionIds.map(function (hid) {
+                  var h = hardwareEntryById(hid);
+                  return { id: hid, label: h ? ((h.code ? h.code + " — " : "") + (h.name || "")) : hid };
+                }),
+                chosenId: accChosenId,
+                onPick: function (hardwareId) {
+                  applyHardwareChoice(acc.code, hardwareId);
+                }
+              }));
+            }
+          };
+          accPreview.addEventListener("click", accOpen);
+          accBlock.appendChild(accPreview);
+
+          libAgregadosContainer.appendChild(accBlock);
+        });
+      });
     });
   }
 
@@ -511,6 +595,25 @@
     return agregadoRoles(def).filter(function (role) {
       return role.required && (!libMaterialChoices[role.code] || !agregadoEntryById(libMaterialChoices[role.code]));
     });
+  }
+
+  // #1519 F2: accesorios requeridos del agregado ELEGIDO — sin elección de
+  // cajón aún, el gate del propio cajón basta (los accesorios dependen de él).
+  function unchosenRequiredAccessories(def) {
+    var missing = [];
+    agregadoRoles(def).forEach(function (role) {
+      var chosenId = libMaterialChoices[role.code];
+      if (!chosenId || !agregadoEntryById(chosenId)) return;
+      (role.options || []).forEach(function (opt) {
+        if (opt.agregadoId !== chosenId) return;
+        (opt.accessoryGroups || []).forEach(function (acc) {
+          if (acc.required && (!libMaterialChoices[acc.code] || !hardwareEntryById(libMaterialChoices[acc.code]))) {
+            missing.push({ name: acc.name || acc.code });
+          }
+        });
+      });
+    });
+    return missing;
   }
 
   // #784 R4: explicit lineage context for the shared material renderer.
@@ -565,7 +668,8 @@
     // motivo concreto (el resolve fallaría cerrado igual — nunca a ciegas).
     var missingHw = unchosenRequiredHardwareRoles(activeLibDef);
     var missingAgr = unchosenRequiredAgregadoRoles(activeLibDef);
-    var missing = missingHw.concat(missingAgr);
+    var missingAcc = unchosenRequiredAccessories(activeLibDef);
+    var missing = missingHw.concat(missingAgr).concat(missingAcc);
     if (missing.length > 0) {
       btnInsert.disabled = true;
       btnInsert.title = "Elegí opción para: " +
