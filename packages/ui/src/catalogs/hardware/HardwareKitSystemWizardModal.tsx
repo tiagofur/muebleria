@@ -258,7 +258,78 @@ export function HardwareKitSystemWizardModal({
             ))}
           </fieldset>
 
-          <fieldset className="catalog-form__section">
+                    <fieldset className="catalog-form__section" data-testid="hardware-system-wizard-designs">
+            <legend className="catalog-form__section-title">Diseños 3D (opcionales)</legend>
+            <p className="catalog-form__hint">
+              Un archivo por pieza (.skp). Las piezas sin diseño se ven con la
+              representación genérica y podés subir el diseño después desde su
+              ficha.
+            </p>
+            {plan?.kits.map((kit) =>
+              kit.designs.map((design) =>
+                (design.handsParts ?? []).map((part) => {
+                  const key = fileKey(kit.code, part.hand, design.code);
+                  const slotId = `system-file-${kit.code}-${part.hand}-${design.code}`
+                    .toLowerCase()
+                    .replace(/[^a-z0-9-]/g, '-');
+                  const handLabel = part.hand === 'left' ? 'izq' : part.hand === 'right' ? 'der' : 'centro';
+                  return (
+                    <div className="catalog-form__field" key={key}>
+                      <label htmlFor={slotId}>
+                        {kit.code} · {design.name.includes('—') ? design.name.split('—')[1]!.trim() : design.name} ({handLabel})
+                      </label>
+                      <input
+                        id={slotId}
+                        type="file"
+                        accept=".skp,.glb"
+                        onChange={(e) =>
+                          setFiles((prev) => {
+                            const next = { ...prev };
+                            if (e.target.files?.[0]) next[key] = e.target.files[0];
+                            else delete next[key];
+                            return next;
+                          })
+                        }
+                        disabled={design.exists}
+                        data-testid={`hardware-system-wizard-file-${key}`}
+                      />
+                    </div>
+                  );
+                }),
+              ),
+            )}
+            {plan?.accessories.map((acc) =>
+              acc.anchors.map((anchor) => {
+                const key = accFileKey(acc.code, anchor);
+                const slotId = `system-file-${acc.code}-${anchor}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+                const handLabel = anchor === 'left' ? 'izq' : anchor === 'right' ? 'der' : 'centro';
+                return (
+                  <div className="catalog-form__field" key={key}>
+                    <label htmlFor={slotId}>
+                      {acc.code} ({handLabel})
+                    </label>
+                    <input
+                      id={slotId}
+                      type="file"
+                      accept=".skp,.glb"
+                      onChange={(e) =>
+                        setFiles((prev) => {
+                          const next = { ...prev };
+                          if (e.target.files?.[0]) next[key] = e.target.files[0];
+                          else delete next[key];
+                          return next;
+                        })
+                      }
+                      disabled={acc.exists}
+                      data-testid={`hardware-system-wizard-file-${key}`}
+                    />
+                  </div>
+                );
+              }),
+            )}
+          </fieldset>
+
+<fieldset className="catalog-form__section">
             <legend className="catalog-form__section-title">Accesorios del cajón E</legend>
             <p className="catalog-form__hint">
               Cada accesorio se genera como un herraje con par de piezas (izq/der) y

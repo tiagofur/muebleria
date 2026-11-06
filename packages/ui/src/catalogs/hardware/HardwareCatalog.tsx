@@ -575,30 +575,36 @@ export function HardwareCatalog({
         icon={<Settings2 size={16} strokeWidth={1.5} />}
         secondaryActions={
           // #1416: kit wizard as a visible secondary action (K5: «Nuevo
-          // herraje» remains the single primary CTA).
-          canMutate && !isTrulyEmpty && onCreateKit ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                onReloadKitTemplates?.();
-                setKitWizardOpen(true);
-              }}
-              data-testid="hardware-kit-wizard-open"
-            >
-              <PackagePlus size={16} strokeWidth={1.5} aria-hidden />
-              Juego de herraje
-            </button>
-          ) : canMutate && !isTrulyEmpty && onCreateKitSystem ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setSystemWizardOpen(true)}
-              data-testid="hardware-system-wizard-open"
-            >
-              <PackagePlus size={16} strokeWidth={1.5} aria-hidden />
-              Nuevo sistema
-            </button>
+          // herraje» remains the single primary CTA). #1546 M4: «Nuevo
+          // sistema» convive — generan superficies distintas (kit vs sistema).
+          canMutate && !isTrulyEmpty ? (
+            <>
+              {onCreateKit ? (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    onReloadKitTemplates?.();
+                    setKitWizardOpen(true);
+                  }}
+                  data-testid="hardware-kit-wizard-open"
+                >
+                  <PackagePlus size={16} strokeWidth={1.5} aria-hidden />
+                  Juego de herraje
+                </button>
+              ) : null}
+              {onCreateKitSystem ? (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setSystemWizardOpen(true)}
+                  data-testid="hardware-system-wizard-open"
+                >
+                  <PackagePlus size={16} strokeWidth={1.5} aria-hidden />
+                  Nuevo sistema
+                </button>
+              ) : null}
+            </>
           ) : undefined
         }
         primaryAction={
