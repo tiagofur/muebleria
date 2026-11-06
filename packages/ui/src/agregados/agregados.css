@@ -139,6 +139,7 @@
   margin: 0;
   max-height: 460px;
   overflow-y: auto;
+  overflow-x: clip;
 }
 
 .agregado-editor__item-row {
@@ -150,7 +151,8 @@
   border-radius: var(--radius-md);
   background: var(--surface-card);
   transition: border-color 120ms ease;
-}
+
+  flex-wrap: wrap;}
 
 .agregado-editor__item-row:hover {
   border-color: var(--brand-300);
@@ -159,9 +161,16 @@
 .agregado-editor__item-fields {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--space-2);
   align-items: end;
+}
+
+/* #1519 F3 (review owner): los hijos del grid NO imponen min-content — el
+   mínimo estructural del CatalogPicker (12rem) desbordaba la tarjeta y
+   producía el «campo a medias» con scroll horizontal a 1280px. */
+.agregado-editor__item-fields > * {
+  min-width: 0;
 }
 
 .agregado-editor__item-hint {
@@ -297,7 +306,7 @@
 /* Three-field grid (Componente / Cantidad / Ubicación) for agregado pieces,
    overriding the default 1fr-auto-auto row used by the hardware tab. */
 .agregado-editor__item-fields--grid {
-  grid-template-columns: 1fr 100px 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: var(--space-3);
   align-items: flex-start;
 }
@@ -516,6 +525,7 @@
 
 .agregado-recipe__axis {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
@@ -532,9 +542,14 @@
 
 .agregado-recipe__variant {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
+}
+
+.agregado-recipe__variant > * {
+  min-width: 0;
 }
 
 /* #1493: juego comercial opcional por variante — compacto junto al herraje. */

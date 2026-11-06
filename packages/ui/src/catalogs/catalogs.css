@@ -538,6 +538,12 @@
   min-width: 12rem;
 }
 
+/* #1519 F3: dentro del editor de agregados los pickers viven en celdas de
+   grid estrechas — el min-width global de 12rem desbordaba la tarjeta. */
+.agregado-editor .catalog-picker__trigger {
+  min-width: 0;
+}
+
 .catalog-picker__trigger:hover:not(:disabled) {
   border-color: var(--border-strong);
   background: var(--surface-hover);
