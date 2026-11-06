@@ -113,6 +113,39 @@ func deriveMemberHostMachining(
 				})
 				continue
 			}
+			// #1512 M3: a right-hand member consumes the LEFT-canonical
+			// catalog profile mirrored — hole x' = HW − x − ⌀. Requires the
+			// canonical hardware width; non-hole kinds fail closed (no
+			// invented mapping), same contract as the TS partDrilling twin.
+			if member.Hand == domain.MemberHandRight {
+				widthMm, _, _ := HardwareFormulaDims(&hw)
+				if widthMm <= 0 {
+					*issues = append(*issues, domain.ContractIssue{
+						Code: "MEMBER_HOST_HAND_MIRROR_REQUIRES_DIMENSIONS",
+						Message: fmt.Sprintf("el miembro %s declara hand right pero el herraje %s no tiene ancho canónico (dimensions W) para espejar su perfil",
+							memberID, hw.Code),
+						Severity:    domain.IssueSeverityError,
+						EntityID:    memberID,
+						Path:        fmt.Sprintf("furniture.assemblies[assemblyInstanceId=%s].rigidMembers[memberId=%s]", assembly.AssemblyInstanceID, memberID),
+						Remediation: "Declara dimensions W×H×D en el herraje o usa el perfil por separado por mano.",
+					})
+					continue
+				}
+				mirrored, ok := mirrorMachiningProfileForRightHand(profile, widthMm)
+				if !ok {
+					*issues = append(*issues, domain.ContractIssue{
+						Code: "MEMBER_HOST_HAND_MIRROR_UNSUPPORTED_KIND",
+						Message: fmt.Sprintf("el miembro %s declara hand right y el herraje %s lleva operaciones no-taladro en su perfil: el espejo v1 sólo cubre holes",
+							memberID, hw.Code),
+						Severity:    domain.IssueSeverityError,
+						EntityID:    memberID,
+						Path:        fmt.Sprintf("furniture.assemblies[assemblyInstanceId=%s].rigidMembers[memberId=%s]", assembly.AssemblyInstanceID, memberID),
+						Remediation: "Declara el perfil por mano (herrajes separados) o usa sólo operaciones de taladro.",
+					})
+					continue
+				}
+				profile = mirrored
+			}
 			for _, part := range profile.Parts {
 				for _, op := range part.Operations {
 					holeWorld, ok := memberHostHoleWorld(op, member, origin, frontPlaneY)
@@ -161,6 +194,36 @@ func deriveMemberHostMachining(
 // members from JSON).
 func memberHostPlacement(member domain.ResolvedRigidMember) string {
 	return member.HostPlacement
+}
+
+// mirrorMachiningProfileForRightHand (#1512 M3) mirrors a LEFT-canonical
+// catalog profile for a right-hand member. XMm is the hole CENTER in the
+// hardware frame (repo convention: seed fixtures and the Ruby projector both
+// place circles at radius ⌀/2 centered on x_mm), so the mirror is
+// x' = HW − x — a center-symmetric hole (x = HW/2) maps to itself. Depth,
+// inner diameter and label ride unchanged. Returns ok=false when any
+// operation is not a hole kind — the mirror never invents a mapping.
+func mirrorMachiningProfileForRightHand(profile *domain.HardwareMachiningProfile, hardwareWidthMm float64) (*domain.HardwareMachiningProfile, bool) {
+	mirrored := &domain.HardwareMachiningProfile{}
+	mirrored.Parts = make([]domain.HardwareMachiningPart, len(profile.Parts))
+	for pi, part := range profile.Parts {
+		out := domain.HardwareMachiningPart{ID: part.ID, Role: part.Role}
+		out.Operations = make([]domain.MachiningOperation, len(part.Operations))
+		for oi, op := range part.Operations {
+			kind := strings.ToLower(strings.TrimSpace(op.Kind))
+			// Round-hole kinds only (the repo vocabulary): blind/through holes
+			// and screw pilots (the Blum datum profiles use screw_pilot).
+			// Anything else (grooves, slots) fails closed — no invented mapping.
+			if kind != "blind_hole" && kind != "through_hole" && kind != "hole" && kind != "screw_pilot" {
+				return nil, false
+			}
+			mirrored := op
+			mirrored.XMm = hardwareWidthMm - op.XMm
+			out.Operations[oi] = mirrored
+		}
+		mirrored.Parts[pi] = out
+	}
+	return mirrored, true
 }
 
 // memberHostIdentity resolves the member's id and its already-resolved

@@ -146,7 +146,16 @@ func ResolveAgregadoAssembly(
 		if err != nil {
 			return domain.ResolvedAssembly{}, err
 		}
-		xCoord, err := calculateAxisPlacementCoord("x", member.Placement.X, params.WidthMm, hwDims)
+		// #1512 M3: closed hand vocabulary — an unknown value is a recipe
+		// authoring bug and must fail closed, never resolve as legacy (the
+		// definition validation also guards; this is the runtime defense).
+		if !domain.IsValidMemberHand(member.Hand) {
+			return domain.ResolvedAssembly{}, fmt.Errorf("member %s: hand inválida %q (valores: left|right)", member.MemberID, member.Hand)
+		}
+		// #1512 M3: default X anchor by hand (left → min/+, right → max/−)
+		// when the member declares no explicit X ref — single authority in
+		// domain.EffectivePlacement.
+		xCoord, err := calculateAxisPlacementCoord("x", member.EffectivePlacement().X, params.WidthMm, hwDims)
 		if err != nil {
 			return domain.ResolvedAssembly{}, fmt.Errorf("member %s: %w", member.MemberID, err)
 		}
@@ -185,6 +194,7 @@ func ResolveAgregadoAssembly(
 			BOMRole:         member.BOMRole,
 			ActorMembership: member.ActorMembership,
 			HostPlacement:   member.HostPlacement, // #1429 slice A: declared external host rides to the machining derivation.
+			Hand:            member.Hand,          // #1512 M3: side rides to the per-hand asset binding.
 		}
 		// #1460 F2: sólo con override — payloads legacy byte-idénticos.
 		if member.DimensionOverrides != nil {

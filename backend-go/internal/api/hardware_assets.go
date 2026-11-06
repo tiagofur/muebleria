@@ -1058,15 +1058,30 @@ func (s *Server) HandleHardwareAssetFileGet(w http.ResponseWriter, r *http.Reque
 // The resolved facts (representation/digest/validation) replace whatever the
 // client echoed — the server is the only source for them.
 func (s *Server) resolveHardwareVisualBindingForWrite(r *http.Request, w http.ResponseWriter, h *domain.Hardware) bool {
-	if h.VisualAsset == nil {
-		return true
+	if h.VisualAsset != nil {
+		binding, err := s.Store.ResolveHardwareVisualAssetBinding(r.Context(), h.VisualAsset.AssetID, h.VisualAsset.AssetRevisionID)
+		if err != nil {
+			respondWithHardwareAssetError(w, err)
+			return false
+		}
+		h.VisualAsset = binding
 	}
-	binding, err := s.Store.ResolveHardwareVisualAssetBinding(r.Context(), h.VisualAsset.AssetID, h.VisualAsset.AssetRevisionID)
-	if err != nil {
-		respondWithHardwareAssetError(w, err)
-		return false
+	// #1512 M3: each declared hand resolves its binding through the SAME
+	// authority — a hand pointing at a nonexistent/retired/foreign revision
+	// fails the write here, never at first resolve.
+	if h.Hands != nil {
+		for _, hand := range []*domain.HardwareHand{h.Hands.Left, h.Hands.Right} {
+			if hand == nil || hand.Asset == nil {
+				continue
+			}
+			binding, err := s.Store.ResolveHardwareVisualAssetBinding(r.Context(), hand.Asset.AssetID, hand.Asset.AssetRevisionID)
+			if err != nil {
+				respondWithHardwareAssetError(w, err)
+				return false
+			}
+			hand.Asset = binding
+		}
 	}
-	h.VisualAsset = binding
 	return true
 }
 

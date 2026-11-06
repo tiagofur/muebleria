@@ -387,3 +387,48 @@ func TestMemberHostValidationAndFailClosed(t *testing.T) {
 		t.Fatalf("missing profile must fail closed with zero holes (issues=%+v, ops=%d)", issues, len(ops))
 	}
 }
+
+// #1512 M3: the right-hand mirror uses the repo hole-CENTER convention
+// (x' = HW − x) — a center-symmetric hole maps to itself; non-hole kinds
+// fail closed with ok=false (no invented mapping).
+func TestMirrorMachiningProfileForRightHand_1512(t *testing.T) {
+	profile := &domain.HardwareMachiningProfile{
+		Parts: []domain.HardwareMachiningPart{
+			{
+				ID:   "p1",
+				Role: "cup",
+				Operations: []domain.MachiningOperation{
+					{ID: "cup", Kind: "blind_hole", DiameterMm: 35, DepthMm: ptrFloat64(12.5), XMm: 0, YMm: 9, Label: "Taza"},
+					{ID: "pilot", Kind: "through_hole", DiameterMm: 5, XMm: 45.5, YMm: 9},
+				},
+			},
+		},
+	}
+
+	mirrored, ok := mirrorMachiningProfileForRightHand(profile, 91)
+	if !ok {
+		t.Fatal("hole-only profile must mirror")
+	}
+	ops := mirrored.Parts[0].Operations
+	if ops[0].XMm != 91 {
+		t.Fatalf("cup center x = %g, want 91 (91 − 0: centro se espeja al lado opuesto)", ops[0].XMm)
+	}
+	if ops[1].XMm != 45.5 {
+		t.Fatalf("pilot center x = %g, want 45.5 (auto-simétrico: 91 − 45.5)", ops[1].XMm)
+	}
+	if ops[0].DepthMm == nil || *ops[0].DepthMm != 12.5 {
+		t.Fatalf("depth must ride unchanged, got %v", ops[0].DepthMm)
+	}
+	if ops[0].Label != "Taza" {
+		t.Fatalf("label must ride unchanged, got %q", ops[0].Label)
+	}
+
+	nonHole := &domain.HardwareMachiningProfile{
+		Parts: []domain.HardwareMachiningPart{
+			{ID: "p1", Operations: []domain.MachiningOperation{{ID: "g1", Kind: "groove", XMm: 10}}},
+		},
+	}
+	if _, ok := mirrorMachiningProfileForRightHand(nonHole, 91); ok {
+		t.Fatal("non-hole kinds must fail closed (ok=false), never invent a mapping")
+	}
+}

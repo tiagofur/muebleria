@@ -21,6 +21,7 @@ import type {
   ReleaseEngineeringState,
   Hardware,
   HardwareCategoryNode,
+  HardwareHand,
   HardwareLine,
   MaterialBoard,
   MaterialCategory,
@@ -500,6 +501,9 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     design_parts: h.designParts ? h.designParts.map((p) => ({ ...p })) : null,
     // Kit link (#1422 slice 1); null = herraje independiente.
     kit_hardware_id: h.kitHardwareId ?? null,
+    // #1512 M3: manos del herraje multi-diseño — sólo identifiers en el write
+    // (los facts server-resueltos nunca re-entran al storage).
+    hands: hardwareHandsToApi(h.hands),
     // #1507: category tree link + free-form brand; null/'' = unset.
     category_id: h.categoryId ?? null,
     brand: h.brand ?? '',
@@ -566,6 +570,9 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     ...(normalizeHardwareDesignParts(raw.design_parts ?? raw.designParts)),
     // Kit link (#1422 slice 1) — passthrough validado server-side.
     ...(kitHardwareId(raw.kit_hardware_id ?? raw.kitHardwareId)),
+    // #1512 M3: manos del herraje multi-diseño — passthrough de identifiers;
+    // los facts llegan server-resueltos y se conservan tal cual en memoria.
+    ...(normalizeHardwareHands(raw.hands)),
     // #1507: category tree link + free-form brand — unset = uncategorized.
     ...(str(raw.category_id ?? raw.categoryId)
       ? { categoryId: str(raw.category_id ?? raw.categoryId) }
@@ -4875,4 +4882,52 @@ export type MachineOutputSelectionsReadModelView = ReturnType<typeof machineOutp
 function kitHardwareId(raw: unknown): Pick<Hardware, 'kitHardwareId'> | {} {
   if (typeof raw !== 'string' || !raw.trim()) return {};
   return { kitHardwareId: raw };
+}
+
+/**
+ * #1512 M3: manos del herraje multi-diseño — write: sólo identifiers (los
+ * facts server-resueltos nunca re-entran al storage); read: passthrough de
+ * la forma validada (un objeto sin manos presentes no entra).
+ */
+function hardwareHandsToApi(
+  hands: Hardware['hands'],
+): Record<string, unknown> | null {
+  if (!hands) return null;
+  const handOut = (h?: HardwareHand): { asset: { assetId: string; assetRevisionId: string } } | null => {
+    const asset = h?.asset;
+    if (!asset || !asset.assetId || !asset.assetRevisionId) return null;
+    return { asset: { assetId: asset.assetId, assetRevisionId: asset.assetRevisionId } };
+  };
+  const left = handOut(hands.left);
+  const right = handOut(hands.right);
+  if (!left && !right) return null;
+  return { ...(left ? { left } : {}), ...(right ? { right } : {}) };
+}
+
+function normalizeHardwareHands(
+  raw: unknown,
+): Pick<Hardware, 'hands'> | {} {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const r = raw as Record<string, unknown>;
+  const handIn = (v: unknown): HardwareHand | undefined => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+    const assetRaw = (v as Record<string, unknown>).asset;
+    if (!assetRaw || typeof assetRaw !== 'object' || Array.isArray(assetRaw)) return {};
+    const a = assetRaw as Record<string, unknown>;
+    const assetId = str(a.assetId);
+    const assetRevisionId = str(a.assetRevisionId);
+    if (!assetId || !assetRevisionId) return {};
+    return { asset: { assetId, assetRevisionId } };
+  };
+  const left = handIn(r.left);
+  const right = handIn(r.right);
+  const hasLeft = Boolean(left && left.asset);
+  const hasRight = Boolean(right && right.asset);
+  if (!hasLeft && !hasRight) return {};
+  return {
+    hands: {
+      ...(hasLeft ? { left } : {}),
+      ...(hasRight ? { right } : {}),
+    },
+  };
 }

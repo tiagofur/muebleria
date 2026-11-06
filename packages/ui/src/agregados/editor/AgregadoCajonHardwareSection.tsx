@@ -486,8 +486,8 @@ export function AgregadoCajonHardwareSection({
             </li>
           ) : null}
           {ownEntries.map(({ m, idx }) => {
-            const sideLabel = (ref: AssemblyAxisRef): string =>
-              SIDE_REFS.find((r) => r.value === ref)?.label ?? ref;
+            const sideLabel = (ref: AssemblyAxisRef | undefined): string =>
+              SIDE_REFS.find((r) => r.value === ref)?.label ?? ref ?? '';
             if (m.source.kind === 'variant') {
               return (
                 <li
