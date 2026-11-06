@@ -69,6 +69,62 @@
     { id: "bottom", label: "Inferior" }
   ];
 
+  // #1527: the v1 resolve handles ONE front region, so «Entre frentes» is
+  // always refused by the server. It is never offered until the multi-zone
+  // resolver (#1529) lands.
+  var SELECTABLE_PLACEMENTS = ["top", "bottom"];
+
+  // #1527: every OPENING_* code the server can answer, in workshop words with
+  // the action and the place where it is fixed. A code missing here shows the
+  // generic text and goes to the console only — never to the card.
+  var WEB_SETTINGS = "Granete Web › Ajustes › Apertura";
+  var WEB_PROFILES = "Granete Web › Catálogo › Perfiles de apertura";
+  var REASON_TEXT = {
+    OPENING_OVERHANG_EVIDENCE_PENDING: "Falta configurar cuántos mm baja la puerta. Ajústalo en " + WEB_SETTINGS + ".",
+    OPENING_OVERHANG_RULE_UNAVAILABLE: "No se pudo leer cuántos mm baja la puerta. Revísalo en " + WEB_SETTINGS + ".",
+    OPENING_PROFILE_DATASHEET_PENDING: "Este perfil no tiene la ficha completa. Complétala en " + WEB_PROFILES + ".",
+    OPENING_PROFILE_UNKNOWN: "Este perfil ya no está en el catálogo. Elige otro perfil.",
+    OPENING_PROFILE_REQUIRED: "Elige un perfil de gola.",
+    OPENING_PROFILE_NOT_APPLICABLE: "Este sistema no usa perfil. Quita el perfil o elige Gola.",
+    OPENING_PROFILE_NOT_CURATED: "Tu taller no ofrece este perfil. Agrégalo en " + WEB_SETTINGS + ".",
+    OPENING_SYSTEM_UNAVAILABLE: "Tu taller no ofrece este sistema. Actívalo en " + WEB_SETTINGS + ".",
+    OPENING_SYSTEM_UNKNOWN: "Este sistema no existe en esta versión. Actualiza Granete for SketchUp.",
+    OPENING_PLACEMENT_RESTRICTED: "Tu taller no permite esa posición en este tipo de mueble. Elige otra posición.",
+    OPENING_PLACEMENT_INCOMPATIBLE: "El perfil no admite esa posición. Elige Superior o Inferior.",
+    OPENING_FURNITURE_TYPE_UNKNOWN: "El tipo de mueble no es válido. Revisa el mueble en Granete Web.",
+    OPENING_LAYOUT_INVALID: "Las medidas del mueble no alcanzan para esta apertura. Revisa el alto del mueble o el descuento del perfil.",
+    OPENING_BOUNDARY_DUPLICATE: "El agarre está repetido en la misma posición. Vuelve a aplicar la apertura.",
+    OPENING_BOUNDARY_INVALID: "La posición del agarre no es válida para este mueble. Elige Superior o Inferior.",
+    OPENING_BOUNDARY_UNKNOWN_ZONE: "La posición del agarre no es válida para este mueble. Elige Superior o Inferior.",
+    OPENING_BODY_MODIFIER_CONFLICT: "Los efectos del perfil sobre el mueble chocan entre sí. Revísalos en " + WEB_PROFILES + ".",
+    OPENING_BODY_MODIFIER_INVALID: "Los efectos del perfil sobre el mueble están incompletos. Revísalos en " + WEB_PROFILES + ".",
+    OPENING_BODY_MODIFIER_PLACEMENT_INVALID: "El perfil declara efectos en una posición que no admite. Revísalo en " + WEB_PROFILES + ".",
+    OPENING_BOM_BODY_CONTEXT_MISSING: "Faltan medidas del mueble para calcular el perfil en la lista de materiales.",
+    OPENING_BOM_INVALID: "Las piezas del perfil están mal configuradas. Revísalas en " + WEB_PROFILES + ".",
+    OPENING_BOM_PIN_SLICE_MISSING: "Esta apertura se guardó antes de que existiera la lista de materiales del perfil. Vuelve a aplicarla.",
+    OPENING_STACKED_FRONTS_UNSUPPORTED: "La gola o el rebase en muebles con cajones apilados todavía no está disponible. Por ahora usa jaladera en este mueble.",
+    OPENING_SELECTION_INVALID: "La selección de apertura no es válida. Revisa sistema, perfil y posición."
+  };
+  var GENERIC_REASON_TEXT = "No se pudo resolver la apertura. Revisa la configuración en " + WEB_SETTINGS + ".";
+
+  // reasonText turns a server reason into the card's words. Codes never
+  // reach the card: an unknown OPENING_* code shows the generic text.
+  function reasonText(reason, fallbackMessage) {
+    if (reason && REASON_TEXT[reason]) {
+      return REASON_TEXT[reason];
+    }
+    if (reason && /^OPENING_/.test(reason)) {
+      if (typeof console !== "undefined" && console.warn) {
+        console.warn("[granete-opening] código de apertura sin texto: " + reason);
+      }
+      return GENERIC_REASON_TEXT;
+    }
+    if (fallbackMessage && !/OPENING_[A-Z_]+/.test(fallbackMessage)) {
+      return fallbackMessage;
+    }
+    return GENERIC_REASON_TEXT;
+  }
+
   // The library default offering when the factory has no overlay decision
   // (mirrors the domain's availableOpeningSystems nil branch).
   var DEFAULT_SYSTEMS = ["handle", "gola", "bottom_overhang"];
@@ -167,10 +223,12 @@
       return [];
     }
     var profile = profileById(profileId);
-    if (!profile || !profile.compatible_placements || profile.compatible_placements.length === 0) {
-      return PLACEMENT_LABELS.map(function (p) { return p.id; });
-    }
-    return profile.compatible_placements.slice(0);
+    var declared = (!profile || !profile.compatible_placements || profile.compatible_placements.length === 0)
+      ? PLACEMENT_LABELS.map(function (p) { return p.id; })
+      : profile.compatible_placements;
+    return declared.filter(function (placement) {
+      return SELECTABLE_PLACEMENTS.indexOf(placement) !== -1;
+    });
   }
 
   function labelFor(list, id) {
@@ -297,7 +355,7 @@
       var unitCount = outcome.units > 0 ? " (" + outcome.units + ")" : "";
       row.textContent = "Geometría actualizada" + unitCount + ".";
     } else if (outcome.status === "failed") {
-      row.textContent = "La geometría no se pudo actualizar (" + (outcome.reason || "sin razón") +
+      row.textContent = "La geometría no se pudo actualizar (" + (/^OPENING_/.test(outcome.reason || "") ? reasonText(outcome.reason, "") : (outcome.reason || "sin razón")) +
         "); convergerá en la próxima edición o sincronización.";
     } else {
       // #1261: skipped/unchanged are NEVER silent — the honest reason is
@@ -349,7 +407,7 @@
         row.className = "subhead";
         row.style.cssText = "font-size: var(--text-xs); margin: var(--space-1) 0 0;";
         row.setAttribute("data-testid", "opening-front-" + (i + 1));
-        row.textContent = "Frente " + (i + 1) + ": " + front.widthMm + " × " + front.heightMm + " mm (read-only)";
+        row.textContent = "Frente " + (i + 1) + ": " + front.widthMm + " × " + front.heightMm + " mm (calculado)";
         body.appendChild(row);
       }
       return;
@@ -359,7 +417,7 @@
       blocked.className = "subhead";
       blocked.style.cssText = "font-size: var(--text-xs); margin: var(--space-1) 0 0;";
       blocked.setAttribute("data-testid", "opening-blocked");
-      blocked.textContent = "Apertura bloqueada a la espera de evidencia (" + (resolution.reason || "sin razón declarada") + ").";
+      blocked.textContent = "Apertura bloqueada: " + reasonText(resolution.reason, "");
       body.appendChild(blocked);
     }
   }
@@ -469,7 +527,7 @@
       error.style.cssText = "font-size: var(--text-xs); margin: var(--space-2) 0 0; color: var(--danger, #b00020);";
       error.setAttribute("data-testid", "opening-error");
       error.setAttribute("role", "alert");
-      error.textContent = state.draftError.message || state.draftError.reason;
+      error.textContent = reasonText(state.draftError.reason, state.draftError.message);
       body.appendChild(error);
     }
 
