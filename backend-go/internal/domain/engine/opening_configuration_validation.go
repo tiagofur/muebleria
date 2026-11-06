@@ -47,7 +47,6 @@ const (
 	OpeningReasonPlacementRestricted   = "OPENING_PLACEMENT_RESTRICTED"
 	OpeningReasonPlacementIncompatible = "OPENING_PLACEMENT_INCOMPATIBLE"
 	OpeningReasonFurnitureTypeUnknown  = "OPENING_FURNITURE_TYPE_UNKNOWN"
-	OpeningReasonOverhangEvidencePend  = "OPENING_OVERHANG_EVIDENCE_PENDING"
 )
 
 // OpeningConfigurationSelection is one proposed authoring selection.
@@ -89,7 +88,7 @@ func ValidateOpeningConfiguration(
 	capabilities *domain.OpeningCapabilities,
 	profiles []OpeningProfileSelectionData,
 	// overhangRule (#1138): the factory's BACKED case C rule parsed from the
-	// versioned `opening.bottom-overhang` blob. nil = case C stays a truthful
+	// grip styles since #1531 (never nil in production). nil = case C stays a truthful
 	// BLOCKED state; present = the selection is gateable like any other
 	// system.
 	overhangRule *domain.OpeningOverhangRule,
@@ -109,13 +108,10 @@ func ValidateOpeningConfiguration(
 
 	switch selection.System {
 	case domain.OpeningGripSystemBottomOverhang:
-		// Available, and resolvable only against the backed rule (#1138):
-		// without it the physical behaviour waits for OQ-3 field evidence —
-		// blocked is a truthful state, not an error. With it, the gate keeps
-		// applying the furniture-type/placement checks below.
-		if overhangRule == nil {
-			return OpeningConfigurationValidation{State: OpeningSelectionBlocked, Reason: OpeningReasonOverhangEvidencePend}
-		}
+		// #1531 (A4): the overhang millimetres come from the grip styles
+		// (20 by default), so the overhang no longer waits for field
+		// evidence; the furniture-type/placement checks below still apply.
+		_ = overhangRule
 	case domain.OpeningGripSystemHandle:
 		if selection.ProfileID != "" {
 			// Only gola consumes a profile; extra ids are incompatible input.
@@ -231,8 +227,18 @@ func OpeningSelectionReasonMessage(reason string) string {
 		return "el perfil no es compatible con la posición pedida"
 	case OpeningReasonFurnitureTypeUnknown:
 		return "tipo de mueble desconocido"
-	case OpeningReasonOverhangEvidencePend:
-		return "el rebase inferior espera evidencia de campo (OQ-3)"
 	}
 	return reason
+}
+
+// Selection vocabularies (#1134; moved here when #1531 retired the
+// capabilities blob parser).
+var openingGripSystemVocabulary = map[string]bool{
+	domain.OpeningGripSystemHandle:         true,
+	domain.OpeningGripSystemGola:           true,
+	domain.OpeningGripSystemBottomOverhang: true,
+}
+
+var openingFurnitureTypeVocabulary = map[string]bool{
+	"inferior": true, "superior": true, "alto": true,
 }

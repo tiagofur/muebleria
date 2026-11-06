@@ -11,10 +11,6 @@ import {
   type FactoryConstructionPolicy,
   isConstructionPolicyOwnedKey,
   policyToOverlayOverrides,
-  type OpeningCapabilities,
-  isOpeningCapabilitiesOwnedKey,
-  openingCapabilitiesToOverlayOverrides,
-  OPENING_OVERHANG_RULE_BLOB_KEY,
 } from '@granete/domain';
 import {
   parseGenerated,
@@ -299,50 +295,6 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
     return await this.createLibraryOverlay(token, {
       baseReleaseId: currentRel.id,
       overrides: policyOverrides,
-    }, signal);
-  }
-
-  /**
-   * #1134: save the factory opening capabilities into the organization's
-   * overlay overrides — same owned-key merge as the construction policy: the
-   * upsert touches ONLY `opening.capabilities`; every other overlay key
-   * (including the construction policy and foreign `joint.*` exceptions)
-   * survives untouched. With no active overlay, the current Standard release
-   * seeds a new one.
-   */
-  async saveOpeningCapabilities(
-    token: string,
-    capabilities: OpeningCapabilities,
-    activeOverlay: LibraryOverlayDetail | null,
-    signal?: AbortSignal,
-    overhangMm?: number | null,
-  ): Promise<LibraryOverlayDetail> {
-    // #1525: the bottom-overhang millimetres travel in the SAME overlay write
-    // (one If-Match version, no second PATCH racing the first). undefined =
-    // leave the key untouched; null = remove it; a number = set it.
-    const capabilityOverrides: Record<string, unknown> = openingCapabilitiesToOverlayOverrides(capabilities);
-    const ownsOverhang = overhangMm !== undefined;
-    if (typeof overhangMm === 'number') {
-      capabilityOverrides[OPENING_OVERHANG_RULE_BLOB_KEY] = { version: 1, overhangMm };
-    }
-    if (activeOverlay) {
-      const existingOverrides = (activeOverlay.overrides ?? {}) as Record<string, unknown>;
-      const nextOverrides: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(existingOverrides)) {
-        if (!isOpeningCapabilitiesOwnedKey(k) && !(ownsOverhang && k === OPENING_OVERHANG_RULE_BLOB_KEY)) {
-          nextOverrides[k] = v;
-        }
-      }
-      Object.assign(nextOverrides, capabilityOverrides);
-      return await this.updateLibraryOverlay(token, activeOverlay.id, activeOverlay.version, {
-        overrides: nextOverrides,
-      }, signal);
-    }
-
-    const currentRel = await this.getStandardCurrentRelease(token, signal);
-    return await this.createLibraryOverlay(token, {
-      baseReleaseId: currentRel.id,
-      overrides: capabilityOverrides,
     }, signal);
   }
 

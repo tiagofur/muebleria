@@ -956,7 +956,7 @@ export type {
 } from './openingBom';
 export { resolveOpeningBOM, OPENING_BOM_INVALID } from './openingBom';
 
-// --- Opening capabilities overlay (#1134) ---
+// --- Opening capabilities (#1134; projected from the grip styles since #1531) ---
 export type {
   OpeningGripSystem,
   FurnitureTypeKey,
@@ -966,26 +966,10 @@ export type {
   OpeningFurnitureTypeGrip,
   OpeningFurnitureTypeCapabilities,
   OpeningCapabilities,
-  OpeningCapabilitiesParseResult,
-} from './openingCapabilities';
-export {
-  parseOpeningCapabilities,
-  availableOpeningSystems,
-  DEFAULT_OPENING_CAPABILITIES,
-  OPENING_CAPABILITIES_BLOB_KEY,
-  isOpeningCapabilitiesOwnedKey,
-  openingCapabilitiesToOverlayOverrides,
 } from './openingCapabilities';
 
-// --- Opening overhang rule (#1138, caso C) ---
-export type {
-  OpeningOverhangRule,
-  OpeningOverhangRuleParseResult,
-} from './openingOverhangRule';
-export {
-  parseOpeningOverhangRule,
-  OPENING_OVERHANG_RULE_BLOB_KEY,
-} from './openingOverhangRule';
+// --- Opening overhang rule (#1138, caso C; from the grip styles since #1531) ---
+export type { OpeningOverhangRule } from './openingOverhangRule';
 
 // --- Opening configuration validator (#1135) ---
 export type {

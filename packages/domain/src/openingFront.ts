@@ -18,7 +18,7 @@
  *
  * Fail-closed by design: a profile whose datasheet is not verified blocks
  * authoring (OPENING_PROFILE_DATASHEET_PENDING); bottom_overhang blocks on
- * pending field evidence (OPENING_OVERHANG_EVIDENCE_PENDING, OQ-3). Nothing
+ * no millimetres from the grip styles (#1531) as invalid input. Nothing
  * is invented.
  */
 
@@ -111,8 +111,7 @@ export type OpeningResolutionErrorCode =
   | 'OPENING_BOUNDARY_DUPLICATE'
   | 'OPENING_BOUNDARY_UNKNOWN_ZONE'
   | 'OPENING_PROFILE_DATASHEET_PENDING'
-  | 'OPENING_PROFILE_UNKNOWN'
-  | 'OPENING_OVERHANG_EVIDENCE_PENDING';
+  | 'OPENING_PROFILE_UNKNOWN';
 
 export type OpeningResolutionResult =
   | { readonly ok: true; readonly resolution: OpeningResolution }
@@ -121,7 +120,7 @@ export type OpeningResolutionResult =
 interface OpeningProfileLookup {
   readonly profiles: readonly OpeningProfileData[];
   /** #1138 case C: the factory's BACKED overhang rule (the versioned
-   * `opening.bottom-overhang` blob, parsed fail-closed). Absent = no backed
+   * grip styles since #1531). Absent = no
    * rule: `bottom_overhang` stays BLOCKED (OQ-3 evidence pending, verbatim).
    * Present = the front extends below the body by exactly this value. */
   readonly overhangMm?: number;
@@ -162,16 +161,11 @@ export function resolveOpeningFront(
   }
 
   if (intent.positioning === 'bottom_overhang') {
-    // #1138 case C: the behaviour resolves ONLY against a backed rule (the
-    // versioned `opening.bottom-overhang` blob). Without one, OQ-3 field
-    // evidence is still pending — the intent is valid, the resolution is
-    // blocked, nothing is invented. A malformed rule value is an incompatible
-    // input, not a silent default.
+    // #1138 case C, #1531 (A4): the overhang millimetres come from the
+    // workshop's grip styles (20 by default); a missing value is an
+    // incompatible input, never a default.
     if (lookup.overhangMm === undefined) {
-      return fail(
-        'OPENING_OVERHANG_EVIDENCE_PENDING',
-        'el rebase inferior espera evidencia de campo (OQ-3)',
-      );
+      return fail('OPENING_LAYOUT_INVALID', 'falta el rebase en milímetros del estilo de agarre');
     }
     if (!Number.isInteger(lookup.overhangMm) || lookup.overhangMm <= 0) {
       return fail(

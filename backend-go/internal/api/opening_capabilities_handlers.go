@@ -4,9 +4,9 @@ import (
 	"net/http"
 )
 
-// #1134: the organization's opening capabilities as a catalog read — the
-// parsed `opening.capabilities` overlay blob, nil when no active overlay
-// governs. Any session member may read it: catalog state (same visibility as
+// #1134: the organization's opening capabilities as a catalog read —
+// projected from the grip styles since #1531 (the overlay blob is retired);
+// nil when the organization has no styles. Any session member may read it: catalog state (same visibility as
 // the construction policy), consumed by authoring surfaces to offer ONLY
 // available systems for new selections. Available ≠ valid: disabling a
 // capability never invalidates existing designs — they resolve against

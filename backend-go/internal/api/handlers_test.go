@@ -297,13 +297,13 @@ type stubStore struct {
 	deleteMaterialCategoryCalled  bool
 	deleteMaterialCategoryErrHook error
 	// Hardware categories (#1507)
-	listHardwareCategories        []domain.HardwareCategory
-	hardwareCategoryReturnedByID  *domain.HardwareCategory
-	hardwareCategoryGetByIDErr    error
-	createHardwareCategoryErr     error
-	createHardwareCategoryOK      bool
-	updateHardwareCategoryCalled  bool
-	deleteHardwareCategoryCalled  bool
+	listHardwareCategories       []domain.HardwareCategory
+	hardwareCategoryReturnedByID *domain.HardwareCategory
+	hardwareCategoryGetByIDErr   error
+	createHardwareCategoryErr    error
+	createHardwareCategoryOK     bool
+	updateHardwareCategoryCalled bool
+	deleteHardwareCategoryCalled bool
 	// Session registry hooks (#460 / SEC-1)
 	authSessions      map[string]*domain.AuthSession
 	nextAuthSessionID string
@@ -488,14 +488,14 @@ type stubStore struct {
 	updateModuleErr             error
 	createModuleArmed           bool
 	// #1436: option-group writes armed by the kit-part guard tests.
-	createOptionGroupArmed      bool
-	updateOptionGroupArmed      bool
-	createModuleReceived        *domain.Module
-	createModuleErr             error
-	deleteModuleCalled          bool
-	deleteModuleReceivedID      string
-	approveDeviceReceived       *storage.ApproveDeviceEnrollmentCommand
-	resolveDeviceResult         *storage.DeviceTokenResult
+	createOptionGroupArmed bool
+	updateOptionGroupArmed bool
+	createModuleReceived   *domain.Module
+	createModuleErr        error
+	deleteModuleCalled     bool
+	deleteModuleReceivedID string
+	approveDeviceReceived  *storage.ApproveDeviceEnrollmentCommand
+	resolveDeviceResult    *storage.DeviceTokenResult
 	// MFA / step-up (#460 SEC-7)
 	mfaEnabledFactors  int
 	mfaStepUpFreshness storage.MFAStepUpFreshness
@@ -513,6 +513,9 @@ type stubStore struct {
 	createdOpeningProfile *domain.OpeningProfile
 	// #1134: opening capabilities catalog.
 	openingCapabilities *domain.OpeningCapabilities
+	// #1531 — grip styles stub (in memory) and the error it returns.
+	gripStyles   []domain.GripStyle
+	gripStyleErr error
 }
 
 func (s *stubStore) stubNotUsed(name string) {

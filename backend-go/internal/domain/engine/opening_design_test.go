@@ -44,12 +44,13 @@ func TestResolveDesignOpening(t *testing.T) {
 		t.Fatalf("blocked resolution drifted: %+v", resolution)
 	}
 
-	// OQ-3: bottom overhang stays blocked until field evidence.
+	// #1531: without its millimetres a bottom overhang is invalid input (the
+	// store always provides them from the grip styles).
 	overhang := &domain.DesignOpeningSelection{System: "bottom_overhang"}
 	resolution, resErr = ResolveDesignOpening(600, 720, overhang, nil, nil, nil)
 	if resErr != nil || resolution == nil || resolution.State != DesignOpeningStateBlocked ||
-		resolution.Reason != OpeningErrOverhangEvidencePend {
-		t.Fatalf("overhang must block on evidence: %v / %+v", resErr, resolution)
+		resolution.Reason != OpeningErrLayoutInvalid {
+		t.Fatalf("overhang without millimetres: %v / %+v", resErr, resolution)
 	}
 
 	// Handle: baseline — the front consumes nothing.

@@ -917,7 +917,7 @@
   ],
   "blockedCases": [
     {
-      "name": "C — alacena con bottom_overhang: intención válida, resolución bloqueada por OQ-3",
+      "name": "C — alacena con bottom_overhang sin milímetros: entrada inválida (los mm salen del estilo, #1531)",
       "cabinetFrontHeightMm": 720,
       "cabinetFrontWidthMm": 720,
       "positioning": "bottom_overhang",
@@ -932,7 +932,7 @@
         ]
       },
       "grips": [],
-      "expectedErrorCode": "OPENING_OVERHANG_EVIDENCE_PENDING"
+      "expectedErrorCode": "OPENING_LAYOUT_INVALID"
     },
     {
       "name": "datasheet pendiente de OQ-2: el authoring no resuelve, nunca se inventa",

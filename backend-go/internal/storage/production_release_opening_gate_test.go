@@ -45,10 +45,6 @@ func TestProductionRelease_OpeningSelectionBlocksRelease(t *testing.T) {
 			name:      "gola",
 			selection: &domain.DesignOpeningSelection{System: domain.OpeningGripSystemGola, ProfileID: "gola-l-8006", Placements: []string{"top"}},
 		},
-		{
-			name:      "bottom_overhang",
-			selection: &domain.DesignOpeningSelection{System: domain.OpeningGripSystemBottomOverhang, Placements: []string{"bottom"}},
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fx := releaseFixtureWithOpening(t, tc.selection)
@@ -101,6 +97,27 @@ func TestProductionRelease_OpeningSelectionBlocksRelease(t *testing.T) {
 				t.Fatalf("blocked revision must not freeze a release, found %d", releases)
 			}
 		})
+	}
+}
+
+// #1531 (A4): the overhang millimetres come from the grip styles (20 by
+// default), so a bottom_overhang revision no longer waits for field
+// evidence: the opening gate does not block it.
+func TestProductionRelease_BottomOverhangResolvesFromGripStyles(t *testing.T) {
+	fx := releaseFixtureWithOpening(t, &domain.DesignOpeningSelection{
+		System: domain.OpeningGripSystemBottomOverhang, Placements: []string{"bottom"},
+	})
+	var result *domain.ManufacturingPreflightResult
+	err := releaseTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var err error
+		result, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, "")
+		return err
+	})
+	if err != nil {
+		t.Fatalf("evaluate preflight: %v", err)
+	}
+	if issue := openingGateIssue(result); issue != nil {
+		t.Fatalf("a bottom_overhang revision must resolve from the grip styles, got %+v", issue)
 	}
 }
 

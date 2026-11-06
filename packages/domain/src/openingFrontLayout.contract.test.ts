@@ -56,7 +56,7 @@ interface ResolutionCase {
   readonly cabinetFrontHeightMm: number;
   readonly cabinetFrontWidthMm: number;
   readonly positioning: 'overlay' | 'inset' | 'partial_overlay' | 'bottom_overhang';
-  /** #1138: the backed `opening.bottom-overhang` rule value for this case
+  /** #1138: the overhang millimetres for this case (grip styles since #1531)
    * (absent = no rule: bottom_overhang stays BLOCKED). */
   readonly overhangMm?: number;
   readonly layout: { readonly direction: 'vertical' | 'horizontal'; readonly zones: readonly ZoneCase[] };
@@ -243,7 +243,7 @@ describe('openingFrontLayout — invariantes fuera del fixture (#1131)', () => {
     expect(result).toMatchObject({ ok: false, errorCode: 'OPENING_LAYOUT_INVALID' });
   });
 
-  it('bloqueo v1 (OQ-3) se propaga sin máscara con forma válida', () => {
+  it('un rebase sin milímetros se propaga como entrada inválida (#1531)', () => {
     const result = resolveOpeningFrontLayout(
       {
         positioning: 'bottom_overhang',
@@ -254,7 +254,7 @@ describe('openingFrontLayout — invariantes fuera del fixture (#1131)', () => {
       720,
       { profiles: [] },
     );
-    expect(result).toMatchObject({ ok: false, errorCode: 'OPENING_OVERHANG_EVIDENCE_PENDING' });
+    expect(result).toMatchObject({ ok: false, errorCode: 'OPENING_LAYOUT_INVALID' });
   });
 
   it('dimensiones no enteras o no positivas fallan cerrado', () => {

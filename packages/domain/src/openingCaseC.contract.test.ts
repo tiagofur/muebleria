@@ -1,6 +1,6 @@
 /**
- * #1138 — caso C de punta a punta en el dominio: la regla respaldada
- * (`opening.bottom-overhang`) habilita la resolución; el cuerpo no cambia;
+ * #1138 — caso C de punta a punta en el dominio: los milímetros del rebase
+ * (del estilo de agarre desde #1531) habilitan la resolución; el cuerpo no cambia;
  * los frentes del borde inferior extienden exactamente la regla; sin BOM de
  * jaladera/gola; y el gate de familias (`byFurnitureType`) rige la selección.
  * El golden compartido (openingFrontResolution.contract.json) pinea los
@@ -8,7 +8,6 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  parseOpeningOverhangRule,
   resolveOpeningFrontLayout,
   resolveOpeningBOM,
   validateOpeningConfiguration,
@@ -16,10 +15,8 @@ import {
 } from './index';
 import type { OpeningIntent } from './openingFront';
 
-const RULE = parseOpeningOverhangRule({
-  'opening.bottom-overhang': { version: 1, overhangMm: 40 },
-});
-if (!RULE.ok || !RULE.rule) throw new Error('fixture de regla inválido');
+// #1531: the rule comes from the grip styles (no overlay blob to parse).
+const RULE = { rule: { version: 1 as const, overhangMm: 40 } };
 const overhangMm = RULE.rule.overhangMm;
 
 const caseCIntent: OpeningIntent = {
@@ -38,11 +35,8 @@ const caseC = (overhang?: number) =>
   });
 
 describe('#1138 caso C — aceptancia transversal', () => {
-  it('sin regla respaldada el bloqueo veraz se mantiene (sin default)', () => {
-    expect(caseC()).toMatchObject({
-      ok: false,
-      errorCode: 'OPENING_OVERHANG_EVIDENCE_PENDING',
-    });
+  it('sin milímetros es entrada inválida (los mm salen del estilo, #1531)', () => {
+    expect(caseC()).toMatchObject({ ok: false, errorCode: 'OPENING_LAYOUT_INVALID' });
   });
 
   it('una regla malformada es entrada incompatible, nunca un silencio', () => {
@@ -115,10 +109,7 @@ describe('#1138 caso C — aceptancia transversal', () => {
         RULE.rule,
       ),
     ).toEqual({ state: 'invalid', reason: 'OPENING_PLACEMENT_RESTRICTED' });
-    // Sin regla respaldada: blocked veraz aunque la familia permita.
-    expect(validateOpeningConfiguration(selection, capabilities, [])).toEqual({
-      state: 'blocked',
-      reason: 'OPENING_OVERHANG_EVIDENCE_PENDING',
-    });
+    // #1531: sin regla ya no bloquea — los milímetros salen de los estilos.
+    expect(validateOpeningConfiguration(selection, capabilities, [])).toEqual({ state: 'valid' });
   });
 });

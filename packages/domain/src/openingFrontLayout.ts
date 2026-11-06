@@ -71,7 +71,7 @@ export type OpeningResolvedFront = {
   readonly offsetMm: number;
   readonly grips: readonly OpeningResolvedFrontGrip[];
   readonly rules: OpeningResolvedFrontRules;
-  /** #1138 case C only: the backed `opening.bottom-overhang` value this
+  /** #1138 case C only: overhang millimetres (from the grip styles since #1531) this
    * front extends below the body bottom. Absent = no overhang (the body
    * region is the whole front). `heightMm` already includes it — the field
    * declares the extension so the cut is auditable against the rule. */
@@ -93,7 +93,7 @@ export type OpeningFrontLayoutResult =
 interface OpeningProfileLookup {
   readonly profiles: readonly OpeningProfileData[];
   /** #1138 case C: the factory's BACKED overhang rule (the versioned
-   * `opening.bottom-overhang` blob, parsed fail-closed). Absent = no backed
+   * grip styles since #1531). Absent = no
    * rule: `bottom_overhang` stays BLOCKED (OQ-3 evidence pending, verbatim). */
   readonly overhangMm?: number;
 }

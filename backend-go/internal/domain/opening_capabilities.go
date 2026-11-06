@@ -26,7 +26,8 @@ const (
 	OpeningGripSystemBottomOverhang = "bottom_overhang"
 )
 
-// OpeningCapabilities is the parsed `opening.capabilities` overlay blob.
+// OpeningCapabilities is the opening offering, projected from the grip
+// styles since #1531 (OpeningCapabilitiesFromGripStyles).
 type OpeningCapabilities struct {
 	Version int                              `json:"version"`
 	Grips   map[string]OpeningGripCapability `json:"grips"`
