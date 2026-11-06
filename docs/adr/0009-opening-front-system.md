@@ -125,6 +125,11 @@ The pilot implementation of this ADR (#1129–#1393) passed issue by issue, but 
    - Positions: `top | between`, available to both materials.
    - Required before use: height, depth, and the **front discount** for each position the profile declares.
    - Manufacturer values are only suggestions at creation (SCILM 8006 L top: 40; 8007 C between: 36). The workshop may change them, because its number is a declared workshop fact, versioned and auditable. `geometryOrigin` becomes informational.
+   - Italian gola defaults (owner, #1524), all editable by the workshop:
+     - front discount 36 at the top and 36 between fronts;
+     - door bevel at 45° with a size of `depthMm − 2`;
+     - side notch of 70 × strip thickness, with 1 mm of clearance;
+     - the strip takes the material and colour of the fronts.
    - Body effects are declared data, consistent with §13.6:
      - top depth reduction (full top) or front-manguete retraction, chosen by the declared Construction Variant;
      - an optional side notch;

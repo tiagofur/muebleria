@@ -408,7 +408,10 @@ golaProfile:                         # org-scoped row (opening_profiles today)
     strip:    { componentId: <panel>, heightMm: 70 }   # Italian gola only
 ```
 
-- Manufacturer values are suggestions when the profile is created: 8006 L top, 40; 8007 C between, 36. The workshop may change them, and no range limit applies.
+- Default values are suggestions when the profile is created, and the workshop may change them. No range limit applies.
+  - 8006 L top: 40 (SCILM datasheet).
+  - 8007 C between: 36 (SCILM datasheet).
+  - Italian gola: 36 top and 36 between (owner, #1524).
 - A missing required value blocks the profile **for that position only**, with a Spanish message that names the field.
 - There is no "verified datasheet" gate. The workshop's declared number is the authoritative input, and every change is versioned and audited.
 - Grip types that are not profiles (`handle`, `bottom_reveal`, `none`) do not exist in this catalog.
@@ -478,10 +481,20 @@ Datasheet fixtures (SCILM pp. 8–9, `r = 1.5`, `H = 720`):
 ### 14.6. Italian gola
 
 - The Italian gola is a gola profile with `material: melamine`, available at the **top and between** positions.
-- Its `strip` part is a panel component, 70 mm high by default and running the full width, and it goes to the cut list with its material.
-- The door edge at that boundary gets a 45° bevel toward the back, so the face stays full. Bevel geometry and CNC share one definition (#1327).
+- Its `strip` part is a panel component, 70 mm high by default and running the full width. It takes the **material and colour of the fronts** (the `FRENTES` choice, #1327) and goes to the cut list as a board.
+- The door edge at that boundary gets a 45° bevel toward the back, so the face stays full. The bevel size is **`depthMm − 2`** by default. Bevel geometry and CNC share one definition (#1327).
+- The side panels get a **notch of 70 × strip thickness**, with **1 mm of clearance**. The strip thickness is the resolved thickness of the fronts' material, so the notch follows the material and is never a typed constant. The notch is visible geometry and a CNC operation from one definition (§13.3).
 - At the top, its body effect is the same as gola L: the full top shortens, or the front manguete retracts, according to the Construction Variant (§13.6).
-- Its front discounts are workshop values. There is no manufacturer default.
+- Default front discounts (owner, #1524): **36 at the top and 36 between fronts**. The workshop may change them.
+
+Italian gola fixtures (`H = 720`, `r = 1.5`):
+
+| Case | Formula | 720 |
+| --- | --- | --- |
+| 1 door, Italian top 36 | `H − 36` | 684 |
+| 2 fronts, Italian top 36 + between 36 | `(H − 72)/2` | 324 |
+
+The 1 mm clearance is added to both notch dimensions, so a 16 mm strip gets a 71 × 17 mm notch. If the workshop means something else, #1530 fixes it in the contract before implementation.
 
 ### 14.7. Surfaces
 
