@@ -20211,7 +20211,8 @@
             "$ref": "#/components/schemas/LayoutLocalTransform"
           },
           "lengthMm": {
-            "type": "integer"
+            "type": "number",
+            "description": "#1529: decimal — an A3 front measures half millimetres; equals the cut list."
           },
           "widthMm": {
             "type": "integer"

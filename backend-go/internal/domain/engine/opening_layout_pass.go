@@ -30,13 +30,16 @@ import (
 // applyOpeningFrontsToBoards applies the resolved front region to the door
 // and drawer-front boards. It returns the set of constrained board indexes —
 // their authored translation is superseded by the opening's constraint.
-func applyOpeningFrontsToBoards(boards []layoutBoard, fronts []OpeningResolvedFront) (map[int]bool, error) {
+//
+// #1529: contract v2 (front.EdgeGrips) always resolves with A3. A v1 pin
+// keeps its v1 arithmetic on fronts side by side; over STACKED fronts, which
+// #1528 blocked, it resolves with A3 using its discount as the top discount.
+func applyOpeningFrontsToBoards(boards []layoutBoard, fronts []OpeningResolvedFront, cabinetHeightMm float64) (map[int]bool, error) {
 	if len(fronts) == 0 {
 		return nil, nil
 	}
-	// v1 pilot: ONE front region per furniture — the design opening
-	// selection resolves a single zone (ratio 1); multi-zone layouts are V3
-	// explicit scope, never a silent split.
+	// One front region per furniture: the design opening resolves a single
+	// zone; the stack inside it is read from the boards (A3).
 	front := fronts[0]
 	consumedByBoundary := map[string]int{}
 	totalConsumed := 0
@@ -44,12 +47,12 @@ func applyOpeningFrontsToBoards(boards []layoutBoard, fronts []OpeningResolvedFr
 		consumedByBoundary[grip.Boundary] += grip.ConsumedMm
 		totalConsumed += grip.ConsumedMm
 	}
-	// #1528: the v1 arithmetic shortens EVERY front by the whole consumption,
-	// which is only right for fronts side by side (one row). Stacked fronts
-	// (a drawer column) need the multi-zone resolver (#1529); until then the
-	// resolve blocks instead of cutting every drawer short.
-	if totalConsumed != 0 && layoutFrontsStacked(boards) {
-		return nil, stackedFrontsError()
+	if front.EdgeGrips != nil || (totalConsumed != 0 && layoutFrontsStacked(boards)) {
+		grips, err := openingEdgeGripsFor(front)
+		if err != nil {
+			return nil, err
+		}
+		return applyOpeningA3ToBoards(boards, front, grips, cabinetHeightMm)
 	}
 	constrained := map[int]bool{}
 	for i := range boards {
@@ -67,22 +70,53 @@ func applyOpeningFrontsToBoards(boards []layoutBoard, fronts []OpeningResolvedFr
 			board.z += float64(lift)
 		}
 		constrained[i] = true
+		pruneOpeningHandleHardware(board, front)
+	}
+	return constrained, nil
+}
 
-		// Gola / integrated grips are handle-free: prune any handle hardware
-		// (JALADERA) from this front so the 3D layout does not mount a pull bar
-		// on a gola front.
-		if len(front.Grips) > 0 && len(board.hardware) > 0 {
-			filtered := make([]domain.HardwarePlacement, 0, len(board.hardware))
-			for _, hp := range board.hardware {
-				if strings.EqualFold(hp.OptionRole, "JALADERA") || strings.EqualFold(hp.OptionRole, "JALADERAS") {
-					continue
-				}
-				filtered = append(filtered, hp)
-			}
-			board.hardware = filtered
+// openingEdgeGripsFor returns the v2 grips of a front: the explicit contract
+// v2 input, or the conversion of a v1 pin over stacked fronts.
+func openingEdgeGripsFor(front OpeningResolvedFront) (OpeningEdgeGrips, error) {
+	if front.EdgeGrips != nil {
+		return *front.EdgeGrips, nil
+	}
+	return openingEdgeGripsFromV1Front(front)
+}
+
+// applyOpeningA3ToBoards writes the A3 poses onto the front boards.
+func applyOpeningA3ToBoards(boards []layoutBoard, front OpeningResolvedFront, grips OpeningEdgeGrips, cabinetHeightMm float64) (map[int]bool, error) {
+	poses, _, err := openingA3Poses(boards, grips, cabinetHeightMm)
+	if err != nil {
+		return nil, err
+	}
+	constrained := map[int]bool{}
+	for index, pose := range poses {
+		board := &boards[index]
+		board.z = pose[0]
+		board.lengthMm = pose[1]
+		constrained[index] = true
+		if !grips.empty() {
+			pruneOpeningHandleHardware(board, front)
 		}
 	}
 	return constrained, nil
+}
+
+// pruneOpeningHandleHardware: gola / integrated grips are handle-free, so
+// the 3D layout does not mount a pull bar (JALADERA) on a gripped front.
+func pruneOpeningHandleHardware(board *layoutBoard, front OpeningResolvedFront) {
+	if (len(front.Grips) == 0 && front.EdgeGrips.empty()) || len(board.hardware) == 0 {
+		return
+	}
+	filtered := make([]domain.HardwarePlacement, 0, len(board.hardware))
+	for _, hp := range board.hardware {
+		if strings.EqualFold(hp.OptionRole, "JALADERA") || strings.EqualFold(hp.OptionRole, "JALADERAS") {
+			continue
+		}
+		filtered = append(filtered, hp)
+	}
+	board.hardware = filtered
 }
 
 // boardIsOpeningFront reports whether a board is a door/drawer-front the
@@ -143,44 +177,81 @@ func OpeningMembersFromFrozenPin(selection *domain.DesignOpeningSelection) *Open
 }
 
 // applyOpeningFrontsToBomParts (#1305) mirrors applyOpeningFrontsToBoards
-// over the BOM expansion: every door/drawer-front part shrinks by the SAME
-// total consumption so the cut list and the machining layout can never
-// disagree about a constrained front's size. The BOM carries no pose — the
-// bottom-grip lift is layout-only — but the DIMENSION rule is the same one
-// arithmetic. Fail-closed: a part that would end non-positive rejects the
-// resolve — never an invented size.
-func applyOpeningFrontsToBomParts(parts []domain.BoardPart, fronts []OpeningResolvedFront) error {
+// over the BOM expansion so the cut list and the layout can never disagree
+// about a constrained front's size. The BOM carries no pose: when the stack
+// matters (contract v2, or any consuming grip), stackBoards supplies the
+// layout boards of the SAME furniture and the A3 measure is copied to each
+// part by its id (BoardPart.ID = layoutBoard.id for the composed expansion).
+// Fail-closed: a front part without its board, or a part that would end
+// non-positive, rejects the resolve — never an invented size.
+func applyOpeningFrontsToBomParts(parts []domain.BoardPart, fronts []OpeningResolvedFront, stackBoards func() ([]layoutBoard, float64, error)) error {
 	if len(fronts) == 0 {
 		return nil
 	}
-	// v1 pilot: ONE front region per furniture — the design opening resolves
-	// a single zone (ratio 1); multi-zone layouts are V3 explicit scope.
 	front := fronts[0]
 	totalConsumed := 0
 	for _, grip := range front.Grips {
 		totalConsumed += grip.ConsumedMm
 	}
-	if totalConsumed == 0 {
+	if totalConsumed == 0 && front.EdgeGrips == nil {
 		return nil
 	}
-	// #1528: the BOM carries no pose, so it cannot see a vertical stack the
-	// way the layout does. It blocks on the structural signature instead:
-	// two or more drawer fronts, or a drawer front next to a door, are
-	// always a stack. Two doors stacked in one tall unit are caught by the
-	// layout pass, which runs before any authoring is accepted.
-	if bomFrontsStacked(parts) {
-		return stackedFrontsError()
+	var boards []layoutBoard
+	var cabinetHeightMm float64
+	if stackBoards != nil {
+		var err error
+		if boards, cabinetHeightMm, err = stackBoards(); err != nil {
+			return err
+		}
+	}
+	if boards == nil {
+		// No poses (legacy flat module): the structural signature decides.
+		if front.EdgeGrips != nil || bomFrontsStacked(parts) {
+			return stackedFrontsError()
+		}
+		return shrinkOpeningBomParts(parts, totalConsumed)
+	}
+	if front.EdgeGrips == nil && !layoutFrontsStacked(boards) {
+		return shrinkOpeningBomParts(parts, totalConsumed)
+	}
+	grips, err := openingEdgeGripsFor(front)
+	if err != nil {
+		return err
+	}
+	poses, _, err := openingA3Poses(boards, grips, cabinetHeightMm)
+	if err != nil {
+		return err
+	}
+	lengthByID := map[string]float64{}
+	for index, pose := range poses {
+		lengthByID[boards[index].id] = pose[1]
 	}
 	for i := range parts {
 		if !bomPartIsOpeningFront(&parts[i]) {
 			continue
 		}
-		if parts[i].LengthMm-totalConsumed <= 0 {
+		length, ok := lengthByID[parts[i].ID]
+		if !ok {
+			return fmt.Errorf("el frente %s del despiece no tiene su tablero en el layout; no se puede aplicar el agarre", parts[i].ID)
+		}
+		parts[i].LengthMm = length
+	}
+	return nil
+}
+
+// shrinkOpeningBomParts is the v1 arithmetic: every front part shrinks by the
+// whole consumption (fronts side by side).
+func shrinkOpeningBomParts(parts []domain.BoardPart, totalConsumed int) error {
+	for i := range parts {
+		if !bomPartIsOpeningFront(&parts[i]) {
+			continue
+		}
+		if parts[i].LengthMm-float64(totalConsumed) <= 0 {
 			return fmt.Errorf(
-				"la apertura deja el frente %s sin altura válida (consumo %d mm sobre %d mm)",
+				"la apertura deja el frente %s sin altura válida (consumo %d mm sobre %g mm)",
 				parts[i].ID, totalConsumed, parts[i].LengthMm)
 		}
-		parts[i].LengthMm -= totalConsumed
+		parts[i].LengthMm -= float64(totalConsumed)
 	}
 	return nil
 }
@@ -190,11 +261,11 @@ func applyOpeningFrontsToBomParts(parts []domain.BoardPart, fronts []OpeningReso
 // side by side.
 const openingStackToleranceMm = 0.5
 
-// stackedFrontsError is the #1528 fail-closed state: a grip over stacked
-// fronts waits for the multi-zone resolver instead of shortening each front.
+// stackedFrontsError is the fail-closed state for stacks A3 cannot read
+// (#1528/#1529): a bottom gola over stacked fronts, or a stack without poses.
 func stackedFrontsError() *OpeningResolutionError {
 	return openingFail(OpeningErrStackedFronts,
-		"la gola o el rebase en muebles con frentes apilados (cajoneras) llega con la gola entre cajones; por ahora sólo se resuelven frentes lado a lado")
+		"este agarre no se puede aplicar a los frentes apilados de este mueble")
 }
 
 // layoutFrontsStacked reports whether two opening fronts sit one above the

@@ -210,7 +210,19 @@ func resolveBomCommon(
 	// #1305: the design opening's front region constrains door/drawer-front
 	// parts with the SAME arithmetic the layout pass applies — the cut list
 	// and the machining layout share one consumed number by construction.
-	if err := applyOpeningFrontsToBomParts(rawParts, openingFronts); err != nil {
+	// #1529: the stack is read from the SAME furniture's layout boards (the
+	// default expansion; part ids match board ids), so the A3 measure of the
+	// cut list is the layout's by construction.
+	var stackBoards func() ([]layoutBoard, float64, error)
+	if strings.TrimSpace(module.StructureID) != "" && moduleDims.H > 0 {
+		stackBoards = func() ([]layoutBoard, float64, error) {
+			boards, err := resolveLayoutBoards(module, catalog,
+				LayoutDims{WidthMm: moduleDims.W, HeightMm: moduleDims.H, DepthMm: moduleDims.D},
+				optionChoices, resolveOptions{})
+			return boards, float64(moduleDims.H), err
+		}
+	}
+	if err := applyOpeningFrontsToBomParts(rawParts, openingFronts, stackBoards); err != nil {
 		return domain.ResolvedBom{}, err
 	}
 	// #1317: the depth reduction annotates the full-depth panels the
@@ -294,7 +306,7 @@ func resolveBomCommon(
 				ID:                 "opening-strip-" + strip.Key,
 				Description:        "Tira " + strip.Key,
 				Quantity:           1,
-				LengthMm:           widthMm,
+				LengthMm:           float64(widthMm),
 				WidthMm:            int(math.Round(strip.DepthMm)),
 				OptionRole:         "FRENTE",
 				Placement:          string(domain.PlacementSuperior),
@@ -804,7 +816,7 @@ func expandComponentInstances(
 				ID:          fmt.Sprintf("%s%s-copy-%d", idPrefix, comp.ID, copyIndex),
 				Description: comp.Name,
 				Quantity:    1,
-				LengthMm:    lengthMm,
+				LengthMm:    float64(lengthMm),
 				WidthMm:     widthMm,
 				Edges:       edges,
 				OptionRole:  optionRole,

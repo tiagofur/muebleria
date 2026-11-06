@@ -74,7 +74,7 @@ func TestOpeningFrontsConstrainDoorBoards(t *testing.T) {
 	}
 	door = findComponentByID(layout.Components, "puerta")
 	if door.LengthMm != 646 {
-		t.Fatalf("bottom-grip door length = %d, want 646", door.LengthMm)
+		t.Fatalf("bottom-grip door length = %v, want 646", door.LengthMm)
 	}
 	if door.Transform.TranslationMm != [3]float64{2, 560, 72} {
 		t.Fatalf("bottom-grip door min corner = %v, want [2 560 72] (lifted by the consumption)", door.Transform.TranslationMm)
@@ -88,7 +88,7 @@ func TestOpeningFrontsConstrainDoorBoards(t *testing.T) {
 	}
 	door = findComponentByID(layout.Components, "puerta")
 	if door.LengthMm != 736 || door.Transform.TranslationMm != [3]float64{2, 560, -18} {
-		t.Fatalf("overhang door = L %d @ %v, want 736 @ [2 560 -18]", door.LengthMm, door.Transform.TranslationMm)
+		t.Fatalf("overhang door = L %v @ %v, want 736 @ [2 560 -18]", door.LengthMm, door.Transform.TranslationMm)
 	}
 
 	// Fail-closed: a consumption that leaves no valid height rejects the
@@ -156,7 +156,7 @@ func TestOpeningFrontsSupersedeAuthoredTranslation(t *testing.T) {
 		t.Fatalf("missing door-01: %+v", opened.Layout.Components)
 	}
 	if door.LengthMm != 646 || door.Transform.TranslationMm[2] == 200 {
-		t.Fatalf("the opening must supersede the authored z (200): L=%d T=%v", door.LengthMm, door.Transform.TranslationMm)
+		t.Fatalf("the opening must supersede the authored z (200): L=%v T=%v", door.LengthMm, door.Transform.TranslationMm)
 	}
 	floor := findBoard(opened.Layout, "floor-01")
 	if floor == nil || floor.Transform.TranslationMm[2] != 10 {
@@ -355,9 +355,10 @@ func TestOpeningMembersHostOnTheCarcassBoard(t *testing.T) {
 	}
 }
 
-// #1528 — a grip over STACKED fronts (a drawer column) must not shorten
-// every front by the whole consumption: it blocks until the multi-zone
-// resolver (#1529). Fronts side by side keep the v1 arithmetic.
+// #1528 → #1529 — a grip over STACKED fronts (a drawer column) no longer
+// blocks: a v1 pin resolves with A3 (its discount as the top discount),
+// measured from the cabinet height. Fronts side by side keep the v1
+// arithmetic, and a bottom gola over a stack stays blocked.
 func stackedDrawerBoards() []layoutBoard {
 	return []layoutBoard{
 		{id: "frente-1", placement: string(domain.PlacementFrenteCajon), z: 482, lengthMm: 236, widthMm: 596},
@@ -367,27 +368,122 @@ func stackedDrawerBoards() []layoutBoard {
 	}
 }
 
-func TestOpeningFrontsBlockStackedDrawerFronts(t *testing.T) {
-	for _, boundary := range []string{"top", "bottom"} {
-		boards := stackedDrawerBoards()
-		_, err := applyOpeningFrontsToBoards(boards, openingPassFront(boundary, 40))
-		var openingErr *OpeningResolutionError
-		if !errors.As(err, &openingErr) || openingErr.Code != OpeningErrStackedFronts {
-			t.Fatalf("%s grip over 3 stacked drawer fronts must block with %s, got %v", boundary, OpeningErrStackedFronts, err)
+func assertFrontPoses(t *testing.T, boards []layoutBoard, want map[string][2]float64) {
+	t.Helper()
+	for _, board := range boards {
+		expected, ok := want[board.id]
+		if !ok {
+			continue
 		}
-		for _, board := range boards {
-			if board.placement == string(domain.PlacementFrenteCajon) && board.lengthMm != 236 {
-				t.Fatalf("a blocked resolve must not touch the fronts: %s = %g, want 236", board.id, board.lengthMm)
-			}
+		if board.z != expected[0] || board.lengthMm != expected[1] {
+			t.Fatalf("%s = z %g L %g, want z %g L %g", board.id, board.z, board.lengthMm, expected[0], expected[1])
 		}
 	}
-	// An overhang (negative consumption) over stacked fronts blocks too.
-	if _, err := applyOpeningFrontsToBoards(stackedDrawerBoards(), openingPassFront("bottom", -20)); err == nil {
-		t.Fatal("an overhang over stacked fronts must block")
+}
+
+func TestOpeningFrontsStackedDrawersResolveWithA3(t *testing.T) {
+	// v1 pin with a top gola of 40 over 3 drawers (H 720, reveals 2, gaps 4):
+	// top edge 720 − 40 + 2 = 682, remaining 682 − 2 − 8 = 672 → 224 each.
+	boards := stackedDrawerBoards()
+	constrained, err := applyOpeningFrontsToBoards(boards, openingPassFront("top", 40), 720)
+	if err != nil {
+		t.Fatalf("a top grip over stacked drawers must resolve with A3: %v", err)
 	}
-	// No grip consumption: nothing to block, fronts untouched.
-	if _, err := applyOpeningFrontsToBoards(stackedDrawerBoards(), openingPassFront("top", 0)); err != nil {
+	assertFrontPoses(t, boards, map[string][2]float64{
+		"frente-1": {458, 224}, "frente-2": {230, 224}, "frente-3": {2, 224}, "lateral": {0, 684},
+	})
+	if !constrained[0] || !constrained[1] || !constrained[2] || constrained[3] {
+		t.Fatalf("only the fronts are constrained: %v", constrained)
+	}
+
+	// Overhang 20 (v1 negative bottom consumption): bottom edge −20, top
+	// keeps its reveal (718): remaining 738 − 8 = 730 → 243, 243.5, 243.5.
+	overhang := stackedDrawerBoards()
+	if _, err := applyOpeningFrontsToBoards(overhang, openingPassFront("bottom", -20), 720); err != nil {
+		t.Fatalf("an overhang over stacked fronts resolves with A3: %v", err)
+	}
+	assertFrontPoses(t, overhang, map[string][2]float64{
+		"frente-1": {475, 243}, "frente-2": {227.5, 243.5}, "frente-3": {-20, 243.5},
+	})
+
+	// A bottom gola has no v2 equivalent: still blocked, fronts untouched.
+	bottom := stackedDrawerBoards()
+	_, err = applyOpeningFrontsToBoards(bottom, openingPassFront("bottom", 40), 720)
+	var openingErr *OpeningResolutionError
+	if !errors.As(err, &openingErr) || openingErr.Code != OpeningErrStackedFronts {
+		t.Fatalf("a bottom gola over stacked fronts must block, got %v", err)
+	}
+	assertFrontPoses(t, bottom, map[string][2]float64{"frente-1": {482, 236}, "frente-3": {2, 236}})
+
+	// No grip consumption: nothing changes.
+	untouched := stackedDrawerBoards()
+	if _, err := applyOpeningFrontsToBoards(untouched, openingPassFront("top", 0), 720); err != nil {
 		t.Fatalf("zero consumption must not block: %v", err)
+	}
+	assertFrontPoses(t, untouched, map[string][2]float64{"frente-1": {482, 236}})
+}
+
+// #1529 acceptance — contract v2: a 3-drawer column with gola L on top (40)
+// and C between every drawer (36) resolves without blocking.
+func TestOpeningFrontsV2DrawerColumnTopAndBetween(t *testing.T) {
+	top, between := 40.0, 36.0
+	front := openingPassFront("top", 0)
+	front[0].Grips = nil
+	front[0].EdgeGrips = &OpeningEdgeGrips{TopDiscountMm: &top, BetweenDiscountMm: &between}
+	boards := stackedDrawerBoards()
+	if _, err := applyOpeningFrontsToBoards(boards, front, 720); err != nil {
+		t.Fatalf("v2 column must resolve: %v", err)
+	}
+	// top edge 682, bottom 2, gaps 36 + 36: remaining 608 → 202.5, 202.5, 203.
+	assertFrontPoses(t, boards, map[string][2]float64{
+		"frente-1": {479.5, 202.5}, "frente-2": {241, 202.5}, "frente-3": {2, 203},
+	})
+}
+
+// #1529 acceptance — contract v2: two doors side by side with gola L give
+// H − 40, whatever the catalog reveal (v2 replaces the reveal, never adds).
+func TestOpeningFrontsV2SideBySideDoorsGiveHMinus40(t *testing.T) {
+	top := 40.0
+	front := openingPassFront("top", 0)
+	front[0].Grips = nil
+	front[0].EdgeGrips = &OpeningEdgeGrips{TopDiscountMm: &top}
+	boards := []layoutBoard{
+		{id: "puerta-izq", placement: string(domain.PlacementPuerta), x: 2, z: 2, lengthMm: 716, widthMm: 296},
+		{id: "puerta-der", placement: string(domain.PlacementPuerta), x: 302, z: 2, lengthMm: 716, widthMm: 296},
+	}
+	if _, err := applyOpeningFrontsToBoards(boards, front, 720); err != nil {
+		t.Fatalf("v2 doors: %v", err)
+	}
+	assertFrontPoses(t, boards, map[string][2]float64{"puerta-izq": {2, 680}, "puerta-der": {2, 680}})
+	if boards[0].widthMm != 296 {
+		t.Fatalf("the grip never touches the width: %g", boards[0].widthMm)
+	}
+}
+
+// #1529 acceptance — contract v2: a wall cabinet with a 20 mm overhang gives
+// a front of H − r_top + 20 with its bottom edge at −20.
+func TestOpeningFrontsV2WallCabinetOverhang(t *testing.T) {
+	overhang := 20.0
+	front := openingPassFront("top", 0)
+	front[0].Grips = nil
+	front[0].EdgeGrips = &OpeningEdgeGrips{BottomOverhangMm: &overhang}
+	boards := []layoutBoard{{id: "puerta", placement: string(domain.PlacementPuerta), z: 2, lengthMm: 716, widthMm: 596}}
+	if _, err := applyOpeningFrontsToBoards(boards, front, 720); err != nil {
+		t.Fatalf("v2 overhang: %v", err)
+	}
+	assertFrontPoses(t, boards, map[string][2]float64{"puerta": {-20, 738}})
+}
+
+func TestOpeningFrontsMixedColumnsStayBlocked(t *testing.T) {
+	boards := []layoutBoard{
+		{id: "puerta", placement: string(domain.PlacementPuerta), x: 2, z: 2, lengthMm: 716, widthMm: 296},
+		{id: "cajon-1", placement: string(domain.PlacementFrenteCajon), x: 302, z: 362, lengthMm: 356, widthMm: 296},
+		{id: "cajon-2", placement: string(domain.PlacementFrenteCajon), x: 302, z: 2, lengthMm: 356, widthMm: 296},
+	}
+	_, err := applyOpeningFrontsToBoards(boards, openingPassFront("top", 40), 720)
+	var openingErr *OpeningResolutionError
+	if !errors.As(err, &openingErr) || openingErr.Code != OpeningErrStackedFronts {
+		t.Fatalf("a door next to a drawer column is not one stack: %v", err)
 	}
 }
 
@@ -396,7 +492,7 @@ func TestOpeningFrontsSideBySideDoorsKeepV1Arithmetic(t *testing.T) {
 		{id: "puerta-izq", placement: string(domain.PlacementPuerta), x: 2, z: 2, lengthMm: 716, widthMm: 296},
 		{id: "puerta-der", placement: string(domain.PlacementPuerta), x: 302, z: 2, lengthMm: 716, widthMm: 296},
 	}
-	constrained, err := applyOpeningFrontsToBoards(boards, openingPassFront("top", 40))
+	constrained, err := applyOpeningFrontsToBoards(boards, openingPassFront("top", 40), 720)
 	if err != nil {
 		t.Fatalf("two doors side by side must resolve: %v", err)
 	}
@@ -407,28 +503,44 @@ func TestOpeningFrontsSideBySideDoorsKeepV1Arithmetic(t *testing.T) {
 	}
 }
 
-func TestOpeningBomPartsBlockStackedFronts(t *testing.T) {
+func TestOpeningBomPartsWithoutPosesKeepTheStructuralRule(t *testing.T) {
+	// Legacy flat modules have no poses: a structural stack stays blocked.
 	drawers := []domain.BoardPart{
 		{ID: "frente-cajon", Placement: string(domain.PlacementFrenteCajon), Quantity: 3, LengthMm: 236},
 	}
 	var openingErr *OpeningResolutionError
-	if err := applyOpeningFrontsToBomParts(drawers, openingPassFront("top", 40)); !errors.As(err, &openingErr) || openingErr.Code != OpeningErrStackedFronts {
-		t.Fatalf("3 drawer fronts in the cut list must block, got %v", err)
+	if err := applyOpeningFrontsToBomParts(drawers, openingPassFront("top", 40), nil); !errors.As(err, &openingErr) || openingErr.Code != OpeningErrStackedFronts {
+		t.Fatalf("3 drawer fronts without poses must block, got %v", err)
 	}
 	if drawers[0].LengthMm != 236 {
-		t.Fatalf("a blocked cut list must not touch the part: %d", drawers[0].LengthMm)
-	}
-	mixed := []domain.BoardPart{
-		{ID: "frente-cajon", Placement: string(domain.PlacementFrenteCajon), Quantity: 1, LengthMm: 150},
-		{ID: "puerta", Placement: string(domain.PlacementPuerta), Quantity: 1, LengthMm: 560},
-	}
-	if err := applyOpeningFrontsToBomParts(mixed, openingPassFront("top", 40)); !errors.As(err, &openingErr) {
-		t.Fatalf("a drawer above a door must block, got %v", err)
+		t.Fatalf("a blocked cut list must not touch the part: %g", drawers[0].LengthMm)
 	}
 	doors := []domain.BoardPart{
 		{ID: "puerta", Placement: string(domain.PlacementPuerta), Quantity: 2, LengthMm: 716},
 	}
-	if err := applyOpeningFrontsToBomParts(doors, openingPassFront("top", 40)); err != nil || doors[0].LengthMm != 676 {
-		t.Fatalf("two doors side by side keep v1: err %v, length %d", err, doors[0].LengthMm)
+	if err := applyOpeningFrontsToBomParts(doors, openingPassFront("top", 40), nil); err != nil || doors[0].LengthMm != 676 {
+		t.Fatalf("two doors side by side keep v1: err %v, length %g", err, doors[0].LengthMm)
+	}
+}
+
+// #1529 — with poses, the cut list copies the A3 measure of each board by id.
+func TestOpeningBomPartsCopyTheA3MeasureOfTheirBoard(t *testing.T) {
+	parts := []domain.BoardPart{
+		{ID: "frente-1", Placement: string(domain.PlacementFrenteCajon), Quantity: 1, LengthMm: 236},
+		{ID: "frente-2", Placement: string(domain.PlacementFrenteCajon), Quantity: 1, LengthMm: 236},
+		{ID: "frente-3", Placement: string(domain.PlacementFrenteCajon), Quantity: 1, LengthMm: 236},
+	}
+	stack := func() ([]layoutBoard, float64, error) { return stackedDrawerBoards(), 720, nil }
+	if err := applyOpeningFrontsToBomParts(parts, openingPassFront("top", 40), stack); err != nil {
+		t.Fatalf("stacked parts with poses resolve: %v", err)
+	}
+	for _, part := range parts {
+		if part.LengthMm != 224 {
+			t.Fatalf("%s = %g, want 224", part.ID, part.LengthMm)
+		}
+	}
+	orphan := []domain.BoardPart{{ID: "frente-x", Placement: string(domain.PlacementFrenteCajon), Quantity: 1, LengthMm: 236}}
+	if err := applyOpeningFrontsToBomParts(orphan, openingPassFront("top", 40), stack); err == nil {
+		t.Fatal("a front part without its board must fail closed")
 	}
 }

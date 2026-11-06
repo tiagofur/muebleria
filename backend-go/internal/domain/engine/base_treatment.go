@@ -217,7 +217,7 @@ func synthesizeBaseBoardPart(moduleCode string, widthMm, baseClearanceMm int) do
 		Code:        syntheticZocloPartCode,
 		Description: "Zócalo (melamina)",
 		Quantity:    1,
-		LengthMm:    maxInt(0, widthMm),
+		LengthMm:    float64(maxInt(0, widthMm)),
 		WidthMm:     maxInt(0, baseClearanceMm),
 		Edges: []domain.EdgeAssignment{
 			{Side: "L1", Enabled: true},
@@ -291,7 +291,7 @@ func applyBaseTreatment(
 				Code:        syntheticZocloSideCode,
 				Description: "Zócalo lateral (vuelta)",
 				Quantity:    1,
-				LengthMm:    returnDepth,
+				LengthMm:    float64(returnDepth),
 				WidthMm:     baseClearanceMm,
 				Edges: []domain.EdgeAssignment{
 					{Side: "L1", Enabled: true},

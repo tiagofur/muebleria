@@ -21,9 +21,10 @@ import (
 // through notch — on the p.42 drawing those callouts dimension the SU116
 // support-mount machining on the gable, a 19-wide relief band with 10-deep
 // notches. Whether an installation cuts the side at all is the §13.6
-// construction decision, never an engine default.) A between
-// boundary or a non-zero front offset has no geometry consumer yet and
-// fails closed; so does a notch that does not fit the board.
+// construction decision, never an engine default.) #1529: a between
+// boundary notches the sides under the front above each between edge. A
+// non-zero front offset has no geometry consumer yet and fails closed; so
+// does a notch that does not fit the board.
 
 // applyOpeningNotchesToBoards materializes every resolved notch modifier
 // onto the side boards it names by constructive role. It runs right after
@@ -42,9 +43,9 @@ func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeni
 				modifier.ProfileID, modifier.Role)
 		}
 		kind := openingBoundaryKind(modifier.Boundary)
-		if kind != "top" && kind != "bottom" {
+		if kind != "top" && kind != "bottom" && kind != "between" {
 			return fmt.Errorf(
-				"la muesca del perfil %s sobre la frontera %q no tiene consumidor de geometría en v1",
+				"la muesca del perfil %s sobre la frontera %q no tiene consumidor de geometría",
 				modifier.ProfileID, kind)
 		}
 		if modifier.NotchOffsetMm != 0 {
@@ -52,17 +53,44 @@ func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeni
 				"la muesca del perfil %s con offset %d mm no tiene consumidor de geometría en v1 (sólo la esquina)",
 				modifier.ProfileID, modifier.NotchOffsetMm)
 		}
+		// #1529: a between notch hangs from the bottom edge of the front
+		// above each between edge of the stack (the strip runs behind the
+		// gap, as it does under the top at a top boundary).
+		var hangFromZ []float64
+		if kind == "between" {
+			rows, err := openingFrontRows(boards)
+			if err != nil {
+				return err
+			}
+			for r := 0; r+1 < len(rows); r++ {
+				hangFromZ = append(hangFromZ, rows[r].bottomMm)
+			}
+			if len(hangFromZ) == 0 {
+				return fmt.Errorf("la muesca entre frentes del perfil %s no tiene frentes apilados", modifier.ProfileID)
+			}
+		}
 		placed := false
 		for i := range boards {
 			if !boardIsOpeningSide(&boards[i]) {
 				continue
 			}
-			notch, err := localNotchBox(&boards[i], modifier, kind)
-			if err != nil {
-				return err
+			if kind != "between" {
+				notch, err := localNotchBox(&boards[i], modifier, kind)
+				if err != nil {
+					return err
+				}
+				boards[i].notches = append(boards[i].notches, notch)
+				placed = true
+				continue
 			}
-			boards[i].notches = append(boards[i].notches, notch)
-			placed = true
+			for _, z := range hangFromZ {
+				notch, err := localNotchBoxAt(&boards[i], modifier, z)
+				if err != nil {
+					return err
+				}
+				boards[i].notches = append(boards[i].notches, notch)
+				placed = true
+			}
 		}
 		if !placed {
 			return fmt.Errorf(
@@ -144,6 +172,36 @@ func localNotchBox(board *layoutBoard, modifier ResolvedOpeningBodyModifier, kin
 		ProfileID: modifier.ProfileID,
 		Boundary:  modifier.Boundary,
 	}, nil
+}
+
+// localNotchBoxAt is the between-edge notch (#1529): the same box as
+// localNotchBox, hanging from the furniture height topZ instead of the
+// board's end.
+func localNotchBoxAt(board *layoutBoard, modifier ResolvedOpeningBodyModifier, topZ float64) (LayoutNotch, error) {
+	notch, err := localNotchBox(board, modifier, "top")
+	if err != nil {
+		return LayoutNotch{}, err
+	}
+	lt, err := boardLocalTransform(board)
+	if err != nil {
+		return LayoutNotch{}, err
+	}
+	axis, sign, err := localAxisForFurnitureAxis(lt.Basis, 2, "vertical")
+	if err != nil {
+		return LayoutNotch{}, fmt.Errorf("componente %s: %w", board.id, err)
+	}
+	sizes := [3]float64{board.widthMm, board.thicknessMm, board.lengthMm}
+	bottomZ := topZ - modifier.NotchHeightMm
+	if bottomZ < board.z || topZ > board.z+sizes[axis] {
+		return LayoutNotch{}, fmt.Errorf(
+			"componente %s: la muesca entre frentes (%g–%g mm) no cabe en el lateral", board.id, bottomZ, topZ)
+	}
+	if sign > 0 {
+		notch.StartMm[axis] = bottomZ - board.z
+	} else {
+		notch.StartMm[axis] = board.z + sizes[axis] - topZ
+	}
+	return notch, nil
 }
 
 // boardLocalTransform recomputes the board's published local transform (the

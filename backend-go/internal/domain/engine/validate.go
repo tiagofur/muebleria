@@ -21,7 +21,7 @@ var validEdgeSide = map[string]struct{}{
 func ValidateBoardPart(part domain.BoardPart, moduleCode string) error {
 	if part.LengthMm <= 0 || part.WidthMm <= 0 {
 		return fmt.Errorf(
-			"board part dimensions must be > 0 (lengthMm=%d, widthMm=%d)",
+			"board part dimensions must be > 0 (lengthMm=%g, widthMm=%d)",
 			part.LengthMm, part.WidthMm,
 		)
 	}

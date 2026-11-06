@@ -168,8 +168,8 @@ func TestOpeningNotchFailsClosedWhenItDoesNotFit(t *testing.T) {
 	}}
 	if _, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
 		fronts: openingPassFront("top", 40), openingBodyModifiers: betweenBoundary,
-	}); err == nil || !strings.Contains(err.Error(), "no tiene consumidor") {
-		t.Fatalf("a between-boundary notch must fail closed in v1, got %v", err)
+	}); err == nil || !strings.Contains(err.Error(), "no tiene frentes apilados") {
+		t.Fatalf("a between-boundary notch on a single front has no edge and must fail closed, got %v", err)
 	}
 
 	offset := []ResolvedOpeningBodyModifier{{

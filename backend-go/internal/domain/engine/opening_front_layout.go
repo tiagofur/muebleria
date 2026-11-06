@@ -69,6 +69,11 @@ type OpeningResolvedFront struct {
 	// region is the whole front). HeightMm already includes it — the field
 	// declares the extension so the cut is auditable against the rule.
 	OverhangMm *int `json:"overhangMm,omitempty"`
+	// EdgeGrips (#1529) is the contract v2 input: when present, the front
+	// passes apply A3 (one gap per edge, measured from the cabinet height)
+	// instead of the v1 consumption. Produced by the project grip (#1532);
+	// absent on every v1 pin.
+	EdgeGrips *OpeningEdgeGrips `json:"edgeGrips,omitempty"`
 }
 
 // OpeningFrontLayout is the #1131 semantic result: the v1 resolution verbatim

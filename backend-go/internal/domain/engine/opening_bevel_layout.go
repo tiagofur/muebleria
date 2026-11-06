@@ -14,8 +14,9 @@ import (
 // v1 geometry contract: only the italian gola's 45° cut at the door's
 // furniture-top (or bottom) front edge is materializable, at WHATEVER size
 // the profile declares — the engine never carries bevel constants. The door
-// is the effect's only consumer (role "door"); any other role, a between
-// boundary, or a bevel that does not fit the board fails closed.
+// is the effect's only consumer (role "door"); any other role or a bevel
+// that does not fit the board fails closed. #1529: a between boundary bevels
+// the top edge of every front just below a between edge.
 
 // applyOpeningBevelsToBoards materializes every resolved bevel modifier onto
 // the front boards the opening constrains. It runs right after the notch
@@ -33,17 +34,25 @@ func applyOpeningBevelsToBoards(boards []layoutBoard, modifiers []ResolvedOpenin
 				modifier.ProfileID, modifier.Role)
 		}
 		kind := openingBoundaryKind(modifier.Boundary)
-		if kind != "top" && kind != "bottom" {
+		if kind != "top" && kind != "bottom" && kind != "between" {
 			return fmt.Errorf(
-				"el bisel del perfil %s sobre la frontera %q no tiene consumidor de geometría en v1",
+				"el bisel del perfil %s sobre la frontera %q no tiene consumidor de geometría",
 				modifier.ProfileID, kind)
 		}
+		// #1529: the bevel cuts the fronts AT its edge, read from the stack:
+		// top → the top row, bottom → the lowest row, between → the top edge
+		// of every front just below a between edge.
+		targets, err := openingFrontsAtEdge(boards, kind)
+		if err != nil {
+			return err
+		}
+		edgeKind := kind
+		if kind == "between" {
+			edgeKind = "top"
+		}
 		placed := false
-		for i := range boards {
-			if !boardIsOpeningFront(&boards[i]) {
-				continue
-			}
-			bevel, err := localBevelPrism(&boards[i], modifier, kind)
+		for _, i := range targets {
+			bevel, err := localBevelPrism(&boards[i], modifier, edgeKind)
 			if err != nil {
 				return err
 			}
@@ -134,4 +143,25 @@ func localBevelPrism(board *layoutBoard, modifier ResolvedOpeningBodyModifier, k
 		ProfileID: modifier.ProfileID,
 		Boundary:  modifier.Boundary,
 	}, nil
+}
+
+// openingFrontsAtEdge returns the front boards at one edge of the stack
+// (#1529): the top row, the lowest row, or every row below a between edge.
+func openingFrontsAtEdge(boards []layoutBoard, kind string) ([]int, error) {
+	rows, err := openingFrontRows(boards)
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	switch kind {
+	case "top":
+		return rows[0].boards, nil
+	case "bottom":
+		return rows[len(rows)-1].boards, nil
+	default:
+		var targets []int
+		for _, row := range rows[1:] {
+			targets = append(targets, row.boards...)
+		}
+		return targets, nil
+	}
 }

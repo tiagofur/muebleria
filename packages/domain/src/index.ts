@@ -916,6 +916,17 @@ export type {
 } from './openingFrontLayout';
 export { resolveOpeningFrontLayout } from './openingFrontLayout';
 
+// --- Opening front contract v2: A3 edge stack (#1529) ---
+export type {
+  OpeningEdgeStackRow,
+  OpeningEdgeBetweenGrip,
+  OpeningEdgeStackInput,
+  OpeningEdgeStackResolvedRow,
+  OpeningEdgeStackResolution,
+  OpeningEdgeStackResult,
+} from './openingEdgeStack';
+export { OPENING_FRONT_CONTRACT_V2, resolveOpeningEdgeStack } from './openingEdgeStack';
+
 // --- Opening body modifiers resolver (#1132) ---
 export type {
   OpeningModifierEffect,

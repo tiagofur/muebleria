@@ -420,9 +420,11 @@ func (s *PostgresStore) loadCatalogModuleDetailsBatched(ctx context.Context, mod
 		var p domain.BoardPart
 		var code *string
 		var l1, l2, w1, w2 bool
-		if err := partRows.Scan(&moduleID, &p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2); err != nil {
+		var lengthMm int
+		if err := partRows.Scan(&moduleID, &p.ID, &code, &p.Description, &p.Quantity, &lengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2); err != nil {
 			return err
 		}
+		p.LengthMm = float64(lengthMm)
 		if code != nil {
 			p.Code = *code
 		}

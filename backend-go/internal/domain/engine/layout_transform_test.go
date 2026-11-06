@@ -109,7 +109,7 @@ func TestLayoutLocalTransformCanonicalBoards(t *testing.T) {
 	// origin side, so the translation parks it at y=PD.
 	left := board("lateral_izquierdo")
 	if left.WidthMm != 560 || left.ThicknessMm != 18 || left.LengthMm != 684 {
-		t.Fatalf("left local dims = %d/%d/%d, want 560/18/684", left.WidthMm, left.ThicknessMm, left.LengthMm)
+		t.Fatalf("left local dims = %v/%v/%v, want 560/18/684", left.WidthMm, left.ThicknessMm, left.LengthMm)
 	}
 	wantLeft := LayoutLocalTransform{
 		TranslationMm: [3]float64{0, 560, 0},
@@ -132,7 +132,7 @@ func TestLayoutLocalTransformCanonicalBoards(t *testing.T) {
 	// (thickness) up, local +Z (length=PW-2T=564) to the right.
 	floor := board("base")
 	if floor.WidthMm != 542 || floor.LengthMm != 564 {
-		t.Fatalf("floor local dims = %d/%d, want 542/564", floor.WidthMm, floor.LengthMm)
+		t.Fatalf("floor local dims = %v/%v, want 542/564", floor.WidthMm, floor.LengthMm)
 	}
 	wantFloor := LayoutLocalTransform{
 		TranslationMm: [3]float64{18, 0, 0},
@@ -233,7 +233,7 @@ func TestLayoutLocalTransformMixedMaterialThickness(t *testing.T) {
 	// y=PD but the panel is now 16 thick, so the AABB starts at x=0..16 and
 	// the right side follows PW-T=584.
 	if left.LengthMm != 688 {
-		t.Fatalf("left length = %d, want PH-2*16=688", left.LengthMm)
+		t.Fatalf("left length = %v, want PH-2*16=688", left.LengthMm)
 	}
 	if left.LocalTransform.TranslationMm != [3]float64{0, 560, 0} {
 		t.Fatalf("left translation = %v", left.LocalTransform.TranslationMm)
@@ -247,7 +247,7 @@ func TestLayoutLocalTransformMixedMaterialThickness(t *testing.T) {
 	}
 	back := findComponentByID(layout.Components, "trasera")
 	if back.ThicknessMm != 6 || back.LengthMm != 600-12 {
-		t.Fatalf("back effective geometry = %d thick / %d long, want 6 / %d (PW-2T)", back.ThicknessMm, back.LengthMm, 600-12)
+		t.Fatalf("back effective geometry = %v thick / %v long, want 6 / %v (PW-2T)", back.ThicknessMm, back.LengthMm, 600-12)
 	}
 
 	// Derived AABB parity holds for the mixed-thickness resolution.

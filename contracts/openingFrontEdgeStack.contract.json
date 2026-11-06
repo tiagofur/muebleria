@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "contract": "granete.opening-front.v2",
+  "description": "#1529 — ADR-0009 A3: un hueco por borde de la pila de frentes, medido desde el alto del mueble (z = 0 en el piso del cuerpo). Arriba con gola: H − D_top + r_inferior; entre frentes con gola: el hueco es D_entre; rebase X: borde inferior en −X; sin agarre: holguras del catálogo. El alto restante se reparte por peso en medios milímetros, y el resto va a la fila más baja primero. Consumido IDÉNTICAMENTE por Go (engine) y TS (packages/domain). Fixtures de la ficha SCILM 8006/8007 (pp. 8–9, r = 1,5, hueco normal 3) y de la gola italiana (#1524).",
+  "resolutionCases": [
+    {
+      "name": "ficha: sin agarre, 1 frente = H − 3",
+      "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [] },
+      "expected": { "topEdgeMm": 718.5, "bottomEdgeMm": 1.5, "rows": [{ "id": "f1", "bottomMm": 1.5, "heightMm": 717 }], "remainderRowId": "f1" }
+    },
+    {
+      "name": "ficha: sin agarre, 2 frentes = (H − 6)/2",
+      "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }, { "id": "f2", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [3] },
+      "expected": { "topEdgeMm": 718.5, "bottomEdgeMm": 1.5, "rows": [{ "id": "f1", "bottomMm": 361.5, "heightMm": 357 }, { "id": "f2", "bottomMm": 1.5, "heightMm": 357 }], "remainderRowId": "f2" }
+    },
+    {
+      "name": "ficha: gola L arriba (40), 1 frente = H − 40",
+      "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [], "topDiscountMm": 40 },
+      "expected": { "topEdgeMm": 681.5, "bottomEdgeMm": 1.5, "rows": [{ "id": "f1", "bottomMm": 1.5, "heightMm": 680 }], "remainderRowId": "f1" }
+    },
+    {
+      "name": "ficha: sólo gola C entre frentes (36), 2 frentes = (H − 39)/2",
+      "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }, { "id": "f2", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [3], "betweenGrips": [{ "upperRowId": "f1", "discountMm": 36 }] },
+      "expected": { "topEdgeMm": 718.5, "bottomEdgeMm": 1.5, "rows": [{ "id": "f1", "bottomMm": 378, "heightMm": 340.5 }, { "id": "f2", "bottomMm": 1.5, "heightMm": 340.5 }], "remainderRowId": "f2" }
+    },
+    {
+      "name": "ficha: gola L arriba + C entre frentes, 2 frentes = (H − 76)/2",
+      "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }, { "id": "f2", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [3], "topDiscountMm": 40, "betweenGrips": [{ "upperRowId": "f1", "discountMm": 36 }] },
+      "expected": { "topEdgeMm": 681.5, "bottomEdgeMm": 1.5, "rows": [{ "id": "f1", "bottomMm": 359.5, "heightMm": 322 }, { "id": "f2", "bottomMm": 1.5, "heightMm": 322 }], "remainderRowId": "f2" }
+    },
+    {
+      "name": "ficha: alacena con rebase 20 = H − 1,5 + 20, borde inferior en −20",
+      "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [], "bottomOverhangMm": 20 },
+      "expected": { "topEdgeMm": 718.5, "bottomEdgeMm": -20, "rows": [{ "id": "f1", "bottomMm": -20, "heightMm": 738.5 }], "remainderRowId": "f1" }
+    },
+    {
+      "name": "italiana: arriba 36, 1 puerta = H − 36",
+      "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [], "topDiscountMm": 36 },
+      "expected": { "topEdgeMm": 685.5, "bottomEdgeMm": 1.5, "rows": [{ "id": "f1", "bottomMm": 1.5, "heightMm": 684 }], "remainderRowId": "f1" }
+    },
+    {
+      "name": "italiana: arriba 36 + entre 36, 2 frentes = (H − 72)/2",
+      "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }, { "id": "f2", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [3], "topDiscountMm": 36, "betweenGrips": [{ "upperRowId": "f1", "discountMm": 36 }] },
+      "expected": { "topEdgeMm": 685.5, "bottomEdgeMm": 1.5, "rows": [{ "id": "f1", "bottomMm": 361.5, "heightMm": 324 }, { "id": "f2", "bottomMm": 1.5, "heightMm": 324 }], "remainderRowId": "f2" }
+    },
+    {
+      "name": "cajonera de 3 frentes: L arriba + C entre cada frente; el resto va al de abajo",
+      "input": { "cabinetHeightMm": 720, "rows": [{ "id": "c1", "weight": 1 }, { "id": "c2", "weight": 1 }, { "id": "c3", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [3, 3], "topDiscountMm": 40, "betweenGrips": [{ "upperRowId": "c1", "discountMm": 36 }, { "upperRowId": "c2", "discountMm": 36 }] },
+      "expected": { "topEdgeMm": 681.5, "bottomEdgeMm": 1.5, "rows": [{ "id": "c1", "bottomMm": 479, "heightMm": 202.5 }, { "id": "c2", "bottomMm": 240.5, "heightMm": 202.5 }, { "id": "c3", "bottomMm": 1.5, "heightMm": 203 }], "remainderRowId": "c3" }
+    },
+    {
+      "name": "pesos desiguales: cajón chico arriba (1) y grande abajo (2) con L arriba",
+      "input": { "cabinetHeightMm": 720, "rows": [{ "id": "c1", "weight": 1 }, { "id": "c2", "weight": 2 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [3], "topDiscountMm": 40 },
+      "expected": { "topEdgeMm": 681.5, "bottomEdgeMm": 1.5, "rows": [{ "id": "c1", "bottomMm": 456, "heightMm": 225.5 }, { "id": "c2", "bottomMm": 1.5, "heightMm": 451.5 }], "remainderRowId": "c2" }
+    }
+  ],
+  "invalidCases": [
+    { "name": "sin filas", "input": { "cabinetHeightMm": 720, "rows": [], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [] }, "expectedErrorCode": "OPENING_LAYOUT_INVALID" },
+    { "name": "huecos que no cuadran con las filas", "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }, { "id": "f2", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [] }, "expectedErrorCode": "OPENING_LAYOUT_INVALID" },
+    { "name": "medida que no es múltiplo de 0,5", "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }], "topRevealMm": 1.25, "bottomRevealMm": 1.5, "gapsMm": [] }, "expectedErrorCode": "OPENING_LAYOUT_INVALID" },
+    { "name": "descuento arriba 0", "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [], "topDiscountMm": 0 }, "expectedErrorCode": "OPENING_LAYOUT_INVALID" },
+    { "name": "gola entre frentes bajo la última fila", "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [], "betweenGrips": [{ "upperRowId": "f1", "discountMm": 36 }] }, "expectedErrorCode": "OPENING_BOUNDARY_INVALID" },
+    { "name": "gola entre frentes repetida", "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 1 }, { "id": "f2", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [3], "betweenGrips": [{ "upperRowId": "f1", "discountMm": 36 }, { "upperRowId": "f1", "discountMm": 30 }] }, "expectedErrorCode": "OPENING_BOUNDARY_DUPLICATE" },
+    { "name": "descuentos que se comen el mueble", "input": { "cabinetHeightMm": 100, "rows": [{ "id": "f1", "weight": 1 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [], "topDiscountMm": 120 }, "expectedErrorCode": "OPENING_LAYOUT_INVALID" },
+    { "name": "peso 0", "input": { "cabinetHeightMm": 720, "rows": [{ "id": "f1", "weight": 0 }], "topRevealMm": 1.5, "bottomRevealMm": 1.5, "gapsMm": [] }, "expectedErrorCode": "OPENING_LAYOUT_INVALID" }
+  ],
+  "widthCase": {
+    "name": "ficha: ancho W − 3 — el agarre no toca el ancho del catálogo",
+    "cabinetWidthMm": 600,
+    "catalogFrontWidthMm": 597,
+    "expectedFrontWidthMm": 597
+  }
+}

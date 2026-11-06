@@ -286,7 +286,7 @@ type BoardPart struct {
 	Code        string `json:"code,omitempty"`
 	Description string `json:"description"`
 	Quantity    int    `json:"quantity"`
-	LengthMm    int    `json:"length_mm"`
+	LengthMm    float64 `json:"length_mm"`
 	WidthMm     int    `json:"width_mm"`
 	// Grain (veta) is inherited from the resolved material's GrainDefault —
 	// never set per piece. Mirrors how edge band is resolved from material.
