@@ -1175,7 +1175,7 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 	openingConstrained := map[int]bool{}
 	if len(opts.fronts) > 0 {
 		var passErr error
-		openingConstrained, passErr = applyOpeningFrontsToBoards(boards, opts.fronts)
+		openingConstrained, passErr = applyOpeningFrontsToBoards(boards, opts.fronts, float64(dims.HeightMm))
 		if passErr != nil {
 			return nil, passErr
 		}

@@ -191,8 +191,8 @@ func TestOpeningBevelFailsClosed(t *testing.T) {
 	}}
 	if _, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
 		fronts: openingPassFront("top", 40), openingBodyModifiers: betweenBoundary,
-	}); err == nil || !strings.Contains(err.Error(), "no tiene consumidor") {
-		t.Fatalf("a between-boundary bevel must fail closed in v1, got %v", err)
+	}); err == nil || !strings.Contains(err.Error(), "no encontró frentes") {
+		t.Fatalf("a between-boundary bevel on a single front has no edge to cut and must fail closed, got %v", err)
 	}
 }
 
