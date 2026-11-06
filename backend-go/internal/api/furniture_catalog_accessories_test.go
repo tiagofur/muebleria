@@ -55,21 +55,28 @@ func TestBuildAccessoryGroupsForAgregado_1519(t *testing.T) {
 			{ID: "og4", Code: "AA_SIN_KIT", Name: "Común", Kind: "hardware", OptionIDs: []string{optionGaleria}},
 			// Otro kind: no participa.
 			{ID: "og5", Code: "AA_BOARD", Name: "Board", Kind: "board", KitHardwareID: &kitMain, OptionIDs: []string{optionGaleria}},
-			// Kit principal: galería (activa) + una inactiva.
 			{ID: "og1", Code: "LATERAL_E", Name: "Lateral superior E", Kind: "hardware", Required: true, KitHardwareID: &kitMain, OptionIDs: []string{optionGaleria, optionInactive}},
+			// Kit principal: B_COVER_E (ordena ANTES de LATERAL_E — review:
+			// con un solo grupo el sort no es observable) + galería + inactiva.
+			{ID: "og6", Code: "B_COVER_E", Name: "Boxcover E", Kind: "hardware", Required: false, KitHardwareID: &kitMain, OptionIDs: []string{optionBoxcap}},
 		},
 	}
 
 	got := buildAccessoryGroupsForAgregado(agr, catalog)
-	// Sólo LATERAL_E: OTRO-KIT/SIN-KIT/AA_BOARD quedan fuera (kit ajeno, sin
-	// kit, otro kind), el inactivo no entra, y el orden es alfabético.
-	if len(got) != 1 {
-		t.Fatalf("groups = %d (%v), want 1 LATERAL_E", len(got), got)
+	// Sólo los grupos de kit-e: OTRO-KIT/SIN-KIT/AA_BOARD quedan fuera (kit
+	// ajeno, sin kit, otro kind), el inactivo no entra, y el ORDEN es
+	// alfabético — B_COVER_E antes que LATERAL_E (review: con un solo grupo
+	// el sort no era observable).
+	if len(got) != 2 {
+		t.Fatalf("groups = %d (%v), want [B_COVER_E LATERAL_E]", len(got), got)
 	}
-	if got[0].Code != "LATERAL_E" {
-		t.Fatalf("code = %v, want LATERAL_E", got[0].Code)
+	if got[0].Code != "B_COVER_E" || got[1].Code != "LATERAL_E" {
+		t.Fatalf("codes = %v/%v, want B_COVER_E/LATERAL_E (orden alfabético)", got[0].Code, got[1].Code)
 	}
-	lat := got[0]
+	if got[0].Required {
+		t.Errorf("B_COVER_E must not inherit required from LATERAL_E (merge por código, no por grupo)")
+	}
+	lat := got[1]
 	if !lat.Required {
 		t.Error("LATERAL_E must inherit required=true")
 	}
@@ -108,12 +115,18 @@ func TestBuildAccessoryGroupsForAgregado_1519(t *testing.T) {
 	if opt.AgregadoID != agr.ID {
 		t.Fatalf("option agregadoId = %q, want %q", opt.AgregadoID, agr.ID)
 	}
-	if len(opt.AccessoryGroups) != 1 || opt.AccessoryGroups[0].Code != "LATERAL_E" {
-		t.Fatalf("accessoryGroups = %v, want [LATERAL_E]", opt.AccessoryGroups)
+	if len(opt.AccessoryGroups) != 2 {
+		t.Fatalf("accessoryGroups = %v, want [B_COVER_E LATERAL_E]", opt.AccessoryGroups)
 	}
-	for _, id := range opt.AccessoryGroups[0].OptionIDs {
-		if id == optionInactive {
-			t.Errorf("la opción inactiva %s no debe entrar", id)
+	if opt.AccessoryGroups[0].Code != "B_COVER_E" || opt.AccessoryGroups[1].Code != "LATERAL_E" {
+		t.Fatalf("accessoryGroups codes = %v/%v, want B_COVER_E/LATERAL_E (orden alfabético)",
+			opt.AccessoryGroups[0].Code, opt.AccessoryGroups[1].Code)
+	}
+	for _, group := range opt.AccessoryGroups {
+		for _, id := range group.OptionIDs {
+			if id == optionInactive {
+				t.Errorf("la opción inactiva %s no debe entrar", id)
+			}
 		}
 	}
 }
