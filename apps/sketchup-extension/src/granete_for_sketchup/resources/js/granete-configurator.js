@@ -531,24 +531,22 @@
           accChevron.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
           accPreview.appendChild(accChevron);
 
-          var accOpen = function () {
+          // #1519 (review P1-1): el MISMO puente que los herrajes — payload
+          // {groupCode, groupName, currentHardwareId, optionIds, context} y
+          // el lado Ruby devuelve la elección por su camino nativo (un
+          // onPick serializado no sobrevive el bridge).
+          accPreview.disabled = !acc.optionIds || acc.optionIds.length === 0;
+          accPreview.addEventListener("click", function () {
             if (!acc.optionIds || acc.optionIds.length === 0) return;
-            if (window.sketchup && typeof window.sketchup.open_hardware_selector === "function") {
-              window.sketchup.open_hardware_selector(JSON.stringify({
-                groupCode: acc.code,
-                groupLabel: (role.name || role.code) + " · " + (acc.name || acc.code),
-                rows: acc.optionIds.map(function (hid) {
-                  var h = hardwareEntryById(hid);
-                  return { id: hid, label: h ? ((h.code ? h.code + " — " : "") + (h.name || "")) : hid };
-                }),
-                chosenId: accChosenId,
-                onPick: function (hardwareId) {
-                  applyHardwareChoice(acc.code, hardwareId);
-                }
-              }));
-            }
-          };
-          accPreview.addEventListener("click", accOpen);
+            openLibraryHardwareSelector(
+              {
+                code: acc.code,
+                name: (role.name || role.code) + " · " + (acc.name || acc.code),
+                optionIds: acc.optionIds
+              },
+              accChosenId
+            );
+          });
           accBlock.appendChild(accPreview);
 
           libAgregadosContainer.appendChild(accBlock);

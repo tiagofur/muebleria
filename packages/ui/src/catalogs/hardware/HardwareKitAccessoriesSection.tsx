@@ -74,7 +74,11 @@ export function HardwareKitAccessoriesSection({
   const createGroup = () => {
     const name = newName.trim();
     if (!name || !onCreateGroup) return;
-    onCreateGroup({ code: groupCodeFromName(name), name, required: newRequired, kitHardwareId: kitId });
+    // #1519 (review P2-1): el código es UNIQUE por organización — prefijo del
+    // kit para que «Galería» en dos kits distintos no choque con 409.
+    const code = groupCodeFromName(kitCode + ' ' + name);
+    if (!code) return;
+    onCreateGroup({ code, name, required: newRequired, kitHardwareId: kitId });
     setNewName('');
     setNewRequired(false);
     setCreating(false);
@@ -222,7 +226,7 @@ export function HardwareKitAccessoriesSection({
                 type="button"
                 className="btn btn--sm btn--primary"
                 onClick={createGroup}
-                disabled={!newName.trim()}
+                disabled={!newName.trim() || !groupCodeFromName(kitCode + ' ' + newName)}
                 data-testid="hardware-accessory-new-create"
               >
                 Crear accesorio
