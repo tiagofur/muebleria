@@ -20,19 +20,20 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	// del overlay parseado; nil = escalera de librería.
 	mux.Handle("GET /api/catalog/construction-policy", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleConstructionPolicy))))
 
-	// Catálogo: Capacidades de apertura de fábrica (#1134) — lectura del
-	// blob 'opening.capabilities' parseado; nil = escalera de librería.
+	// Catálogo: Capacidades de apertura (#1134), proyectadas desde los
+	// estilos de agarre (#1531); nil = el taller no tiene estilos.
 	// Available ≠ valid: gobierna la oferta para nueva autoría, jamás los
 	// diseños existentes.
 	mux.Handle("GET /api/catalog/opening-capabilities", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleOpeningCapabilities))))
 
-	// Catálogo: validación autoritativa de configuraciones de apertura
-	// (#1135) — ocultar en UI jamás sustituye esta validación; inválida
-	// responde 422 INVALID_OPENING_CONFIGURATION con details.reason.
-	mux.Handle("POST /api/catalog/opening-configuration/validate", authMW(http.HandlerFunc(server.HandleOpeningConfigurationValidate)))
-
 	// Catálogo: Perfiles de apertura (#1130) — gola L/C, REACH… con ficha
 	// técnica respaldada; escrituras If-Match.
+	// #1531: grip styles (the workshop's named grip recipes).
+	mux.Handle("GET /api/catalog/grip-styles", authMW(http.HandlerFunc(server.HandleGripStyles)))
+	mux.Handle("POST /api/catalog/grip-styles", authMW(http.HandlerFunc(server.HandleGripStyles)))
+	mux.Handle("GET /api/catalog/grip-styles/{id}", authMW(http.HandlerFunc(server.HandleGripStyleByID)))
+	mux.Handle("PUT /api/catalog/grip-styles/{id}", authMW(http.HandlerFunc(server.HandleGripStyleByID)))
+	mux.Handle("DELETE /api/catalog/grip-styles/{id}", authMW(http.HandlerFunc(server.HandleGripStyleByID)))
 	mux.Handle("GET /api/catalog/opening-profiles", authMW(http.HandlerFunc(server.HandleOpeningProfiles)))
 	mux.Handle("POST /api/catalog/opening-profiles", authMW(http.HandlerFunc(server.HandleOpeningProfiles)))
 	mux.Handle("GET /api/catalog/opening-profiles/suggestions", authMW(http.HandlerFunc(server.HandleOpeningProfileSuggestions)))

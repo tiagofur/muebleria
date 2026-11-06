@@ -61,8 +61,8 @@ func TestOpeningFrontLayoutPropagatesV1ErrorsVerbatim(t *testing.T) {
 		Positioning: "bottom_overhang",
 	}
 	_, resErr := ResolveOpeningFrontLayout(intent, 600, 720, nil, nil)
-	if resErr == nil || resErr.Code != OpeningErrOverhangEvidencePend {
-		t.Fatalf("code = %v, want %s", resErr, OpeningErrOverhangEvidencePend)
+	if resErr == nil || resErr.Code != OpeningErrLayoutInvalid {
+		t.Fatalf("code = %v, want %s", resErr, OpeningErrLayoutInvalid)
 	}
 }
 

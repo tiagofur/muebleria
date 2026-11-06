@@ -64,7 +64,7 @@ type OpeningResolvedFront struct {
 	OffsetMm int                        `json:"offsetMm"`
 	Grips    []OpeningResolvedFrontGrip `json:"grips"`
 	Rules    OpeningResolvedFrontRules  `json:"rules"`
-	// OverhangMm (#1138, caso C): the backed `opening.bottom-overhang` value
+	// OverhangMm (#1138, caso C): overhang millimetres (from the grip styles since #1531)
 	// this front extends below the body bottom. nil = no overhang (the body
 	// region is the whole front). HeightMm already includes it — the field
 	// declares the extension so the cut is auditable against the rule.
@@ -96,7 +96,7 @@ func openingZoneAccessKnown(access string) bool {
 // Pure, deterministic, integer millimetres; identical to the TS domain
 // through the shared fixture. Shape errors fail closed before the v1 math;
 // v1 errors propagate verbatim. overhangMm (#1138) is the factory's BACKED
-// case C rule parsed from the versioned `opening.bottom-overhang` blob;
+// case C millimetres from the grip styles (#1531);
 // nil = no backed rule, which keeps bottom_overhang BLOCKED verbatim.
 func ResolveOpeningFrontLayout(
 	intent OpeningIntent,

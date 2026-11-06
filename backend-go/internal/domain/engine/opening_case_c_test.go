@@ -24,13 +24,15 @@ func caseCLayout(overhangMm *int) (*OpeningFrontLayout, *OpeningResolutionError)
 	return ResolveOpeningFrontLayout(intent, 600, 720, nil, overhangMm)
 }
 
-func TestOpeningCaseCWithoutRuleStaysBlocked(t *testing.T) {
+// #1531: the millimetres come from the grip styles; a resolve without
+// them is invalid input, never a pending-evidence state.
+func TestOpeningCaseCWithoutMillimetresIsInvalid(t *testing.T) {
 	layout, resErr := caseCLayout(nil)
 	if resErr == nil || layout != nil {
-		t.Fatalf("sin regla respaldada el caso C debe seguir BLOCKED: %+v / %v", layout, resErr)
+		t.Fatalf("sin milímetros el caso C no resuelve: %+v / %v", layout, resErr)
 	}
-	if resErr.Code != OpeningErrOverhangEvidencePend {
-		t.Fatalf("code = %s, want %s", resErr.Code, OpeningErrOverhangEvidencePend)
+	if resErr.Code != OpeningErrLayoutInvalid {
+		t.Fatalf("code = %s, want %s", resErr.Code, OpeningErrLayoutInvalid)
 	}
 }
 
@@ -107,8 +109,8 @@ func TestOpeningCaseCFamilyGateRulesSelection(t *testing.T) {
 	if got := ValidateOpeningConfiguration(restricted, capabilities, nil, rule); got.State != OpeningSelectionInvalid || got.Reason != OpeningReasonPlacementRestricted {
 		t.Fatalf("validación = %+v, want placementRestricted", got)
 	}
-	// Sin regla respaldada: blocked veraz aunque la familia permita.
-	if got := ValidateOpeningConfiguration(selection, capabilities, nil, nil); got.State != OpeningSelectionBlocked || got.Reason != OpeningReasonOverhangEvidencePend {
-		t.Fatalf("validación = %+v, want blocked/OQ-3", got)
+	// #1531: sin regla ya no bloquea — los milímetros salen de los estilos.
+	if got := ValidateOpeningConfiguration(selection, capabilities, nil, nil); got.State != OpeningSelectionValid {
+		t.Fatalf("validación = %+v, want valid (A4)", got)
 	}
 }

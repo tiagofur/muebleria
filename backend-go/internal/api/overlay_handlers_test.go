@@ -1218,7 +1218,7 @@ func TestHandleSaveAndActivatePolicyDraft(t *testing.T) {
 
 // #1525 — a malformed opening blob is rejected at the write boundary (422)
 // with the same parser the resolve runs; a valid overhang is stored.
-func TestHandleUpdateLibraryOverlayValidatesOpeningBlobs(t *testing.T) {
+func TestHandleUpdateLibraryOverlayRejectsRetiredOpeningBlobs(t *testing.T) {
 	standardID := uuid.MustParse(domain.GraneteStandardLibraryID)
 	orgA := uuid.New()
 	userID := uuid.New()
@@ -1242,19 +1242,15 @@ func TestHandleUpdateLibraryOverlayValidatesOpeningBlobs(t *testing.T) {
 		return rr
 	}
 
-	for name, overhang := range map[string]any{
-		"zero": 0, "negative": -5, "decimal": 12.5, "text": "20",
+	// #1531: the opening blobs are retired (their content lives in the grip
+	// styles); the overlay rejects the namespace like any unknown one.
+	for _, overrides := range []map[string]any{
+		{"opening.bottom-overhang": map[string]any{"version": 1, "overhangMm": 20}},
+		{"opening.capabilities": map[string]any{"version": 1, "grips": map[string]any{"handle": map[string]any{"enabled": true}}}},
 	} {
-		rr := patch(map[string]any{"opening.bottom-overhang": map[string]any{"version": 1, "overhangMm": overhang}})
-		if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "OPENING_OVERHANG_RULE_INVALID") {
-			t.Fatalf("overhang %s must be 422 OPENING_OVERHANG_RULE_INVALID, got %d: %s", name, rr.Code, rr.Body.String())
+		rr := patch(overrides)
+		if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "permitted namespaces") {
+			t.Fatalf("retired opening blob must be rejected, got %d: %s", rr.Code, rr.Body.String())
 		}
-	}
-	rr := patch(map[string]any{"opening.capabilities": map[string]any{"version": 1, "grips": map[string]any{"handle": map[string]any{"enabled": true, "mm": 40}}}})
-	if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "OPENING_CAPABILITIES_INVALID") {
-		t.Fatalf("capabilities with an unknown key must be 422, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if rr := patch(map[string]any{"opening.bottom-overhang": map[string]any{"version": 1, "overhangMm": 20}}); rr.Code != http.StatusOK {
-		t.Fatalf("a valid 20 mm overhang must be stored, got %d: %s", rr.Code, rr.Body.String())
 	}
 }

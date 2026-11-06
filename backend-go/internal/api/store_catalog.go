@@ -5,6 +5,7 @@ import (
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // Contrato: catálogo comercial — tableros, ambientes, categorías, cANTON,
@@ -28,15 +29,21 @@ type CatalogStore interface {
 	// standard-library overlay; nil when no active overlay governs.
 	GetFactoryConstructionPolicy(ctx context.Context) (*engine.FactoryConstructionPolicy, error)
 
-	// Catalog: opening capabilities (#1134) — the parsed 'opening.capabilities'
-	// overlay blob; nil when no active overlay governs. Available governs
+	// Catalog: opening capabilities (#1134) projected from the grip styles
+	// (#1531); nil when the organization has no styles. Available governs
 	// new-authoring offering only, never existing designs.
 	GetOpeningCapabilities(ctx context.Context) (*domain.OpeningCapabilities, error)
 
-	// Catalog: the backed case C overhang rule (#1138) — the parsed
-	// 'opening.bottom-overhang' overlay blob; nil = no backed rule and the
-	// case C resolution/gate stay BLOCKED (never a default).
+	// Catalog: the overhang millimetres of v1 bottom_overhang selections,
+	// from the grip styles (#1531). Never nil: 20 mm by default (A4).
 	GetOpeningOverhangRule(ctx context.Context) (*domain.OpeningOverhangRule, error)
+
+	// Catalog: grip styles (#1531) — If-Match guarded, audited writes.
+	ListGripStyles(ctx context.Context) ([]domain.GripStyle, error)
+	GetGripStyle(ctx context.Context, id string) (*domain.GripStyle, error)
+	CreateGripStyle(ctx context.Context, style *domain.GripStyle, meta storage.GripStyleWriteMeta) error
+	UpdateGripStyle(ctx context.Context, id string, expectedVersion int64, style *domain.GripStyle, meta storage.GripStyleWriteMeta) error
+	DeleteGripStyle(ctx context.Context, id string, expectedVersion int64, meta storage.GripStyleWriteMeta) error
 
 	// Catalog: opening profiles (#1130) — the grip profile catalog.
 	ListOpeningProfiles(ctx context.Context) ([]domain.OpeningProfile, error)

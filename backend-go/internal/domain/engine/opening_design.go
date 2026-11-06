@@ -68,7 +68,7 @@ type DesignOpeningBOMContext struct {
 // front dimensions. widthMm/heightMm must be positive — the caller passes
 // the furniture dims it resolved (nil selection returns nil: no intent, no
 // resolution). overhangMm (#1138) is the factory's BACKED case C rule parsed
-// from the versioned `opening.bottom-overhang` blob; nil = no backed rule,
+// from the grip styles (#1531); nil = no millimetres,
 // which keeps bottom_overhang BLOCKED verbatim. bomCtx (#1263) enables the
 // BOM resolution for gola selections; nil keeps the fronts-only behavior.
 func ResolveDesignOpening(

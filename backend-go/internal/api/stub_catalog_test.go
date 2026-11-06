@@ -5,6 +5,7 @@ package api
 // las firmas son las de la sub-interface en store_catalog.go
 import (
 	"context"
+	"fmt"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -289,4 +290,78 @@ func (s *stubStore) UpdateOpeningProfile(_ context.Context, _ string, _ int64, p
 
 func (s *stubStore) DeactivateOpeningProfile(_ context.Context, _ string, _ int64) error {
 	return s.openingProfileErr
+}
+
+// #1531 — grip styles stub: validates the shape like the real store (the
+// catalog checks need PostgreSQL) and keeps rows in memory.
+func (s *stubStore) ListGripStyles(context.Context) ([]domain.GripStyle, error) {
+	if s.gripStyleErr != nil {
+		return nil, s.gripStyleErr
+	}
+	return append([]domain.GripStyle{}, s.gripStyles...), nil
+}
+
+func (s *stubStore) GetGripStyle(_ context.Context, id string) (*domain.GripStyle, error) {
+	for i := range s.gripStyles {
+		if s.gripStyles[i].ID == id {
+			style := s.gripStyles[i]
+			return &style, nil
+		}
+	}
+	return nil, storage.ErrGripStyleNotFound
+}
+
+func (s *stubStore) CreateGripStyle(_ context.Context, style *domain.GripStyle, _ storage.GripStyleWriteMeta) error {
+	if s.gripStyleErr != nil {
+		return s.gripStyleErr
+	}
+	if style.ByFurnitureType == nil {
+		style.ByFurnitureType = map[string]domain.GripStyleRecipe{}
+	}
+	domain.NormalizeGripStyle(style)
+	if err := domain.ValidateGripStyleShape(*style); err != nil {
+		return err
+	}
+	style.ID = fmt.Sprintf("gs-%d", len(s.gripStyles)+1)
+	style.Version = 1
+	s.gripStyles = append(s.gripStyles, *style)
+	return nil
+}
+
+func (s *stubStore) UpdateGripStyle(_ context.Context, id string, expectedVersion int64, style *domain.GripStyle, _ storage.GripStyleWriteMeta) error {
+	if s.gripStyleErr != nil {
+		return s.gripStyleErr
+	}
+	for i := range s.gripStyles {
+		if s.gripStyles[i].ID != id {
+			continue
+		}
+		if s.gripStyles[i].Version != expectedVersion {
+			return storage.ErrVersionConflict
+		}
+		domain.NormalizeGripStyle(style)
+		if err := domain.ValidateGripStyleShape(*style); err != nil {
+			return err
+		}
+		style.ID, style.Version = id, expectedVersion+1
+		s.gripStyles[i] = *style
+		return nil
+	}
+	return storage.ErrGripStyleNotFound
+}
+
+func (s *stubStore) DeleteGripStyle(_ context.Context, id string, expectedVersion int64, _ storage.GripStyleWriteMeta) error {
+	if s.gripStyleErr != nil {
+		return s.gripStyleErr
+	}
+	for i := range s.gripStyles {
+		if s.gripStyles[i].ID == id {
+			if s.gripStyles[i].Version != expectedVersion {
+				return storage.ErrVersionConflict
+			}
+			s.gripStyles = append(s.gripStyles[:i], s.gripStyles[i+1:]...)
+			return nil
+		}
+	}
+	return storage.ErrGripStyleNotFound
 }

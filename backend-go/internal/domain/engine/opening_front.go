@@ -15,21 +15,20 @@ import "fmt"
 //	in v1). Integer math only; canonical outputs are integer mm.
 //
 // Fail-closed by design: a profile whose datasheet is not verified blocks
-// authoring (OPENING_PROFILE_DATASHEET_PENDING); bottom_overhang blocks on
-// pending field evidence (OPENING_OVERHANG_EVIDENCE_PENDING, OQ-3). Nothing
-// is invented.
+// authoring (OPENING_PROFILE_DATASHEET_PENDING); a bottom_overhang without
+// its millimetres (from the grip styles since #1531) is invalid input.
+// Nothing is invented.
 
 const OpeningFrontContract = "granete.opening-front.v1"
 
 // Resolution error codes — mirrored verbatim by the TS domain.
 const (
-	OpeningErrLayoutInvalid        = "OPENING_LAYOUT_INVALID"
-	OpeningErrBoundaryInvalid      = "OPENING_BOUNDARY_INVALID"
-	OpeningErrBoundaryDuplicate    = "OPENING_BOUNDARY_DUPLICATE"
-	OpeningErrBoundaryUnknownZone  = "OPENING_BOUNDARY_UNKNOWN_ZONE"
-	OpeningErrDatasheetPending     = "OPENING_PROFILE_DATASHEET_PENDING"
-	OpeningErrProfileUnknown       = "OPENING_PROFILE_UNKNOWN"
-	OpeningErrOverhangEvidencePend = "OPENING_OVERHANG_EVIDENCE_PENDING"
+	OpeningErrLayoutInvalid       = "OPENING_LAYOUT_INVALID"
+	OpeningErrBoundaryInvalid     = "OPENING_BOUNDARY_INVALID"
+	OpeningErrBoundaryDuplicate   = "OPENING_BOUNDARY_DUPLICATE"
+	OpeningErrBoundaryUnknownZone = "OPENING_BOUNDARY_UNKNOWN_ZONE"
+	OpeningErrDatasheetPending    = "OPENING_PROFILE_DATASHEET_PENDING"
+	OpeningErrProfileUnknown      = "OPENING_PROFILE_UNKNOWN"
 	// #1528: a grip over stacked fronts waits for the multi-zone resolver (#1529).
 	OpeningErrStackedFronts = "OPENING_STACKED_FRONTS_UNSUPPORTED"
 )
@@ -124,7 +123,7 @@ func openingGripBoundaryKey(grip OpeningGrip) string {
 // deterministic, integer millimetres; identical to the TS domain through the
 // shared fixture. Never mutates, never invents: blocked evidence → blocked
 // result. overhangMm (#1138) is the factory's BACKED case C rule parsed from
-// the versioned `opening.bottom-overhang` blob; nil = no backed rule, which
+// the grip styles (#1531); nil = no millimetres, which
 // keeps bottom_overhang BLOCKED verbatim.
 func ResolveOpeningFront(
 	intent OpeningIntent,
@@ -150,14 +149,12 @@ func ResolveOpeningFront(
 	}
 
 	if intent.Positioning == "bottom_overhang" {
-		// #1138 case C: the behaviour resolves ONLY against a backed rule
-		// (the versioned `opening.bottom-overhang` blob). Without one, OQ-3
-		// field evidence is still pending — the intent is valid, the
-		// resolution is blocked, nothing is invented. A malformed rule value
-		// is an incompatible input, not a silent default.
+		// #1138 case C, #1531 (A4): the overhang millimetres come from the
+		// workshop's grip styles (20 by default) — the caller always has
+		// them; a missing value is an incompatible input, never a default.
 		if overhangMm == nil {
-			return nil, openingFail(OpeningErrOverhangEvidencePend,
-				"el rebase inferior espera evidencia de campo (OQ-3)")
+			return nil, openingFail(OpeningErrLayoutInvalid,
+				"falta el rebase en milímetros del estilo de agarre")
 		}
 		if *overhangMm <= 0 {
 			return nil, openingFail(OpeningErrLayoutInvalid,

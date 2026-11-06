@@ -118,7 +118,6 @@ func TestOpeningSelectionReasonMessagesTotal(t *testing.T) {
 		OpeningReasonProfileNotCurated, OpeningReasonProfileUnknown,
 		OpeningReasonDatasheetPending, OpeningReasonPlacementRestricted,
 		OpeningReasonPlacementIncompatible, OpeningReasonFurnitureTypeUnknown,
-		OpeningReasonOverhangEvidencePend,
 	} {
 		if OpeningSelectionReasonMessage(reason) == reason {
 			t.Fatalf("reason %s has no workshop-facing message", reason)

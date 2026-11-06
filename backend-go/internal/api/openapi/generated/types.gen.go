@@ -3176,6 +3176,39 @@ type GolaProfileSuggestion struct {
 	BomMembers             map[string]OpeningProfileBOMMember `json:"bom_members"`
 }
 
+type GripStyleRecipe struct {
+	Mode             string   `json:"mode"`
+	HandleHardwareId *string  `json:"handleHardwareId,omitempty"`
+	TopProfileId     *string  `json:"topProfileId,omitempty"`
+	BetweenProfileId *string  `json:"betweenProfileId,omitempty"`
+	OverhangMm       *float64 `json:"overhangMm,omitempty"`
+}
+
+type GripStyleWrite struct {
+	Name            string         `json:"name"`
+	Offered         bool           `json:"offered"`
+	IsDefault       bool           `json:"isDefault"`
+	ByFurnitureType map[string]any `json:"byFurnitureType"`
+}
+
+type GripStyle struct {
+	ID              string          `json:"id"`
+	OrganizationId  string          `json:"organizationId"`
+	Name            string          `json:"name"`
+	Offered         bool            `json:"offered"`
+	IsDefault       bool            `json:"isDefault"`
+	ByFurnitureType map[string]any  `json:"byFurnitureType"`
+	MigrationReport *map[string]any `json:"migrationReport,omitempty"`
+	Version         int64           `json:"version"`
+	CreatedAt       string          `json:"createdAt"`
+	UpdatedAt       string          `json:"updatedAt"`
+}
+
+type GripStyleDeleted struct {
+	Deleted bool   `json:"deleted"`
+	ID      string `json:"id"`
+}
+
 type OpeningProfileWrite struct {
 	Material               *string                             `json:"material,omitempty"`
 	Positions              []string                            `json:"positions,omitempty"`
