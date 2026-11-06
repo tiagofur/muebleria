@@ -145,7 +145,7 @@ export interface AgregadoRigidMember {
    */
   readonly hostPlacement?: string;
   /**
-   * #1518 F1 (was #1512 hands): mano del miembro ('left' | 'right'). Con un herraje que declara
+   * #1518 F1 (was #1512 hands): ancla del miembro ('left' | 'right' | 'center'). Con un herraje que declara
    * hands selecciona el asset de ese lado y deriva el anclaje X por defecto
    * (left → min/+; right → max/−) cuando el miembro no declara el suyo
    * explícito. Ausente = simétrico/legacy.
