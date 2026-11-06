@@ -58,7 +58,7 @@ export type AssemblyAxisRef = 'min' | 'max' | 'center';
 
 export interface AssemblyAxisPlacement {
   /**
-   * #1512 M3: opcional SOLO para miembros con mano — la mano deriva el ref X
+   * #1518 F1 (was #1512 hands): opcional SOLO para miembros con mano — la mano deriva el ref X
    * default (left → min, right → max) vía effectivePlacement. Sin mano, la
    * validación de definición exige ref explícita (fail-closed intacto).
    */
@@ -114,7 +114,7 @@ export interface HardwareDimensionOverride {
 }
 
 /**
- * #1512 M3: mano de un miembro rígido — vocabulario cerrado. Ausente = el
+ * #1518 F1 (was #1512 hands): mano de un miembro rígido — vocabulario cerrado. Ausente = el
  * miembro es simétrico/legacy (byte-idéntico); declarado con un herraje
  * multi-diseño (hands) selecciona asset y anclaje por lado.
  */
@@ -145,7 +145,7 @@ export interface AgregadoRigidMember {
    */
   readonly hostPlacement?: string;
   /**
-   * #1512 M3: mano del miembro ('left' | 'right'). Con un herraje que declara
+   * #1518 F1 (was #1512 hands): mano del miembro ('left' | 'right'). Con un herraje que declara
    * hands selecciona el asset de ese lado y deriva el anclaje X por defecto
    * (left → min/+; right → max/−) cuando el miembro no declara el suyo
    * explícito. Ausente = simétrico/legacy.
@@ -234,7 +234,7 @@ export interface ResolvedRigidMember {
   /** #1376: Actor membership for presentation kinematics ('body' | 'actor:<id>' | undefined). */
   readonly actorMembership?: string;
   /**
-   * #1512 M3: mano del miembro copiada de la receta — gobierna la selección
+   * #1518 F1 (was #1512 hands): mano del miembro copiada de la receta — gobierna la selección
    * del asset por mano en attachVisualPins/createCatalogVisualAssetLookup.
    * Ausente = simétrico/legacy.
    */
@@ -659,7 +659,7 @@ export function validateAssemblyAnchorRule(rule: AssemblyAnchorRule): void {
 }
 
 /**
- * #1512 M3 (gemelo Go: AgregadoRigidMember.EffectivePlacement): el anclaje
+ * #1518 F1 (was #1512 hands) (gemelo Go: AgregadoRigidMember.EffectivePlacement): el anclaje
  * del miembro con el default por mano aplicado — left → min (offset +),
  * right → max (offset −) cuando el miembro no declara ref X explícita. La
  * declaración propia de la receta siempre gana.
@@ -720,12 +720,12 @@ export function validateAgregadoRigidMember(
       );
     }
   }
-  // #1512 M3: vocabulario cerrado de mano — un valor desconocido es un bug
+  // #1518 F1 (was #1512 hands): vocabulario cerrado de mano — un valor desconocido es un bug
   // de autoría (gemelo Go: IsValidMemberHand en ValidateAgregadoRigidMember).
   if (m.hand !== undefined && !isRigidMemberHand(m.hand)) {
     throw new Error(`rigid member '${m.memberId}': hand inválida '${String(m.hand)}' (valores: left|right|center)`);
   }
-  // #1512 M3: la mano provee el anclaje X default, así que una ref X vacía es
+  // #1518 F1 (was #1512 hands): la mano provee el anclaje X default, así que una ref X vacía es
   // válida exactamente cuando una mano la deriva — se valida la regla
   // efectiva (gemelo Go: EffectivePlacement).
   validateAssemblyAnchorRule(effectivePlacement(m));
@@ -1261,7 +1261,7 @@ export function resolveAgregadoAssembly(
         params.hardwareDimensions?.[hardwareId],
         { widthMm: params.widthMm, depthMm: params.depthMm, heightMm: params.heightMm },
       );
-      // #1512 M3: vocabulario cerrado de mano — un valor desconocido es un
+      // #1518 F1 (was #1512 hands): vocabulario cerrado de mano — un valor desconocido es un
       // bug de autoría y falla cerrado, nunca resuelve como legacy. Ausente =
       // simétrico/legacy (pasa siempre). El anclaje X default por mano vive
       // en effectivePlacement (autoridad única, gemelo Go).
@@ -1286,7 +1286,7 @@ export function resolveAgregadoAssembly(
         },
         bomRole: member.bomRole,
         actorMembership: member.actorMembership,
-        // #1512 M3: la mano viaja al miembro resuelto — la selección de asset
+        // #1518 F1 (was #1512 hands): la mano viaja al miembro resuelto — la selección de asset
         // por mano vive en attachVisualPins/createCatalogVisualAssetLookup.
         ...(member.hand ? { hand: member.hand } : {}),
         // #1429 slice B: el anfitrión externo declarado viaja al miembro
@@ -1417,7 +1417,7 @@ export interface MemberGlbRepresentation {
 }
 
 /**
- * #1512 M3: el lookup acepta la mano del miembro (opcional) — con un herraje
+ * #1518 F1 (was #1512 hands): el lookup acepta la mano del miembro (opcional) — con un herraje
  * multi-diseño resuelve el asset de ese lado con fallback al visualAsset
  * global. Los callers legacy que sólo pasan hardwareId siguen funcionando.
  */
@@ -1449,7 +1449,7 @@ export function createCatalogVisualAssetLookup(
   return (hardwareId: string, hand?: RigidMemberHand) => {
     const hw = map.get(hardwareId);
     if (!hw) return null;
-    // #1512 M3: un miembro con mano liga el asset DE ESA MANO cuando el
+    // #1518 F1 (was #1512 hands): un miembro con mano liga el asset DE ESA MANO cuando el
     // herraje declara hands; cualquier otro caso (herraje simétrico, miembro
     // sin mano, mano sin asset propio) cae al visualAsset global. Nunca una
     // sustitución silenciosa de caja: el fail-closed de attachVisualPins

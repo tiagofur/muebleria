@@ -604,6 +604,15 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		// #1518 F1: piezas multi-diseño con anclas inválidas/duplicadas u
+		// offsets fuera de rango fallan el write con 422 (nunca NULL silencio).
+		if err := domain.ValidateHardwarePieces(h.Pieces); err != nil {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "HARDWARE_PIECES_INVALID",
+				"message": err.Error(),
+			})
+			return
+		}
 		if h.KitHardwareID != nil && *h.KitHardwareID != "" {
 			if err := s.validateHardwareKitLink(r.Context(), &h, h.ID); err != nil {
 				respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
@@ -713,6 +722,14 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		if err := domain.ValidateHardwareDimensions(h.Dimensions); err != nil {
 			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
 				"code":    "HARDWARE_DIMENSIONS_INVALID",
+				"message": err.Error(),
+			})
+			return
+		}
+		// #1518 F1: piezas multi-diseño inválidas fallan el PUT con 422.
+		if err := domain.ValidateHardwarePieces(h.Pieces); err != nil {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "HARDWARE_PIECES_INVALID",
 				"message": err.Error(),
 			})
 			return

@@ -405,8 +405,8 @@ describe('plantillas del taller editables (#1422 slice 2 — fixture compartido 
           code: 'MBOX-IGM-M',
           name: 'Perfil MERIVOBOX M',
           pieces: [
-            { anchor: 'left', asset: { assetId: 'a1', assetRevisionId: 'r1' } },
-            { anchor: 'right', asset: { assetId: 'a2', assetRevisionId: 'r2' } },
+            { anchor: 'left' as const, asset: { assetId: 'a1', assetRevisionId: 'r1' } },
+            { anchor: 'right' as const, asset: { assetId: 'a2', assetRevisionId: 'r2' } },
           ],
         },
       ];
@@ -614,5 +614,87 @@ describe('agregadoDeclaresKitViaVariant (#1493)', () => {
     expect(agregadoDeclaresKitViaVariant(receta, '')).toBe(false);
     expect(agregadoDeclaresKitViaVariant(receta, '   ')).toBe(false);
     expect(agregadoDeclaresKitViaVariant({}, 'kit-mbox-n')).toBe(false);
+  });
+});
+
+describe('#1518 regresión: pos: label no aplasta piezas multi-diseño (sync TS)', () => {
+  it('syncAgregadoWithKitParts: parte con pieces + label pos:min conserva el ancla por pieza', () => {
+    const agregado = {
+      id: 'agr-reg',
+      code: 'AGR-REG',
+      commercialKitHardwareId: 'kit-m',
+      rigidMembers: [
+        {
+          memberId: 'part_mbox_igm_m_left',
+          role: 'slide',
+          source: { kind: 'fixed', fixed: { hardwareId: 'hw-perfil-m' } },
+          placement: { x: { ref: 'min', offsetMm: 8 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 100 } },
+          bomRole: 'included_in_kit',
+          actorMembership: 'body',
+          hand: 'left',
+        },
+        {
+          memberId: 'part_mbox_igm_m_right',
+          role: 'slide',
+          source: { kind: 'fixed', fixed: { hardwareId: 'hw-perfil-m' } },
+          placement: { x: { ref: 'max', offsetMm: -12 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 100 } },
+          bomRole: 'included_in_kit',
+          actorMembership: 'body',
+          hand: 'right',
+        },
+      ],
+    };
+    const kitParts = [
+      {
+        id: 'hw-perfil-m',
+        code: 'MBOX-IGM-M',
+        name: 'Perfil MERIVOBOX M',
+        // El label del editor de posición (el que antes colapsaba ambos lados a min).
+        designParts: [{ componentName: 'MBOX-IGM-M', actorMembership: 'body', label: 'pos:min:10:0:0' }],
+        pieces: [{ anchor: 'left' as const }, { anchor: 'right' as const }],
+      },
+    ];
+
+    const synced = syncAgregadoWithKitParts(agregado, kitParts);
+    expect(synced.rigidMembers).toHaveLength(2);
+    const left = synced.rigidMembers.find((m: any) => m.hand === 'left');
+    const right = synced.rigidMembers.find((m: any) => m.hand === 'right');
+    expect(left.placement.x).toEqual({ ref: 'min', offsetMm: 8 });
+    expect(right.placement.x).toEqual({ ref: 'max', offsetMm: -12 });
+  });
+
+  it('ensureAgregadoKitParts: misma regla para recetas por variante', () => {
+    const agregado = {
+      id: 'agr-reg2',
+      code: 'AGR-REG2',
+      rigidMembers: [
+        {
+          memberId: 'part_mbox_igm_m_right',
+          role: 'slide',
+          source: { kind: 'fixed', fixed: { hardwareId: 'hw-perfil-m' } },
+          placement: { x: { ref: 'max', offsetMm: -12 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 100 } },
+          bomRole: 'included_in_kit',
+          actorMembership: 'body',
+          hand: 'right',
+        },
+      ],
+    };
+    const kitParts = [
+      {
+        id: 'hw-perfil-m',
+        code: 'MBOX-IGM-M',
+        name: 'Perfil MERIVOBOX M',
+        designParts: [{ componentName: 'MBOX-IGM-M', actorMembership: 'body', label: 'pos:min:10:0:0' }],
+        pieces: [{ anchor: 'left' as const }, { anchor: 'right' as const }],
+      },
+    ];
+
+    const synced = ensureAgregadoKitParts(agregado, kitParts);
+    const right = synced.rigidMembers.find((m: any) => m.hand === 'right');
+    expect(right.placement.x).toEqual({ ref: 'max', offsetMm: -12 });
+    // La pieza left faltante se agrega desde el catálogo (expansión por pieza).
+    const left = synced.rigidMembers.find((m: any) => m.hand === 'left');
+    expect(left).toBeDefined();
+    expect(left.placement.x.ref).toBe('min');
   });
 });

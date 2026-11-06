@@ -865,6 +865,7 @@ export function syncAgregadoWithKitParts(
     readonly name: string;
     readonly previewShape?: string;
     readonly designParts?: readonly { readonly componentName: string; readonly actorMembership: string; readonly label?: string }[];
+    readonly pieces?: readonly { readonly anchor: 'left' | 'right' | 'center' }[];
   }[],
 ): any {
   const currentMembers = agregado.rigidMembers ?? [];
@@ -882,8 +883,12 @@ export function syncAgregadoWithKitParts(
       const part = hwId ? partById.get(hwId) : undefined;
       const dp = part?.designParts?.[0];
       if (!part || !dp) return m;
-      const parsedPos = parseKitPartPlacementLabel(dp.label);
       const nextActor = dp.actorMembership?.trim() || m.actorMembership;
+      // #1518 F1: piezas multi-diseño NUNCA toman el pos: override — cada
+      // pieza declara su placement en el catálogo; el label único aplastaba
+      // ambos lados al mismo X (SKPs superpuestos).
+      const isMultiPiece = (part.pieces?.length ?? 0) > 0;
+      const parsedPos = isMultiPiece ? null : parseKitPartPlacementLabel(dp.label);
       if (!parsedPos) {
         return nextActor ? { ...m, actorMembership: nextActor } : m;
       }
@@ -906,6 +911,20 @@ export function syncAgregadoWithKitParts(
   // 2. Para cada parte del kit que no esté en la receta, usar su configuración o inferir un slot inicial
   const newMembers: any[] = [];
   for (const part of kitParts) {
+    // #1518 F1: expansión POR ANCLA (ver ensureAgregadoKitParts).
+    if (part.pieces && part.pieces.length > 0) {
+      const presentAnchors = new Set(
+        keptMembers
+          .filter((m) => m.source?.fixed?.hardwareId === part.id && m.hand)
+          .map((m) => m.hand),
+      );
+      const missing = part.pieces.filter((pc) => !presentAnchors.has(pc.anchor));
+      if (missing.length === 0) continue;
+      newMembers.push(
+        ...newKitPartMembers(part, agregado).filter((m: any) => !presentAnchors.has(m.hand)),
+      );
+      continue;
+    }
     if (existingHwIds.has(part.id)) continue;
     newMembers.push(...newKitPartMembers(part, agregado));
   }
@@ -933,6 +952,7 @@ function newKitPartMembers(
     readonly pieces?: readonly {
       readonly anchor: 'left' | 'right' | 'center';
       readonly asset?: { readonly assetId: string; readonly assetRevisionId: string };
+      readonly offsetMm?: { readonly x: number; readonly y: number; readonly z: number };
     }[];
   },
   agregado: { readonly id: string; readonly code: string },
@@ -943,22 +963,29 @@ function newKitPartMembers(
   // placement derivado del ancla (left→min/+, right→max/−). El pos: label NO
   // aplica a partes multi-pieza (cada pieza declara sus offsets propios).
   if (part.pieces && part.pieces.length > 0) {
-    return part.pieces.map((piece) => ({
-      memberId: `${safeMemberId}_${piece.anchor}`,
-      role: part.previewShape || 'part',
-      source: { kind: 'fixed', fixed: { hardwareId: part.id } },
-      placement: {
-        x: {
-          ref: piece.anchor === 'right' ? 'max' : piece.anchor === 'center' ? 'center' : 'min',
-          offsetMm: piece.anchor === 'right' ? -Math.abs(cfg.xOffsetMm) : Math.abs(cfg.xOffsetMm),
+    return part.pieces.map((piece) => {
+      // #1518 (review P2): los offsets de la PIEZA (paridad con kitPieceMember
+      // Go) pisan los derivados del config cuando existen.
+      const xOff = piece.offsetMm ? piece.offsetMm.x : piece.anchor === 'right' ? -Math.abs(cfg.xOffsetMm) : Math.abs(cfg.xOffsetMm);
+      const yOff = piece.offsetMm ? piece.offsetMm.y : cfg.yOffsetMm;
+      const zOff = piece.offsetMm ? piece.offsetMm.z : cfg.zOffsetMm;
+      return {
+        memberId: `${safeMemberId}_${piece.anchor}`,
+        role: part.previewShape || 'part',
+        source: { kind: 'fixed', fixed: { hardwareId: part.id } },
+        placement: {
+          x: {
+            ref: piece.anchor === 'right' ? 'max' : piece.anchor === 'center' ? 'center' : 'min',
+            offsetMm: xOff,
+          },
+          y: { ref: 'min', offsetMm: yOff },
+          z: { ref: 'min', offsetMm: zOff },
         },
-        y: { ref: 'min', offsetMm: cfg.yOffsetMm },
-        z: { ref: 'min', offsetMm: cfg.zOffsetMm },
-      },
-      bomRole: 'included_in_kit',
-      actorMembership: cfg.actorMembership,
-      hand: piece.anchor,
-    }));
+        bomRole: 'included_in_kit',
+        actorMembership: cfg.actorMembership,
+        hand: piece.anchor,
+      };
+    });
   }
   // Single/legacy: pos: label de DesignParts[0] sigue mandando (paridad Go).
   const parsedPos = part.designParts?.[0]?.label
@@ -1027,6 +1054,7 @@ export function ensureAgregadoKitParts(
     readonly name: string;
     readonly previewShape?: string;
     readonly designParts?: readonly { readonly componentName: string; readonly actorMembership: string; readonly label?: string }[];
+    readonly pieces?: readonly { readonly anchor: 'left' | 'right' | 'center' }[];
   }[],
 ): any {
   const currentMembers = (agregado.rigidMembers ?? []).map((m) => {
@@ -1036,7 +1064,10 @@ export function ensureAgregadoKitParts(
     // Miembro de una parte de ESTE kit: refresca colocación/actor desde la parte.
     const dp = part.designParts?.[0];
     const nextActor = dp?.actorMembership?.trim() || m.actorMembership;
-    const parsedPos = dp ? parseKitPartPlacementLabel(dp.label) : undefined;
+    // #1518 F1: piezas multi-diseño NUNCA toman el pos: override (el label
+    // único aplastaba ambos lados al mismo X).
+    const isMultiPiece = (part.pieces?.length ?? 0) > 0;
+    const parsedPos = dp && !isMultiPiece ? parseKitPartPlacementLabel(dp.label) : undefined;
     if (!parsedPos) {
       return nextActor ? { ...m, actorMembership: nextActor } : m;
     }
@@ -1055,6 +1086,22 @@ export function ensureAgregadoKitParts(
   const existingHwIds = new Set(currentMembers.map((m) => m.source?.fixed?.hardwareId).filter(Boolean));
   const newMembers: any[] = [];
   for (const part of kitParts) {
+    // #1518 F1: piezas multi-diseño se expanden POR ANCLA — una parte con
+    // sólo un lado presente agrega el faltante (el índice por herraje único
+    // se lo tragaba).
+    if (part.pieces && part.pieces.length > 0) {
+      const presentAnchors = new Set(
+        currentMembers
+          .filter((m) => m.source?.fixed?.hardwareId === part.id && m.hand)
+          .map((m) => m.hand),
+      );
+      const missing = part.pieces.filter((pc) => !presentAnchors.has(pc.anchor));
+      if (missing.length === 0) continue;
+      newMembers.push(
+        ...newKitPartMembers(part, agregado).filter((m: any) => !presentAnchors.has(m.hand)),
+      );
+      continue;
+    }
     if (existingHwIds.has(part.id)) continue;
     newMembers.push(...newKitPartMembers(part, agregado));
   }

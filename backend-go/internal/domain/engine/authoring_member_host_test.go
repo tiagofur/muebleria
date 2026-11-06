@@ -629,3 +629,50 @@ func TestMirrorMachiningProfileForRightHand_1512(t *testing.T) {
 		t.Fatal("non-hole kinds must fail closed (ok=false), never invent a mapping")
 	}
 }
+
+// #1518 F1 (regresión del bug pos:, review P1): una parte de kit MULTI-PIEZA
+// cuyo designParts[0].label trae pos: NO debe ver su placement pisado — el
+// placement sale de la pieza del catálogo (ancla + offsets); el label único
+// solía aplastar ambos lados al mismo X (SKPs superpuestos).
+func TestKitPieceMemberIgnoresPosLabel_1518(t *testing.T) {
+	kitID := "kit-m"
+	hw := domain.Hardware{
+		ID:   "hw-perfil-m",
+		Code: "MBOX-IGM-M",
+		Name: "Perfil MERIVOBOX M",
+		KitHardwareID: &kitID,
+		Active:        true,
+		Pieces: []domain.HardwarePiece{
+			{Anchor: domain.MemberHandLeft, OffsetMm: &domain.HardwarePieceOffset{X: 8, Y: 0, Z: 100}},
+			{Anchor: domain.MemberHandRight, OffsetMm: &domain.HardwarePieceOffset{X: 12, Y: 0, Z: 100}},
+		},
+		DesignParts: []domain.HardwareDesignPart{
+			// Label del editor de posición (el que antes pisaba ambos lados).
+			{ComponentName: "MBOX-IGM-M", ActorMembership: "body", Label: "pos:min:10:0:0"},
+		},
+	}
+	catalog := domain.Catalog{Hardware: []domain.Hardware{hw}}
+	agr := domain.Agregado{ID: "agr-x", Code: "AGR-X"}
+	got := syncAgregadoRigidMembersFromCatalog(agr, catalog, kitID)
+
+	if len(got.RigidMembers) != 2 {
+		t.Fatalf("members = %d, want 2 (uno por pieza)", len(got.RigidMembers))
+	}
+	for _, m := range got.RigidMembers {
+		if m.Hand == domain.MemberHandLeft {
+			if m.Placement.X.Ref != domain.AxisRefMin || m.Placement.X.OffsetMm != 8 {
+				t.Errorf("left: X = %v/%g, want min/8 (offset de LA PIEZA, no del label 10)",
+					m.Placement.X.Ref, m.Placement.X.OffsetMm)
+			}
+			if m.Placement.Z.OffsetMm != 100 {
+				t.Errorf("left: Z = %g, want 100 (offset de la pieza)", m.Placement.Z.OffsetMm)
+			}
+		}
+		if m.Hand == domain.MemberHandRight {
+			if m.Placement.X.Ref != domain.AxisRefMax || m.Placement.X.OffsetMm != 12 {
+				t.Errorf("right: X = %v/%g, want max/12 (offset de LA PIEZA; el label min lo colapsaba)",
+					m.Placement.X.Ref, m.Placement.X.OffsetMm)
+			}
+		}
+	}
+}
