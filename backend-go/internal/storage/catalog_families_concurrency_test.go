@@ -185,6 +185,31 @@ func TestCatalogSimpleFamilies_OptimisticConcurrency(t *testing.T) {
 			},
 		},
 		{
+			name: "hardware_categories",
+			create: func(ctx context.Context) (string, error) {
+				c := &domain.HardwareCategory{Name: "Subgrupo herrajes S2 " + unique, SortOrder: 99}
+				if err := store.CreateHardwareCategory(ctx, c); err != nil {
+					return "", err
+				}
+				cleanupConnectStoreFixture(t, "DELETE FROM hardware_categories WHERE id = $1", c.ID)
+				return c.ID, nil
+			},
+			refresh: func(ctx context.Context, id string) (int64, error) {
+				c, err := store.GetHardwareCategoryByID(ctx, id)
+				if err != nil {
+					return 0, err
+				}
+				return c.Version, nil
+			},
+			update: func(ctx context.Context, id string, expected int64) error {
+				c := &domain.HardwareCategory{Name: "Subgrupo herrajes S2 editado", SortOrder: 98}
+				return store.UpdateHardwareCategory(ctx, id, expected, c)
+			},
+			remove: func(ctx context.Context, id string, expected int64) error {
+				return store.DeleteHardwareCategory(ctx, id, expected)
+			},
+		},
+		{
 			name: "ambient_materials",
 			create: func(ctx context.Context) (string, error) {
 				m := &domain.AmbientMaterial{ID: unique + "AM", Code: unique + "AM", Name: "Ambiental S2", Active: true, SurfaceType: domain.AmbientSurfaceFloor}

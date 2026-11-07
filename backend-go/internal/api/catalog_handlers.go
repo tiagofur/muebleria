@@ -458,6 +458,37 @@ func (s *Server) validateHardwareKitLink(ctx context.Context, h *domain.Hardware
 	return nil
 }
 
+// validateHardwareCategoryLink rejects a category outside this organization
+// (#1556). The FK alone cannot: referential checks bypass RLS, so a category
+// id of another tenant would be accepted. The lookup is org-scoped, which
+// makes a foreign id and a nonexistent one indistinguishable to the caller
+// (no existence oracle).
+func (s *Server) validateHardwareCategoryLink(w http.ResponseWriter, r *http.Request, h *domain.Hardware) bool {
+	h.CategoryID = strings.TrimSpace(h.CategoryID)
+	if h.CategoryID == "" {
+		return true
+	}
+	category, err := s.Store.GetHardwareCategoryByID(r.Context(), h.CategoryID)
+	if err != nil && !errors.Is(err, storage.ErrHardwareCategoryNotFound) {
+		respondWithInternalError(w, err, "hardware category link")
+		return false
+	}
+	if err != nil || category == nil {
+		respondHardwareCategoryInvalid(w)
+		return false
+	}
+	return true
+}
+
+// respondHardwareCategoryInvalid is the typed 422 of a category link, shared
+// by the pre-check and the FK race (category deleted before the write). It
+// uses the full ApiError envelope: hardware writes go through the generated
+// client, which replaces any other error shape with a generic message.
+func respondHardwareCategoryInvalid(w http.ResponseWriter) {
+	respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeHardwareCategoryInvalid,
+		"la categoría del herraje no existe en este taller", nil)
+}
+
 // kitPartHardwareCodes returns the codes of the given hardware ids that are
 // design parts of a kit (kit_hardware_id set). #1436: a part is never
 // purchasable on its own — the whole kit travels — so it can neither be an
@@ -622,6 +653,9 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		if !s.validateHardwareCategoryLink(w, r, &h) {
+			return
+		}
 		if err := domain.ValidateHardwareFinishIDs(h.AvailableFinishes); err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
@@ -634,6 +668,10 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 		h.Active = true
 		err := s.Store.CreateHardware(r.Context(), &h)
 		if err != nil {
+			if isHardwareCategoryLinkViolation(err) {
+				respondHardwareCategoryInvalid(w)
+				return
+			}
 			if isDuplicateKey(err) {
 				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
@@ -718,6 +756,9 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		if !s.validateHardwareCategoryLink(w, r, &h) {
+			return
+		}
 		// #1453 F1: the canonical bounding box is complete-or-nothing.
 		if err := domain.ValidateHardwareDimensions(h.Dimensions); err != nil {
 			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
@@ -759,6 +800,10 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		}
 		err := s.Store.UpdateHardware(r.Context(), id, expectedVersion, &h)
 		if err != nil {
+			if isHardwareCategoryLinkViolation(err) {
+				respondHardwareCategoryInvalid(w)
+				return
+			}
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
