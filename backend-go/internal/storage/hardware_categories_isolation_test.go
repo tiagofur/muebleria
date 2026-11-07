@@ -3,6 +3,7 @@ package storage_test
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -78,5 +79,54 @@ func TestHardwareCategories_RLSIsolationTwoOrgs_1556(t *testing.T) {
 		return store.CreateHardware(ctx, hw)
 	}); err != nil {
 		t.Fatalf("storage-level cross-org category write err = %v (the gap this test pins changed — update the handler E2E)", err)
+	}
+}
+
+func TestHardwareCategories_MigrationUpDownReplay_1556(t *testing.T) {
+	ctx := context.Background()
+	pool := multiOrgFreshMigrationDB(t)
+	migrationStore := &storage.PostgresStore{Pool: pool}
+	if err := migrationStore.RunMigrations(ctx); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	downSQL, err := os.ReadFile("../../db/migration/000177_hardware_categories.down.sql")
+	if err != nil {
+		t.Fatalf("read down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, string(downSQL)); err != nil {
+		t.Fatalf("execute down migration: %v", err)
+	}
+	for _, artifact := range []string{
+		`SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'hardware_categories')`,
+		`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'hardwares' AND column_name = 'category_id')`,
+		`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'hardwares' AND column_name = 'brand')`,
+		`SELECT EXISTS(SELECT 1 FROM pg_policies WHERE tablename = 'hardware_categories')`,
+		`SELECT EXISTS(SELECT 1 FROM rls_policy_inventory WHERE table_name = 'hardware_categories')`,
+	} {
+		var exists bool
+		if err := pool.QueryRow(ctx, artifact).Scan(&exists); err != nil || exists {
+			t.Fatalf("down migration left an artifact behind (%s): exists=%v err=%v", artifact, exists, err)
+		}
+	}
+
+	upSQL, err := os.ReadFile("../../db/migration/000177_hardware_categories.up.sql")
+	if err != nil {
+		t.Fatalf("read up migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, string(upSQL)); err != nil {
+		t.Fatalf("re-apply up migration: %v", err)
+	}
+	for _, artifact := range []string{
+		`SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'hardware_categories')`,
+		`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'hardwares' AND column_name = 'category_id')`,
+		`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'hardwares' AND column_name = 'brand')`,
+		`SELECT EXISTS(SELECT 1 FROM pg_policies WHERE tablename = 'hardware_categories' AND policyname = 'tenant_isolation')`,
+		`SELECT EXISTS(SELECT 1 FROM rls_policy_inventory WHERE table_name = 'hardware_categories')`,
+	} {
+		var exists bool
+		if err := pool.QueryRow(ctx, artifact).Scan(&exists); err != nil || !exists {
+			t.Fatalf("re-applied migration missing artifact (%s): exists=%v err=%v", artifact, exists, err)
+		}
 	}
 }
