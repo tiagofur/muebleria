@@ -167,6 +167,64 @@ export interface WorkspaceRepository {
     expectedVersion: number,
     agregado: import('@granete/domain').Agregado,
   ): Promise<import('@granete/domain').Agregado>;
+  /**
+   * #1553 — alta transaccional del sistema generador de cajones
+   * (server mode only). Shape estructural espejo del contrato OpenAPI
+   * (HardwareKitSystemCreateRequest / HardwareKitSystemCreated).
+   */
+  createHardwareKitSystem?(req: {
+    readonly expected_existing_codes: readonly string[];
+    readonly hardware: readonly {
+      readonly id: string;
+      readonly code: string;
+      readonly name: string;
+      readonly unit: 'set' | 'piece';
+      readonly cost_per_unit: number;
+      readonly active: boolean;
+      readonly preview_shape?: string | null;
+      readonly notes?: string | null;
+      readonly kit_hardware_id?: string | null;
+      readonly pieces?: readonly {
+        readonly anchor: 'left' | 'right' | 'center';
+        readonly asset?: { readonly assetId: string; readonly assetRevisionId: string };
+      }[];
+    }[];
+    readonly agregado: {
+      readonly id: string;
+      readonly code: string;
+      readonly name: string;
+      readonly active: boolean;
+      readonly width_mm: number;
+      readonly height_mm: number;
+      readonly depth_mm: number;
+      readonly commercial_kit_hardware_id: string;
+      readonly presentation_motion?: Record<string, unknown> | null;
+      readonly variant_sets: readonly {
+        readonly id: string;
+        readonly dimension: 'width' | 'height' | 'depth';
+        readonly variants: readonly {
+          readonly nominalDimensionMm: number;
+          readonly hardwareId: string;
+          readonly commercialKitHardwareId?: string | null;
+        }[];
+      }[];
+    };
+    readonly option_group?: {
+      readonly id: string;
+      readonly code: string;
+      readonly name: string;
+      readonly kind: 'hardware';
+      readonly required: boolean;
+      readonly option_ids: readonly string[];
+      readonly kit_hardware_id: string;
+    } | null;
+  }): Promise<{
+    readonly created_codes: readonly string[];
+    readonly reused_codes: readonly string[];
+    readonly agregado_id: string;
+    readonly agregado_code: string;
+    readonly variant_set_ids: readonly string[];
+  }>;
   /** Load full workspace; missing file → seed workspace. */
   load(): Promise<Workspace>;
 
