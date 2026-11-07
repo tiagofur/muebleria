@@ -34,6 +34,9 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	mux.Handle("GET /api/catalog/grip-styles/{id}", authMW(http.HandlerFunc(server.HandleGripStyleByID)))
 	mux.Handle("PUT /api/catalog/grip-styles/{id}", authMW(http.HandlerFunc(server.HandleGripStyleByID)))
 	mux.Handle("DELETE /api/catalog/grip-styles/{id}", authMW(http.HandlerFunc(server.HandleGripStyleByID)))
+	// Vista previa del editor de agarres (#1533): el servidor resuelve
+	// «Mueble de 720 → puerta de 680» con el contrato A3; React la renderiza.
+	mux.Handle("POST /api/catalog/grip-styles/preview", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleGripStylePreview))))
 	mux.Handle("GET /api/catalog/opening-profiles", authMW(http.HandlerFunc(server.HandleOpeningProfiles)))
 	mux.Handle("POST /api/catalog/opening-profiles", authMW(http.HandlerFunc(server.HandleOpeningProfiles)))
 	mux.Handle("GET /api/catalog/opening-profiles/suggestions", authMW(http.HandlerFunc(server.HandleOpeningProfileSuggestions)))

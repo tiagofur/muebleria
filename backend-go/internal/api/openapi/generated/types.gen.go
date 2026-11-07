@@ -3191,6 +3191,15 @@ type GripStyleWrite struct {
 	ByFurnitureType map[string]any `json:"byFurnitureType"`
 }
 
+type GripStylePreviewRequest struct {
+	HeightMm        int64          `json:"heightMm"`
+	ByFurnitureType map[string]any `json:"byFurnitureType"`
+}
+
+type GripStylePreviewResponse struct {
+	Previews []map[string]any `json:"previews"`
+}
+
 type GripSnapshot struct {
 	StyleId   string                        `json:"styleId"`
 	StyleName string                        `json:"styleName"`
