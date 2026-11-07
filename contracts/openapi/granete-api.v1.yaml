@@ -6787,6 +6787,40 @@
         }
       }
     },
+    "/catalog/grip-styles/preview": {
+      "post": {
+        "operationId": "previewGripStyles",
+        "summary": "Resolve the style editor's per-type preview sentences server-side (#1533): «Mueble de 720 → puerta de 680» with the A3 contract; React renders them verbatim",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GripStylePreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One resolved sentence per furniture type present in the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GripStylePreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/catalog/grip-styles/{gripStyleId}": {
       "parameters": [
         {
@@ -19640,6 +19674,69 @@
           "byFurnitureType"
         ],
         "description": "#1531 — authorable fields; id/organization/version/timestamps/migrationReport are server-owned."
+      },
+      "GripStylePreviewRequest": {
+        "type": "object",
+        "description": "#1533: the style editor's in-flight recipes (unsaved) plus the reference cabinet height. The server joins the profile IDs against the catalog with the #1530 use rule and resolves the sentences with the A3 contract.",
+        "additionalProperties": false,
+        "required": [
+          "heightMm",
+          "byFurnitureType"
+        ],
+        "properties": {
+          "heightMm": {
+            "type": "integer",
+            "description": "The reference cabinet height (e.g. 720)."
+          },
+          "byFurnitureType": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "inferior": {
+                "$ref": "#/components/schemas/GripStyleRecipe"
+              },
+              "superior": {
+                "$ref": "#/components/schemas/GripStyleRecipe"
+              },
+              "alto": {
+                "$ref": "#/components/schemas/GripStyleRecipe"
+              }
+            }
+          }
+        }
+      },
+      "GripStylePreviewResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "previews"
+        ],
+        "properties": {
+          "previews": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "furnitureType",
+                "mode",
+                "preview"
+              ],
+              "properties": {
+                "furnitureType": {
+                  "type": "string"
+                },
+                "mode": {
+                  "type": "string"
+                },
+                "preview": {
+                  "type": "string",
+                  "description": "The resolved Spanish sentence the UI renders verbatim."
+                }
+              }
+            }
+          }
+        }
       },
       "GripSnapshot": {
         "type": "object",

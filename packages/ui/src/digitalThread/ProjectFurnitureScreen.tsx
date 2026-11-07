@@ -333,19 +333,14 @@ export function ProjectFurnitureScreen({
     placeholderData: keepPreviousData,
   });
 
-  // #1532: the design-opening FACADE is the v1 read-model of the furniture's
-  // effective grip (its override, else the project's frozen snapshot) — the
-  // authoring defaults' opening is retired dead data. The drawer's
-  // provenance reads THIS derived selection, the same truth the plugin card
-  // renders until #1535.
-  const openingFacadeQuery = useQuery({
-    queryKey: queryKeys.designWorkingCopy?.(`${designContext.designId ?? ''}-opening-facade`) ?? queryKeys.designs,
-    queryFn: ({ signal }) =>
-      api.request<DesignAuthoringDefaults | null>('GET', `/designs/${designContext.designId as string}/opening`, {
-        token,
-        signal,
-      }),
-    enabled: designContext.designId != null,
+  // #1533 (scope item 4): the drawer's provenance reads the PROJECT GRIP
+  // state — the style, the furniture's exception and the frozen values — the
+  // same truth quotes and releases consume (A7). The authoring defaults'
+  // opening is retired dead data.
+  const projectGripQuery = useQuery({
+    queryKey: queryKeys.designWorkingCopy?.(`${projectId}-grip`) ?? queryKeys.designs,
+    queryFn: ({ signal }) => api.getProjectGrip(token, projectId, signal),
+    enabled: projectId !== '',
     placeholderData: keepPreviousData,
   });
 
@@ -382,20 +377,13 @@ export function ProjectFurnitureScreen({
   const selectedDesignRevision =
     designRevisions.find((revision) => revision.id === designContext.designRevisionId) ?? null;
 
-  // #1330/#1532: the drawer's read-only opening procedencia — the derived
-  // selection the facade serves (the effective grip with its complete frozen
-  // pin), never the retired authoring defaults. `null` payload = the design
-  // declares no grip (the truthful absence).
-  const facadePayload = openingFacadeQuery.data as
-    | { readonly opening?: DesignAuthoringDefaults['opening'] }
-    | null
-    | undefined;
-  const detailOpeningDefaults: DesignAuthoringDefaults | null = facadePayload
-    ? ({ opening: facadePayload.opening ?? null } as DesignAuthoringDefaults)
-    : null;
-  const detailOpeningProvenance = openingProvenanceView(
-    detailOpeningDefaults,
-    openingFacadeQuery.isPending,
+  // #1533: the drawer's provenance — THREE honest lines from the project
+  // grip state: the style the furniture inherits, its exception (when it has
+  // one) and the frozen values of its effective recipe (A7).
+  const detailGripProvenance = gripProvenanceLines(
+    (projectGripQuery.data ?? null) as unknown as GripProvenanceState | null,
+    detailRow?.instance.id ?? null,
+    projectGripQuery.isPending,
   );
 
   // Single authoritative backend read-model query: POST /projects/{projectId}/furniture-workspace
@@ -874,7 +862,7 @@ export function ProjectFurnitureScreen({
           designRevision={selectedDesignRevision}
           contextualRelease={contextualRelease}
           latestProjectRelease={latestProjectRelease}
-          openingProvenance={detailOpeningProvenance}
+          gripProvenance={detailGripProvenance}
           onClose={() => setDetailRow(null)}
         />
       ) : null}
@@ -1219,64 +1207,81 @@ interface DetailDrawerProps {
   readonly designRevision: DesignRevision | null;
   readonly contextualRelease: FurnitureWorkspaceReleaseContext | null;
   readonly latestProjectRelease: FurnitureWorkspaceReleaseContext | null;
-  readonly openingProvenance: OpeningProvenanceView;
+  readonly gripProvenance: ReturnType<typeof gripProvenanceLines>;
   readonly onClose: () => void;
 }
 
-/** #1330 — the drawer's read-only opening procedencia, derived ONLY from the
- * design's durable selection and its frozen pin. Every absence is truthful:
- * no opening, pre-pin legacy selection — nothing invented. `undefined`
- * defaults = the source is still loading; `null` = the design declares no
- * opening. */
-export type OpeningProvenanceView =
-  | { readonly state: 'loading' }
-  | { readonly state: 'none' }
-  | { readonly state: 'system'; readonly systemLabel: string }
-  | { readonly state: 'unpinned'; readonly systemLabel: string }
-  | {
-      readonly state: 'pinned';
-      readonly label: string;
-    };
+/** The grip state shape the provenance reads (#1532 GET /projects/{id}/grip). */
+export interface GripProvenanceState {
+  readonly snapshot: {
+    readonly styleId: string;
+    readonly styleName: string;
+    readonly recipes: Record<
+      string,
+      {
+        readonly mode: string;
+        readonly top?: { readonly code: string; readonly bomVersion: number; readonly frontDiscountTopMm?: number } | null;
+        readonly between?: { readonly code: string; readonly bomVersion: number; readonly frontDiscountBetweenMm?: number } | null;
+        readonly overhangMm?: number;
+      }
+    > | null;
+  } | null;
+  readonly overrides?: readonly {
+    readonly furnitureInstanceId: string;
+    readonly snapshot: GripProvenanceState['snapshot'] | null;
+  }[];
+  readonly report?: {
+    readonly items?: readonly { readonly furnitureInstanceId: string; readonly furnitureType: string }[];
+  };
+}
 
-const OPENING_SYSTEM_LABELS: Readonly<Record<string, string>> = {
-  handle: 'Jaladera',
-  gola: 'Gola (perfil integrado)',
-  bottom_overhang: 'Rebase inferior',
-};
-
-export function openingProvenanceView(
-  defaults: DesignAuthoringDefaults | null | undefined,
+/**
+ * #1533 (scope item 4): the drawer's provenance as THREE honest lines — the
+ * style the furniture inherits, its exception (only when it has one) and the
+ * frozen values of its effective recipe (A7). `undefined` = still loading;
+ * `null` = the project has no grip at all (the truthful absence).
+ */
+export function gripProvenanceLines(
+  grip: GripProvenanceState | null | undefined,
+  furnitureInstanceId: string | null,
   loading: boolean,
-): OpeningProvenanceView {
+): { readonly state: 'loading' } | { readonly state: 'none' } | {
+  readonly state: 'resolved';
+  readonly styleName: string | null;
+  readonly overrideName: string | null; // the inherited project style, when an override governs
+  readonly frozen: string | null;
+} {
   if (loading) return { state: 'loading' };
-  const opening = defaults?.opening ?? null;
-  if (!opening) return { state: 'none' };
-  const systemLabel = OPENING_SYSTEM_LABELS[opening.system] ?? opening.system;
-  if (opening.system !== 'gola') {
-    // Only the gola profile carries a pin — the other systems have no
-    // datasheet to freeze.
-    return { state: 'system', systemLabel };
+  if (!grip || (!grip.snapshot && !(grip.overrides?.length))) return { state: 'none' };
+  const override = grip.overrides?.find((entry) => entry.furnitureInstanceId === furnitureInstanceId) ?? null;
+  const effective = override?.snapshot ?? grip.snapshot ?? null;
+  const itemType =
+    grip.report?.items?.find((item) => item.furnitureInstanceId === furnitureInstanceId)?.furnitureType ?? 'inferior';
+  const recipe = effective?.recipes?.[itemType] ?? null;
+  let frozen: string | null = null;
+  if (recipe) {
+    if (recipe.mode === 'handle') {
+      frozen = 'jaladera (sin descuento)';
+    } else if (recipe.mode === 'bottom_overhang' && recipe.overhangMm != null) {
+      frozen = `rebase ${recipe.overhangMm} mm`;
+    } else if (recipe.mode === 'gola' && recipe.top) {
+      const parts = [`${recipe.top.code} v${recipe.top.bomVersion} · puertas H−${recipe.top.frontDiscountTopMm ?? 0}`];
+      if (recipe.between) {
+        parts.push(`entre frentes ${recipe.between.code} v${recipe.between.bomVersion} · ${recipe.between.frontDiscountBetweenMm ?? 0}`);
+      }
+      frozen = parts.join(' · ');
+    }
   }
-  const pin = opening.profilePin ?? null;
-  if (!pin) {
-    return { state: 'unpinned', systemLabel };
-  }
-  const parts: string[] = [];
-  const version = pin.bom?.profileVersion ?? null;
-  parts.push(version != null ? `${pin.profileCode} v${version}` : pin.profileCode);
-  const doorDiscount =
-    pin.doorReductionMm ??
-    (pin.frontReductionMm > 0 ? pin.frontReductionMm + pin.gripClearanceMm : null);
-  if (doorDiscount != null && doorDiscount > 0) {
-    parts.push(`puertas H−${doorDiscount}`);
-  }
-  const notch = (pin.bodyModifiers ?? []).find(
-    (modifier) => modifier.notch_height_mm != null && modifier.notch_depth_mm != null,
-  );
-  if (notch) {
-    parts.push(`muesca ${notch.notch_height_mm} × ${notch.notch_depth_mm} mm`);
-  }
-  return { state: 'pinned', label: parts.join(' · ') };
+  // The GOVERNING style is the furniture's effective one; when an override
+  // governs, the inherited project style stays visible as context.
+  const effectiveName = effective?.styleName ?? null;
+  const projectName = override ? grip.snapshot?.styleName ?? null : null;
+  return {
+    state: 'resolved',
+    styleName: effectiveName,
+    overrideName: override && projectName ? projectName : null,
+    frozen,
+  };
 }
 
 function ProjectFurnitureDetailDrawer({
@@ -1286,7 +1291,7 @@ function ProjectFurnitureDetailDrawer({
   designRevision,
   contextualRelease,
   latestProjectRelease,
-  openingProvenance,
+  gripProvenance,
   onClose,
 }: DetailDrawerProps): ReactNode {
   const quoteItem =
@@ -1356,17 +1361,19 @@ function ProjectFurnitureDetailDrawer({
             ) : null}
             {row.presence === 'placed' ? (
               <>
-                <dt>Apertura</dt>
+                <dt>Agarre</dt>
                 <dd data-testid="pf-detail-opening-provenance">
-                  {openingProvenance.state === 'loading'
+                  {gripProvenance.state === 'loading'
                     ? 'Cargando…'
-                    : openingProvenance.state === 'none'
-                      ? 'Sin apertura'
-                      : openingProvenance.state === 'unpinned'
-                        ? `${openingProvenance.systemLabel} · sin pin — re-aplicá la apertura para congelar la procedencia`
-                        : openingProvenance.state === 'system'
-                          ? openingProvenance.systemLabel
-                          : openingProvenance.label}
+                    : gripProvenance.state === 'none'
+                      ? 'Sin agarre configurado'
+                      : (
+                        <span data-testid="pf-detail-grip-lines">
+                          Estilo: {gripProvenance.styleName ?? '—'}
+                          {gripProvenance.overrideName ? ` · Excepción sobre «${gripProvenance.overrideName}»` : ''}
+                          {gripProvenance.frozen ? ` · ${gripProvenance.frozen}` : ''}
+                        </span>
+                      )}
                 </dd>
               </>
             ) : null}

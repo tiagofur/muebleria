@@ -60,6 +60,8 @@ import type {
   GolaProfileSuggestion,
   GripStyle,
   GripStyleDeleted,
+  GripStylePreviewRequest,
+  GripStylePreviewResponse,
   GripStyleWrite,
   Hardware,
   HardwareAsset,
@@ -383,6 +385,7 @@ export abstract class GeneratedGraneteApiClient {
   deactivateHardwareProfile(token: string, profileId: string, version: number, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("DELETE", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, ifMatch: version, signal }); }
   listGripStyles(token: string, signal?: AbortSignal): Promise<ReadonlyArray<GripStyle>> { return this.request("GET", "/catalog/grip-styles", { arrayOf: "GripStyle", token, signal }); }
   createGripStyle(token: string, body: GripStyleWrite, signal?: AbortSignal): Promise<GripStyle> { return this.request("POST", "/catalog/grip-styles", { schema: "GripStyle", token, bodySchema: "GripStyleWrite", body, signal }); }
+  previewGripStyles(token: string, body: GripStylePreviewRequest, signal?: AbortSignal): Promise<GripStylePreviewResponse> { return this.request("POST", "/catalog/grip-styles/preview", { schema: "GripStylePreviewResponse", token, bodySchema: "GripStylePreviewRequest", body, signal }); }
   getGripStyle(token: string, gripStyleId: string, signal?: AbortSignal): Promise<GripStyle> { return this.request("GET", `/catalog/grip-styles/${encodeURIComponent(gripStyleId)}`, { schema: "GripStyle", token, signal }); }
   updateGripStyle(token: string, gripStyleId: string, version: number, body: GripStyleWrite, signal?: AbortSignal): Promise<GripStyle> { return this.request("PUT", `/catalog/grip-styles/${encodeURIComponent(gripStyleId)}`, { schema: "GripStyle", token, ifMatch: version, bodySchema: "GripStyleWrite", body, signal }); }
   deleteGripStyle(token: string, gripStyleId: string, version: number, signal?: AbortSignal): Promise<GripStyleDeleted> { return this.request("DELETE", `/catalog/grip-styles/${encodeURIComponent(gripStyleId)}`, { schema: "GripStyleDeleted", token, ifMatch: version, signal }); }
