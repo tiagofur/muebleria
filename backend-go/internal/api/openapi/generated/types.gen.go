@@ -3225,7 +3225,7 @@ type FrozenGripProfile struct {
 
 type ProjectGrip struct {
 	ProjectId   string           `json:"projectId"`
-	GripStyleId string           `json:"gripStyleId"`
+	GripStyleId *string          `json:"gripStyleId"`
 	Snapshot    *GripSnapshot    `json:"snapshot,omitempty"`
 	GripVersion int64            `json:"gripVersion"`
 	Overrides   []map[string]any `json:"overrides"`

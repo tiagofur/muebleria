@@ -464,4 +464,29 @@ func TestProjectGripWritesRaceAuditRollback(t *testing.T) {
 	if after.Version != current.Version {
 		t.Fatalf("a rejected write must not bump the version: %d → %d", current.Version, after.Version)
 	}
+
+	// §14.8 (judgment-day r1 S2): un-checking «Ofrecer» hides the style for
+	// NEW choices only — the explicit «Actualizar» on a project already using
+	// it re-freezes from the style's CURRENT values and never 422s.
+	appliedStyle := isolationFamilyValue(t, fixture, orgA, func(txCtx context.Context) (*domain.GripStyle, error) {
+		return store.GetGripStyle(txCtx, gola)
+	})
+	unOffered := *appliedStyle
+	unOffered.Offered = false
+	if err := isolationFamilyError(t, fixture, orgA, func(txCtx context.Context) error {
+		return store.UpdateGripStyle(txCtx, gola, appliedStyle.Version, &unOffered, storage.GripStyleWriteMeta{})
+	}); err != nil {
+		t.Fatalf("un-offer the applied style: %v", err)
+	}
+	if applyErr := isolationFamilyError(t, fixture, orgA, func(txCtx context.Context) error {
+		_, err := store.SetProjectGrip(txCtx, projectID, gola, after.Version, storage.ProjectGripWriteMeta{})
+		return err
+	}); applyErr == nil {
+		t.Fatal("applying an un-offered style is a NEW choice and must be refused")
+	}
+	if err := isolationFamilyError(t, fixture, orgA, func(txCtx context.Context) error {
+		return store.RefreshProjectGrip(txCtx, projectID, false, after.Version, storage.ProjectGripWriteMeta{})
+	}); err != nil {
+		t.Fatalf("«Actualizar» on a project using an un-offered style must succeed (§14.8): %v", err)
+	}
 }

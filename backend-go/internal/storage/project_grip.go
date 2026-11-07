@@ -137,7 +137,10 @@ func (s *PostgresStore) projectGripProfileLookup(ctx context.Context) func(id st
 }
 
 // freezeStyleSnapshot loads the org's style and freezes its complete copy.
-func (s *PostgresStore) freezeStyleSnapshot(ctx context.Context, styleID string) (*domain.GripSnapshot, error) {
+// requireOffered gates NEW choices only (§14.8: disabling «Ofrecer» hides
+// the style for new selections, never for the explicit refresh of a project
+// already using it — available ≠ valid).
+func (s *PostgresStore) freezeStyleSnapshot(ctx context.Context, styleID string, requireOffered bool) (*domain.GripSnapshot, error) {
 	style, err := s.GetGripStyle(ctx, styleID)
 	if err != nil {
 		if errors.Is(err, ErrGripStyleNotFound) {
@@ -146,7 +149,7 @@ func (s *PostgresStore) freezeStyleSnapshot(ctx context.Context, styleID string)
 		}
 		return nil, err
 	}
-	if !style.Offered {
+	if requireOffered && !style.Offered {
 		return nil, &domain.GripSnapshotValidationError{
 			Code: "GRIP_STYLE_NOT_OFFERED", Message: "el estilo de agarre «" + style.Name + "» no está ofrecido para nuevas elecciones"}
 	}
@@ -165,7 +168,7 @@ func (s *PostgresStore) SetProjectGrip(ctx context.Context, projectID, styleID s
 			}
 			return err
 		}
-		snapshot, err := s.freezeStyleSnapshot(txCtx, styleID)
+		snapshot, err := s.freezeStyleSnapshot(txCtx, styleID, true)
 		if err != nil {
 			return err
 		}
@@ -239,7 +242,7 @@ func (s *PostgresStore) SetFurnitureGripOverrides(ctx context.Context, projectID
 				}
 				continue
 			}
-			snapshot, err := s.freezeStyleSnapshot(txCtx, *override.StyleID)
+			snapshot, err := s.freezeStyleSnapshot(txCtx, *override.StyleID, true)
 			if err != nil {
 				return err
 			}
@@ -305,7 +308,7 @@ func (s *PostgresStore) RefreshProjectGrip(ctx context.Context, projectID string
 			return &domain.GripSnapshotValidationError{
 				Code: "GRIP_STYLE_NONE", Message: "el proyecto no tiene un estilo de agarre que actualizar"}
 		}
-		snapshot, err := s.freezeStyleSnapshot(txCtx, grip.StyleID)
+		snapshot, err := s.freezeStyleSnapshot(txCtx, grip.StyleID, false)
 		if err != nil {
 			return err
 		}
@@ -362,7 +365,7 @@ func (s *PostgresStore) RefreshProjectGrip(ctx context.Context, projectID string
 				if override.snapshot == nil || override.snapshot.StyleID == "" {
 					continue
 				}
-				fresh, err := s.freezeStyleSnapshot(txCtx, override.snapshot.StyleID)
+				fresh, err := s.freezeStyleSnapshot(txCtx, override.snapshot.StyleID, false)
 				if err != nil {
 					return err
 				}

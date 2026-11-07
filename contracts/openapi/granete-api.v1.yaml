@@ -2595,6 +2595,11 @@
       },
       "put": {
         "operationId": "setProjectGrip",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
         "summary": "Apply a grip style to the project: one complete frozen snapshot (A7), audited; If-Match on the grip version",
         "requestBody": {
           "required": true,
@@ -2648,6 +2653,11 @@
       ],
       "put": {
         "operationId": "setFurnitureGripOverrides",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
         "summary": "Set or clear the grip override of one or several furniture in ONE operation (#1532), audited; If-Match on the grip version",
         "requestBody": {
           "required": true,
@@ -2701,6 +2711,11 @@
       ],
       "post": {
         "operationId": "refreshProjectGrip",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
         "summary": "«Actualizar a los valores actuales del taller» (#1532, A7): re-freeze the project snapshot from its style's current values; never automatic, always audited; If-Match on the grip version",
         "requestBody": {
           "required": true,
@@ -19648,8 +19663,10 @@
             ]
           },
           "handleHardwareId": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "top": {
             "$ref": "#/components/schemas/FrozenGripProfile"
@@ -19759,8 +19776,10 @@
             "type": "string"
           },
           "gripStyleId": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "snapshot": {
             "$ref": "#/components/schemas/GripSnapshot"

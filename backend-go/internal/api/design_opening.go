@@ -59,8 +59,23 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 		respondWithJSON(w, http.StatusOK, state)
 		return
 	}
+	if err := domain.ValidateGripSnapshotShape(facadeState.Snapshot); err != nil {
+		// C1 (judgment-day r1): the SAME shape gate every authoritative
+		// surface applies — the plugin card sees the honest blocked state
+		// instead of a resolve this grip can never produce.
+		state.Resolution = &engine.DesignOpeningResolution{
+			State: engine.DesignOpeningStateBlocked, Reason: "GRIP_SNAPSHOT_INVALID",
+		}
+		respondWithJSON(w, http.StatusOK, state)
+		return
+	}
 	selection := derivedDesignOpeningSelection(facadeState.Snapshot, facadeState.FurnitureType)
 	if selection == nil {
+		// The recipe's grips cannot be produced (a gola without its frozen
+		// top discount): the truthful blocked state, never an invented one.
+		state.Resolution = &engine.DesignOpeningResolution{
+			State: engine.DesignOpeningStateBlocked, Reason: "GRIP_PROFILE_UNUSABLE",
+		}
 		respondWithJSON(w, http.StatusOK, state)
 		return
 	}
@@ -129,7 +144,11 @@ func derivedDesignOpeningSelection(snapshot *domain.GripSnapshot, furnitureType 
 	case domain.GripModeBottomOverhang:
 		return &domain.DesignOpeningSelection{System: domain.OpeningGripSystemBottomOverhang}
 	case domain.GripModeGola:
-		if recipe.TopProfile == nil {
+		if recipe.TopProfile == nil || recipe.TopProfile.FrontDiscountTopMm == nil || *recipe.TopProfile.FrontDiscountTopMm <= 0 {
+			// C1 (judgment-day r1): a frozen copy without its top discount is
+			// exactly what the authoritative surfaces block as
+			// GRIP_PROFILE_UNUSABLE — the facade NEVER substitutes 0 (A6: no
+			// invented values); the caller reports the honest blocked state.
 			return nil
 		}
 		placements := []string{"top"}
@@ -141,10 +160,7 @@ func derivedDesignOpeningSelection(snapshot *domain.GripSnapshot, furnitureType 
 		if members == nil {
 			members = map[string]domain.OpeningBOMMember{}
 		}
-		discount := 0
-		if top.FrontDiscountTopMm != nil {
-			discount = *top.FrontDiscountTopMm
-		}
+		discount := *top.FrontDiscountTopMm
 		return &domain.DesignOpeningSelection{
 			System:     domain.OpeningGripSystemGola,
 			ProfileID:  top.ProfileID,
