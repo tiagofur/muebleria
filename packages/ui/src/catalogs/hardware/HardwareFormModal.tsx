@@ -278,13 +278,13 @@ export function HardwareFormModal({
                       e.target.value = '';
                     }}
                   />
-                  <label htmlFor="hw-image" className="btn btn--sm">
+                  <label htmlFor="hw-image" className="btn btn--small">
                     {draft.imageUrl ? 'Cambiar foto' : 'Añadir foto'}
                   </label>
                   {draft.imageUrl ? (
                     <button
                       type="button"
-                      className="btn btn--sm btn--ghost"
+                      className="btn btn--small btn--ghost"
                       onClick={() => setDraft({ ...draft, imageUrl: '' })}
                     >
                       Quitar foto
@@ -333,7 +333,7 @@ export function HardwareFormModal({
                     <div className="catalog-hw-part__actions">
                       <button
                         type="button"
-                        className="btn btn--sm"
+                        className="btn btn--small"
                         onClick={() => onEditKitPart(part)}
                         data-testid={`hardware-form-kit-part-edit-${part.code}`}
                       >
@@ -342,7 +342,7 @@ export function HardwareFormModal({
                       {onRemoveKitPart ? (
                         <button
                           type="button"
-                          className="btn btn--sm btn--danger"
+                          className="btn btn--small btn--danger"
                           aria-label={`Quitar ${part.code} del juego`}
                           title="Quitar del juego"
                           onClick={() => onRemoveKitPart(part)}
@@ -460,7 +460,7 @@ export function HardwareFormModal({
               {onAddKitPart ? (
                 <button
                   type="button"
-                  className="btn btn--sm"
+                  className="btn btn--small"
                   onClick={onAddKitPart}
                   data-testid="hardware-form-kit-part-add"
                 >
