@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.memberHostDedupe.v1",
+  "comment": "#1557 — paridad TS↔Go del dedupe member-host/manual (#1429 slice B): misma cara + centro/Ø/profundidad dentro de ±0.1mm por eje (Chebyshev) = equivalente; la autoría manual del owner manda y el member-host se suprime; no-equivalentes conviven y el gate DRILLING_CONFLICT sigue fail-closed. Casos: exacto, sub-umbral (0.08/0.06/0.08/0.05 — dentro), fuera de umbral en x (0.11), cara distinta.",
+  "toleranceMm": 0.1,
+  "cases": [
+    {
+      "name": "exact_equivalent",
+      "hole": { "face": "front", "xMm": 207, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+      "manual": { "face": "front", "xMm": 207, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+      "equivalent": true
+    },
+    {
+      "name": "sub_threshold_equivalent",
+      "hole": { "face": "front", "xMm": 207, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+      "manual": { "face": "front", "xMm": 207.08, "yMm": 33.56, "diameterMm": 3.12, "depthMm": 12.05 },
+      "equivalent": true
+    },
+    {
+      "name": "x_beyond_threshold",
+      "hole": { "face": "front", "xMm": 207, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+      "manual": { "face": "front", "xMm": 207.11, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+      "equivalent": false
+    },
+    {
+      "name": "different_face",
+      "hole": { "face": "front", "xMm": 207, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+      "manual": { "face": "back", "xMm": 207, "yMm": 33.5, "diameterMm": 3.2, "depthMm": 12 },
+      "equivalent": false
+    }
+  ]
+}

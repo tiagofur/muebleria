@@ -722,7 +722,7 @@ func ValidateAgregadoRigidMember(m AgregadoRigidMember, hasCommercialKit bool) e
 	}
 	// #1512 M3: closed hand vocabulary — an unknown value is an authoring bug.
 	if !IsValidMemberHand(m.Hand) {
-		return fmt.Errorf("rigid member '%s': hand inválida %q (valores: left|right)", m.MemberID, m.Hand)
+		return fmt.Errorf("rigid member '%s': hand inválida %q (valores: left|right|center)", m.MemberID, m.Hand)
 	}
 	// #1512 M3: the hand provides the default X anchor, so an empty X ref is
 	// valid exactly when a hand derives it — validate the effective rule.

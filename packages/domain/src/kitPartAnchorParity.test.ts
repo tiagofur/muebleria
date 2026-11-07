@@ -1,0 +1,89 @@
+/**
+ * #1557 — paridad TS↔Go de la expansión/sync por ancla de partes de kit
+ * multi-diseño (#1518 F1). El MISMO fixture lo consume el engine Go
+ * (kit_part_anchor_parity_test.go): receta parcial → reparación del ancla
+ * faltante + defaults de fallback idénticos (10 / 35 móvil-cajón / negado en
+ * right) en ambos runtimes, drift 0.
+ */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+import { syncAgregadoWithKitParts } from './hardwareKit';
+
+interface AnchorFixture {
+  readonly kit: { readonly id: string; readonly code: string; readonly name: string };
+  readonly agregado: { readonly code: string };
+  readonly parts: readonly {
+    readonly id: string;
+    readonly code: string;
+    readonly name: string;
+    readonly previewShape: string;
+    readonly pieces: readonly { readonly anchor: 'left' | 'right' | 'center' }[];
+  }[];
+  readonly partialRecipe: readonly {
+    readonly memberId: string;
+    readonly hand: string;
+    readonly hardwareId: string;
+    readonly x: { readonly ref: string; readonly offsetMm: number };
+  }[];
+  readonly expectedMembers: readonly {
+    readonly memberId: string;
+    readonly hand: string;
+    readonly xRef: string;
+    readonly xOffsetMm: number;
+  }[];
+}
+
+const fixturePath = resolve(__dirname, '../../../contracts/fixtures/kitPartAnchorParity.contract.json');
+const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as AnchorFixture;
+
+describe('kitPartAnchorParity contract (#1557)', () => {
+  const agregado = {
+    id: 'agr-par',
+    code: fixture.agregado.code,
+    rigidMembers: fixture.partialRecipe.map((m) => ({
+      memberId: m.memberId,
+      role: 'slide',
+      source: { kind: 'fixed' as const, fixed: { hardwareId: m.hardwareId } },
+      placement: {
+        x: { ref: m.x.ref as 'min' | 'max' | 'center', offsetMm: m.x.offsetMm },
+        y: { ref: 'min' as const, offsetMm: 0 },
+        z: { ref: 'min' as const, offsetMm: 0 },
+      },
+      bomRole: 'included_in_kit' as const,
+      actorMembership: 'body',
+      hand: m.hand as 'left' | 'right' | 'center',
+    })),
+  };
+
+  const synced = syncAgregadoWithKitParts(
+    agregado,
+    fixture.parts.map((p) => ({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      previewShape: p.previewShape,
+      pieces: p.pieces,
+    })),
+  );
+
+  const byMember = new Map(
+    (synced.rigidMembers as any[]).map((m) => [m.memberId, m] as const),
+  );
+
+  it('produce el conjunto completo de miembros desde la receta parcial', () => {
+    expect(synced.rigidMembers).toHaveLength(fixture.expectedMembers.length);
+    for (const want of fixture.expectedMembers) {
+      expect(byMember.has(want.memberId), `miembro ${want.memberId}`).toBe(true);
+    }
+  });
+
+  for (const want of fixture.expectedMembers) {
+    it(`${want.memberId}: hand/ancla/offset por pieza (defaults por-ancla)`, () => {
+      const got = byMember.get(want.memberId);
+      expect(got?.hand).toBe(want.hand);
+      expect(got?.placement.x).toEqual({ ref: want.xRef, offsetMm: want.xOffsetMm });
+    });
+  }
+});
