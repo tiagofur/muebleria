@@ -61,6 +61,7 @@ const (
 	ApiErrorCodeMfaEnrollmentExpired           ApiErrorCode = "MFA_ENROLLMENT_EXPIRED"
 	ApiErrorCodeMfaFactorNotFound              ApiErrorCode = "MFA_FACTOR_NOT_FOUND"
 	ApiErrorCodeMfaRecoveryInvalid             ApiErrorCode = "MFA_RECOVERY_INVALID"
+	ApiErrorCodeHardwareCategoryInvalid        ApiErrorCode = "HARDWARE_CATEGORY_INVALID"
 )
 
 type ApiError struct {
@@ -3019,6 +3020,9 @@ type HardwareWrite struct {
 	VisualAsset         *map[string]string  `json:"visual_asset,omitempty"`
 	DesignParts         []map[string]any    `json:"design_parts,omitempty"`
 	KitHardwareID       *string             `json:"kit_hardware_id,omitempty"`
+	Pieces              []HardwarePiece     `json:"pieces,omitempty"`
+	CategoryID          *string             `json:"category_id,omitempty"`
+	Brand               *string             `json:"brand,omitempty"`
 	Active              bool                `json:"active"`
 }
 
@@ -3479,13 +3483,6 @@ type HardwareKitSystemCreated struct {
 	AgregadoID    string   `json:"agregado_id"`
 	AgregadoCode  string   `json:"agregado_code"`
 	VariantSetIds []string `json:"variant_set_ids"`
-}
-
-type WorkshopHardwareCategory struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	ParentId  *string `json:"parentId,omitempty"`
-	SortOrder int64   `json:"sortOrder"`
 }
 
 type WorkshopHardwareRole struct {
