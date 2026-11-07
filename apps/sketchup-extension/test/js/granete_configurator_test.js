@@ -979,4 +979,129 @@ test('agregado roles: required group without active members disables Insert with
   assert(/Cajón/.test(el(sandbox, 'btn-insert').title), 'the reason names the missing group');
 });
 
+// ---------------------------------------------------------------------------
+// #1555 — accesorios del juego: fila bajo el cajón, gate de requeridos,
+// overrides del modo conectado y limpieza de elecciones huérfanas al cambiar
+// de cajón. El motor (Go accessory_kit.go + espejo TS) ya consume la
+// elección; estos tests cubren el TRANSPORTE del lado plugin.
+// ---------------------------------------------------------------------------
+
+function accessoryFixture(sandbox) {
+  sandbox.__state.hardwareCatalog = [
+    { id: 'hw-gal-e', code: 'GAL-E', name: 'Galería E' },
+    { id: 'hw-gal-m', code: 'GAL-M', name: 'Galería M' }
+  ];
+  sandbox.__state.agregadosCatalog = [
+    { id: 'agr-e', code: 'AGR-E', name: 'Cajón E cacerolero' },
+    { id: 'agr-m', code: 'AGR-M', name: 'Cajón M estándar' }
+  ];
+  return definition({
+    agregadoRoles: [
+      {
+        code: 'CAJON', name: 'Cajón', required: true, optionIds: ['agr-e', 'agr-m'],
+        options: [
+          {
+            agregadoId: 'agr-e',
+            accessoryGroups: [
+              { code: 'LATERAL_E', name: 'Lateral superior E', required: true, optionIds: ['hw-gal-e'] }
+            ]
+          },
+          {
+            agregadoId: 'agr-m',
+            accessoryGroups: [
+              { code: 'LATERAL_M', name: 'Lateral M', required: false, optionIds: ['hw-gal-m'] }
+            ]
+          }
+        ]
+      }
+    ]
+  });
+}
+
+test('accessories: row renders under the chosen drawer with chosen-code meta and gates required choice', () => {
+  const sandbox = runModule();
+  accessoryFixture(sandbox);
+  sandbox.window.GraneteUI.configurator.open(accessoryFixture(sandbox));
+
+  // Sin elección de cajón aún no hay fila de accesorio (depende del elegido).
+  const container = el(sandbox, 'library-agregados-container');
+  // Seed default de agregado = primer miembro (agr-e) → la fila del accesorio E aparece.
+  assert.strictEqual(container.children.length, 2, 'drawer row + accessory row of the seeded drawer');
+  const accRow = container.children[1];
+  assert.strictEqual(accRow.children[0].children[0].textContent, 'Lateral superior E');
+  // Meta con elección activa = código; sin elección = invitación a elegir.
+  assert.strictEqual(accRow.children[1].children[1].children[1].textContent,
+    'Clic para elegir un accesorio del catálogo', 'no chosen accessory yet → invitation');
+
+  // Requerido sin elegir → Insert bloqueado nombrando el accesorio.
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, true, 'required accessory blocks insert');
+  assert(/Lateral superior E/.test(el(sandbox, 'btn-insert').title), 'the reason names the accessory');
+
+  // Elegido → meta muestra el CÓDIGO y el gate se abre (el re-render crea
+  // nodos nuevos: releer la fila).
+  sandbox.window.GraneteUI.configurator.applyHardwareChoice('LATERAL_E', 'hw-gal-e');
+  const accRowAfter = el(sandbox, 'library-agregados-container').children[1];
+  assert.strictEqual(accRowAfter.children[1].children[1].children[1].textContent, 'GAL-E',
+    'chosen accessory meta shows its code (#1555)');
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, false,
+    'choice unblocks insert (title: ' + el(sandbox, 'btn-insert').title + ')');
+});
+
+test('accessories: connected insert rides chosen accessory groups inside materialOverrides', () => {
+  const sandbox = runModule();
+  accessoryFixture(sandbox);
+  sandbox.__state.connected = true;
+  sandbox.window.GraneteUI.configurator.open(accessoryFixture(sandbox));
+
+  sandbox.window.GraneteUI.configurator.applyHardwareChoice('LATERAL_E', 'hw-gal-e');
+  sandbox.__calls.bridge.length = 0;
+  el(sandbox, 'btn-insert').click();
+  const sent = sandbox.__calls.bridge.filter((c) => c.fn === 'begin_catalog_placement_preview').pop();
+  assert(sent, 'preview dispatched');
+  assert.strictEqual(sent.payload.materialChoices.LATERAL_E, 'hw-gal-e',
+    'accessory choice rides materialChoices for the local resolve');
+  assert.strictEqual(sent.payload.materialOverrides.LATERAL_E, 'hw-gal-e',
+    '#1555: the chosen accessory group ALSO rides materialOverrides — without it the connected resolve loses the choice');
+});
+
+test('accessories: changing the drawer drops orphan accessory choices from the insert payload', () => {
+  const sandbox = runModule();
+  accessoryFixture(sandbox);
+  sandbox.__state.connected = true;
+  sandbox.window.GraneteUI.configurator.open(accessoryFixture(sandbox));
+
+  // Elegir accesorio del kit E, luego cambiar el cajón a M.
+  sandbox.window.GraneteUI.configurator.applyHardwareChoice('LATERAL_E', 'hw-gal-e');
+  sandbox.window.GraneteUI.configurator.applyHardwareChoice('CAJON', 'agr-m');
+
+  sandbox.__calls.bridge.length = 0;
+  el(sandbox, 'btn-insert').click();
+  const sent = sandbox.__calls.bridge.filter((c) => c.fn === 'begin_catalog_placement_preview').pop();
+  assert(sent, 'preview dispatched after drawer change');
+  assert.strictEqual(sent.payload.materialChoices.CAJON, 'agr-m', 'new drawer choice active');
+  assert(!('LATERAL_E' in sent.payload.materialChoices),
+    '#1555: the orphan E accessory choice is dropped, never sent to the resolve');
+  assert(!('LATERAL_E' in sent.payload.materialOverrides), 'overrides clean too');
+  // La fila de accesorio ahora es la del kit M (otro código).
+  assert(!('LATERAL_M' in sent.payload.materialChoices), 'M accessory not silently seeded');
+});
+
+test('accessories: no accessory groups on the chosen drawer means clean payload and no gating', () => {
+  const sandbox = runModule();
+  sandbox.__state.agregadosCatalog = [{ id: 'agr-plain', code: 'AGR-P', name: 'Cajón sin accesorios' }];
+  sandbox.window.GraneteUI.configurator.open(definition({
+    agregadoRoles: [
+      { code: 'CAJON', name: 'Cajón', required: true, optionIds: ['agr-plain'], options: [{ agregadoId: 'agr-plain', accessoryGroups: [] }] }
+    ]
+  }));
+
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, false, 'no accessory groups → no gating');
+  sandbox.__calls.bridge.length = 0;
+  el(sandbox, 'btn-insert').click();
+  const sent = sandbox.__calls.bridge.filter((c) => c.fn === 'begin_catalog_placement_preview').pop();
+  assert(sent, 'insert flows');
+  assert.deepStrictEqual(Object.keys(sent.payload.materialChoices).filter((k) => k.startsWith('LATERAL')), [],
+    'no accessory keys in the payload');
+});
+
 console.log(JSON.stringify({ success: true, testsPassed }));

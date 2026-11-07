@@ -339,6 +339,10 @@
     libMaterialChoices[groupCode] = hardwareId;
     if (!libUserCustomizedRoles) libUserCustomizedRoles = {};
     libUserCustomizedRoles[groupCode] = true;
+    // #1555: si el grupo cambiado es un AGREGADO, las elecciones de
+    // accesorio del kit anterior quedan huérfanas — se dropean antes de
+    // re-renderizar (el gate de requeridos vuelve a exigir elección).
+    dropOrphanAccessoryChoices(activeLibDef);
     clearCatalogIntentKey();
     renderLibraryHardwareRoles(activeLibDef);
     renderLibraryAgregadoRoles(activeLibDef);
@@ -520,8 +524,11 @@
           accInfo.appendChild(accName);
           var accMeta = document.createElement("span");
           accMeta.className = "material-selected-meta";
+          // #1555: la meta muestra el código elegido (paridad con herrajes y
+          // agregados), nunca un «Clic para elegir…» permanente con elección
+          // activa.
           accMeta.textContent = (acc.optionIds && acc.optionIds.length > 0)
-            ? "Clic para elegir un accesorio del catálogo"
+            ? ((accChosen && accChosen.code) ? accChosen.code : "Clic para elegir un accesorio del catálogo")
             : "Sin miembros activos en el catálogo";
           accInfo.appendChild(accMeta);
           accPreview.appendChild(accInfo);
@@ -614,6 +621,56 @@
     return missing;
   }
 
+  // #1555: los códigos de grupo accesorio que pertenecen al agregado ELEGIDO
+  // de cada rol (los únicos cuya clave es válida en materialChoices ahora).
+  function effectiveAccessoryGroupCodes(def) {
+    var valid = {};
+    agregadoRoles(def).forEach(function (role) {
+      var chosenId = libMaterialChoices[role.code];
+      if (!chosenId) return;
+      (role.options || []).forEach(function (opt) {
+        if (opt.agregadoId !== chosenId) return;
+        (opt.accessoryGroups || []).forEach(function (acc) {
+          valid[acc.code] = true;
+        });
+      });
+    });
+    return valid;
+  }
+
+  // #1555: TODOS los códigos de grupo accesorio conocidos por la definición
+  // (de cualquier agregado candidato) — las claves que pueden quedar huérfanas
+  // al cambiar el cajón elegido.
+  function knownAccessoryGroupCodes(def) {
+    var known = {};
+    agregadoRoles(def).forEach(function (role) {
+      (role.options || []).forEach(function (opt) {
+        (opt.accessoryGroups || []).forEach(function (acc) {
+          known[acc.code] = true;
+        });
+      });
+    });
+    return known;
+  }
+
+  // #1555: al cambiar el CAJÓN elegido, las elecciones de accesorio del kit
+  // anterior quedan huérfanas (grupos que ya no pertenecen al agregado
+  // vigente) y viajarían al resolve como ids sin sentido — 422 críptico o
+  // descarte silencioso. Se dropean SIEMPRE que el grupo deja de existir en
+  // el agregado elegido (elección explícita de nuevo, nunca un pin oculto).
+  function dropOrphanAccessoryChoices(def) {
+    var valid = effectiveAccessoryGroupCodes(def);
+    var known = knownAccessoryGroupCodes(def);
+    for (var code in known) {
+      if (!valid[code] && libMaterialChoices[code]) {
+        delete libMaterialChoices[code];
+        if (libUserCustomizedRoles && libUserCustomizedRoles[code]) {
+          delete libUserCustomizedRoles[code];
+        }
+      }
+    }
+  }
+
   // #784 R4: explicit lineage context for the shared material renderer.
   // customizedRoles is the ONLY override signal (tracked on user input);
   // designLineage gates the badges to connected models — an unbound insert
@@ -674,6 +731,11 @@
         missing.map(function (r) { return r.name || r.code; }).join(", ");
       return;
     }
+    // #1555: el gate anterior puede haber deshabilitado el botón (grupos
+    // sin seed, p.ej. un accesorio requerido) — el camino libre lo
+    // RE-HABILITA explícitamente; sólo actualizar el título dejaba el botón
+    // muerto después de completar las elecciones.
+    btnInsert.disabled = false;
     var isConnected = deps.isModelConnected();
     var canEdit = !window.GraneteUI || !window.GraneteUI.modelBinding ||
       typeof window.GraneteUI.modelBinding.canEditWorkingCopy !== "function" ||
@@ -939,6 +1001,25 @@
         if (libMaterialChoices[role.code]) {
           overrides[role.code] = libMaterialChoices[role.code];
         }
+      });
+      // #1555: accessory group choices of the CHOSEN agregado ride as
+      // overrides too — they only travel in materialChoices otherwise, and
+      // the connected resolve loses the choice (same #1153 reasoning): the
+      // accessory would never reach BOM/quote, and a REQUIRED accessory
+      // would fail closed with accessory_choice_required despite the user
+      // having chosen it.
+      agregadoRoles(activeLibDef).forEach(function (role) {
+        var chosenAgregadoId = libMaterialChoices[role.code];
+        if (!chosenAgregadoId) return;
+        (role.options || []).forEach(function (opt) {
+          if (opt.agregadoId !== chosenAgregadoId) return;
+          (opt.accessoryGroups || []).forEach(function (acc) {
+            var accChoice = libMaterialChoices[acc.code];
+            if (accChoice && hardwareEntryById(accChoice)) {
+              overrides[acc.code] = accChoice;
+            }
+          });
+        });
       });
       payload.materialOverrides = overrides;
     }
