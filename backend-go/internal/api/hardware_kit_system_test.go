@@ -27,6 +27,7 @@ import (
 // SQL-level rollback proof are the issue's acceptance.
 
 const kitSysActor = "21000000-0000-0000-0000-0000000000e3"
+const kitSysMembership = "23000000-0000-0000-0000-0000000000e3"
 
 type kitSysE2E struct {
 	server *Server
@@ -57,6 +58,10 @@ func kitSystemE2EStore(t *testing.T) *kitSysE2E {
 	}
 	t.Cleanup(func() {
 		migrationPool.Close()
+		if os.Getenv("TEST_KEEP_DB") == "1" {
+			t.Logf("TEST_KEEP_DB=1: keeping throwaway database %s", dbName)
+			return
+		}
 		_, _ = admin.Exec(context.Background(), fmt.Sprintf(`DROP DATABASE IF EXISTS %s WITH (FORCE)`, dbName))
 		admin.Close()
 	})
@@ -143,25 +148,37 @@ func (e *kitSysE2E) run(t *testing.T, body string) *httptest.ResponseRecorder {
 
 // sqlCount counts rows by code under the actor's tenant context — the
 // acceptance's readback authority (rollback is proven by SQL, never by the
-// absence of an error).
+// absence of an error). The read runs on an EXPLICIT transaction with the
+// app.* GUCs set (B1 del review #1561): a bare pool connection carries no
+// tenant GUCs and RLS (role granete_app, NOBYPASSRLS) would hide every row —
+// making the "zero rows" assertions pass vacuously.
 func (e *kitSysE2E) sqlCount(t *testing.T, table string, codes []string) int {
 	t.Helper()
-	actor := storage.TenantActor{OrganizationID: e.org, UserID: kitSysActor}
-	ctx := storage.WithOrgCtx(context.Background(), e.org)
-	var total int
-	err := e.store.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
-		for _, code := range codes {
-			var n int
-			if err := e.store.Pool.QueryRow(txCtx,
-				fmt.Sprintf(`SELECT count(*) FROM %s WHERE code = $1`, table), code).Scan(&n); err != nil {
-				return err
-			}
-			total += n
-		}
-		return nil
-	})
+	ctx := context.Background()
+	tx, err := e.pool.Begin(ctx)
 	if err != nil {
-		t.Fatalf("sql readback: %v", err)
+		t.Fatalf("readback begin: %v", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `
+		SELECT set_config('app.organization_id', $1, true),
+		       set_config('app.user_id', $2, true),
+		       set_config('app.membership_id', $3, true),
+		       set_config('app.authorized_organization_ids', $1, true)`,
+		e.org, kitSysActor, kitSysMembership); err != nil {
+		t.Fatalf("readback tenant GUCs: %v", err)
+	}
+	total := 0
+	for _, code := range codes {
+		var n int
+		if err := tx.QueryRow(ctx,
+			fmt.Sprintf(`SELECT count(*) FROM %s WHERE code = $1`, table), code).Scan(&n); err != nil {
+			t.Fatalf("sql readback: %v", err)
+		}
+		total += n
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("readback commit: %v", err)
 	}
 	return total
 }
