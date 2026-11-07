@@ -208,7 +208,7 @@ describe('GripStylesSection — judgment-day round-2 regressions', () => {
     const user = userEvent.setup();
     const stale = styleFixture();
     const fresh = styleFixture({ version: 4 });
-    const { stub, api } = apiStub([stale], calls);
+    const { stub, api } = apiStub([stale]);
     stub.listGripStyles
       .mockResolvedValueOnce([stale]) // initial load
       .mockResolvedValueOnce([fresh]); // after Recargar
@@ -228,7 +228,8 @@ describe('GripStylesSection — judgment-day round-2 regressions', () => {
     await user.click(screen.getByTestId('grip-style-editor-save'));
     await waitFor(() => expect(stub.updateGripStyle.mock.calls).toHaveLength(2));
     // The re-apply carries the REFRESHED version (4), not the stale 3.
-    expect(stub.updateGripStyle.mock.calls[1][2]).toBe(4);
+    const secondUpdate = stub.updateGripStyle.mock.calls[1] as unknown[] | undefined;
+    expect(secondUpdate?.[2]).toBe(4);
   });
 
   it('C4: el 422 de una fila se ancla a esa fila con role="alert"', async () => {
@@ -264,9 +265,9 @@ describe('GripStylesSection — judgment-day round-2 regressions', () => {
   });
 
   it('C5+C7: esqueletos en carga y ayuda del switch en la tarjeta', async () => {
-    const { api } = apiStub([styleFixture({ offered: false })]);
+    const { stub, api } = apiStub([styleFixture({ offered: false })]);
     let resolveList: (v: GripStyle[]) => void = () => undefined;
-    api.listGripStyles.mockImplementationOnce(() => new Promise<GripStyle[]>((resolve) => { resolveList = resolve; }));
+    stub.listGripStyles.mockImplementationOnce(() => new Promise<GripStyle[]>((resolve) => { resolveList = resolve; }));
     render(<GripStylesSection api={api} token={TOKEN} />);
     expect(screen.getAllByTestId('grip-styles-skeleton')).toHaveLength(3);
     resolveList([styleFixture({ offered: false })]);
