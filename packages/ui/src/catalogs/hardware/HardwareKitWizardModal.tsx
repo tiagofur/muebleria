@@ -407,7 +407,7 @@ export function HardwareKitWizardModal({
               {onEditTemplates || onEditTemplate ? (
                 <button
                   type="button"
-                  className="btn btn--sm"
+                  className="btn btn--small"
                   onClick={onEditTemplates}
                   data-testid="hardware-kit-wizard-manage-templates"
                 >
@@ -417,7 +417,7 @@ export function HardwareKitWizardModal({
               {onEditTemplate && selectedWorkshopTemplate ? (
                 <button
                   type="button"
-                  className="btn btn--sm"
+                  className="btn btn--small"
                   onClick={() => onEditTemplate(selectedWorkshopTemplate)}
                   data-testid="hardware-kit-wizard-edit-template"
                 >

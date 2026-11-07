@@ -285,7 +285,7 @@ export function ProjectsPortfolioView({
                     </span>
                     <button
                       type="button"
-                      className="btn btn--ghost btn--sm"
+                      className="btn btn--ghost btn--small"
                       title="Ver en pantalla completa"
                       onClick={(e) => {
                         e.stopPropagation();

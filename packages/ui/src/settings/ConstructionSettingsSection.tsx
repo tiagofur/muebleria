@@ -297,7 +297,7 @@ export function ConstructionSettingsSection({
           </div>
           <button
             type="button"
-            className="btn btn--primary btn--sm"
+            className="btn btn--primary btn--small"
             onClick={() => onRebase?.(latestRelease.id)}
             disabled={disabled || saving || rebasing}
             data-testid="rebase-library-btn"
@@ -383,7 +383,7 @@ export function ConstructionSettingsSection({
                 <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', marginTop: 4 }}>
                   <button
                     type="button"
-                    className="btn btn--secondary btn--sm"
+                    className="btn btn--secondary btn--small"
                     onClick={() => onResolveConflict?.(conflict.id, 'keep_custom')}
                     disabled={disabled || resolvingConflictId === conflict.id}
                     data-testid={`btn-resolve-keep-${conflict.id}`}
@@ -392,7 +392,7 @@ export function ConstructionSettingsSection({
                   </button>
                   <button
                     type="button"
-                    className="btn btn--primary btn--sm"
+                    className="btn btn--primary btn--small"
                     onClick={() => onResolveConflict?.(conflict.id, 'adopt_upstream')}
                     disabled={disabled || resolvingConflictId === conflict.id}
                     data-testid={`btn-resolve-adopt-${conflict.id}`}
@@ -456,7 +456,7 @@ export function ConstructionSettingsSection({
             {onSaveDraft ? (
               <button
                 type="button"
-                className="btn btn--secondary btn--sm"
+                className="btn btn--secondary btn--small"
                 disabled={drafting || disabled}
                 onClick={() => void onSaveDraft(policy)}
                 data-testid="construction-save-draft-btn"
@@ -468,7 +468,7 @@ export function ConstructionSettingsSection({
             {onActivateDraft ? (
               <button
                 type="button"
-                className="btn btn--primary btn--sm"
+                className="btn btn--primary btn--small"
                 disabled={drafting || !policyDraft || !draftValidation?.valid}
                 onClick={() => void onActivateDraft?.()}
                 data-testid="construction-activate-btn"
@@ -514,7 +514,7 @@ export function ConstructionSettingsSection({
           {policy.floorToSide.provenance === 'factory' ? (
             <button
               type="button"
-              className="btn btn--secondary btn--sm"
+              className="btn btn--secondary btn--small"
               onClick={() => handleRestore('floorToSide')}
               disabled={disabled || saving}
               data-testid="restore-floor-inheritance"
@@ -610,7 +610,7 @@ export function ConstructionSettingsSection({
           {policy.topToSide.provenance === 'factory' ? (
             <button
               type="button"
-              className="btn btn--secondary btn--sm"
+              className="btn btn--secondary btn--small"
               onClick={() => handleRestore('topToSide')}
               disabled={disabled || saving}
               data-testid="restore-top-inheritance"
@@ -706,7 +706,7 @@ export function ConstructionSettingsSection({
           {policy.shelfToSide.provenance === 'factory' ? (
             <button
               type="button"
-              className="btn btn--secondary btn--sm"
+              className="btn btn--secondary btn--small"
               onClick={() => handleRestore('shelfToSide')}
               disabled={disabled || saving}
               data-testid="restore-shelf-inheritance"
@@ -802,7 +802,7 @@ export function ConstructionSettingsSection({
           {policy.backPanel.provenance === 'factory' ? (
             <button
               type="button"
-              className="btn btn--secondary btn--sm"
+              className="btn btn--secondary btn--small"
               onClick={() => handleRestore('backPanel')}
               disabled={disabled || saving}
               data-testid="restore-back-inheritance"
