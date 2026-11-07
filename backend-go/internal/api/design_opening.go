@@ -71,10 +71,11 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 	}
 	selection := derivedDesignOpeningSelection(facadeState.Snapshot, facadeState.FurnitureType)
 	if selection == nil {
-		// The recipe's grips cannot be produced (a gola without its frozen
-		// top discount): the truthful blocked state, never an invented one.
+		// Reaching here after the shape gate means the snapshot does not
+		// cover this furniture's type (GRIP_TYPE_UNCOVERED): the SAME code
+		// the authoritative resolve reports for the condition.
 		state.Resolution = &engine.DesignOpeningResolution{
-			State: engine.DesignOpeningStateBlocked, Reason: "GRIP_PROFILE_UNUSABLE",
+			State: engine.DesignOpeningStateBlocked, Reason: "GRIP_SNAPSHOT_INVALID",
 		}
 		respondWithJSON(w, http.StatusOK, state)
 		return

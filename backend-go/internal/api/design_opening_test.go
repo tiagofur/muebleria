@@ -189,6 +189,54 @@ func TestHandleDesignOpeningGetRebuildsFromAuthoritativeState(t *testing.T) {
 	}
 }
 
+// C1 (judgment-day r1→r2): the facade GET blocks HONESTLY when the frozen
+// copy cannot produce its grips — a nil/zero top discount answers
+// GRIP_SNAPSHOT_INVALID (the shape gate), never an invented DoorReductionMm
+// 0 with a resolved full-height front; a snapshot that does not cover the
+// furniture's type answers the same code the authoritative resolve reports.
+func TestHandleDesignOpeningBlocksOnUnusableFrozenRecipe(t *testing.T) {
+	newServer := func(facade *storage.DesignOpeningFacadeState) *Server {
+		store := openingDesignStub()
+		store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{
+			"d1137000-0000-0000-0000-000000000001": *designWCWithDims(map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}),
+		}
+		store.designGripFacadeState = facade
+		return &Server{Store: store}
+	}
+	request := func(srv *Server) string {
+		rr := openingRequest(t, srv, http.MethodGet, "")
+		return rr.Body.String()
+	}
+
+	// A gola recipe whose frozen top discount is ZERO: the shape gate blocks.
+	zero := facadeTestGolaState(facadeTestFrozenProfile(0, nil))
+	got := request(newServer(zero))
+	if !strings.Contains(got, `"state":"blocked"`) || !strings.Contains(got, "GRIP_SNAPSHOT_INVALID") {
+		t.Fatalf("zero frozen discount must block with the shape code, got %s", got)
+	}
+	if strings.Contains(got, `"doorReductionMm":0`) || strings.Contains(got, `"heightMm":720`) {
+		t.Fatalf("no invented discount and no full-height resolve: %s", got)
+	}
+
+	// A frozen top profile WITHOUT the discount field: the shape gate's
+	// per-position check blocks with the same code.
+	noDiscount := facadeTestGolaState(facadeTestFrozenProfile(70, nil))
+	noDiscount.Snapshot.Recipes["inferior"].TopProfile.FrontDiscountTopMm = nil
+	got = request(newServer(noDiscount))
+	if !strings.Contains(got, `"state":"blocked"`) || !strings.Contains(got, "GRIP_SNAPSHOT_INVALID") {
+		t.Fatalf("missing frozen discount must block with the shape code, got %s", got)
+	}
+
+	// A snapshot that does not cover the furniture's type: the same code the
+	// authoritative resolve reports (GRIP_TYPE_UNCOVERED condition).
+	uncovered := facadeTestHandleState()
+	uncovered.FurnitureType = "panel"
+	got = request(newServer(uncovered))
+	if !strings.Contains(got, `"state":"blocked"`) || !strings.Contains(got, "GRIP_SNAPSHOT_INVALID") {
+		t.Fatalf("an uncovered furniture type must block with the snapshot code, got %s", got)
+	}
+}
+
 func TestHandleDesignOpeningWithoutDimsIsTruthful(t *testing.T) {
 	store := openingDesignStub()
 	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{
