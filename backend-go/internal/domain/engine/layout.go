@@ -875,6 +875,29 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 				continue
 			}
 			if existingHwIDs[hw.ID] {
+				// #1557: a multi-piece part with only SOME anchors present
+				// gets the missing ones added — the wholesale skip swallowed
+				// a side (a partial recipe resolved 1 member in Go and 2 in
+				// the web preview). Parity with the TS sync repair.
+				if len(hw.Pieces) > 0 {
+					presentAnchors := make(map[string]bool)
+					for i := range members {
+						if members[i].Source.Fixed != nil && members[i].Source.Fixed.HardwareID == hw.ID && members[i].Hand != "" {
+							presentAnchors[members[i].Hand] = true
+						}
+					}
+					added := false
+					for _, piece := range hw.Pieces {
+						if presentAnchors[piece.Anchor] {
+							continue
+						}
+						members = append(members, kitPieceMember(hw, piece, agr.Code))
+						added = true
+					}
+					if added {
+						continue
+					}
+				}
 				continue
 			}
 			// #1518 F1 (was #1512 hands): a multi-design kit part expands to

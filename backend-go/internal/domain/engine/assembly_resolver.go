@@ -150,7 +150,7 @@ func ResolveAgregadoAssembly(
 		// authoring bug and must fail closed, never resolve as legacy (the
 		// definition validation also guards; this is the runtime defense).
 		if !domain.IsValidMemberHand(member.Hand) {
-			return domain.ResolvedAssembly{}, fmt.Errorf("member %s: hand inválida %q (valores: left|right)", member.MemberID, member.Hand)
+			return domain.ResolvedAssembly{}, fmt.Errorf("member %s: hand inválida %q (valores: left|right|center)", member.MemberID, member.Hand)
 		}
 		// #1512 M3: default X anchor by hand (left → min/+, right → max/−)
 		// when the member declares no explicit X ref — single authority in

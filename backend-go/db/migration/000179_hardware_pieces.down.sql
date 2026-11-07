@@ -1,4 +1,8 @@
 -- #1518 F1 reversal: rebuild hands (left/right only) from pieces, then drop.
+-- LOSSY by design (#1557): pieces with anchor 'center' and per-piece
+-- offsetMm have no hands equivalent — the down DROPS them. Recover those
+-- pieces from a pre-down backup before running this migration if any
+-- center-pieced or offset-pieced hardware exists.
 ALTER TABLE hardwares
     ADD COLUMN IF NOT EXISTS hands JSONB;
 
