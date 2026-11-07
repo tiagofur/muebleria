@@ -212,6 +212,11 @@ func (s *stubStore) CreateHardware(context.Context, *domain.Hardware) error {
 	return nil
 }
 
+// #1553: no-op — the stub never opens a real transaction to lock.
+func (s *stubStore) LockCatalogCodes(context.Context, []string) error {
+	return nil
+}
+
 func (s *stubStore) UpdateHardware(_ context.Context, _ string, expectedVersion int64, h *domain.Hardware) error {
 	if s.updateHardwareErr != nil {
 		return s.updateHardwareErr

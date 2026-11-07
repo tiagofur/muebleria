@@ -85,6 +85,8 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 
 	// Catálogo: Herrajes
 	mux.Handle("GET /api/catalog/hardware", authMW(http.HandlerFunc(server.HandleHardwares)))
+	// #1553: alta transaccional del sistema generador de cajones (M4).
+	mux.Handle("POST /api/catalog/hardware-kit-systems", authMW(http.HandlerFunc(server.HandleHardwareKitSystemCreate)))
 	mux.Handle("POST /api/catalog/hardware", authMW(http.HandlerFunc(server.HandleHardwares)))
 	mux.Handle("GET /api/catalog/hardware/{id}", authMW(http.HandlerFunc(server.HandleHardwareByID)))
 	mux.Handle("PUT /api/catalog/hardware/{id}", authMW(http.HandlerFunc(server.HandleHardwareByID)))
