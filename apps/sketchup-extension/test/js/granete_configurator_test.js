@@ -1104,4 +1104,45 @@ test('accessories: no accessory groups on the chosen drawer means clean payload 
     'no accessory keys in the payload');
 });
 
+// #1555 (P2 del review #1563): la fila del accesorio abre el MISMO
+// catálogo flotante con el payload groupCode del grupo accesorio.
+test('accessories: the row opens the shared hardware selector with the accessory groupCode payload', () => {
+  const sandbox = runModule();
+  sandbox.window.GraneteUI.configurator.open(accessoryFixture(sandbox));
+
+  const accRow = el(sandbox, 'library-agregados-container').children[1];
+  const accPreview = accRow.children[1];
+  sandbox.__calls.bridge.length = 0;
+  accPreview.click();
+  const opened = sandbox.__calls.bridge.filter((c) => c.fn === 'open_hardware_selector').pop();
+  assert(opened, 'open_hardware_selector called from the accessory row');
+  assert.strictEqual(opened.payload.groupCode, 'LATERAL_E', 'the accessory group code rides the bridge');
+  assert.deepStrictEqual(opened.payload.optionIds, ['hw-gal-e']);
+  assert.strictEqual(opened.payload.currentHardwareId, null, 'no accessory chosen yet');
+  assert.strictEqual(opened.payload.context, 'configurator');
+  assert(/Cajón · Lateral superior E/.test(opened.payload.groupName), 'the label names drawer and accessory');
+});
+
+// #1555 (P2 del review #1563): a gate re-render during an in-flight preview
+// (picker, binding push, catalog refresh) never RE-ENABLES Insert; the
+// rearm/result handlers do.
+test('insert: gate re-render mid-flight keeps Insert disabled until rearm', () => {
+  const sandbox = runModule();
+  sandbox.window.GraneteUI.configurator.open(accessoryFixture(sandbox));
+  sandbox.window.GraneteUI.configurator.applyHardwareChoice('LATERAL_E', 'hw-gal-e');
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, false, 'ready to insert');
+
+  el(sandbox, 'btn-insert').click();
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, true, 'dispatch disables Insert');
+
+  // A picker choice mid-flight re-runs the gate: Insert must stay disabled.
+  sandbox.window.GraneteUI.configurator.applyHardwareChoice('LATERAL_E', 'hw-gal-e');
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, true,
+    'mid-flight gate re-render must not re-enable Insert (#1555)');
+
+  // The Ruby side refuses/cancels the preview → rearm restores the gate.
+  sandbox.window.GraneteUI.configurator.rearmInsertButton();
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, false, 'rearm re-enables Insert');
+});
+
 console.log(JSON.stringify({ success: true, testsPassed }));

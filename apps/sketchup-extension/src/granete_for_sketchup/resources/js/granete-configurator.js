@@ -67,6 +67,12 @@
   // key; Esc ends the loop.
   var lastCatalogPlacementPayload = null;
   var repeatPreviewActive = false;
+  // #1555 (P2 del review #1563): true while an insert/preview is dispatched
+  // and its result has not arrived. The gate re-render (binding push,
+  // catalog refresh, picker) must never RE-ENABLE Insert mid-flight — a
+  // second click would reset repeatPreviewActive and overwrite
+  // lastCatalogPlacementPayload (Ruby already refuses with preview_busy).
+  var insertInFlight = false;
 
   // Injected by the dialog bootstrap before any render: shared helpers
   // stay single-implementation (param forms are shared with the
@@ -719,6 +725,12 @@
 
   function updateLibraryInsertButton() {
     if (!btnInsert) return;
+    // #1555: mid-flight the button stays disabled with its in-flight label;
+    // the result/rearm handlers clear the flag and re-run this gate.
+    if (insertInFlight) {
+      btnInsert.disabled = true;
+      return;
+    }
     // #1144 / #1482: un grupo requerido sin elección bloquea la inserción con el
     // motivo concreto (el resolve fallaría cerrado igual — nunca a ciegas).
     var missingHw = unchosenRequiredHardwareRoles(activeLibDef);
@@ -858,6 +870,7 @@
     if (!window.sketchup || !window.sketchup.begin_catalog_placement_preview) return false;
 
     repeatPreviewActive = true;
+    insertInFlight = true;
     btnInsert.disabled = true;
     btnInsert.innerHTML = deps.icon("clock") + "<span>Vista previa en el modelo…</span>";
     clearCatalogIntentKey();
@@ -868,6 +881,7 @@
   }
 
   function onInsertionResult(result) {
+    insertInFlight = false;
     btnInsert.disabled = false;
     updateLibraryInsertButton();
     if (result && result.success) {
@@ -905,6 +919,7 @@
   // state.
   function onCreateProjectFurnitureResult(result) {
     result = result || {};
+    insertInFlight = false;
     btnInsert.disabled = false;
     updateLibraryInsertButton();
     if (result.ok) {
@@ -971,6 +986,7 @@
   btnInsert.addEventListener("click", function () {
     if (!activeLibDef) return;
     btnInsert.disabled = true;
+    insertInFlight = true;
     repeatPreviewActive = false; // a manual begin is never a repeat
 
     var isConnected = deps.isModelConnected();
@@ -1120,6 +1136,7 @@
     // handlers (started-refused / cancelled).
     rearmInsertButton: function () {
       requireDeps();
+      insertInFlight = false;
       btnInsert.disabled = false;
       updateLibraryInsertButton();
     },
