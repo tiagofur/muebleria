@@ -163,12 +163,12 @@ func (s *stubStore) CreateHardwareCategory(_ context.Context, _ *domain.Hardware
 
 func (s *stubStore) UpdateHardwareCategory(_ context.Context, _ string, _ int64, _ *domain.HardwareCategory) error {
 	s.updateHardwareCategoryCalled = true
-	return nil
+	return s.updateHardwareCategoryErr
 }
 
 func (s *stubStore) DeleteHardwareCategory(_ context.Context, _ string, _ int64) error {
 	s.deleteHardwareCategoryCalled = true
-	return nil
+	return s.deleteHardwareCategoryErr
 }
 
 func (s *stubStore) ListEdgeBands(context.Context) ([]domain.EdgeBand, error) {

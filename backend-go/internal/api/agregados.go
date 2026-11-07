@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -12,6 +13,67 @@ import (
 )
 
 // --- CATALOG / AGREGADOS (reusable sub-assemblies) ---
+
+// validateAgregadoKitParts is the server side of the opaque-kit rule (#1506,
+// #1556): a recipe cannot reference a design part of a kit the agregado does
+// not mount, because that part would be drawn and bought on its own (#1436).
+// Parts of a kit the agregado DOES mount are the normal members — the kit
+// wizard writes them and the catalog sync re-derives them — so the TS
+// predicate cannot be ported as "no part at all". A commercial kit that is
+// itself a part is rejected too (a part mounts nothing), and so is any part
+// in a fixed hardware line: that line BUYS it, mounted kit or not.
+func (s *Server) validateAgregadoKitParts(w http.ResponseWriter, r *http.Request, a *domain.Agregado) bool {
+	mounted := map[string]bool{}
+	refs := map[string]bool{}
+	for _, kit := range engine.AgregadoKitIDs(*a) {
+		mounted[kit] = true
+		refs[kit] = true
+	}
+	for _, member := range a.RigidMembers {
+		if member.Source.Fixed != nil && member.Source.Fixed.HardwareID != "" {
+			refs[member.Source.Fixed.HardwareID] = true
+		}
+	}
+	for _, set := range a.VariantSets {
+		for _, variant := range set.Variants {
+			if variant.HardwareID != "" {
+				refs[variant.HardwareID] = true
+			}
+		}
+	}
+	purchased := map[string]bool{}
+	for _, line := range a.HardwareLines {
+		if line.HardwareID != "" {
+			refs[line.HardwareID] = true
+			purchased[line.HardwareID] = true
+		}
+	}
+	if len(refs) == 0 {
+		return true
+	}
+	hardware, err := s.Store.ListHardwares(r.Context())
+	if err != nil {
+		respondWithInternalError(w, err, "agregado kit part guard")
+		return false
+	}
+	var codes []string
+	for i := range hardware {
+		h := &hardware[i]
+		if !refs[h.ID] || h.KitHardwareID == nil || *h.KitHardwareID == "" {
+			continue
+		}
+		if mounted[*h.KitHardwareID] && !mounted[h.ID] && !purchased[h.ID] {
+			continue
+		}
+		codes = append(codes, h.Code)
+	}
+	if len(codes) == 0 {
+		return true
+	}
+	sort.Strings(codes)
+	respondKitPartGuard(w, "AGREGADO_KIT_PART", codes)
+	return false
+}
 
 func (s *Server) HandleAgregados(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -43,6 +105,9 @@ func (s *Server) HandleAgregados(w http.ResponseWriter, r *http.Request) {
 				"code":    "AGREGADO_RECIPE_INVALID",
 				"message": err.Error(),
 			})
+			return
+		}
+		if !s.validateAgregadoKitParts(w, r, &a) {
 			return
 		}
 		a.Active = true
@@ -113,6 +178,9 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 				"code":    "AGREGADO_RECIPE_INVALID",
 				"message": err.Error(),
 			})
+			return
+		}
+		if !s.validateAgregadoKitParts(w, r, &a) {
 			return
 		}
 		// #1168: the catalog update and its audit revision commit in ONE

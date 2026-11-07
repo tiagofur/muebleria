@@ -14,6 +14,39 @@ import (
 // Mirror of the material_categories store (F142): pgxpool, hand-written
 // queries, parents-before-children placement validation, physical delete
 // guarded by children. hardwares.category_id FK is ON DELETE SET NULL.
+//
+// #1556: the tree's depth, acyclicity and children-guard are multi-row
+// invariants no single row lock can protect (move + create yields a level-4
+// node, move + move a cycle), so every mutation validates and writes under
+// one per-organization advisory lock.
+
+// ErrHardwareCategoryNotFound is the typed not-found of this family: callers
+// must distinguish it from a storage failure (a dropped connection is never
+// a 404).
+var ErrHardwareCategoryNotFound = errors.New("hardware category not found")
+
+// ErrHardwareCategoryHasChildren reports a delete refused by the children
+// guard.
+var ErrHardwareCategoryHasChildren = errors.New("cannot delete category with children; reparent or delete children first")
+
+// withHardwareCategoryTree runs one tree mutation in the tenant transaction,
+// holding the organization's tree lock and handing it a tree read AFTER the
+// lock: the previous holder's commit is visible, so validation can never run
+// against a stale tree. The xact lock lives until the surrounding transaction
+// ends.
+func (s *PostgresStore) withHardwareCategoryTree(ctx context.Context, run func(context.Context, []domain.HardwareCategory) error) error {
+	return runInTenantTxErr(s, ctx, func(txCtx context.Context) error {
+		key := "hardware_categories:" + OrgFromCtx(txCtx)
+		if _, err := s.db(txCtx).Exec(txCtx, "SELECT pg_advisory_xact_lock(hashtext($1))", key); err != nil {
+			return fmt.Errorf("lock hardware category tree: %w", err)
+		}
+		all, err := s.ListHardwareCategories(txCtx)
+		if err != nil {
+			return err
+		}
+		return run(txCtx, all)
+	})
+}
 
 func (s *PostgresStore) ListHardwareCategories(ctx context.Context) ([]domain.HardwareCategory, error) {
 	query := `
@@ -59,7 +92,7 @@ func (s *PostgresStore) GetHardwareCategoryByID(ctx context.Context, id string) 
 	err := row.Scan(&c.ID, &c.Name, &parentID, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt, &c.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("hardware category not found")
+			return nil, ErrHardwareCategoryNotFound
 		}
 		return nil, err
 	}
@@ -70,91 +103,86 @@ func (s *PostgresStore) GetHardwareCategoryByID(ctx context.Context, id string) 
 }
 
 func (s *PostgresStore) CreateHardwareCategory(ctx context.Context, c *domain.HardwareCategory) error {
-	all, err := s.ListHardwareCategories(ctx)
-	if err != nil {
-		return err
-	}
-	if err := domain.ValidateHardwareCategoryPlacement(c.ParentID, all, ""); err != nil {
-		return fmt.Errorf("invalid category placement: %w", err)
-	}
-	if c.Name == "" {
-		return fmt.Errorf("category name is required")
-	}
+	return s.withHardwareCategoryTree(ctx, func(ctx context.Context, all []domain.HardwareCategory) error {
+		if err := domain.ValidateHardwareCategoryPlacement(c.ParentID, all, ""); err != nil {
+			return fmt.Errorf("invalid category placement: %w", err)
+		}
+		if c.Name == "" {
+			return fmt.Errorf("category name is required")
+		}
 
-	var parent interface{}
-	if c.ParentID != "" {
-		parent = c.ParentID
-	}
+		var parent interface{}
+		if c.ParentID != "" {
+			parent = c.ParentID
+		}
 
-	if c.ID != "" {
+		if c.ID != "" {
+			query := `
+				INSERT INTO hardware_categories (id, name, parent_id, sort_order, organization_id)
+				VALUES ($1, $2, $3, $4, $5)
+				RETURNING created_at, updated_at, version;
+			`
+			return s.db(ctx).QueryRow(ctx, query, c.ID, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
+				Scan(&c.CreatedAt, &c.UpdatedAt, &c.Version)
+		}
+
 		query := `
 			INSERT INTO hardware_categories (id, name, parent_id, sort_order, organization_id)
-			VALUES ($1, $2, $3, $4, $5)
-			RETURNING created_at, updated_at, version;
+			VALUES (gen_random_uuid()::text, $1, $2, $3, $4)
+			RETURNING id, created_at, updated_at, version;
 		`
-		return s.db(ctx).QueryRow(ctx, query, c.ID, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
-			Scan(&c.CreatedAt, &c.UpdatedAt, &c.Version)
-	}
-
-	query := `
-		INSERT INTO hardware_categories (id, name, parent_id, sort_order, organization_id)
-		VALUES (gen_random_uuid()::text, $1, $2, $3, $4)
-		RETURNING id, created_at, updated_at, version;
-	`
-	return s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
-		Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt, &c.Version)
+		return s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
+			Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt, &c.Version)
+	})
 }
 
 func (s *PostgresStore) UpdateHardwareCategory(ctx context.Context, id string, expectedVersion int64, c *domain.HardwareCategory) error {
-	all, err := s.ListHardwareCategories(ctx)
-	if err != nil {
-		return err
-	}
-	if err := domain.ValidateHardwareCategoryPlacement(c.ParentID, all, id); err != nil {
-		return fmt.Errorf("invalid category placement: %w", err)
-	}
-	if c.Name == "" {
-		return fmt.Errorf("category name is required")
-	}
-
-	var parent interface{}
-	if c.ParentID != "" {
-		parent = c.ParentID
-	}
-
-	query := `
-		UPDATE hardware_categories
-		SET name = $1, parent_id = $2, sort_order = $3, updated_at = CURRENT_TIMESTAMP, version = version + 1
-		WHERE id = $4 AND organization_id = $5 AND version = $6
-		RETURNING updated_at, version;
-	`
-	err = s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, id, OrgFromCtx(ctx), expectedVersion).Scan(&c.UpdatedAt, &c.Version)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return s.disambiguateRowNotFound(ctx, "hardware_categories", id, fmt.Errorf("hardware category not found"))
+	return s.withHardwareCategoryTree(ctx, func(ctx context.Context, all []domain.HardwareCategory) error {
+		if err := domain.ValidateHardwareCategoryPlacement(c.ParentID, all, id); err != nil {
+			return fmt.Errorf("invalid category placement: %w", err)
 		}
-		return err
-	}
-	c.ID = id
-	return nil
+		if c.Name == "" {
+			return fmt.Errorf("category name is required")
+		}
+
+		var parent interface{}
+		if c.ParentID != "" {
+			parent = c.ParentID
+		}
+
+		query := `
+			UPDATE hardware_categories
+			SET name = $1, parent_id = $2, sort_order = $3, updated_at = CURRENT_TIMESTAMP, version = version + 1
+			WHERE id = $4 AND organization_id = $5 AND version = $6
+			RETURNING updated_at, version;
+		`
+		err := s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, id, OrgFromCtx(ctx), expectedVersion).Scan(&c.UpdatedAt, &c.Version)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return s.disambiguateRowNotFound(ctx, "hardware_categories", id, ErrHardwareCategoryNotFound)
+			}
+			return err
+		}
+		c.ID = id
+		return nil
+	})
 }
 
 func (s *PostgresStore) DeleteHardwareCategory(ctx context.Context, id string, expectedVersion int64) error {
-	children, err := s.db(ctx).Query(ctx, `SELECT id FROM hardware_categories WHERE parent_id = $1 AND organization_id = $2 LIMIT 1`, id, OrgFromCtx(ctx))
-	if err != nil {
-		return err
-	}
-	defer children.Close()
-	if children.Next() {
-		return fmt.Errorf("cannot delete category with children; reparent or delete children first")
-	}
+	return s.withHardwareCategoryTree(ctx, func(ctx context.Context, all []domain.HardwareCategory) error {
+		for i := range all {
+			if all[i].ParentID == id {
+				return ErrHardwareCategoryHasChildren
+			}
+		}
 
-	tag, err := s.db(ctx).Exec(ctx, `DELETE FROM hardware_categories WHERE id = $1 AND organization_id = $2 AND version = $3`, id, OrgFromCtx(ctx), expectedVersion)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return s.disambiguateRowNotFound(ctx, "hardware_categories", id, fmt.Errorf("hardware category not found"))
-	}
-	return nil
+		tag, err := s.db(ctx).Exec(ctx, `DELETE FROM hardware_categories WHERE id = $1 AND organization_id = $2 AND version = $3`, id, OrgFromCtx(ctx), expectedVersion)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return s.disambiguateRowNotFound(ctx, "hardware_categories", id, ErrHardwareCategoryNotFound)
+		}
+		return nil
+	})
 }

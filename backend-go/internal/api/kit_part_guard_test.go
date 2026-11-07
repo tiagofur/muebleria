@@ -210,3 +210,84 @@ func TestHandleModuleByIDPutRejectsKitPartHardwareLine(t *testing.T) {
 		t.Error("the guard must reject before any write")
 	}
 }
+
+// #1556: the opaque-kit rule enforced server-side on agregado recipes. A
+// part of a kit the agregado MOUNTS is a normal member (the kit wizard
+// writes them); a part of a foreign kit, a part bought in a fixed hardware
+// line, or a "kit" that is itself a part is rejected with a typed 422 that
+// names the codes.
+func agregadoKitPartFixture() []domain.Hardware {
+	return []domain.Hardware{
+		{ID: "kit-494", Code: "49402645", Name: "Set corredera", Unit: "set", Active: true},
+		{ID: "parte-fij-i", Code: "49402645-FIJ-I", Name: "Guía fija izquierda", Unit: "piece", Active: true, KitHardwareID: kitLink("kit-494")},
+		{ID: "kit-otro", Code: "KIT-OTRO", Name: "Otro set", Unit: "set", Active: true},
+		{ID: "parte-otra", Code: "KIT-OTRO-FIJ", Name: "Parte de otro set", Unit: "piece", Active: true, KitHardwareID: kitLink("kit-otro")},
+	}
+}
+
+func agregadoKitPartRequest(body string) (*Server, *httptest.ResponseRecorder, *http.Request) {
+	srv := &Server{Store: &stubStore{listHardwares: agregadoKitPartFixture(), getOrgByID: customLibraryOrg()}}
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/agregados", strings.NewReader(body)), "admin", string(domain.RoleAdmin))
+	req.Header.Set("Content-Type", "application/json")
+	return srv, httptest.NewRecorder(), req
+}
+
+func agregadoKitPartBody(kit string, memberHardware string, lineHardware string) string {
+	lines := "[]"
+	if lineHardware != "" {
+		lines = `[{"id":"l1","quantity":1,"option_role":"","hardware_id":"` + lineHardware + `"}]`
+	}
+	return `{
+		"id":"agr-1","code":"CAJ-1","name":"Cajón","width_mm":400,"height_mm":150,"depth_mm":500,
+		"commercial_kit_hardware_id":"` + kit + `",
+		"hardware_lines":` + lines + `,
+		"rigid_members":[{"memberId":"fixed_rail_left","role":"fixed_rail",
+			"source":{"kind":"fixed","fixed":{"hardwareId":"` + memberHardware + `"}},
+			"placement":{"x":{"ref":"min","offsetMm":0},"y":{"ref":"min","offsetMm":0},"z":{"ref":"min","offsetMm":0}},
+			"bomRole":"included_in_kit"}]
+	}`
+}
+
+func TestHandleAgregadosPostRejectsPartOfForeignKit_1556(t *testing.T) {
+	srv, rr, req := agregadoKitPartRequest(agregadoKitPartBody("kit-494", "parte-otra", ""))
+	srv.HandleAgregados(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "AGREGADO_KIT_PART") || !strings.Contains(rr.Body.String(), "KIT-OTRO-FIJ") {
+		t.Fatalf("body must carry the typed code and name the part: %s", rr.Body.String())
+	}
+}
+
+func TestHandleAgregadosPostRejectsPartBoughtInHardwareLine_1556(t *testing.T) {
+	// Even a part of the MOUNTED kit cannot be bought on its own line.
+	srv, rr, req := agregadoKitPartRequest(agregadoKitPartBody("kit-494", "parte-fij-i", "parte-fij-i"))
+	srv.HandleAgregados(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "49402645-FIJ-I") {
+		t.Fatalf("status = %d, want 422 naming the part (body=%s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleAgregadosPostRejectsPartAsCommercialKit_1556(t *testing.T) {
+	srv, rr, req := agregadoKitPartRequest(agregadoKitPartBody("parte-otra", "parte-otra", ""))
+	srv.HandleAgregados(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "AGREGADO_KIT_PART") {
+		t.Fatalf("a part used as the commercial kit must be rejected: %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleAgregadosPostAcceptsPartsOfMountedKit_1556(t *testing.T) {
+	// The kit wizard's own recipe shape: members are parts of the kit the
+	// agregado mounts. The guard must let it through (the store stub then
+	// panics on an unexpected CreateAgregado — reaching it proves the pass).
+	srv, rr, req := agregadoKitPartRequest(agregadoKitPartBody("kit-494", "parte-fij-i", ""))
+	defer func() {
+		if recovered := recover(); recovered == nil || !strings.Contains(recovered.(string), "CreateAgregado") {
+			t.Fatalf("the request must reach CreateAgregado (guard passed), got panic=%v status=%d body=%s", recovered, rr.Code, rr.Body.String())
+		}
+	}()
+	srv.HandleAgregados(rr, req)
+}

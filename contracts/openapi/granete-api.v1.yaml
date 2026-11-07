@@ -7697,7 +7697,8 @@
           "MFA_INVALID",
           "MFA_ENROLLMENT_EXPIRED",
           "MFA_FACTOR_NOT_FOUND",
-          "MFA_RECOVERY_INVALID"
+          "MFA_RECOVERY_INVALID",
+          "HARDWARE_CATEGORY_INVALID"
         ]
       },
       "ApiError": {
@@ -18853,6 +18854,30 @@
             ],
             "description": "#1422 slice 1: design part of the referenced kit hardware."
           },
+          "pieces": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "description": "#1518 F1: design pieces of a multi-design hardware; identifiers only on write.",
+            "items": {
+              "$ref": "#/components/schemas/HardwarePiece"
+            }
+          },
+          "category_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#1507 HardwareCategory link; must belong to this organization (422 HARDWARE_CATEGORY_INVALID). Empty or null = uncategorized."
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#1507 free-form manufacturer/series label."
+          },
           "active": {
             "type": "boolean"
           }
@@ -21095,29 +21120,6 @@
             "type": "array",
             "items": { "type": "string" },
             "description": "Ids asignados por el servidor, por índice de variant_sets del request."
-          }
-        }
-      },
-      "WorkshopHardwareCategory": {
-        "type": "object",
-        "description": "Hardware category tree node (#1507, subgrupos de herrajes). Same shape and 3-level rules as the other catalogs.",
-        "required": [
-          "id",
-          "name",
-          "sortOrder"
-        ],
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "parentId": {
-            "type": "string"
-          },
-          "sortOrder": {
-            "type": "integer"
           }
         }
       },

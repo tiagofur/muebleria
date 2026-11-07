@@ -34,6 +34,15 @@ func isForeignKeyViolation(err error) bool {
 	return strings.Contains(err.Error(), "foreign key")
 }
 
+// isHardwareCategoryLinkViolation reports whether err is the hardwares →
+// hardware_categories foreign key (#1556): the category passed the pre-check
+// and was deleted before the write. Matched by constraint so a kit or asset
+// FK on the same row is never reported as a category problem.
+func isHardwareCategoryLinkViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == "hardwares_category_id_fkey"
+}
+
 // moduleChildRowConflict reports whether a duplicate-key error comes from one
 // of a module's child row primary keys (#1398). A client that clones another
 // module as a template without dropping its preset / hardware line / board
