@@ -1,0 +1,82 @@
+package storage_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
+)
+
+// #1556 — hardware_categories (#1507) owes the new-table invariants the
+// merge skipped: multi-organization RLS isolation under the runtime role,
+// and the up/down replay of 000177. (Concurrency: see
+// hardware_categories_concurrency_test.go.)
+
+func TestHardwareCategories_RLSIsolationTwoOrgs_1556(t *testing.T) {
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
+
+	// Each org creates its own category tree with the same shape.
+	const nameA = "Bisagras A"
+	const nameB = "Bisagras B"
+	var idA, idB string
+	if err := isolationRuntimeError(fixture, fixture.actorA, func(ctx context.Context) error {
+		a := &domain.HardwareCategory{Name: nameA, SortOrder: 1}
+		createErr := store.CreateHardwareCategory(ctx, a)
+		idA = a.ID
+		return createErr
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := isolationRuntimeError(fixture, fixture.actorB, func(ctx context.Context) error {
+		b := &domain.HardwareCategory{Name: nameB, SortOrder: 1}
+		createErr := store.CreateHardwareCategory(ctx, b)
+		idB = b.ID
+		return createErr
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Lists only see their own tree.
+	listA := isolationRuntimeValue(t, fixture, fixture.actorA, func(ctx context.Context) ([]domain.HardwareCategory, error) {
+		return store.ListHardwareCategories(ctx)
+	})
+	listB := isolationRuntimeValue(t, fixture, fixture.actorB, func(ctx context.Context) ([]domain.HardwareCategory, error) {
+		return store.ListHardwareCategories(ctx)
+	})
+	if len(listA) != 1 || listA[0].ID != idA {
+		t.Fatalf("org A list = %+v, want only its own node", listA)
+	}
+	if len(listB) != 1 || listB[0].ID != idB {
+		t.Fatalf("org B list = %+v, want only its own node", listB)
+	}
+
+	// A foreign id reads as not-found — never as a distinct code that would
+	// confirm existence (ADR-0004: tenant_id is not authorization).
+	crossErr := isolationRuntimeError(fixture, fixture.actorB, func(ctx context.Context) error {
+		_, err := store.GetHardwareCategoryByID(ctx, idA)
+		return err
+	})
+	if !errors.Is(crossErr, storage.ErrHardwareCategoryNotFound) {
+		t.Fatalf("org B reading org A's category err = %v, want ErrHardwareCategoryNotFound", crossErr)
+	}
+
+	// And the org-scoped lookup is exactly what the hardware category-link
+	// validation runs before any write. This probe pins WHY that pre-check
+	// is REQUIRED, not optional: the FK cannot protect this path (referential
+	// integrity bypasses RLS), so at STORAGE level a cross-tenant category_id
+	// still LANDS — only the admin role can see it, no tenant scope can (the
+	// link is invisible to org A and org B alike). The handler-level E2E in
+	// the api package asserts the 422 that blocks it.
+	hw := &domain.Hardware{
+		ID: "c9000000-0000-0000-0000-00000000000a", Code: "HW-1556-A", Name: "Herraje A",
+		Unit: "piece", CostPerUnit: 1, Active: true, CategoryID: idA,
+	}
+	if err := isolationRuntimeError(fixture, fixture.actorB, func(ctx context.Context) error {
+		return store.CreateHardware(ctx, hw)
+	}); err != nil {
+		t.Fatalf("storage-level cross-org category write err = %v (the gap this test pins changed — update the handler E2E)", err)
+	}
+}
