@@ -281,7 +281,7 @@ func consumeAgregadoAndAccessoryChoices(module domain.Module, catalog domain.Cat
 		if role != "" && strings.TrimSpace(choices[role]) != "" {
 			consumed[role] = effectiveID
 		}
-		for _, kitID := range agregadoKitIDs(agr) {
+		for _, kitID := range AgregadoKitIDs(agr) {
 			for _, og := range linkedAccessoryGroups(catalog, kitID) {
 				choice := strings.TrimSpace(choices[og.Code])
 				if choice == "" {
@@ -295,11 +295,11 @@ func consumeAgregadoAndAccessoryChoices(module domain.Module, catalog domain.Cat
 	}
 }
 
-// agregadoKitIDs lists the commercial kits the agregado can mount: the level
+// AgregadoKitIDs lists the commercial kits the agregado can mount: the level
 // kit plus every height-variant kit (#1493). Accessory groups are declared
 // per kit; the web offering unions them across variants and so does the
 // consumed derivation.
-func agregadoKitIDs(agr domain.Agregado) []string {
+func AgregadoKitIDs(agr domain.Agregado) []string {
 	kitIDs := make([]string, 0, 2)
 	seen := map[string]bool{}
 	if agr.CommercialKitHardwareID != nil && strings.TrimSpace(*agr.CommercialKitHardwareID) != "" {
