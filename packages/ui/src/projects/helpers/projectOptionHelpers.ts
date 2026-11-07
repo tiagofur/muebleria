@@ -119,6 +119,15 @@ export function canShowProjectPricePreview(
 ): PricePreviewGateResult {
   const missing = new Set<string>();
   const byId = new Map(modules.map((m) => [m.id, m]));
+  // #1555: los roles de AGREGADO (CAJON, PUERTA…) nunca bloquean el PRECIO —
+  // el motor (TS/Go ResolveEffectiveAgregadoID) cae al agregado default de
+  // la instancia y cotiza igual; exigirlos acá bloquearía ítems legacy que
+  // el motor sí cotiza. La elección explícita del cajón se exige en el ALTA
+  // (ProjectAddItemModal), no en el gate del presupuesto. Los accesorios del
+  // kit SÍ bloquean: el motor falla cerrado (accessory_choice_required).
+  const agregadoRoleCodes = new Set(
+    optionGroups.filter((g) => g.kind === 'agregado').map((g) => g.code),
+  );
 
   for (const item of project.items) {
     const mod = byId.get(item.moduleId);
@@ -140,7 +149,7 @@ export function canShowProjectPricePreview(
       catalogAgregados,
       catalogOptionGroups,
       effective,
-    );
+    ).filter((code) => !agregadoRoleCodes.has(code));
     // P0-2b: a plinth_board item without ZOCLO nor FRENTE explodes on accept
     // with an unresolvable synthesized zoclo — surface it at the preview gate.
     if (plinthZocloNeedsChoice(mod, effective)) {

@@ -285,6 +285,12 @@ func ConsumedOptionRoles(module domain.Module, choices map[string]string, catalo
 			consumed[resolved.OptionRole] = resolved.HardwareID
 		}
 	}
+	// #1555: the resolve CONSULTS the agregado option role (which cajón the
+	// bay mounts) and the kit accessory group choices when it draws and
+	// quotes the bay — the consumed set must carry them or the #826
+	// intersection silently changes the next resolve's BOM (different kit,
+	// missing accessory line) and the gate rejects the user's picks.
+	consumeAgregadoAndAccessoryChoices(module, catalog, choices, consumed)
 	return consumed
 }
 

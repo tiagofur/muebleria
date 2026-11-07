@@ -97,6 +97,32 @@ func (s *Server) HandleDesignEffectiveMaterials(w http.ResponseWriter, r *http.R
 			OptionIDs: ar.OptionIDs,
 		})
 	}
+	// #1555: the kit accessory groups (galería/boxcap/boxcover) of every
+	// agregado option are choices of the SAME map — without them here the
+	// composition silently drops the plugin's accessory override and the
+	// connected resolve never sees the choice (optional: lost quote line;
+	// required: accessory_choice_required despite the user's pick). They are
+	// ExplicitChoiceOnly: an override or a compatible Design default passes,
+	// the curated first-option fallback never seeds an accessory. Deduped by
+	// code (the same group can surface under several agregado options).
+	seenAccessory := make(map[string]bool)
+	for _, ar := range def.AgregadoRoles {
+		for _, opt := range ar.Options {
+			for _, acc := range opt.AccessoryGroups {
+				code := strings.TrimSpace(acc.Code)
+				if code == "" || seenAccessory[code] {
+					continue
+				}
+				seenAccessory[code] = true
+				roleSpecs = append(roleSpecs, domain.DefinitionRoleOptionSpec{
+					Role:               code,
+					Label:              acc.Name,
+					OptionIDs:          acc.OptionIDs,
+					ExplicitChoiceOnly: true,
+				})
+			}
+		}
+	}
 
 	// 4. Pure composition rule in domain.
 	effective := domain.ComposeEffectiveDefinitionMaterials(

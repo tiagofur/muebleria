@@ -153,6 +153,11 @@ export function computeSelectedProjectBreakdown(
     catalog.optionGroups,
     catalog.components,
     catalog.structures,
+    // #1555: el gate del quote local ve agregados y grupos accesorios — un
+    // accesorio requerido del kit del cajón elegido bloquea el preview igual
+    // que en el resolve conectado (fail-closed simétrico).
+    catalog.agregados,
+    catalog.optionGroups,
   );
   if (!gate.ok) {
     return {

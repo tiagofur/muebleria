@@ -205,6 +205,10 @@ export function ProjectAddItemModal({
   const addModule = selectionHidden
     ? undefined
     : modules.find((m) => m.id === addItem.moduleId);
+  // #1555: las elecciones EFECTIVAS del alta (las del draft sobre las del
+  // proyecto) gobiernan qué accesorio se oferta — el del cajón ELEGIDO en
+  // el modal, nunca el del agregado default de la instancia.
+  const addEffectiveChoices = effectiveOptionChoices(addItem.optionChoices, projectLevelChoices);
   const addGroups = groupsForModuleItem(
     addModule,
     optionGroups,
@@ -215,6 +219,7 @@ export function ProjectAddItemModal({
     // #1502: los grupos de accesorios declarados por los kits aparecen como
     // selector en el alta (elección explícita, sin default).
     optionGroups,
+    addEffectiveChoices,
   );
 
   const selectModuleForAdd = (moduleId: string) => {
@@ -288,6 +293,10 @@ export function ProjectAddItemModal({
       return;
     }
 
+    // #1555: las elecciones efectivas PRIMERO — los requeridos se derivan del
+    // cajón ELEGIDO (un accesorio del kit default que el cajón elegido no
+    // monta no puede exigirse: bloqueo falso + elección huérfana).
+    const effective = effectiveOptionChoices(addItem.optionChoices, projectLevelChoices);
     const groups = groupsForModuleItem(
       mod,
       optionGroups,
@@ -298,8 +307,8 @@ export function ProjectAddItemModal({
       // #1502: un accesorio requerido sin elección se exige aquí, antes de
       // que el motor lo rechace visible en el resolve.
       optionGroups,
+      effective,
     ).filter((g) => g.required);
-    const effective = effectiveOptionChoices(addItem.optionChoices, projectLevelChoices);
     for (const group of groups) {
       if (!effective[group.code]) {
         setItemError(`Falta elegir: ${group.name} (${group.code}).`);

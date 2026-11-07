@@ -92,6 +92,7 @@ import {
   type LayoutCommandResult,
   type WallOpeningKind,
   createCatalogVisualAssetLookup,
+  effectiveOptionChoices,
 } from '@granete/domain';
 import {
   ArrowDown,
@@ -1126,8 +1127,13 @@ export function ProjectSpatialStudio({
         selectedItem?.baseMode,
         // #1502: grupos de accesorios declarados por los kits de los agregados.
         catalog.optionGroups,
+        // #1555: el accesorio sigue la elección EFECTIVA de CAJÓN del item
+        // seleccionado (ítem sobre proyecto) — la misma que usa el gate.
+        selectedItem
+          ? effectiveOptionChoices(selectedItem.optionChoices, project.projectLevelChoices)
+          : undefined,
       ),
-    [selectedModule, catalog, selectedItem],
+    [selectedModule, catalog, selectedItem, project.projectLevelChoices],
   );
 
   const pickerCatalogs = useMemo(

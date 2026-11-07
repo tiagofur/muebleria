@@ -254,3 +254,66 @@ func accessoryChoiceContractIssues(rejections []LayoutAssemblyRejection) []domai
 	}
 	return issues
 }
+
+// consumeAgregadoAndAccessoryChoices (#1555): registers the choice keys the
+// resolve CONSULTS when it materializes a bay's kit and its accessories —
+// the agregado option role and every kit-linked accessory group with a valid
+// member choice. The #826 intersection (design working copy, quote freeze)
+// and the release gate share THIS derivation: dropping a consulted key would
+// change the NEXT resolve's BOM (different kit / missing accessory line),
+// breaking the BOM-neutrality guarantee exactly like the review reproduced.
+// A key whose value is not a real active member is consumed by nobody — it
+// stays droppable and the gate rejects it by name. Same decision functions
+// the quote and the layout run (ResolveEffectiveAgregadoID,
+// linkedAccessoryGroups, accessoryMemberForChoice): no second truth.
+func consumeAgregadoAndAccessoryChoices(module domain.Module, catalog domain.Catalog, choices map[string]string, consumed map[string]string) {
+	instances := append(append([]domain.ModuleAgregadoInstance{}, structureAgregadosOf(module, catalog)...), module.Agregados...)
+	for _, inst := range instances {
+		role := strings.TrimSpace(inst.OptionRole)
+		effectiveID := ResolveEffectiveAgregadoID(inst, choices)
+		if effectiveID == "" {
+			continue
+		}
+		agr, ok := findAgregado(catalog, effectiveID)
+		if !ok {
+			continue
+		}
+		if role != "" && strings.TrimSpace(choices[role]) != "" {
+			consumed[role] = effectiveID
+		}
+		for _, kitID := range agregadoKitIDs(agr) {
+			for _, og := range linkedAccessoryGroups(catalog, kitID) {
+				choice := strings.TrimSpace(choices[og.Code])
+				if choice == "" {
+					continue
+				}
+				if hw, ok := accessoryMemberForChoice(catalog, og, choice); ok {
+					consumed[og.Code] = hw.ID
+				}
+			}
+		}
+	}
+}
+
+// agregadoKitIDs lists the commercial kits the agregado can mount: the level
+// kit plus every height-variant kit (#1493). Accessory groups are declared
+// per kit; the web offering unions them across variants and so does the
+// consumed derivation.
+func agregadoKitIDs(agr domain.Agregado) []string {
+	kitIDs := make([]string, 0, 2)
+	seen := map[string]bool{}
+	if agr.CommercialKitHardwareID != nil && strings.TrimSpace(*agr.CommercialKitHardwareID) != "" {
+		kitIDs = append(kitIDs, *agr.CommercialKitHardwareID)
+		seen[*agr.CommercialKitHardwareID] = true
+	}
+	for _, vs := range agr.VariantSets {
+		for _, v := range vs.Variants {
+			kit := strings.TrimSpace(v.CommercialKitHardwareID)
+			if kit != "" && !seen[kit] {
+				kitIDs = append(kitIDs, kit)
+				seen[kit] = true
+			}
+		}
+	}
+	return kitIDs
+}

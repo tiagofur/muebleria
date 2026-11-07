@@ -166,3 +166,4 @@ func TestIntersectKeepsChoicesWhenBOMHasNoDemand(t *testing.T) {
 		t.Fatal("zero-demand units keep their choices untouched")
 	}
 }
+

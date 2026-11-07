@@ -169,6 +169,62 @@ func TestComposeEffectiveDefinitionMaterials_UnrestrictedRoleWithoutDefaultCarri
 	}
 }
 
+// #1555: kit accessory groups are ExplicitChoiceOnly — an override or a
+// COMPATIBLE Design default passes, an incompatible default and the curated
+// first-option fallback never seed an accessory the user did not choose.
+func TestComposeEffectiveDefinitionMaterials_ExplicitChoiceOnlyNeverSeeds_1555(t *testing.T) {
+	accessory := DefinitionRoleOptionSpec{
+		Role: "LATERAL_E", OptionIDs: []string{"hw-gal-e", "hw-cap-e"}, ExplicitChoiceOnly: true,
+	}
+
+	t.Run("override passes with mode override", func(t *testing.T) {
+		res := ComposeEffectiveDefinitionMaterials("MBOX", []DefinitionRoleOptionSpec{accessory},
+			DesignAuthoringDefaults{}, map[string]string{"LATERAL_E": "hw-cap-e"})
+		if res.MaterialChoices["LATERAL_E"] != "hw-cap-e" || res.MaterialChoiceModes["LATERAL_E"] != DesignMaterialChoiceModeOverride {
+			t.Fatalf("override must pass: %v / %v", res.MaterialChoices, res.MaterialChoiceModes)
+		}
+	})
+
+	t.Run("compatible design default passes", func(t *testing.T) {
+		res := ComposeEffectiveDefinitionMaterials("MBOX", []DefinitionRoleOptionSpec{accessory},
+			DesignAuthoringDefaults{MaterialChoices: map[string]string{"LATERAL_E": "hw-gal-e"}}, nil)
+		if res.MaterialChoices["LATERAL_E"] != "hw-gal-e" || res.MaterialChoiceModes["LATERAL_E"] != DesignMaterialChoiceModeDesign {
+			t.Fatalf("compatible default must pass: %v / %v", res.MaterialChoices, res.MaterialChoiceModes)
+		}
+	})
+
+	t.Run("incompatible design default carries no statement (no fallback seed)", func(t *testing.T) {
+		res := ComposeEffectiveDefinitionMaterials("MBOX", []DefinitionRoleOptionSpec{accessory},
+			DesignAuthoringDefaults{MaterialChoices: map[string]string{"LATERAL_E": "hw-ajeno"}}, nil)
+		if _, ok := res.MaterialChoices["LATERAL_E"]; ok {
+			t.Fatalf("incompatible default must NOT fall back to the first accessory: %v", res.MaterialChoices)
+		}
+		if _, ok := res.MaterialChoiceModes["LATERAL_E"]; ok {
+			t.Fatalf("parity: no mode either: %v", res.MaterialChoiceModes)
+		}
+	})
+
+	t.Run("no override and no default carries no statement", func(t *testing.T) {
+		res := ComposeEffectiveDefinitionMaterials("MBOX", []DefinitionRoleOptionSpec{accessory},
+			DesignAuthoringDefaults{}, nil)
+		if len(res.MaterialChoices) != 0 || len(res.MaterialChoiceModes) != 0 {
+			t.Fatalf("an accessory nobody chose is never seeded: %v / %v", res.MaterialChoices, res.MaterialChoiceModes)
+		}
+	})
+
+	t.Run("regular roles keep the curated fallback (regression guard)", func(t *testing.T) {
+		regular := DefinitionRoleOptionSpec{Role: "BISAGRA", OptionIDs: []string{"hw-blum", "hw-eco"}}
+		res := ComposeEffectiveDefinitionMaterials("MBOX", []DefinitionRoleOptionSpec{regular, accessory},
+			DesignAuthoringDefaults{}, nil)
+		if res.MaterialChoices["BISAGRA"] != "hw-blum" || res.MaterialChoiceModes["BISAGRA"] != DesignMaterialChoiceModeDefinition {
+			t.Fatalf("regular role fallback must stay: %v", res.MaterialChoices)
+		}
+		if _, ok := res.MaterialChoices["LATERAL_E"]; ok {
+			t.Fatalf("accessory must not be seeded next to it: %v", res.MaterialChoices)
+		}
+	})
+}
+
 func TestComposeEffectiveDefinitionMaterials_DefinitionFallbackDoesNotInflateOverrideCounts(t *testing.T) {
 	entries := []DesignRoleInheritance{
 		{Role: "FRENTES", Mode: DesignMaterialChoiceModeDefinition, AppliedChoice: "mat-oak", DesignDefault: "mat-glass"},
