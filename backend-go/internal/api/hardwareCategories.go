@@ -63,7 +63,11 @@ func (s *Server) HandleHardwareCategoryByID(w http.ResponseWriter, r *http.Reque
 	case http.MethodGet:
 		c, err := s.Store.GetHardwareCategoryByID(r.Context(), id)
 		if err != nil {
-			respondWithError(w, http.StatusNotFound, "hardware category not found")
+			if errors.Is(err, storage.ErrHardwareCategoryNotFound) {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			respondWithInternalError(w, err, "hardware category get")
 			return
 		}
 		w.Header().Set("ETag", FormatVersionETag(c.Version))
@@ -83,7 +87,9 @@ func (s *Server) HandleHardwareCategoryByID(w http.ResponseWriter, r *http.Reque
 		}
 		err := s.Store.UpdateHardwareCategory(r.Context(), id, expectedVersion, &c)
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			// Typed on purpose: "invalid category placement: parent category
+			// not found" is a 400 about the body, not a 404 about the path.
+			if errors.Is(err, storage.ErrHardwareCategoryNotFound) {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
@@ -114,8 +120,12 @@ func (s *Server) HandleHardwareCategoryByID(w http.ResponseWriter, r *http.Reque
 		}
 		err := s.Store.DeleteHardwareCategory(r.Context(), id, expectedVersion)
 		if err != nil {
-			if strings.Contains(err.Error(), "cannot delete category with children") {
+			if errors.Is(err, storage.ErrHardwareCategoryHasChildren) {
 				respondWithError(w, http.StatusConflict, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrHardwareCategoryNotFound) {
+				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
 			if errors.Is(err, storage.ErrVersionConflict) {
