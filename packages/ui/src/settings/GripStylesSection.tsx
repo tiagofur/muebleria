@@ -15,12 +15,12 @@ import {
   Star,
   Trash2,
 } from 'lucide-react';
-import type { GraneteApiClient } from '@granete/storage';
+import { GraneteApiError, type GraneteApiClient } from '@granete/storage';
 import type {
   GripStyle,
   GripStyleRecipe,
 } from '@granete/storage';
-import { ConfirmDialog, EmptyState } from '../common';
+import { ConfirmDialog, EmptyState, Modal } from '../common';
 import './settings.css';
 
 export type GripFurnitureTypeId = 'inferior' | 'superior' | 'alto';
@@ -132,11 +132,23 @@ export interface GripStylesSectionProps {
   readonly token: string | null;
 }
 
+/** #1533 (C4): the API names the failing family in its message — anchor the
+ * alert to that field instead of a modal-level paragraph. */
+function saveErrorAnchor(message: string): 'name' | 'inferior' | 'superior' | 'alto' | 'top' {
+  const lowered = message.toLowerCase();
+  if (lowered.includes('nombre')) return 'name';
+  if (lowered.includes('inferior') || lowered.includes('muebles bajos')) return 'inferior';
+  if (lowered.includes('superior') || lowered.includes('alacena')) return 'superior';
+  if (lowered.includes('alto') || lowered.includes('muebles altos')) return 'alto';
+  if (lowered.includes('arriba') || lowered.includes('perfil superior')) return 'top';
+  return 'name';
+}
+
 export function GripStylesSection({ api, token }: GripStylesSectionProps): ReactNode {
   const [phase, setPhase] = useState<'loading' | 'error' | 'ready'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [styles, setStyles] = useState<readonly GripStyle[]>([]);
-  const [profiles, setProfiles] = useState<readonly { id: string; code: string; name: string; usage?: Record<string, { usable?: boolean }> }[]>([]);
+  const [profiles, setProfiles] = useState<readonly { id: string; code: string; name: string; usage?: Record<string, { usable?: boolean; message?: string | null }> }[]>([]);
 
   const [editor, setEditor] = useState<GripEditorDraft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -180,12 +192,20 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
     [profiles],
   );
 
-  /** Profiles usable at one position (the server's use rule, verbatim). */
-  const usableProfiles = useCallback(
+  /** All org profiles with the server's use-rule verdict at one position:
+   * usable ones are selectable, the rest stay visible DISABLED with their
+   * reason (the brief: «deshabilitados con su motivo, no ocultos»). */
+  const profilesAt = useCallback(
     (position: 'top' | 'between') =>
-      profiles.filter((p) => {
+      profiles.map((p) => {
         const usage = p.usage?.[position];
-        return usage ? usage.usable === true : false;
+        return {
+          id: p.id,
+          code: p.code,
+          name: p.name,
+          usable: usage?.usable === true,
+          reason: usage?.usable === true ? null : usage?.message ?? null,
+        };
       }),
     [profiles],
   );
@@ -342,7 +362,7 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
       if (ok) setListFlash('Estilo guardado.');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'No se pudo guardar el estilo.';
-      if (message.includes('412') || message.toLowerCase().includes('conflict') || message.includes('versión')) {
+      if (err instanceof GraneteApiError && err.status === 412) {
         setConflict(true);
       } else {
         setSaveError(message);
@@ -419,9 +439,24 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
   );
 
   if (phase === 'loading') {
+    // C5: card skeletons — the layout never jumps when the cards arrive.
     return (
-      <div data-testid="grip-styles-loading" aria-busy="true">
-        <p className="settings-lead settings-lead--inline">Cargando estilos de agarre…</p>
+      <div data-testid="grip-styles-loading" aria-busy="true" aria-label="Cargando estilos de agarre">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <p className="settings-lead settings-lead--inline" aria-hidden>Una receta por tipo de mueble, con un estilo predeterminado.</p>
+        </div>
+        {[0, 1, 2].map((index) => (
+          <div
+            key={index}
+            aria-hidden
+            data-testid="grip-styles-skeleton"
+            style={{ border: '1px solid var(--border, #ddd)', borderRadius: 8, padding: '12px 16px', marginBottom: 12, opacity: 0.6 }}
+          >
+            <div style={{ height: 16, width: '30%', background: 'var(--border, #ddd)', borderRadius: 4, marginBottom: 10 }} />
+            <div style={{ height: 12, width: '70%', background: 'var(--border, #ddd)', borderRadius: 4, marginBottom: 6 }} />
+            <div style={{ height: 12, width: '55%', background: 'var(--border, #ddd)', borderRadius: 4 }} />
+          </div>
+        ))}
       </div>
     );
   }
@@ -502,6 +537,9 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
                     Ofrecer en SketchUp
                   </label>
                 </div>
+                <p className="settings-lead settings-lead--inline" style={{ margin: '4px 0 0' }}>
+                  Ocultar sólo quita el estilo de las elecciones nuevas.
+                </p>
               </div>
               <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none' }} data-testid={`grip-style-summary-${style.id}`}>
                 {gripStyleSummaryLines(style, profileCodeById).map((line) => (
@@ -536,17 +574,16 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
       )}
 
       {editor ? (
-        <div
-          className="catalog-modal__overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label={editor.id ? 'Editar estilo de agarre' : 'Nuevo estilo de agarre'}
-          data-testid="grip-style-editor"
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'grid', placeItems: 'center', zIndex: 30 }}
+        <div data-testid="grip-style-editor">
+        <Modal
+          open
+          onClose={() => setEditor(null)}
+          title={editor.id ? 'Editar estilo de agarre' : 'Nuevo estilo de agarre'}
+          size="lg"
         >
           <div
             className="catalog-form"
-            style={{ background: 'var(--bg, #fff)', borderRadius: 10, padding: 20, maxWidth: 640, width: '92%', maxHeight: '90vh', overflow: 'auto' }}
+            style={{ padding: 0 }}
           >
             <h2 style={{ marginTop: 0 }}>{editor.id ? 'Editar estilo de agarre' : 'Nuevo estilo de agarre'}</h2>
 
@@ -558,17 +595,22 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
                   className="btn btn--sm"
                   data-testid="grip-style-conflict-reload"
                   onClick={async () => {
-                    setEditor(null);
+                    // C2: the modal draft is CONSERVED for re-applying — only
+                    // the If-Match version is refreshed from the reloaded list.
                     const ok = await reload();
-                    if (ok) setListFlash('Lista actualizada.');
+                    if (ok && editor.id) {
+                      const fresh = styles.find((s) => s.id === editor.id);
+                      if (fresh) setEditor({ ...editor, version: fresh.version });
+                    }
+                    setConflict(false);
                   }}
                 >
                   Recargar
                 </button>
               </div>
             ) : null}
-            {saveError ? (
-              <p role="alert" data-testid="grip-style-save-error" style={{ color: 'var(--danger, #b00)' }}>{saveError}</p>
+            {saveError && saveErrorAnchor(saveError) === 'name' ? (
+              <p role="alert" data-testid="grip-style-save-error" aria-describedby="grip-style-name" style={{ color: 'var(--danger, #b00)', margin: '0 0 4px' }}>{saveError}</p>
             ) : null}
 
             <label style={{ display: 'block', marginBottom: 12 }}>
@@ -577,7 +619,9 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
                 type="text"
                 value={editor.name}
                 maxLength={120}
+                disabled={saving}
                 data-testid="grip-style-name"
+                aria-invalid={saveError != null && saveErrorAnchor(saveError) === 'name' || undefined}
                 style={{ display: 'block', width: '100%', marginTop: 4 }}
                 onChange={(event) => setEditor({ ...editor, name: event.target.value })}
               />
@@ -588,6 +632,7 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
                 type="checkbox"
                 role="switch"
                 checked={editor.offered}
+                disabled={saving}
                 data-testid="grip-style-editor-offered"
                 onChange={(event) => setEditor({ ...editor, offered: event.target.checked })}
               />
@@ -598,6 +643,7 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
                 type="checkbox"
                 role="switch"
                 checked={editor.isDefault}
+                disabled={saving}
                 data-testid="grip-style-editor-default"
                 onChange={(event) => setEditor({ ...editor, isDefault: event.target.checked })}
               />
@@ -608,11 +654,14 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
               const row = editor.rows[ftype];
               const setRow = (next: Partial<GripEditorRow>) =>
                 setEditor({ ...editor, rows: { ...editor.rows, [ftype]: { ...row, ...next } } });
-              const usable = usableProfiles(ftype === 'superior' ? 'top' : ftype === 'alto' ? 'top' : ftype === 'inferior' ? 'top' : 'top');
-              const usableBetween = usableProfiles('between');
+              const rowError = saveError != null && saveErrorAnchor(saveError) === ftype;
+
               return (
-                <fieldset key={ftype} data-testid={`grip-style-row-${ftype}`} style={{ border: '1px solid var(--border, #ddd)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                <fieldset key={ftype} data-testid={`grip-style-row-${ftype}`} disabled={saving} style={{ border: '1px solid var(--border, #ddd)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
                   <legend style={{ fontWeight: 600 }}>{FURNITURE_TYPE_LABELS[ftype]}</legend>
+                  {rowError ? (
+                    <p role="alert" data-testid={`grip-style-save-error-${ftype}`} style={{ color: 'var(--danger, #b00)', margin: '0 0 8px' }}>{saveError}</p>
+                  ) : null}
                   <label style={{ display: 'block', marginBottom: 8 }}>
                     Modo
                     <select
@@ -656,8 +705,15 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
                           onChange={(event) => setRow({ topProfileId: event.target.value })}
                         >
                           <option value="">Elegí un perfil…</option>
-                          {usable.map((p) => (
-                            <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                          {profilesAt('top').map((p) => (
+                            <option
+                              key={p.id}
+                              value={p.usable ? p.id : ''}
+                              disabled={!p.usable}
+                              title={p.reason ?? undefined}
+                            >
+                              {p.usable ? `${p.code} — ${p.name}` : `${p.code} — no utilizable arriba (${p.reason ?? 'faltan datos de ficha'})`}
+                            </option>
                           ))}
                         </select>
                       </label>
@@ -670,8 +726,15 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
                           onChange={(event) => setRow({ betweenProfileId: event.target.value })}
                         >
                           <option value="">Sin gola entre frentes</option>
-                          {usableBetween.map((p) => (
-                            <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                          {profilesAt('between').map((p) => (
+                            <option
+                              key={p.id}
+                              value={p.usable ? p.id : ''}
+                              disabled={!p.usable}
+                              title={p.reason ?? undefined}
+                            >
+                              {p.usable ? `${p.code} — ${p.name}` : `${p.code} — no utilizable entre frentes (${p.reason ?? 'faltan datos de ficha'})`}
+                            </option>
                           ))}
                         </select>
                       </label>
@@ -728,6 +791,7 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
               </button>
             </div>
           </div>
+        </Modal>
         </div>
       ) : null}
 

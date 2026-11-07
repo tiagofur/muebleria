@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GripStylesSection, gripStyleSummaryLines } from './GripStylesSection';
-import type { GripStyle } from '@granete/storage';
+import { GraneteApiError, type GripStyle } from '@granete/storage';
 
 const TOKEN = 'tok-1';
 
@@ -163,7 +163,7 @@ describe('GripStylesSection — editor round-trip', () => {
   it('surfaces the 412 conflict as a banner with Recargar, never a silent overwrite', async () => {
     const user = userEvent.setup();
     const { stub, api } = apiStub([styleFixture()]);
-    stub.updateGripStyle.mockRejectedValueOnce(new Error('request failed with status 412'));
+    stub.updateGripStyle.mockRejectedValueOnce(new GraneteApiError(412, { code: 'VERSION_CONFLICT', message: 'la versión del estilo cambió', fieldErrors: {}, requestId: '', retryable: false, details: {} }));
     render(<GripStylesSection api={api} token={TOKEN} />);
     await waitFor(() => expect(screen.getByTestId(`grip-style-edit-style-1`)).toBeDefined());
     await user.click(screen.getByTestId(`grip-style-edit-style-1`));
