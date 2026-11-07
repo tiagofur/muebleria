@@ -63,6 +63,8 @@ Un PR contra main. Completo si toda la aceptación corre; parcial si queda alcan
 
 ## Judgment Day (ronda 1, 2026-11-07)
 
-- Dos jueces ciegos sobre f3f4c2c1..a3e9d050: 1 confirmado (C1, MAJOR: la fachada GET inventaba doorReductionMm 0 y resolvía sin el gate de forma), 5 MAJOR suspects (S1 If-Match del cliente generado, S2 Actualizar vs offered §14.8, S3 gates de modificadores, S4 pruebas between, S5 nullability 3.1) y 11 MINOR suspects. Ledger: /tmp/1532-review/ledger-round1.md.
-- Alcance aprobado por el owner: C1 + S1/S2/S5 + S4. Delta a3e9d050..8476912c (después 8476912c incluye la regresión determinista). S3 y el resto de MINOR quedan info en el ledger.
-- Verificación del delta: suite Go sin DB verde, drift current, gates 1263/#1532 PASS, CI 22/22 en 8476912c. Re-juzgado acotado en curso (A+B sobre ledger + delta).
+- Dos jueces ciegos sobre f3f4c2c1..a3e9d050: 1 confirmado (C1, MAJOR: la fachada GET inventaba doorReductionMm 0 y resolvía sin el gate de forma), 5 MAJOR suspects (S1 If-Match del cliente generado, S2 Actualizar vs offered §14.8, S3 gates de modificadores, S4 pruebas between, S5 nullability 3.1) y 12 MINOR suspects (S6–S17). Ledger: /tmp/1532-review/ledger-round1.md.
+- Alcance aprobado por el owner: C1 + S1/S2/S5 + S4. Delta r1 a3e9d050..8476912c; re-juzgado r1: A limpio, B con 1 MAJOR (falta regresión de C1) + 2 MINOR.
+- Ronda 2 (a6a09390): regresión de las tres ramas bloqueadas de C1, motivo honesto (GRIP_SNAPSHOT_INVALID) y contratos de los helpers de aristas; residual multi-fila declarado info.
+- Re-juzgado r2: A y B limpios (0 hallazgos cada uno; B confirma sin debilitamiento de pruebas ni defectos causados por el fix; CI 22/22 en a6a09390).
+- JUDGMENT: APPROVED ✅ (ronda 2). Quedan como info para issues futuras: S3 (gates de dedupe/conflicto/placement en ResolveProjectGripModifiers), S10 (cajón web en contexto revisión), S12–S17.
