@@ -35,3 +35,11 @@ Un PR contra main con los commits por unidad de trabajo. Completo respecto del a
 - Regresión C1-like de esta issue: el snapshot null del agarre del proyecto
   se omite del payload (el esquema lo exige objeto; sin estilo no viaja) —
   cazado por el gate 1263 con la ficha nueva.
+
+## Judgment Day (2026-11-07, dos rondas)
+
+- Ronda 1 (A+B ciegos sobre b9fe7282..112363a1): 7 MAJOR confirmados por ambos (brechas contra el brief: foco trap, borrador 412, perfiles no utilizables ocultos, 422 sin anclar, carga sin esqueletos, editor no inerte, ayuda del switch ausente) + C8 MINOR confirmado + 4 suspects MAJOR de un solo juez. Owner aprobó alcance: C1–C8.
+- Ronda 1 fix (888b102b) + re-juzgado: A/B confirman C1/C3–C8 pero revelan que C2 quedó a medias (closure stale: la versión no se refrescaba), sin regresiones de C1–C7 y cierres del Modal sin gate. CI: dispatch sobre merge con main (#1556) → 22/22 en 112363a1 y b3345e9c; el flake del spec #714 (Ana López 714) pasó al reintento (cross-shard, sin relación con el delta).
+- Ronda 2 fix (b3345e9c): reload devuelve la lista + update funcional; cierres del Modal gated por saving; motivo honesto para posición no declarada; anchor «top» muerto eliminado; aria corregido; 4 regresiones nuevas (Recargar conserva/refresca versión 4, perfiles no utilizables disabled+motivo, 422 anclado a fila, editor inerte, esqueletos+ayuda).
+- Re-juzgado final r2: A y B sin hallazgos severos — solo MINOR informativos (aria-invalid perdido al rewire, discriminación del test C2, esqueleto artesanal vs ListSkeleton, C1 sin aserción de sección — Modal tiene suite propia).
+- JUDGMENT: APPROVED ✅ (ronda 2). CI success en b3345e9c; los commits posteriores son docs-only.
