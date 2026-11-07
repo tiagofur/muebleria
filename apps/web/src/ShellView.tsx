@@ -896,6 +896,12 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     () => new GraneteApiClient(DEFAULT_API_BASE),
     [],
   );
+  // #1533: the Ajustes › Agarres section reads/writes grip styles through
+  // the generated client (one instance per shell; it owns no state).
+  const settingsClient = useMemo(
+    () => new GraneteApiClient(DEFAULT_API_BASE),
+    [],
+  );
 
   // R5 #1088 — engineering workspace state lives in
   // ./engineering/useEngineeringShellState (verbatim move; invoked at the
@@ -2194,6 +2200,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       ) : null}
       {navId === 'settings' ? (
         <SettingsScreen
+          api={settingsClient}
+          token={session === 'auth' ? authToken : null}
           settings={workshopSettings}
           onSave={async (newSettings) => {
             await saveWorkshopSettings(newSettings);

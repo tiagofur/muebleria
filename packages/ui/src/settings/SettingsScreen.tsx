@@ -6,6 +6,8 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import type { WorkshopSettings, FactoryConstructionPolicy } from '@granete/domain';
 import type { LibraryOverlayDetail, LibraryReleaseSummary } from '@granete/storage';
+import type { GraneteApiClient } from '@granete/storage';
+import { GripStylesSection } from './GripStylesSection';
 import { DraftingCompass, Factory, Network, Settings, SlidersHorizontal } from 'lucide-react';
 import { PageHeader, submitBusyLabel, WorkspaceTabs, type TabDefinition } from '../common';
 import { SalesNetworkSection } from './SalesNetworkSection';
@@ -21,6 +23,9 @@ import {
 } from './ConstructionSettingsSection';
 
 export type SettingsScreenProps = {
+  /** #1533: the API handle + session token for the Agarres styles section. */
+  readonly api?: GraneteApiClient | null;
+  readonly token?: string | null;
   readonly settings: WorkshopSettings;
   readonly onSave: (settings: WorkshopSettings) => void | Promise<void>;
   readonly saving?: boolean;
@@ -41,7 +46,7 @@ export type SettingsScreenProps = {
   readonly constructionPolicyConfig?: ConstructionSettingsSectionProps | null;
 };
 
-type SettingsTabId = 'general' | 'diseno' | 'produccion' | 'red';
+type SettingsTabId = 'general' | 'diseno' | 'produccion' | 'red' | 'agarres';
 
 const SETTINGS_TABS: readonly TabDefinition<SettingsTabId>[] = [
   {
@@ -52,6 +57,11 @@ const SETTINGS_TABS: readonly TabDefinition<SettingsTabId>[] = [
   {
     id: 'diseno',
     label: 'Diseño e Ingeniería',
+    icon: <DraftingCompass size={14} aria-hidden style={{ marginRight: 6 }} />,
+  },
+  {
+    id: 'agarres',
+    label: 'Agarres',
     icon: <DraftingCompass size={14} aria-hidden style={{ marginRight: 6 }} />,
   },
   {
@@ -74,6 +84,8 @@ export function SettingsScreen({
   salesNetwork = null,
   machineOutput = null,
   constructionPolicyConfig = null,
+  api = null,
+  token = null,
 }: SettingsScreenProps): ReactNode {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
 
@@ -385,6 +397,11 @@ export function SettingsScreen({
         ) : null}
 
         {/* TAB 3: RED DE VENTAS (solo fábricas, #326) */}
+        {activeTab === 'agarres' && api ? (
+          <div className="catalog-form__section" data-testid="settings-grip-styles">
+            <GripStylesSection api={api} token={token} />
+          </div>
+        ) : null}
         {activeTab === 'red' && salesNetwork ? (
           <SalesNetworkSection
             baseUrl={salesNetwork.baseUrl}
@@ -558,16 +575,7 @@ export function SettingsScreen({
               <ConstructionSettingsSection {...constructionPolicyConfig} />
             ) : null}
 
-            {/* #1531: the grip is configured as workshop styles now; the old
-                capabilities section wrote an overlay blob that is retired. */}
-            <fieldset className="catalog-form__section" data-testid="settings-grip-notice">
-              <legend className="catalog-form__section-title">Agarre</legend>
-              <p className="settings-lead settings-lead--inline">
-                La gola, la jaladera y el rebase ahora se configuran como estilos de agarre: una receta
-                por tipo de mueble, con uno predeterminado. Sus valores actuales ya se pasaron a esos
-                estilos. La pantalla para editarlos llega en Ajustes › Agarres.
-              </p>
-            </fieldset>
+
           </>
         ) : null}
 
