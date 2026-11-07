@@ -97,21 +97,11 @@ BEGIN
     RETURN result;
 END $$;
 
--- project_org(#1532): the organization of a project, from its designs or its
--- furniture instances (projects have no organization_id column).
+-- project_org(#1532): the organization of a project.
 CREATE OR REPLACE FUNCTION migration_000182_project_org(p_project_id UUID)
-RETURNS UUID LANGUAGE plpgsql STABLE AS $$
-DECLARE
-    org UUID;
-BEGIN
-    SELECT wc.organization_id INTO org FROM design_working_copies wc
-     WHERE wc.project_id = p_project_id LIMIT 1;
-    IF org IS NULL THEN
-        SELECT fi.organization_id INTO org FROM furniture_instances fi
-         WHERE fi.project_id = p_project_id LIMIT 1;
-    END IF;
-    RETURN org;
-END $$;
+RETURNS UUID LANGUAGE sql STABLE AS $$
+    SELECT organization_id FROM projects WHERE id = p_project_id
+$$;
 
 -- overhang_rule(#1532): the v1 bottom_overhang millimetres a migrated
 -- selection resolves with — the same precedence OpeningOverhangRuleFromGripStyles

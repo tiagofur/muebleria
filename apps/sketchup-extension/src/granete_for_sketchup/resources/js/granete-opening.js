@@ -101,7 +101,6 @@
     OPENING_BODY_MODIFIER_PLACEMENT_INVALID: "El perfil declara efectos en una posición que no admite. Revísalo en " + WEB_PROFILES + ".",
     OPENING_BOM_BODY_CONTEXT_MISSING: "Faltan medidas del mueble para calcular el perfil en la lista de materiales.",
     OPENING_BOM_INVALID: "Las piezas del perfil están mal configuradas. Revísalas en " + WEB_PROFILES + ".",
-    OPENING_BOM_PIN_SLICE_MISSING: "Esta apertura se guardó antes de que existiera la lista de materiales del perfil. Vuelve a aplicarla.",
     OPENING_STACKED_FRONTS_UNSUPPORTED: "La gola o el rebase en muebles con cajones apilados todavía no está disponible. Por ahora usa jaladera en este mueble.",
     OPENING_SELECTION_INVALID: "La selección de apertura no es válida. Revisa sistema, perfil y posición."
   };

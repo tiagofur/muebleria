@@ -817,27 +817,48 @@ func TestRequote_ProvenanceMigration_FreshAndUpgrade(t *testing.T) {
 	assertRequoteProvenanceSchema(t, upgrade)
 }
 
-// golaOpeningSelection is the pinned gola selection the fixture's design
-// declares (mirrors the owner's real profile.gola-l.8006 v6 slice).
-func golaOpeningSelection() *domain.DesignOpeningSelection {
-	notchH, notchD := 56.5, 27.2
+// requoteGripProfileID is the fixture's frozen-from-catalog gola profile
+// (mounted over the fixture's own 8006 hardware).
+const requoteGripProfileID = "96000000-0000-0000-0000-0000000000d1"
+
+// seedGolaGrip applies the v2 grip the requote quotes with (#1532): a usable
+// gola L profile over the fixture's own 8006 hardware, one offered style
+// mounting it for every furniture type, applied to the project with the
+// If-Match version round trip. The legacy authoring-defaults selection is
+// dead data — the quote and the requote read the project grip only.
+func (fx *requoteDesignFixture) seedGolaGrip(t *testing.T) {
+	t.Helper()
 	spacing := 400
-	return &domain.DesignOpeningSelection{
-		System:     "gola",
-		ProfileID:  "profile.gola-l.8006",
-		Placements: []string{"top"},
-		ProfilePin: &domain.DesignOpeningProfilePin{
-			ProfileCode: "GOLA-L-8006", FrontReductionMm: 38, GripClearanceMm: 2,
-			DatasheetStatus: "verified", ProfileHeightMm: 56.5, ProfileDepthMm: 27.2,
-			CompatiblePlacements: []string{"top"},
-			BodyModifiers: []domain.OpeningBodyModifier{{
-				Role: "lateral", NotchHeightMm: &notchH, NotchDepthMm: &notchD, NotchAt: "top_front",
-			}},
-			BOM: &domain.DesignOpeningProfilePinBOM{ProfileVersion: 6, Members: map[string]domain.OpeningBOMMember{
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		if err := fx.store.CreateOpeningProfile(ctx, &domain.OpeningProfile{
+			ID: requoteGripProfileID, Code: "GOLA-L-8006", Name: "Gola L Cymisa 8006",
+			GripType: "gola", CrossSectionShape: "L",
+			Material:           domain.GolaMaterialAluminum,
+			Positions:          []string{domain.GolaPositionTop},
+			FrontDiscountTopMm: intPtr(40),
+			ProfileHeightMm:    floatPtr(56.5), ProfileDepthMm: floatPtr(27.2),
+			GeometryOrigin:  "docs/fichas/perfil_gola_l_ficha_tecnica.pdf (SCILM GOLA PROFILES 2022-04-01 pp. 42-45)",
+			DatasheetStatus: "verified", Active: true, BodyModifiers: []domain.OpeningBodyModifier{},
+			BOMMembers: map[string]domain.OpeningBOMMember{
 				"profile":  {HardwareID: "80000000-0000-4000-8000-000000000801", Rule: "interior_width", Unit: "meter"},
 				"supports": {HardwareID: "80000000-0000-4000-8000-000000000802", Rule: "per_length", SpacingMm: &spacing, DimensionsMm: &[3]float64{17, 19.5, 39.5}},
-			}},
-		},
+			},
+		}); err != nil {
+			return err
+		}
+		style := golaStyleForAllTypes("Gola del taller", requoteGripProfileID)
+		if err := fx.store.CreateGripStyle(ctx, style, storage.GripStyleWriteMeta{}); err != nil {
+			return err
+		}
+		grip, err := fx.store.GetProjectGrip(ctx, csProject)
+		if err != nil {
+			return err
+		}
+		_, err = fx.store.SetProjectGrip(ctx, csProject, style.ID, grip.Version, storage.ProjectGripWriteMeta{})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("seed gola grip: %v", err)
 	}
 }
 
@@ -897,7 +918,6 @@ func setupRequoteDesignFixtureWithThirdUUID(t *testing.T, thirdUUID string) *req
 		}
 		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID: fx.designID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA, Items: wcItems,
-			AuthoringDefaults: &domain.DesignAuthoringDefaults{Opening: golaOpeningSelection()},
 		}); err != nil {
 			return err
 		}
@@ -985,6 +1005,9 @@ func (fx *requoteDesignFixture) publishDesignRevisionWithDims(t *testing.T, incl
 // stays intact.
 func TestRequote_IncorporatesDesignOnlyUnitsOfPresetModules(t *testing.T) {
 	fx := setupRequoteDesignFixture(t)
+	// #1532: the grip is project state — the requote derives the opening for
+	// EVERY unit (carried and design-only) from the project's frozen grip.
+	fx.seedGolaGrip(t)
 	designRevID := fx.publishDesignRevisionWithDims(t, true, csModule, map[string]any{"widthMm": 500, "heightMm": 720, "depthMm": 560})
 	var result *storage.RequoteProjectQuoteResult
 	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {

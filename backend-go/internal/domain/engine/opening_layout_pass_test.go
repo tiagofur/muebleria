@@ -14,12 +14,22 @@ import (
 // closed, and an opening-constrained front supersedes client-authored
 // translation. No fronts = the historical layout stays byte-identical.
 
-func openingPassFront(boundary string, consumedMm int) []OpeningResolvedFront {
+// openingPassFront builds the v2 fronts of a top discount (the project
+// grip's producer shape, #1532). The one-door fixture's geometry (door z=2,
+// length 716, H=720 ⇒ r_bottom=2) under A3: top edge = 720−N+2, bottom edge
+// 2, one row ⇒ the door's length is 720−N with its bottom edge intact.
+func openingPassFront(_ string, mm int) []OpeningResolvedFront {
+	grips := &OpeningEdgeGrips{}
+	if mm >= 0 {
+		discount := float64(mm)
+		grips.TopDiscountMm = &discount
+	} else {
+		overhang := float64(-mm)
+		grips.BottomOverhangMm = &overhang
+	}
 	return []OpeningResolvedFront{{
-		ZoneID: "z1", Access: "hinged", WidthMm: 596, HeightMm: 720 - consumedMm, OffsetMm: 0,
-		Grips: []OpeningResolvedFrontGrip{{
-			Boundary: boundary, ProfileID: "profile.gola-l.alu", ConsumedMm: consumedMm,
-		}},
+		ZoneID: "z1", Access: "hinged", WidthMm: 596, HeightMm: 720 - mm, OffsetMm: 0,
+		EdgeGrips: grips,
 	}}
 }
 
@@ -37,22 +47,23 @@ func TestOpeningFrontsConstrainDoorBoards(t *testing.T) {
 		t.Fatalf("baseline door drifted: %+v", baseDoor)
 	}
 
-	// Top grip (gola L superior): the door shrinks from the TOP — its bottom
-	// edge stays where the catalog put it, the authored holgura (−4) survives
-	// inside the remaining length.
+	// Top grip (gola L superior): under A3 the top edge sits at
+	// 720 − 70 + 2 = 652 and the bottom edge keeps the catalog reveal (2),
+	// so the door measures 650 with its bottom edge intact (the authored
+	// holgura survives inside the remaining length).
 	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{fronts: openingPassFront("top", 70)})
 	if err != nil {
 		t.Fatalf("top-grip resolve: %v", err)
 	}
 	door := findComponentByID(layout.Components, "puerta")
-	if door == nil || door.LengthMm != 646 || door.WidthMm != 596 {
-		t.Fatalf("top-grip door = %+v, want L=646 (716−70) W=596 (split intact)", door)
+	if door == nil || door.LengthMm != 650 || door.WidthMm != 596 {
+		t.Fatalf("top-grip door = %+v, want L=650 (720−70, A3) W=596 (split intact)", door)
 	}
 	if door.Transform.TranslationMm != [3]float64{2, 560, 2} {
 		t.Fatalf("top-grip door min corner = %v, want [2 560 2] (bottom edge intact)", door.Transform.TranslationMm)
 	}
-	if door.DimensionsMm != [3]float64{596, 18, 646} {
-		t.Fatalf("top-grip door AABB = %v, want [596 18 646]", door.DimensionsMm)
+	if door.DimensionsMm != [3]float64{596, 18, 650} {
+		t.Fatalf("top-grip door AABB = %v, want [596 18 650]", door.DimensionsMm)
 	}
 	// The BODY never moves: the lateral keeps its full resolved length.
 	lateral := findComponentByID(layout.Components, "lateral_izquierdo")
@@ -67,35 +78,23 @@ func TestOpeningFrontsConstrainDoorBoards(t *testing.T) {
 		}
 	}
 
-	// Bottom grip: the door shrinks from the BOTTOM — its bottom edge lifts.
-	layout, _, err = resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{fronts: openingPassFront("bottom", 70)})
-	if err != nil {
-		t.Fatalf("bottom-grip resolve: %v", err)
-	}
-	door = findComponentByID(layout.Components, "puerta")
-	if door.LengthMm != 646 {
-		t.Fatalf("bottom-grip door length = %v, want 646", door.LengthMm)
-	}
-	if door.Transform.TranslationMm != [3]float64{2, 560, 72} {
-		t.Fatalf("bottom-grip door min corner = %v, want [2 560 72] (lifted by the consumption)", door.Transform.TranslationMm)
-	}
-
-	// Case C overhang (negative consumption, #1138): the front EXTENDS below
-	// the body bottom with the same arithmetic.
-	layout, _, err = resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{fronts: openingPassFront("bottom", -20)})
+	// Case C overhang (A4, #1138→#1532): the front EXTENDS below the body
+	// bottom; the bottom edge sits at −20.
+	layout, _, err = resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{fronts: openingPassFront("overhang", -20)})
 	if err != nil {
 		t.Fatalf("overhang resolve: %v", err)
 	}
 	door = findComponentByID(layout.Components, "puerta")
-	if door.LengthMm != 736 || door.Transform.TranslationMm != [3]float64{2, 560, -18} {
-		t.Fatalf("overhang door = L %v @ %v, want 736 @ [2 560 -18]", door.LengthMm, door.Transform.TranslationMm)
+	// top edge = 720 − 2 (no top grip) = 718; bottom = −20 ⇒ length 738.
+	if door.LengthMm != 738 || door.Transform.TranslationMm != [3]float64{2, 560, -20} {
+		t.Fatalf("overhang door = L %v @ %v, want 738 @ [2 560 -20]", door.LengthMm, door.Transform.TranslationMm)
 	}
 
-	// Fail-closed: a consumption that leaves no valid height rejects the
-	// resolve — never an invented size.
+	// Fail-closed: a discount bigger than the cabinet rejects the resolve —
+	// never an invented size.
 	if _, _, err = resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{fronts: openingPassFront("top", 800)}); err == nil ||
-		!strings.Contains(err.Error(), "sin altura válida") {
-		t.Fatalf("an oversized consumption must fail closed, got %v", err)
+		!strings.Contains(err.Error(), "consumen más") {
+		t.Fatalf("an oversized discount must fail closed, got %v", err)
 	}
 
 	// No fronts: the historical layout stays byte-identical.
@@ -155,7 +154,7 @@ func TestOpeningFrontsSupersedeAuthoredTranslation(t *testing.T) {
 	if door == nil {
 		t.Fatalf("missing door-01: %+v", opened.Layout.Components)
 	}
-	if door.LengthMm != 646 || door.Transform.TranslationMm[2] == 200 {
+	if door.LengthMm != 650 || door.Transform.TranslationMm[2] == 200 {
 		t.Fatalf("the opening must supersede the authored z (200): L=%v T=%v", door.LengthMm, door.Transform.TranslationMm)
 	}
 	floor := findBoard(opened.Layout, "floor-01")
@@ -406,19 +405,11 @@ func TestOpeningFrontsStackedDrawersResolveWithA3(t *testing.T) {
 		"frente-1": {475, 243}, "frente-2": {227.5, 243.5}, "frente-3": {-20, 243.5},
 	})
 
-	// A bottom gola has no v2 equivalent: still blocked, fronts untouched.
-	bottom := stackedDrawerBoards()
-	_, err = applyOpeningFrontsToBoards(bottom, openingPassFront("bottom", 40), 720)
-	var openingErr *OpeningResolutionError
-	if !errors.As(err, &openingErr) || openingErr.Code != OpeningErrStackedFronts {
-		t.Fatalf("a bottom gola over stacked fronts must block, got %v", err)
-	}
-	assertFrontPoses(t, bottom, map[string][2]float64{"frente-1": {482, 236}, "frente-3": {2, 236}})
-
-	// No grip consumption: nothing changes.
+	// No grip consumption: the v2 producer emits no fronts for a handle
+	// recipe — the layout stays byte-identical.
 	untouched := stackedDrawerBoards()
-	if _, err := applyOpeningFrontsToBoards(untouched, openingPassFront("top", 0), 720); err != nil {
-		t.Fatalf("zero consumption must not block: %v", err)
+	if _, err := applyOpeningFrontsToBoards(untouched, nil, 720); err != nil {
+		t.Fatalf("no fronts must not touch the boards: %v", err)
 	}
 	assertFrontPoses(t, untouched, map[string][2]float64{"frente-1": {482, 236}})
 }
@@ -487,24 +478,27 @@ func TestOpeningFrontsMixedColumnsStayBlocked(t *testing.T) {
 	}
 }
 
-func TestOpeningFrontsSideBySideDoorsKeepV1Arithmetic(t *testing.T) {
+func TestOpeningFrontsSideBySideDoorsShareOneRow(t *testing.T) {
 	boards := []layoutBoard{
 		{id: "puerta-izq", placement: string(domain.PlacementPuerta), x: 2, z: 2, lengthMm: 716, widthMm: 296},
 		{id: "puerta-der", placement: string(domain.PlacementPuerta), x: 302, z: 2, lengthMm: 716, widthMm: 296},
 	}
+	// Doors whose vertical extents overlap share ONE A3 row: both carry the
+	// same built measure (720 − 40 = 680 @ the catalog bottom reveal 2).
 	constrained, err := applyOpeningFrontsToBoards(boards, openingPassFront("top", 40), 720)
 	if err != nil {
 		t.Fatalf("two doors side by side must resolve: %v", err)
 	}
 	for i, board := range boards {
-		if board.lengthMm != 676 || board.z != 2 || !constrained[i] {
-			t.Fatalf("door %s = L %g @ z %g (constrained %v), want 676 @ 2", board.id, board.lengthMm, board.z, constrained[i])
+		if board.lengthMm != 680 || board.z != 2 || !constrained[i] {
+			t.Fatalf("door %s = L %g @ z %g (constrained %v), want 680 @ 2", board.id, board.lengthMm, board.z, constrained[i])
 		}
 	}
 }
 
-func TestOpeningBomPartsWithoutPosesKeepTheStructuralRule(t *testing.T) {
-	// Legacy flat modules have no poses: a structural stack stays blocked.
+func TestOpeningBomPartsWithoutPosesFailClosed(t *testing.T) {
+	// Legacy flat modules have no poses: the A3 measure cannot be read and
+	// the cut list fails closed — never a shrink the layout would contradict.
 	drawers := []domain.BoardPart{
 		{ID: "frente-cajon", Placement: string(domain.PlacementFrenteCajon), Quantity: 3, LengthMm: 236},
 	}
@@ -518,8 +512,11 @@ func TestOpeningBomPartsWithoutPosesKeepTheStructuralRule(t *testing.T) {
 	doors := []domain.BoardPart{
 		{ID: "puerta", Placement: string(domain.PlacementPuerta), Quantity: 2, LengthMm: 716},
 	}
-	if err := applyOpeningFrontsToBomParts(doors, openingPassFront("top", 40), nil); err != nil || doors[0].LengthMm != 676 {
-		t.Fatalf("two doors side by side keep v1: err %v, length %g", err, doors[0].LengthMm)
+	if err := applyOpeningFrontsToBomParts(doors, openingPassFront("top", 40), nil); !errors.As(err, &openingErr) || openingErr.Code != OpeningErrStackedFronts {
+		t.Fatalf("doors without poses must block too, got %v", err)
+	}
+	if doors[0].LengthMm != 716 {
+		t.Fatalf("a blocked cut list must not touch the part: %g", doors[0].LengthMm)
 	}
 }
 

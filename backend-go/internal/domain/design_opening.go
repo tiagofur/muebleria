@@ -48,22 +48,21 @@ type DesignOpeningProfilePin struct {
 	// #1283 / §13.2: the datasheet physical envelope frozen with the rest of
 	// the pin (8006: 56.5 tall × 27.2 deep). The historical layout places the
 	// member hardware from these values — never the live catalog row and
-	// never an engine constant. 0 = pin authored before the fields existed
-	// (truthful absence: the layout places no opening hardware until the
-	// selection is re-applied, the same migration rule as the BOM slice).
+	// never an engine constant. 0 = the frozen copy does not declare the
+	// envelope (the truthful absence: the layout places no opening
+	// hardware, the same rule as the BOM slice).
 	ProfileHeightMm float64 `json:"profileHeightMm,omitempty"`
 	ProfileDepthMm  float64 `json:"profileDepthMm,omitempty"`
 	// #1287 / §13.3: the frozen declared slice the modifier resolution
 	// consumes (compatible placements + body modifiers). Absent/empty means
-	// the pin predates the slice — the truthful absence (no modifiers, no
+	// the copy declares none — the truthful absence (no modifiers, no
 	// notches), never a live-catalog fallback.
 	CompatiblePlacements []string              `json:"compatiblePlacements,omitempty"`
 	BodyModifiers        []OpeningBodyModifier `json:"bodyModifiers,omitempty"`
-	// BOM freezes the #1130 BOM slice the selection was validated against
-	// (#1263): the profile revision plus its declared members the historical
-	// BOM and quote resolve from — never the live catalog row. Empty members
-	// mean "the datasheet declares none"; nil only in pins authored before
-	// #1263 existed (those report the truthful absence, no fallback).
+	// BOM freezes the #1130 BOM slice the grip was frozen from (#1263/#1532):
+	// the profile revision plus its declared members the historical BOM and
+	// quote resolve from — never the live catalog row. Empty members mean
+	// "the datasheet declares none" (the truthful emptiness, no fallback).
 	BOM *DesignOpeningProfilePinBOM `json:"bom,omitempty"`
 }
 

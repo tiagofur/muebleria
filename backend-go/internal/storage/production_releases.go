@@ -472,25 +472,31 @@ func (s *PostgresStore) resolveReleaseOpenings(ctx context.Context, gripCtx *rel
 		if modErr != nil {
 			return nil, fmt.Errorf("los efectos declarados del agarre de %s no pueden resolverse (%s)", item.FurnitureInstanceID, modErr.Code)
 		}
-		dims := domain.CommercialDimsFromParameters(item.Parameters)
-		var depthMm int
-		if dims != nil {
-			depthMm = dims.DepthMm
-		}
-		interiorWidth := releaseOpeningInteriorWidth(item.FurnitureDefinitionID, widthMm, catalog)
-		betweenEdges, err := releaseGripBetweenEdges(catalog, item, recipe, widthMm, heightMm, depthMm)
-		if err != nil {
-			return nil, err
-		}
-		lines, bomErr := engine.ResolveProjectGripBOM(engine.ProjectGripBOMInput{
-			CabinetInteriorWidthMm: interiorWidth,
-			Ends:                   engine.OpeningBOMDefaultEnds,
-			Top:                    frozenBOMProfile(recipe.TopProfile),
-			Between:                frozenBOMProfile(recipe.BetweenProfile),
-			BetweenEdgeCount:       betweenEdges,
-		})
-		if bomErr != nil {
-			return nil, fmt.Errorf("el BOM de la apertura no puede resolverse (%s) para %s", bomErr.Code, item.FurnitureInstanceID)
+		// A rebase recipe has no profiles and no hardware: fronts only, no
+		// BOM section and no member demand (the truthful absence).
+		var lines []engine.OpeningResolvedBOMLine
+		if recipe.Mode == domain.GripModeGola {
+			dims := domain.CommercialDimsFromParameters(item.Parameters)
+			var depthMm int
+			if dims != nil {
+				depthMm = dims.DepthMm
+			}
+			interiorWidth := releaseOpeningInteriorWidth(item.FurnitureDefinitionID, widthMm, catalog)
+			betweenEdges, err := releaseGripBetweenEdges(catalog, item, recipe, widthMm, heightMm, depthMm)
+			if err != nil {
+				return nil, err
+			}
+			resolvedLines, bomErr := engine.ResolveProjectGripBOM(engine.ProjectGripBOMInput{
+				CabinetInteriorWidthMm: interiorWidth,
+				Ends:                   engine.OpeningBOMDefaultEnds,
+				Top:                    frozenBOMProfile(recipe.TopProfile),
+				Between:                frozenBOMProfile(recipe.BetweenProfile),
+				BetweenEdgeCount:       betweenEdges,
+			})
+			if bomErr != nil {
+				return nil, fmt.Errorf("el BOM de la apertura no puede resolverse (%s) para %s", bomErr.Code, item.FurnitureInstanceID)
+			}
+			lines = resolvedLines
 		}
 		openings[item.FurnitureInstanceID] = engine.ReleaseUnitOpening{
 			Fronts:    fronts,

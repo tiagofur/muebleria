@@ -154,6 +154,8 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   // Design-opening resolve failures (api/authoring_resolve.go via
   // designOpeningResolveFailure) — review #1501 B1.
   'DESIGN_UNKNOWN',
+  'FURNITURE_INSTANCE_UNKNOWN',
+  'GRIP_SNAPSHOT_INVALID',
   'OPENING_PROFILE_UNKNOWN',
   'OPENING_OVERHANG_RULE_UNAVAILABLE',
   // Familia cerrada de razones/errores de apertura (opening_configuration_validation.go,
@@ -163,7 +165,6 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   'OPENING_BODY_MODIFIER_PLACEMENT_INVALID',
   'OPENING_BOM_BODY_CONTEXT_MISSING',
   'OPENING_BOM_INVALID',
-  'OPENING_BOM_PIN_SLICE_MISSING',
   'OPENING_BOUNDARY_DUPLICATE',
   'OPENING_BOUNDARY_INVALID',
   'OPENING_BOUNDARY_UNKNOWN_ZONE',

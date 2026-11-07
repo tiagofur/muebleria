@@ -95,10 +95,10 @@ func TestResolveDesignOpeningIgnoresCapabilities(t *testing.T) {
 	}
 }
 
-// #1263 — the design-level BOM resolution: the PINNED BOM slice resolves the
-// historical lines (revision + members frozen at validation), a pre-#1263 pin
-// reports the truthful absence with no live fallback, the live slice feeds
-// only pre-pin rows, and an underivable body context never invents a run.
+// #1263/#1532 — the design-level BOM resolution: the PINNED BOM slice (the
+// #1532 facade derives it from the frozen profile) resolves the historical
+// lines, an unknown profile fails closed with no live fallback, and an
+// underivable body context never invents a run.
 func TestResolveDesignOpeningBOM(t *testing.T) {
 	verified := []OpeningProfileData{{
 		ProfileID: "profile.gola-l.alu", DatasheetStatus: "verified",
@@ -158,23 +158,12 @@ func TestResolveDesignOpeningBOM(t *testing.T) {
 		t.Fatalf("ends must ride visibly: %+v", resolution.BOMEnds)
 	}
 
-	// Pre-#1263 pin: the truthful absence — the live slice never backfills a
-	// historical design's BOM.
-	legacyPin := &domain.DesignOpeningSelection{
-		System: "gola", ProfileID: "profile.gola-l.alu",
-		ProfilePin: &domain.DesignOpeningProfilePin{
-			ProfileCode: "8006", FrontReductionMm: 38, GripClearanceMm: 2, DatasheetStatus: "verified",
-		},
-	}
-	resolution, _ = ResolveDesignOpening(600, 720, legacyPin, verified, nil, newCtx(564, liveBOM))
-	if resolution.BOM != nil || resolution.BOMReason != OpeningReasonBOMPinSliceMissing {
-		t.Fatalf("legacy pin must report the missing slice: %+v (%q)", resolution.BOM, resolution.BOMReason)
-	}
-
-	// Pre-pin row (authored before pins existed): the live slice resolves.
-	noPin := &domain.DesignOpeningSelection{System: "gola", ProfileID: "profile.gola-l.alu"}
-	resolution, _ = ResolveDesignOpening(600, 720, noPin, verified, nil, newCtx(564, liveBOM))
-	if len(resolution.BOM) != 1 || resolution.BOM[0].ProfileVersion != 9 || resolution.BOMReason != "" {
+	// #1532: a pin without its BOM slice no longer exists as a persisted
+	// shape — the derived pin (from the frozen profile) always carries it, and
+	// the unknown-profile fallback is gone: an unknown profile fails closed.
+	missingProfile := &domain.DesignOpeningSelection{System: "gola", ProfileID: "profile.desconocido"}
+	resolution, _ = ResolveDesignOpening(600, 720, missingProfile, verified, nil, newCtx(564, liveBOM))
+	if resolution.State != DesignOpeningStateBlocked {
 		t.Fatalf("live slice must feed pre-pin rows: %+v (%q)", resolution.BOM, resolution.BOMReason)
 	}
 
@@ -183,7 +172,7 @@ func TestResolveDesignOpeningBOM(t *testing.T) {
 	// engine-side defense (designOpeningBOMData).
 
 	// Underivable body context: no invented run length.
-	resolution, _ = ResolveDesignOpening(600, 720, noPin, verified, nil, newCtx(0, liveBOM))
+	resolution, _ = ResolveDesignOpening(600, 720, pinned, verified, nil, newCtx(0, liveBOM))
 	if resolution.BOM != nil || resolution.BOMReason != OpeningReasonBOMBodyContextMissing {
 		t.Fatalf("missing body context must be truthful: %+v (%q)", resolution.BOM, resolution.BOMReason)
 	}

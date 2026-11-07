@@ -40,7 +40,17 @@ No objetivos: UI web #1533, editor perfiles #1534, Inspector/host SketchUp #1535
 
 ## Evidencia
 
-(a completar por tarea con resultados observados)
+- T1 preflight: `PREFLIGHT_OK_NOT_VERIFIED`, worktree limpio, base origin/main 9adacdfc.
+- T3/T4 dominio+motor: go build ./... verde; fixture de paridad openingBodyModifiers actualizado (Go + TS idénticos, 2165 tests TS); tests de dominio del snapshot (freeze completo, uso vigente, herencia, tipo descubierto, shape) en verde.
+- T2 migración 000182: aplicada limpia en la cadena completa (fresh y upgrade en contenedor desechable, 00182 en el log del suite); corrección de ambigüedad project_id en los helpers (SQLSTATE 42702) captada por TestMultiOrg_*.
+- T5/T6/T7/T8: go vet + go test ./... (sin DB) verde en domain/api/storage tras reescribir los tests de fachada y resolve de autoría a la semántica v2 (680 = 720−40 bajo A3).
+- OpenAPI: python3 scripts/generate_openapi.py + check_openapi_drift.py → «OpenAPI generated files are current; operation drift negative proofs passed».
+- pnpm typecheck + pnpm test: exit 0 (8 paquetes, 2165+ tests).
+- Grep de retiro: sin ramas de era de pines en código de producción (SetDesignWorkingCopyOpening pendiente de borrar al cerrar el agente de tests de storage).
+- Reescritura de tests de storage v2 (quote/release/requote + helpers compartidos golaStyleForAllTypes/applyGripStyle/seedVerifiedGolaProfile): completa. Dos hallazgos corregidos: (a) fixture de release sin estructura de laterales → interior 0 → OPENING_BOM_INVALID (sembrados lateral+estructura como el v1); (b) bug real: resolveReleaseOpenings resolvía BOM para recetas bottom_overhang sin perfiles → ahora fronts-only (skip del BOM cuando Mode != gola). Segundo publish necesitaba BaseRevisionID.
+- Retiro: SetDesignWorkingCopyOpening + comando + interface + stub + captura eliminados (grep limpio); openingMembersFromPin wrapper, OpeningMembersFromFrozenPin, openingEdgeGripsFromV1Front, shrinkOpeningBomParts, bomFrontsStacked, layoutFrontsStacked, OpeningReasonBOMPinSliceMissing retirados; registros de códigos (yaml schema, TS AUTHORING_RESOLVE_ISSUE_CODES, Ruby ISSUE_CODES, JS mensajes) actualizados con FURNITURE_INSTANCE_UNKNOWN/GRIP_SNAPSHOT_INVALID y sin el código retirado. EXTENSION_VERSION 0.1.105 → 0.1.106 (gate #1251).
+- Tests del motor convertidos a EdgeGrips con aritmética A3 recomputada (constrain 650, overhang 738@−20, side-by-side comparten fila 680, single-row 688, release wiring 680 estable); casos v1 puros retirados con nota.
+- Pendiente al cierre: suite storage completa en curso (fondo), E2E browser gate, migración piloto row-by-row (test TestProjectGripMigrationFrontsBeforeAfter escrito), verify_affected final.
 
 ## Entrega
 
