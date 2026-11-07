@@ -134,13 +134,13 @@ export interface GripStylesSectionProps {
 
 /** #1533 (C4): the API names the failing family in its message — anchor the
  * alert to that field instead of a modal-level paragraph. */
-function saveErrorAnchor(message: string): 'name' | 'inferior' | 'superior' | 'alto' | 'top' {
+function saveErrorAnchor(message: string): 'name' | 'inferior' | 'superior' | 'alto' {
   const lowered = message.toLowerCase();
-  if (lowered.includes('nombre')) return 'name';
   if (lowered.includes('inferior') || lowered.includes('muebles bajos')) return 'inferior';
   if (lowered.includes('superior') || lowered.includes('alacena')) return 'superior';
-  if (lowered.includes('alto') || lowered.includes('muebles altos')) return 'alto';
-  if (lowered.includes('arriba') || lowered.includes('perfil superior')) return 'top';
+  if (lowered.includes('muebles altos') || lowered.match(/alto\b/)) return 'alto';
+  // Unmapped messages (incl. 'nombre' and generic ones) anchor to the name
+  // field alert — never swallowed.
   return 'name';
 }
 
@@ -160,11 +160,11 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
   const [listFlash, setListFlash] = useState<string | null>(null);
   const [hardwareOptions, setHardwareOptions] = useState<readonly { id: string; name: string }[]>([]);
 
-  const reload = useCallback(async (): Promise<boolean> => {
+  const reload = useCallback(async (): Promise<readonly GripStyle[] | null> => {
     if (!token) {
       setPhase('error');
       setLoadError('Necesitás una sesión activa para ver los estilos de agarre.');
-      return false;
+      return null;
     }
     try {
       const [styleList, profileList] = await Promise.all([
@@ -175,11 +175,11 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
       setProfiles(profileList.map((p) => ({ id: p.id, code: p.code, name: p.name, usage: p.usage })));
       setPhase('ready');
       setLoadError(null);
-      return true;
+      return styleList;
     } catch (err) {
       setPhase('error');
       setLoadError(err instanceof Error ? err.message : 'No se pudieron cargar los estilos de agarre.');
-      return false;
+      return null;
     }
   }, [api, token]);
 
@@ -204,7 +204,9 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
           code: p.code,
           name: p.name,
           usable: usage?.usable === true,
-          reason: usage?.usable === true ? null : usage?.message ?? null,
+          reason: usage?.usable === true
+            ? null
+            : usage?.message ?? 'el perfil no se declaró para usarse en esta posición',
         };
       }),
     [profiles],
@@ -574,19 +576,19 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
       )}
 
       {editor ? (
-        <div data-testid="grip-style-editor">
         <Modal
           open
-          onClose={() => setEditor(null)}
+          onClose={() => {
+            if (!saving) setEditor(null);
+          }}
           title={editor.id ? 'Editar estilo de agarre' : 'Nuevo estilo de agarre'}
           size="lg"
+          dataTestId="grip-style-editor"
         >
           <div
             className="catalog-form"
             style={{ padding: 0 }}
           >
-            <h2 style={{ marginTop: 0 }}>{editor.id ? 'Editar estilo de agarre' : 'Nuevo estilo de agarre'}</h2>
-
             {conflict ? (
               <div role="alert" data-testid="grip-style-conflict" style={{ border: '1px solid var(--border, #ddd)', padding: '8px 12px', borderRadius: 6, marginBottom: 12 }}>
                 <p style={{ margin: '0 0 8px' }}>Alguien más cambió este estilo. Recargá y volvé a aplicar tus cambios.</p>
@@ -595,12 +597,15 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
                   className="btn btn--sm"
                   data-testid="grip-style-conflict-reload"
                   onClick={async () => {
-                    // C2: the modal draft is CONSERVED for re-applying — only
-                    // the If-Match version is refreshed from the reloaded list.
-                    const ok = await reload();
-                    if (ok && editor.id) {
-                      const fresh = styles.find((s) => s.id === editor.id);
-                      if (fresh) setEditor({ ...editor, version: fresh.version });
+                    // C2 (r2): the modal draft is CONSERVED and the If-Match
+                    // version is refreshed from the RETURNED list (never the
+                    // render-time closure); the functional update preserves
+                    // any field the user edited while the reload was in
+                    // flight.
+                    const list = await reload();
+                    if (list && editor.id) {
+                      const fresh = list.find((s) => s.id === editor.id);
+                      setEditor((prev) => (prev && fresh ? { ...prev, version: fresh.version } : prev));
                     }
                     setConflict(false);
                   }}
@@ -610,7 +615,7 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
               </div>
             ) : null}
             {saveError && saveErrorAnchor(saveError) === 'name' ? (
-              <p role="alert" data-testid="grip-style-save-error" aria-describedby="grip-style-name" style={{ color: 'var(--danger, #b00)', margin: '0 0 4px' }}>{saveError}</p>
+              <p role="alert" id="grip-style-name-error" data-testid="grip-style-save-error" style={{ color: 'var(--danger, #b00)', margin: '0 0 4px' }}>{saveError}</p>
             ) : null}
 
             <label style={{ display: 'block', marginBottom: 12 }}>
@@ -621,7 +626,7 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
                 maxLength={120}
                 disabled={saving}
                 data-testid="grip-style-name"
-                aria-invalid={saveError != null && saveErrorAnchor(saveError) === 'name' || undefined}
+                aria-describedby={saveError && saveErrorAnchor(saveError) === 'name' ? 'grip-style-name-error' : undefined}
                 style={{ display: 'block', width: '100%', marginTop: 4 }}
                 onChange={(event) => setEditor({ ...editor, name: event.target.value })}
               />
@@ -770,7 +775,7 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
               type="button"
               className="btn btn--sm"
               data-testid="grip-style-preview-refresh"
-              disabled={previewLoading}
+              disabled={previewLoading || saving}
               onClick={() => void refreshPreview(editor)}
             >
               {previewLoading ? 'Resolviendo vista previa…' : 'Actualizar vista previa'}
@@ -792,7 +797,6 @@ export function GripStylesSection({ api, token }: GripStylesSectionProps): React
             </div>
           </div>
         </Modal>
-        </div>
       ) : null}
 
       <ConfirmDialog

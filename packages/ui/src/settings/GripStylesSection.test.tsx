@@ -136,11 +136,15 @@ describe('GripStylesSection — editor round-trip', () => {
     await user.type(screen.getByTestId('grip-style-name'), 'Gola negra');
     // Inferior: gola with L top + C between (only usable profiles appear).
     await user.selectOptions(screen.getByTestId('grip-style-mode-inferior'), 'gola');
-    const topOptions = (screen.getByTestId('grip-style-top-profile-inferior') as HTMLSelectElement)
-      .querySelectorAll('option');
-    const optionValues = Array.from(topOptions).map((o) => o.value);
-    expect(optionValues).toContain('p-l');
-    expect(optionValues).not.toContain('p-c'); // not usable at top
+    // C3: unusable profiles stay VISIBLE and DISABLED with the reason; only
+    // usable ones carry a value.
+    const topOptions = Array.from(
+      (screen.getByTestId('grip-style-top-profile-inferior') as HTMLSelectElement).querySelectorAll('option'),
+    );
+    expect(topOptions.some((o) => o.value === 'p-l' && !o.disabled)).toBe(true);
+    const unusable = topOptions.find((o) => o.textContent?.includes('no utilizable arriba'));
+    expect(unusable).toBeDefined();
+    expect(unusable!.disabled).toBe(true);
     await user.selectOptions(screen.getByTestId('grip-style-top-profile-inferior'), 'p-l');
     await user.selectOptions(screen.getByTestId('grip-style-between-profile-inferior'), 'p-c');
     // Superior: rebase 20.
@@ -196,5 +200,77 @@ describe('GripStylesSection — editor round-trip', () => {
     await user.click(screen.getByTestId('grip-styles-create'));
     await user.click(screen.getByTestId('grip-style-editor-save'));
     expect(screen.getByTestId('grip-style-save-error')).toBeDefined();
+  });
+});
+
+describe('GripStylesSection — judgment-day round-2 regressions', () => {
+  it('C2: Recargar conserva el borrador y refresca la versión If-Match desde la lista recargada', async () => {
+    const user = userEvent.setup();
+    const stale = styleFixture();
+    const fresh = styleFixture({ version: 4 });
+    const { stub, api } = apiStub([stale], calls);
+    stub.listGripStyles
+      .mockResolvedValueOnce([stale]) // initial load
+      .mockResolvedValueOnce([fresh]); // after Recargar
+    stub.updateGripStyle
+      .mockRejectedValueOnce(new GraneteApiError(412, { code: 'VERSION_CONFLICT', message: 'la versión del estilo cambió', fieldErrors: {}, requestId: '', retryable: false, details: {} }))
+      .mockResolvedValueOnce(fresh); // re-apply succeeds with the fresh version
+
+    render(<GripStylesSection api={api} token={TOKEN} />);
+    await waitFor(() => expect(screen.getByTestId(`grip-style-edit-style-1`)).toBeDefined());
+    await user.click(screen.getByTestId(`grip-style-edit-style-1`));
+    // Edit a field after the 412, to prove the draft survives the reload.
+    await user.click(screen.getByTestId('grip-style-editor-save'));
+    await waitFor(() => expect(screen.getByTestId('grip-style-conflict')).toBeDefined());
+    await user.click(screen.getByTestId('grip-style-conflict-reload'));
+    await waitFor(() => expect(screen.queryByTestId('grip-style-conflict')).toBeNull());
+    expect((screen.getByTestId('grip-style-name') as HTMLInputElement).value).toBe('Jaladera del taller');
+    await user.click(screen.getByTestId('grip-style-editor-save'));
+    await waitFor(() => expect(stub.updateGripStyle.mock.calls).toHaveLength(2));
+    // The re-apply carries the REFRESHED version (4), not the stale 3.
+    expect(stub.updateGripStyle.mock.calls[1][2]).toBe(4);
+  });
+
+  it('C4: el 422 de una fila se ancla a esa fila con role="alert"', async () => {
+    const user = userEvent.setup();
+    const { stub, api } = apiStub([styleFixture()]);
+    stub.createGripStyle.mockRejectedValueOnce(
+      new GraneteApiError(422, { code: 'BAD_REQUEST', message: 'el rebase de alacenas necesita milímetros mayores a 0', fieldErrors: {}, requestId: '', retryable: false, details: {} }),
+    );
+    render(<GripStylesSection api={api} token={TOKEN} />);
+    await waitFor(() => expect(screen.getByTestId('grip-styles-create')).toBeDefined());
+    await user.click(screen.getByTestId('grip-styles-create'));
+    await user.type(screen.getByTestId('grip-style-name'), 'Rebase test');
+    await user.selectOptions(screen.getByTestId('grip-style-mode-superior'), 'bottom_overhang');
+    await user.click(screen.getByTestId('grip-style-editor-save'));
+    await waitFor(() => expect(screen.getByTestId('grip-style-save-error-superior')).toBeDefined());
+    expect(screen.getByTestId('grip-style-save-error-superior').textContent).toContain('alacenas');
+    // The anchor map must not leave the message unwrapped anywhere else.
+    expect(screen.queryByTestId('grip-style-save-error')).toBeNull();
+  });
+
+  it('C6: mientras guarda, el editor queda inerte', async () => {
+    const user = userEvent.setup();
+    const { stub, api } = apiStub([styleFixture()]);
+    stub.updateGripStyle.mockImplementationOnce(() => new Promise(() => undefined)); // never resolves
+    render(<GripStylesSection api={api} token={TOKEN} />);
+    await waitFor(() => expect(screen.getByTestId(`grip-style-edit-style-1`)).toBeDefined());
+    await user.click(screen.getByTestId(`grip-style-edit-style-1`));
+    await user.click(screen.getByTestId('grip-style-editor-save'));
+    await waitFor(() => expect(screen.getByTestId('grip-style-editor-save').textContent).toContain('Guardando'));
+    expect((screen.getByTestId('grip-style-name') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByTestId('grip-style-editor-offered') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByTestId('grip-style-row-inferior') as HTMLFieldSetElement).disabled).toBe(true);
+  });
+
+  it('C5+C7: esqueletos en carga y ayuda del switch en la tarjeta', async () => {
+    const { api } = apiStub([styleFixture({ offered: false })]);
+    let resolveList: (v: GripStyle[]) => void = () => undefined;
+    api.listGripStyles.mockImplementationOnce(() => new Promise<GripStyle[]>((resolve) => { resolveList = resolve; }));
+    render(<GripStylesSection api={api} token={TOKEN} />);
+    expect(screen.getAllByTestId('grip-styles-skeleton')).toHaveLength(3);
+    resolveList([styleFixture({ offered: false })]);
+    await waitFor(() => expect(screen.getByTestId('grip-styles-list')).toBeDefined());
+    expect(screen.getByText('Ocultar sólo quita el estilo de las elecciones nuevas.')).toBeDefined();
   });
 });
