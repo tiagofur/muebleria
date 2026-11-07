@@ -266,7 +266,7 @@ export function ProjectPhotosGallery({
             />
             <button
               type="button"
-              className="btn btn--primary btn--sm project-photos-uploader__btn"
+              className="btn btn--primary btn--small project-photos-uploader__btn"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
             >
@@ -378,14 +378,14 @@ export function ProjectPhotosGallery({
                       />
                       <button
                         type="button"
-                        className="btn btn--sm btn--primary"
+                        className="btn btn--small btn--primary"
                         onClick={() => void saveCaption(photo.id)}
                       >
                         <Check size={14} />
                       </button>
                       <button
                         type="button"
-                        className="btn btn--sm btn--secondary"
+                        className="btn btn--small btn--secondary"
                         onClick={() => setEditingCaptionId(null)}
                       >
                         <X size={14} />

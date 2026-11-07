@@ -174,7 +174,7 @@ export function OrganizationLifecyclePanel({ api, token, organization, onUpdated
 
   return <>
     {stepUp.modal}
-    <button type="button" className="btn btn--secondary btn--sm" onClick={() => setOpen(true)}>
+    <button type="button" className="btn btn--secondary btn--small" onClick={() => setOpen(true)}>
       Estado y ciclo de vida
     </button>
     <Modal open={open} onClose={() => setOpen(false)} title={`Estado de ${organization.name}`} size="md">
@@ -198,7 +198,7 @@ export function OrganizationLifecyclePanel({ api, token, organization, onUpdated
 
         {error && <div role="alert" className="platform-modal-error">
           <span>{error}</span>
-          {conflict ? <button type="button" className="btn btn--secondary btn--sm" onClick={() => void reloadConflict()}>Recargar estado</button> : null}
+          {conflict ? <button type="button" className="btn btn--secondary btn--small" onClick={() => void reloadConflict()}>Recargar estado</button> : null}
         </div>}
 
         {canPreview ? <div className="platform-form-group">

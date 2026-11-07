@@ -353,7 +353,7 @@ export function KitTemplateEditorModal({
                   {slots.length > 1 ? (
                     <button
                       type="button"
-                      className="btn btn--sm"
+                      className="btn btn--small"
                       onClick={() => setSlots((prev) => prev.filter((_, i) => i !== index))}
                       data-testid={`kit-template-slot-remove-${index}`}
                     >
@@ -371,7 +371,7 @@ export function KitTemplateEditorModal({
             {slots.length < 12 ? (
               <button
                 type="button"
-                className="btn btn--sm"
+                className="btn btn--small"
                 onClick={() => setSlots((prev) => [...prev, emptySlot()])}
                 data-testid="kit-template-slot-add"
               >

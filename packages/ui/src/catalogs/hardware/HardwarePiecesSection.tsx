@@ -133,7 +133,7 @@ export function HardwarePiecesSection({
                   <div className="catalog-hw-part__actions">
                     <button
                       type="button"
-                      className="btn btn--sm"
+                      className="btn btn--small"
                       onClick={() => setPickingAnchor(anchor)}
                       data-testid={`hardware-piece-${anchor}-bind`}
                     >
@@ -142,7 +142,7 @@ export function HardwarePiecesSection({
                     {piece ? (
                       <button
                         type="button"
-                        className="btn btn--sm btn--ghost"
+                        className="btn btn--small btn--ghost"
                         onClick={() => setPiece(anchor, undefined)}
                         data-testid={`hardware-piece-${anchor}-clear`}
                       >

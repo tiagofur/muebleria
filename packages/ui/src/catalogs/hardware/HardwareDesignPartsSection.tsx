@@ -118,7 +118,7 @@ export function HardwareDesignPartsSection({
           <div className="catalog-design-parts__row-actions">
             <button
               type="button"
-              className="btn btn--sm btn--danger"
+              className="btn btn--small btn--danger"
               onClick={() => removeRow(idx)}
               aria-label={`Eliminar parte ${idx + 1}`}
               data-testid={`hardware-design-part-${idx}-remove`}
@@ -131,7 +131,7 @@ export function HardwareDesignPartsSection({
       <div className="catalog-design-parts__add">
         <button
           type="button"
-          className="btn btn--sm"
+          className="btn btn--small"
           onClick={addRow}
           data-testid="hardware-design-parts-add"
         >

@@ -479,7 +479,7 @@ export function PlatformScreen({
                         />
                         <button
                           type="button"
-                          className="btn btn--secondary btn--sm"
+                          className="btn btn--secondary btn--small"
                           onClick={() => {
                             const currentPlan = org.license_plan || 'trial';
                             const currentExpiry = org.license_expires_at || null;
@@ -495,7 +495,7 @@ export function PlatformScreen({
                         </button>
                         <button
                           type="button"
-                          className="btn btn--primary btn--sm"
+                          className="btn btn--primary btn--small"
                           disabled={org.status !== 'active' || organizationReadiness[org.id]?.ready !== true}
                           title={org.status === 'active' && organizationReadiness[org.id]?.ready !== true ? 'La preparación debe estar verificada antes de iniciar soporte' : org.status === 'active' ? undefined : 'Sólo podés iniciar soporte en una organización activa'}
                           onClick={() => {
