@@ -566,6 +566,8 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
               item.baseMode,
               // #1502: grupos de accesorios declarados por los kits de los agregados.
               optionGroups,
+              // #1555: el accesorio ofertado sigue la elección de CAJÓN del item.
+              item.optionChoices,
             );
 
             // Drop indicator classes

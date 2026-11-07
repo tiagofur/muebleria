@@ -1126,6 +1126,8 @@ export function ProjectSpatialStudio({
         selectedItem?.baseMode,
         // #1502: grupos de accesorios declarados por los kits de los agregados.
         catalog.optionGroups,
+        // #1555: el accesorio sigue la elección de CAJÓN del item seleccionado.
+        selectedItem?.optionChoices,
       ),
     [selectedModule, catalog, selectedItem],
   );
