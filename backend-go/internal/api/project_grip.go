@@ -23,7 +23,7 @@ import (
 type projectGripPayload struct {
 	ProjectID   string                       `json:"projectId"`
 	GripStyleID *string                      `json:"gripStyleId"`
-	Snapshot    *domain.GripSnapshot         `json:"snapshot"`
+	Snapshot    *domain.GripSnapshot         `json:"snapshot,omitempty"`
 	GripVersion int64                        `json:"gripVersion"`
 	Overrides   []projectGripOverridePayload `json:"overrides"`
 	Report      *projectGripReportPayload    `json:"report,omitempty"`
@@ -31,7 +31,7 @@ type projectGripPayload struct {
 
 type projectGripOverridePayload struct {
 	FurnitureInstanceID string               `json:"furnitureInstanceId"`
-	Snapshot            *domain.GripSnapshot `json:"snapshot"`
+	Snapshot            *domain.GripSnapshot `json:"snapshot,omitempty"`
 }
 
 type projectGripReportPayload struct {
