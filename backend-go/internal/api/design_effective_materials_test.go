@@ -283,3 +283,85 @@ func TestHandleDesignEffectiveMaterials(t *testing.T) {
 		}
 	})
 }
+
+// #1555 (B1 del review #1563): the connected resolve receives the materials
+// COMPOSED by this endpoint, not the plugin's raw map. The kit accessory
+// groups of the definition's agregado options must be part of the
+// composition — otherwise the plugin's accessory override is silently
+// dropped (optional: lost quote line; required: accessory_choice_required
+// despite the pick). They are ExplicitChoiceOnly: nobody's choice is never
+// seeded with the first accessory.
+func TestHandleDesignEffectiveMaterials_AccessoryGroups_1555(t *testing.T) {
+	const (
+		testDesignID = "52000000-0000-0000-0000-000000000155"
+		modUUID      = "61000000-0000-0000-0000-000000000155"
+	)
+	kitE := "kit-e"
+	catalog := domain.Catalog{
+		Hardware: []domain.Hardware{
+			{ID: kitE, Code: "MBOX-E", Name: "Kit MERIVOBOX E", Unit: domain.UnitSet, Active: true},
+			{ID: "hw-gal-e", Code: "GAL-E", Name: "Galería E", Unit: domain.UnitPiece, Active: true},
+		},
+		OptionGroups: []domain.OptionGroup{
+			{Code: "CAJON", Name: "Cajón", Kind: "agregado", OptionIDs: []string{"agr-e"}},
+			{
+				Code: "LATERAL_E", Name: "Lateral superior E", Kind: "hardware", Required: true,
+				OptionIDs: []string{"hw-gal-e"}, KitHardwareID: &kitE,
+			},
+		},
+		Agregados: []domain.Agregado{
+			{ID: "agr-e", Code: "CAJON-E", Name: "Cajón E", Active: true, CommercialKitHardwareID: &kitE},
+		},
+		Modules: []domain.Module{
+			{
+				ID: modUUID, Code: "MOD-MBOX-E", Name: "Base MERIVOBOX E",
+				WidthMm: 600, HeightMm: 720, DepthMm: 560,
+				Agregados: []domain.ModuleAgregadoInstance{
+					{ID: "inst-e", AgregadoID: "agr-e", OptionRole: "CAJON", Quantity: 1},
+				},
+			},
+		},
+	}
+	srv := &Server{Store: &stubStore{
+		catalogOverride: &catalog,
+		designWorkingCopiesByID: map[string]domain.DesignWorkingCopy{
+			testDesignID: {
+				DesignID: testDesignID, ProjectID: "proj-1",
+				SourceType: domain.DesignRevisionSourceManual, UpdatedAt: time.Now(),
+			},
+		},
+	}}
+	post := func(body string) openapi.DesignEffectiveMaterials {
+		t.Helper()
+		req := designRequest(http.MethodPost, "/api/designs/"+testDesignID+"/effective-materials", body, string(domain.RoleAdmin))
+		rr := httptest.NewRecorder()
+		srv.HandleDesignEffectiveMaterials(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+		}
+		var resp openapi.DesignEffectiveMaterials
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		return resp
+	}
+
+	t.Run("the plugin's accessory override survives the composition", func(t *testing.T) {
+		resp := post(`{"furnitureDefinitionId":"` + modUUID + `","materialChoices":{"CAJON":"agr-e","LATERAL_E":"hw-gal-e"}}`)
+		if resp.MaterialChoices["LATERAL_E"] != "hw-gal-e" || resp.MaterialChoiceModes["LATERAL_E"] != openapi.DesignMaterialChoiceModeOverride {
+			t.Fatalf("LATERAL_E = %q (mode %q), want hw-gal-e (override) — the connected resolve must see the pick: %v",
+				resp.MaterialChoices["LATERAL_E"], resp.MaterialChoiceModes["LATERAL_E"], resp.MaterialChoices)
+		}
+	})
+
+	t.Run("no accessory choice is never seeded with the first member", func(t *testing.T) {
+		resp := post(`{"furnitureDefinitionId":"` + modUUID + `"}`)
+		if _, ok := resp.MaterialChoices["LATERAL_E"]; ok {
+			t.Fatalf("accessory nobody chose must carry no statement: %v", resp.MaterialChoices)
+		}
+		// The drawer group keeps its curated definition fallback (regression guard).
+		if resp.MaterialChoices["CAJON"] != "agr-e" || resp.MaterialChoiceModes["CAJON"] != openapi.DesignMaterialChoiceModeDefinition {
+			t.Fatalf("CAJON fallback must stay: %v / %v", resp.MaterialChoices, resp.MaterialChoiceModes)
+		}
+	})
+}

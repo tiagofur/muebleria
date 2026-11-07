@@ -9,6 +9,14 @@ type DefinitionRoleOptionSpec struct {
 	Role      string   `json:"role"`
 	Label     string   `json:"label,omitempty"`
 	OptionIDs []string `json:"optionIds"`
+	// ExplicitChoiceOnly (#1555): the role only ever carries an EXPLICIT
+	// choice — an override or a compatible Design default — and never the
+	// curated first-option fallback. Kit accessory groups (galería/boxcap)
+	// are a deliberate per-furniture decision: silently seeding the first
+	// accessory would quote and draw something the user never chose. An
+	// absent statement is honest (optional → nothing; required → the engine
+	// fails closed with accessory_choice_required).
+	ExplicitChoiceOnly bool `json:"explicitChoiceOnly,omitempty"`
 }
 
 // EffectiveDefinitionMaterials represents the result of the definition-aware composition:
@@ -68,8 +76,9 @@ func ComposeEffectiveDefinitionMaterials(
 
 		// 3. Curated definition fallback (first allowed option). An
 		// unrestricted role without candidates and without a Design default
-		// carries no statement at all.
-		if len(spec.OptionIDs) > 0 {
+		// carries no statement at all. ExplicitChoiceOnly roles (#1555 kit
+		// accessories) never take the fallback: no choice = no statement.
+		if len(spec.OptionIDs) > 0 && !spec.ExplicitChoiceOnly {
 			fallback := strings.TrimSpace(spec.OptionIDs[0])
 			if fallback != "" {
 				out.MaterialChoices[role] = fallback
