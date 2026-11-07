@@ -81,7 +81,8 @@ export type OpeningContractBodyModifier = {
 /** The library slice the body-modifier resolution consumes (a projection of
  * the #1130 entity — the storage layer maps it). profileDepthMm /
  * profileHeightMm (#1317) are the datasheet envelope the depth reduction
- * derives from; zero/absent = the pin predates #1283. */
+ * derives from; zero/absent = the declaration does not exist (the truthful
+ * absence, never an invented default). */
 export type OpeningProfileBodyData = {
   readonly profileId: string;
   readonly compatiblePlacements: readonly string[];
@@ -268,7 +269,7 @@ function resolveEffect(
   }
   const band = profile.profileHeightMm ?? 0;
   // Go marshals profileHeightMm omitempty: 0 stays absent on the wire — the
-  // truthful absence of a pre-#1283 datasheet, not a zero band.
+  // truthful absence of a declared band, not a zero one.
   const depthModifier = (depthReductionMm: number): Omit<ResolvedOpeningBodyModifier, 'profileId' | 'boundary'> =>
     band > 0
       ? { effect: 'depth_reduction', role: modifier.role, depthReductionMm, profileHeightMm: band }

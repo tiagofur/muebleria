@@ -2,7 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -38,50 +37,16 @@ func applyOpeningFrontsToBoards(boards []layoutBoard, fronts []OpeningResolvedFr
 	if len(fronts) == 0 {
 		return nil, nil
 	}
-	// One front region per furniture: the design opening resolves a single
-	// zone; the stack inside it is read from the boards (A3).
+	// One front region per furniture: the project grip produces the v2
+	// EdgeGrips (#1532); the stack inside it is read from the boards (A3,
+	// #1529). There is no v1 arithmetic left: every producer of fronts is
+	// the project grip.
 	front := fronts[0]
-	consumedByBoundary := map[string]int{}
-	totalConsumed := 0
-	for _, grip := range front.Grips {
-		consumedByBoundary[grip.Boundary] += grip.ConsumedMm
-		totalConsumed += grip.ConsumedMm
+	if front.EdgeGrips == nil {
+		return nil, fmt.Errorf(
+			"el frente resuelto no declara agarres por borde (contrato v2): el agarre del proyecto produce EdgeGrips siempre")
 	}
-	if front.EdgeGrips != nil || (totalConsumed != 0 && layoutFrontsStacked(boards)) {
-		grips, err := openingEdgeGripsFor(front)
-		if err != nil {
-			return nil, err
-		}
-		return applyOpeningA3ToBoards(boards, front, grips, cabinetHeightMm)
-	}
-	constrained := map[int]bool{}
-	for i := range boards {
-		board := &boards[i]
-		if !boardIsOpeningFront(board) {
-			continue
-		}
-		if board.lengthMm-float64(totalConsumed) <= 0 {
-			return nil, fmt.Errorf(
-				"la apertura deja el frente %s sin altura válida (consumo %d mm sobre %g mm)",
-				board.id, totalConsumed, board.lengthMm)
-		}
-		board.lengthMm -= float64(totalConsumed)
-		if lift := consumedByBoundary["bottom"]; lift != 0 {
-			board.z += float64(lift)
-		}
-		constrained[i] = true
-		pruneOpeningHandleHardware(board, front)
-	}
-	return constrained, nil
-}
-
-// openingEdgeGripsFor returns the v2 grips of a front: the explicit contract
-// v2 input, or the conversion of a v1 pin over stacked fronts.
-func openingEdgeGripsFor(front OpeningResolvedFront) (OpeningEdgeGrips, error) {
-	if front.EdgeGrips != nil {
-		return *front.EdgeGrips, nil
-	}
-	return openingEdgeGripsFromV1Front(front)
+	return applyOpeningA3ToBoards(boards, front, *front.EdgeGrips, cabinetHeightMm)
 }
 
 // applyOpeningA3ToBoards writes the A3 poses onto the front boards.
@@ -128,7 +93,6 @@ func boardIsOpeningFront(board *layoutBoard) bool {
 		isDoorBoard(board)
 }
 
-// OpeningMembersFromFrozenPin projects the selection's pinned member set
 // onto the layout's derived-hardware input (#1274). ONE projection feeds the
 // authoring resolve and the production release (#1305) — a copy here and a
 // copy there would drift. nil when the pin declares no members.
@@ -189,11 +153,7 @@ func applyOpeningFrontsToBomParts(parts []domain.BoardPart, fronts []OpeningReso
 		return nil
 	}
 	front := fronts[0]
-	totalConsumed := 0
-	for _, grip := range front.Grips {
-		totalConsumed += grip.ConsumedMm
-	}
-	if totalConsumed == 0 && front.EdgeGrips == nil {
+	if front.EdgeGrips == nil || front.EdgeGrips.empty() {
 		return nil
 	}
 	var boards []layoutBoard
@@ -205,20 +165,11 @@ func applyOpeningFrontsToBomParts(parts []domain.BoardPart, fronts []OpeningReso
 		}
 	}
 	if boards == nil {
-		// No poses (legacy flat module): the structural signature decides.
-		if front.EdgeGrips != nil || bomFrontsStacked(parts) {
-			return stackedFrontsError()
-		}
-		return shrinkOpeningBomParts(parts, totalConsumed)
+		// No poses (legacy flat module): the stack is unreadable — the
+		// fail-closed state, never a shrink the layout would contradict.
+		return stackedFrontsError()
 	}
-	if front.EdgeGrips == nil && !layoutFrontsStacked(boards) {
-		return shrinkOpeningBomParts(parts, totalConsumed)
-	}
-	grips, err := openingEdgeGripsFor(front)
-	if err != nil {
-		return err
-	}
-	poses, _, err := openingA3Poses(boards, grips, cabinetHeightMm)
+	poses, _, err := openingA3Poses(boards, *front.EdgeGrips, cabinetHeightMm)
 	if err != nil {
 		return err
 	}
@@ -239,23 +190,6 @@ func applyOpeningFrontsToBomParts(parts []domain.BoardPart, fronts []OpeningReso
 	return nil
 }
 
-// shrinkOpeningBomParts is the v1 arithmetic: every front part shrinks by the
-// whole consumption (fronts side by side).
-func shrinkOpeningBomParts(parts []domain.BoardPart, totalConsumed int) error {
-	for i := range parts {
-		if !bomPartIsOpeningFront(&parts[i]) {
-			continue
-		}
-		if parts[i].LengthMm-float64(totalConsumed) <= 0 {
-			return fmt.Errorf(
-				"la apertura deja el frente %s sin altura válida (consumo %d mm sobre %g mm)",
-				parts[i].ID, totalConsumed, parts[i].LengthMm)
-		}
-		parts[i].LengthMm -= float64(totalConsumed)
-	}
-	return nil
-}
-
 // openingStackToleranceMm absorbs formula rounding when two fronts share a
 // row: their vertical extents must overlap by more than this to count as
 // side by side.
@@ -266,48 +200,6 @@ const openingStackToleranceMm = 0.5
 func stackedFrontsError() *OpeningResolutionError {
 	return openingFail(OpeningErrStackedFronts,
 		"este agarre no se puede aplicar a los frentes apilados de este mueble")
-}
-
-// layoutFrontsStacked reports whether two opening fronts sit one above the
-// other (their vertical extents do not overlap), using the resolved pose.
-func layoutFrontsStacked(boards []layoutBoard) bool {
-	var fronts []*layoutBoard
-	for i := range boards {
-		if boardIsOpeningFront(&boards[i]) {
-			fronts = append(fronts, &boards[i])
-		}
-	}
-	for i := 0; i < len(fronts); i++ {
-		for j := i + 1; j < len(fronts); j++ {
-			a, b := fronts[i], fronts[j]
-			overlap := math.Min(a.z+a.lengthMm, b.z+b.lengthMm) - math.Max(a.z, b.z)
-			if overlap <= openingStackToleranceMm {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// bomFrontsStacked is the pose-free signature of a stack (#1528): two or
-// more drawer fronts, or a drawer front together with a door.
-func bomFrontsStacked(parts []domain.BoardPart) bool {
-	drawers, doors := 0, 0
-	for i := range parts {
-		if !bomPartIsOpeningFront(&parts[i]) {
-			continue
-		}
-		qty := parts[i].Quantity
-		if qty < 1 {
-			qty = 1
-		}
-		if parts[i].Placement == string(domain.PlacementFrenteCajon) {
-			drawers += qty
-		} else {
-			doors += qty
-		}
-	}
-	return drawers >= 2 || (drawers >= 1 && doors >= 1)
 }
 
 // bomPartIsOpeningFront is the BOM twin of boardIsOpeningFront: the SAME

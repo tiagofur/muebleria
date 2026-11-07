@@ -22,6 +22,13 @@ func registerProjectRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	// durable idempotency receipt; removal is the terminal lifecycle command
 	// under optimistic concurrency.
 	mux.Handle("GET /api/projects/{projectId}/furniture-instances", authMW(http.HandlerFunc(server.HandleProjectFurnitureInstances)))
+	// Agarre del proyecto (#1532, ADR-0009 Amendment 1 A2.3/A7): leer y
+	// cambiar el estilo del proyecto, la excepción por mueble en una
+	// operación y el «Actualizar a los valores actuales del taller».
+	mux.Handle("GET /api/projects/{projectId}/grip", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectGrip))))
+	mux.Handle("PUT /api/projects/{projectId}/grip", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectGrip))))
+	mux.Handle("PUT /api/projects/{projectId}/grip/furniture", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectFurnitureGrip))))
+	mux.Handle("POST /api/projects/{projectId}/grip:refresh", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectGripRefresh))))
 	mux.Handle("POST /api/projects/{projectId}/furniture-instances", authMW(server.RequireIdempotency("project.create-furniture-instance", http.HandlerFunc(server.HandleProjectFurnitureInstances))))
 	mux.Handle("POST /api/projects/{projectId}/furniture-instances/{instanceCommand...}", authMW(server.RequireIdempotency("project.duplicate-furniture-instance", projectFurnitureInstanceCommandRouter(map[string]http.Handler{
 		"duplicate": http.HandlerFunc(server.HandleFurnitureInstanceDuplicate),

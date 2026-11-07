@@ -516,6 +516,18 @@ type stubStore struct {
 	// #1531 — grip styles stub (in memory) and the error it returns.
 	gripStyles   []domain.GripStyle
 	gripStyleErr error
+
+	// #1532 — the design-opening facade: the derived state the GET renders
+	// and the write the PUT captures.
+	designGripFacadeState *storage.DesignOpeningFacadeState
+	designGripFacadeApply *designGripFacadeApplyCapture
+}
+
+// designGripFacadeApplyCapture records one facade write (#1532).
+type designGripFacadeApplyCapture struct {
+	DesignID               string
+	Selection              domain.DesignOpeningSelection
+	ExpectedWorkingVersion string
 }
 
 func (s *stubStore) stubNotUsed(name string) {

@@ -237,9 +237,10 @@ func (s *PostgresStore) CreateInitialDesignQuoteRevision(ctx context.Context, cm
 			FurnitureDefinitionID: item.FurnitureDefinitionID,
 			QuoteLineID:           item.QuoteLineID,
 			Parameters:            item.Parameters,
+			MaterialChoices:       item.MaterialChoices,
 		})
 	}
-	opening, err := s.deriveDesignOpeningCommercial(ctx, &wc.AuthoringDefaults, openingUnits)
+	opening, err := s.deriveDesignOpeningCommercial(ctx, cmd.ProjectID, openingUnits)
 	if err != nil {
 		return nil, err
 	}

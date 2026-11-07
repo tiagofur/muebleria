@@ -55,6 +55,7 @@ import type {
   ExchangePairingGrantRequest,
   FactoryOrganization,
   FurnitureDefinitionLayout,
+  FurnitureGripOverridesWrite,
   FurnitureInstance,
   GolaProfileSuggestion,
   GripStyle,
@@ -133,6 +134,9 @@ import type {
   ProjectDesignReconciliationResult,
   ProjectFurnitureWorkspace,
   ProjectFurnitureWorkspaceRequest,
+  ProjectGrip,
+  ProjectGripRefresh,
+  ProjectGripWrite,
   ProjectManufacturingSnapshot,
   ProjectQuoteRequoteResult,
   ProjectWorkshopOccurrences,
@@ -271,6 +275,10 @@ export abstract class GeneratedGraneteApiClient {
   listCustomerSummaries(token: string, signal?: AbortSignal): Promise<ReadonlyArray<CustomerSummary>> { return this.request("GET", "/customers/summaries", { arrayOf: "CustomerSummary", token, signal }); }
   bootstrapProjectDesign(token: string, body: ProjectDesignBootstrapRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ProjectDesignBootstrapResponse> { return this.request("POST", "/projects:bootstrap-design", { schema: "ProjectDesignBootstrapResponse", token, bodySchema: "ProjectDesignBootstrapRequest", body, idempotencyKey: key, signal }); }
   listProjectCommercialSummaries(token: string, signal?: AbortSignal): Promise<ReadonlyArray<ProjectCommercialSummary>> { return this.request("GET", "/projects/commercial-summaries", { arrayOf: "ProjectCommercialSummary", token, signal }); }
+  getProjectGrip(token: string, projectId: string, signal?: AbortSignal): Promise<ProjectGrip> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/grip`, { schema: "ProjectGrip", token, signal }); }
+  setProjectGrip(token: string, projectId: string, body: ProjectGripWrite, signal?: AbortSignal): Promise<ProjectGrip> { return this.request("PUT", `/projects/${encodeURIComponent(projectId)}/grip`, { schema: "ProjectGrip", token, bodySchema: "ProjectGripWrite", body, signal }); }
+  setFurnitureGripOverrides(token: string, projectId: string, body: FurnitureGripOverridesWrite, signal?: AbortSignal): Promise<ProjectGrip> { return this.request("PUT", `/projects/${encodeURIComponent(projectId)}/grip/furniture`, { schema: "ProjectGrip", token, bodySchema: "FurnitureGripOverridesWrite", body, signal }); }
+  refreshProjectGrip(token: string, projectId: string, body: ProjectGripRefresh, signal?: AbortSignal): Promise<ProjectGrip> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/grip:refresh`, { schema: "ProjectGrip", token, bodySchema: "ProjectGripRefresh", body, signal }); }
   listProjectFurnitureInstances(token: string, projectId: string, signal?: AbortSignal): Promise<ReadonlyArray<FurnitureInstance>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/furniture-instances`, { arrayOf: "FurnitureInstance", token, signal }); }
   createProjectFurnitureInstance(token: string, projectId: string, body: CreateFurnitureInstanceRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<FurnitureInstance> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/furniture-instances`, { schema: "FurnitureInstance", token, bodySchema: "CreateFurnitureInstanceRequest", body, idempotencyKey: key, signal }); }
   duplicateProjectFurnitureInstance(token: string, projectId: string, instanceId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<FurnitureInstance> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/furniture-instances/${encodeURIComponent(instanceId)}:duplicate`, { schema: "FurnitureInstance", token, idempotencyKey: key, signal }); }

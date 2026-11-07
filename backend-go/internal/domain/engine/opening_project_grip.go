@@ -15,35 +15,46 @@ import (
 )
 
 // ProjectGripFronts produces the v2 fronts of one furniture from its
-// effective recipe: nil when the grip constrains nothing (handle mode, or a
-// recipe whose values are absent — the truthful no-grip baseline). The front
-// carries EdgeGrips only: the layout pass reads the stack from the boards
-// and applies A3 (#1529); position never comes from a user selection (A5).
-func ProjectGripFronts(recipe *domain.GripSnapshotRecipe) []OpeningResolvedFront {
+// effective recipe: nil (no constraint) when the grip constrains nothing
+// (handle mode, or a recipe whose values are absent — the truthful no-grip
+// baseline). The front carries EdgeGrips only: the layout pass reads the
+// stack from the boards and applies A3 (#1529); position never comes from a
+// user selection (A5). A recipe that cannot produce its grips (a gola
+// without a usable frozen top profile, or the migrated bottom-gola marker)
+// fails closed — never a silent no-grip resolve.
+func ProjectGripFronts(recipe *domain.GripSnapshotRecipe) ([]OpeningResolvedFront, *OpeningResolutionError) {
 	if recipe == nil {
-		return nil
+		return nil, nil
+	}
+	if recipe.LegacyBottomGola {
+		return nil, openingFail(OpeningErrStackedFronts,
+			"el agarre inferior del diseño migrado no tiene equivalente en el agarre por bordes; aplica de nuevo el agarre del mueble con el estilo del taller")
 	}
 	grips := &OpeningEdgeGrips{}
 	switch recipe.Mode {
 	case domain.GripModeGola:
-		if recipe.TopProfile != nil && recipe.TopProfile.FrontDiscountTopMm != nil && *recipe.TopProfile.FrontDiscountTopMm > 0 {
-			discount := float64(*recipe.TopProfile.FrontDiscountTopMm)
-			grips.TopDiscountMm = &discount
+		if recipe.TopProfile == nil || recipe.TopProfile.FrontDiscountTopMm == nil || *recipe.TopProfile.FrontDiscountTopMm <= 0 {
+			return nil, openingFail(OpeningErrLayoutInvalid,
+				"la receta de gola congelada no tiene el descuento del frente de arriba")
 		}
+		discount := float64(*recipe.TopProfile.FrontDiscountTopMm)
+		grips.TopDiscountMm = &discount
 		if recipe.BetweenProfile != nil && recipe.BetweenProfile.FrontDiscountBetweenMm != nil && *recipe.BetweenProfile.FrontDiscountBetweenMm > 0 {
-			discount := float64(*recipe.BetweenProfile.FrontDiscountBetweenMm)
-			grips.BetweenDiscountMm = &discount
+			between := float64(*recipe.BetweenProfile.FrontDiscountBetweenMm)
+			grips.BetweenDiscountMm = &between
 		}
 	case domain.GripModeBottomOverhang:
-		if recipe.OverhangMm != nil && *recipe.OverhangMm > 0 {
-			overhang := *recipe.OverhangMm
-			grips.BottomOverhangMm = &overhang
+		if recipe.OverhangMm == nil || *recipe.OverhangMm <= 0 {
+			return nil, openingFail(OpeningErrLayoutInvalid,
+				"la receta de rebase congelada no tiene los milímetros")
 		}
+		overhang := *recipe.OverhangMm
+		grips.BottomOverhangMm = &overhang
 	case domain.GripModeHandle:
 		// A handled front consumes nothing: the baseline resolution.
 	}
 	if grips.empty() {
-		return nil
+		return nil, nil
 	}
 	return []OpeningResolvedFront{{
 		ZoneID:    "grip",
@@ -55,17 +66,21 @@ func ProjectGripFronts(recipe *domain.GripSnapshotRecipe) []OpeningResolvedFront
 			Ratio:       1,
 			RatioSum:    1,
 		},
-	}}
+	}}, nil
 }
 
 // ProjectGripEdgeGrips returns the recipe's edge grips alone — the stack
 // report and the BOM resolution consume the numbers without a front shell.
-func ProjectGripEdgeGrips(recipe *domain.GripSnapshotRecipe) OpeningEdgeGrips {
-	fronts := ProjectGripFronts(recipe)
-	if len(fronts) == 0 {
-		return OpeningEdgeGrips{}
+// A recipe that cannot produce its grips fails closed like the fronts do.
+func ProjectGripEdgeGrips(recipe *domain.GripSnapshotRecipe) (OpeningEdgeGrips, *OpeningResolutionError) {
+	fronts, resErr := ProjectGripFronts(recipe)
+	if resErr != nil {
+		return OpeningEdgeGrips{}, resErr
 	}
-	return *fronts[0].EdgeGrips
+	if len(fronts) == 0 {
+		return OpeningEdgeGrips{}, nil
+	}
+	return *fronts[0].EdgeGrips, nil
 }
 
 // ProjectGripMembers projects the frozen top profile's declared members onto

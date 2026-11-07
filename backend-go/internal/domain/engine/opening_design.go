@@ -170,29 +170,19 @@ func ResolveDesignOpening(
 }
 
 // designOpeningBOMData picks the BOM slice the historical design owns: the
-// pin freezes revision + members at validation time; the live catalog only
-// feeds rows authored before the pin existed (same fallback rule as fronts).
+// #1532 pin (the derived one from the frozen profile) always carries it.
 func designOpeningBOMData(selection *domain.DesignOpeningSelection, bomCtx *DesignOpeningBOMContext) (OpeningProfileBOMData, string) {
-	if pin := selection.ProfilePin; pin != nil {
-		if pin.BOM == nil {
-			// Pre-#1263 pin: the frozen slice never included the BOM — the
-			// truthful absence, never a live-catalog fallback.
-			return OpeningProfileBOMData{}, OpeningReasonBOMPinSliceMissing
-		}
-		members := make(map[string]OpeningContractBOMMember, len(pin.BOM.Members))
-		for key, member := range pin.BOM.Members {
-			members[key] = openingContractBOMMember(member)
-		}
-		return OpeningProfileBOMData{
-			ProfileID:  selection.ProfileID,
-			Version:    pin.BOM.ProfileVersion,
-			BOMMembers: members,
-		}, ""
+	pin := selection.ProfilePin
+	if pin == nil || pin.BOM == nil {
+		return OpeningProfileBOMData{}, OpeningErrProfileUnknown
 	}
-	for _, profile := range bomCtx.Profiles {
-		if profile.ProfileID == selection.ProfileID {
-			return profile, ""
-		}
+	members := make(map[string]OpeningContractBOMMember, len(pin.BOM.Members))
+	for key, member := range pin.BOM.Members {
+		members[key] = openingContractBOMMember(member)
 	}
-	return OpeningProfileBOMData{}, OpeningErrProfileUnknown
+	return OpeningProfileBOMData{
+		ProfileID:  selection.ProfileID,
+		Version:    pin.BOM.ProfileVersion,
+		BOMMembers: members,
+	}, ""
 }

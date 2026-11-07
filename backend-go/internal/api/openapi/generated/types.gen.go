@@ -3191,6 +3191,59 @@ type GripStyleWrite struct {
 	ByFurnitureType map[string]any `json:"byFurnitureType"`
 }
 
+type GripSnapshot struct {
+	StyleId   string                        `json:"styleId"`
+	StyleName string                        `json:"styleName"`
+	Recipes   map[string]GripSnapshotRecipe `json:"recipes"`
+	FrozenAt  string                        `json:"frozenAt"`
+}
+
+type GripSnapshotRecipe struct {
+	Mode             string             `json:"mode"`
+	HandleHardwareId *string            `json:"handleHardwareId,omitempty"`
+	Top              *FrozenGripProfile `json:"top,omitempty"`
+	Between          *FrozenGripProfile `json:"between,omitempty"`
+	OverhangMm       *float64           `json:"overhangMm,omitempty"`
+	LegacyBottomGola *bool              `json:"legacyBottomGola,omitempty"`
+}
+
+type FrozenGripProfile struct {
+	ProfileId              string                    `json:"profileId"`
+	Code                   string                    `json:"code"`
+	Name                   string                    `json:"name"`
+	Material               *string                   `json:"material,omitempty"`
+	Positions              []string                  `json:"positions"`
+	ProfileHeightMm        *float64                  `json:"profileHeightMm,omitempty"`
+	ProfileDepthMm         *float64                  `json:"profileDepthMm,omitempty"`
+	FrontDiscountTopMm     *int64                    `json:"frontDiscountTopMm,omitempty"`
+	FrontDiscountBetweenMm *int64                    `json:"frontDiscountBetweenMm,omitempty"`
+	CompatiblePlacements   []string                  `json:"compatiblePlacements"`
+	BodyModifiers          []map[string]any          `json:"bodyModifiers,omitempty"`
+	BomMembers             map[string]map[string]any `json:"bomMembers,omitempty"`
+	BomVersion             int64                     `json:"bomVersion"`
+}
+
+type ProjectGrip struct {
+	ProjectId   string           `json:"projectId"`
+	GripStyleId string           `json:"gripStyleId"`
+	Snapshot    *GripSnapshot    `json:"snapshot,omitempty"`
+	GripVersion int64            `json:"gripVersion"`
+	Overrides   []map[string]any `json:"overrides"`
+	Report      map[string]any   `json:"report,omitempty"`
+}
+
+type ProjectGripWrite struct {
+	GripStyleId string `json:"gripStyleId"`
+}
+
+type FurnitureGripOverridesWrite struct {
+	Overrides []map[string]any `json:"overrides"`
+}
+
+type ProjectGripRefresh struct {
+	IncludeOverrides *bool `json:"includeOverrides,omitempty"`
+}
+
 type GripStyle struct {
 	ID              string          `json:"id"`
 	OrganizationId  string          `json:"organizationId"`
@@ -3514,6 +3567,7 @@ type AuthoringPlacement struct {
 type AuthoringResolveFurniture struct {
 	FurnitureDefinitionId string                `json:"furnitureDefinitionId"`
 	CatalogRevision       string                `json:"catalogRevision"`
+	FurnitureInstanceId   *string               `json:"furnitureInstanceId,omitempty"`
 	LibraryReleaseId      *string               `json:"libraryReleaseId,omitempty"`
 	Parameters            map[string]any        `json:"parameters,omitempty"`
 	MaterialChoices       map[string]string     `json:"materialChoices,omitempty"`

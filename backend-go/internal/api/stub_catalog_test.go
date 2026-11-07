@@ -365,3 +365,42 @@ func (s *stubStore) DeleteGripStyle(_ context.Context, id string, expectedVersio
 	}
 	return storage.ErrGripStyleNotFound
 }
+
+func (s *stubStore) GetProjectGrip(_ context.Context, _ string) (*storage.ProjectGrip, error) {
+	s.stubNotUsed("GetProjectGrip")
+	return nil, nil
+}
+
+func (s *stubStore) SetProjectGrip(_ context.Context, _, _ string, _ int64, _ storage.ProjectGripWriteMeta) (*storage.ProjectGrip, error) {
+	s.stubNotUsed("SetProjectGrip")
+	return nil, nil
+}
+
+func (s *stubStore) SetFurnitureGripOverrides(_ context.Context, _ string, _ []storage.FurnitureGripOverrideCommand, _ int64, _ storage.ProjectGripWriteMeta) error {
+	s.stubNotUsed("SetFurnitureGripOverrides")
+	return nil
+}
+
+func (s *stubStore) RefreshProjectGrip(_ context.Context, _ string, _ bool, _ int64, _ storage.ProjectGripWriteMeta) error {
+	s.stubNotUsed("RefreshProjectGrip")
+	return nil
+}
+
+func (s *stubStore) GetDesignOpeningFacadeState(_ context.Context, _ string) (*storage.DesignOpeningFacadeState, error) {
+	if s.designGripFacadeState == nil {
+		return &storage.DesignOpeningFacadeState{ProjectID: "proj-1"}, nil
+	}
+	return s.designGripFacadeState, nil
+}
+
+func (s *stubStore) ApplyDesignOpeningFacade(_ context.Context, designID string, selection domain.DesignOpeningSelection, expectedWorkingVersion string, _ storage.ProjectGripWriteMeta) error {
+	s.designGripFacadeApply = &designGripFacadeApplyCapture{
+		DesignID: designID, Selection: selection, ExpectedWorkingVersion: expectedWorkingVersion,
+	}
+	return nil
+}
+
+func (s *stubStore) GetFurnitureEffectiveGrip(_ context.Context, _, _ string) (*domain.GripSnapshot, error) {
+	s.stubNotUsed("GetFurnitureEffectiveGrip")
+	return nil, nil
+}

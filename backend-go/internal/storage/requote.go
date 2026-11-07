@@ -98,15 +98,12 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 			plan.Include[id] = true
 		}
 	}
-	// #1263: the design revision's frozen opening resolves BEFORE the draft —
-	// an opening-only change is commercial state the draft's no-change gate
-	// must let through (its items carry verbatim; only the section and the
-	// amounts move). Preview units come from the design revision items with
-	// the source snapshot's stable line identities.
-	revisionDefaults, err := s.loadDesignRevisionAuthoringDefaults(ctx, cmd.DesignRevisionID)
-	if err != nil {
-		return nil, err
-	}
+	// #1263/#1532: the design's opening resolves from the PROJECT GRIP (each
+	// unit's effective frozen snapshot) BEFORE the draft — an opening-only
+	// change is commercial state the draft's no-change gate must let through
+	// (its items carry verbatim; only the section and the amounts move).
+	// Preview units come from the design revision items with the source
+	// snapshot's stable line identities.
 	sourceLineByInstance := map[string]string{}
 	if inputs.Quote.CommercialSnapshot != nil {
 		for _, unit := range inputs.Quote.CommercialSnapshot.Units {
@@ -129,9 +126,10 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 			FurnitureDefinitionID: designItem.FurnitureDefinitionID,
 			QuoteLineID:           quoteLineID,
 			Parameters:            designItem.Parameters,
+			MaterialChoices:       designItem.MaterialChoices,
 		})
 	}
-	opening, err := s.deriveDesignOpeningCommercial(ctx, revisionDefaults, previewUnits)
+	opening, err := s.deriveDesignOpeningCommercial(ctx, inputs.Quote.ProjectID, previewUnits)
 	if err != nil {
 		return nil, err
 	}

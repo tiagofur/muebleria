@@ -38,6 +38,10 @@ type GripSnapshotRecipe struct {
 	TopProfile       *FrozenGripProfile `json:"top,omitempty"`
 	BetweenProfile   *FrozenGripProfile `json:"between,omitempty"`
 	OverhangMm       *float64          `json:"overhangMm,omitempty"`
+	// LegacyBottomGola marks a migrated v1 bottom-gola selection (#1532):
+	// the A3 edge contract has no bottom gola, so the resolve blocks with
+	// the honest code instead of reinterpreting it as top or dropping it.
+	LegacyBottomGola bool `json:"legacyBottomGola,omitempty"`
 }
 
 // FrozenGripProfile is one gola profile frozen completely (A7): the values
