@@ -121,11 +121,13 @@ test('1531: el rebase sale del estilo de agarre predeterminado y la pantalla vie
   expect(applied.resolution?.state).toBe('resolved');
   expect(applied.resolution?.fronts?.[0]?.heightMm).toBe(740);
 
-  // The settings tab no longer edits overlay blobs: it points to the styles.
+  // #1533: Ajustes › Agarres REPLACED the notice — the styles are edited in
+  // the new tab and both the old notice and the old section are gone.
   await loginToA(page);
   await page.goto('/settings');
-  await page.getByTestId('settings-tab-tab-diseno').click();
-  await expect(page.getByTestId('settings-grip-notice')).toContainText('estilos de agarre', { timeout: 15_000 });
+  await page.getByTestId('settings-tab-tab-agarres').click();
+  await expect(page.getByTestId('grip-styles-list')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('settings-grip-notice')).toHaveCount(0);
   await expect(page.getByTestId('settings-section-opening')).toHaveCount(0);
 
   // Leave the shared org as other specs expect it.
