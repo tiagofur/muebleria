@@ -19,3 +19,19 @@ Prerrequisito UX: brief publicado y aprobado por el owner (comentario en la issu
 
 ## Entrega
 Un PR contra main con los commits por unidad de trabajo. Completo respecto del alcance de la issue (ítems 1–5 del alcance; aceptación 1–4 demostradas).
+
+## Cierre de la ronda de fixes (2026-11-07)
+
+- CI del PR: los webhooks de Actions dejaron de dispararse para la rama
+  (sin corrida para dos pushes); diagnosticado con workflow_dispatch (vive)
+  y el PR cerrado/reabierto sin efecto. Integrado main (#1556, b9fe7282)
+  por merge (conflicto único: types.ts regenerado — resuelto con
+  generate_openapi.py, drift current). CI disparado por dispatch sobre el
+  HEAD de merge 112363a1: corrida autoritativa 42395098778 SUCCESS 22/22;
+  la corrida duplicada cancelada dejó check-runs rojos huérfanos —
+  rerun --failed sobrescribió (22 pass). Base del bundle: b9fe7282.
+- Spec 1531 actualizado: afirmaba el aviso que #1533 reemplaza; ahora
+  verifica el tab Agarres real (gate PASS).
+- Regresión C1-like de esta issue: el snapshot null del agarre del proyecto
+  se omite del payload (el esquema lo exige objeto; sin estilo no viaja) —
+  cazado por el gate 1263 con la ficha nueva.
