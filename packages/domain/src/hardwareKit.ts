@@ -966,7 +966,14 @@ function newKitPartMembers(
     return part.pieces.map((piece) => {
       // #1518 (review P2): los offsets de la PIEZA (paridad con kitPieceMember
       // Go) pisan los derivados del config cuando existen.
-      const xOff = piece.offsetMm ? piece.offsetMm.x : piece.anchor === 'right' ? -Math.abs(cfg.xOffsetMm) : Math.abs(cfg.xOffsetMm);
+      // #1557: el FALLBACK (pieza sin offsetMm) espeja kitPieceMember Go:
+      // base 10, 35 para miembro móvil de cajón, negado en right; center
+      // como left (el cfg con su 0 de centro divergía del motor).
+      let fallbackX = 10;
+      if (inferDefaultKitPartConfig(part, agregado.code ?? '').actorMembership === 'actor:drawer') {
+        fallbackX = 35;
+      }
+      const xOff = piece.offsetMm ? piece.offsetMm.x : piece.anchor === 'right' ? -fallbackX : fallbackX;
       const yOff = piece.offsetMm ? piece.offsetMm.y : cfg.yOffsetMm;
       const zOff = piece.offsetMm ? piece.offsetMm.z : cfg.zOffsetMm;
       return {
