@@ -27,9 +27,11 @@
  */
 
 import { eulerXyzMatrix } from './spatialAnchor';
+import { resolveHardwareDimensions } from './hardwarePlacement';
 import type {
   Hardware,
   HardwareMachiningPart,
+  HardwareMachiningProfile,
   MachiningOperation,
   ResolvedBoardPart,
 } from './types';
@@ -40,7 +42,9 @@ import type { HoleDefinition, HoleType } from './partDrilling';
 export type MemberHostDrillingIssueCode =
   | 'MEMBER_HOST_PLACEMENT_MISSING'
   | 'MEMBER_HOST_PROFILE_REQUIRED'
-  | 'MEMBER_HOST_BASIS_UNSUPPORTED';
+  | 'MEMBER_HOST_BASIS_UNSUPPORTED'
+  | 'MEMBER_HOST_HAND_MIRROR_REQUIRES_DIMENSIONS'
+  | 'MEMBER_HOST_HAND_MIRROR_UNSUPPORTED_KIND';
 
 export interface MemberHostDrillingIssue {
   readonly code: MemberHostDrillingIssueCode;
@@ -261,6 +265,34 @@ function memberHostHoleType(
 }
 
 /**
+ * #1512 M3 (#1554): mirrors a LEFT-canonical catalog profile for a right-hand
+ * member — hole center x' = HW − x (XMm is the hole CENTER in the hardware
+ * frame: repo convention — seed fixtures and the Ruby projector place circles
+ * at ⌀/2 centered on x_mm). Depth, inner diameter and label ride unchanged.
+ * Returns null when any operation is not a hole kind — the mirror never
+ * invents a mapping (parity twin of Go mirrorMachiningProfileForRightHand;
+ * round-hole vocabulary only: blind/through holes and screw pilots).
+ */
+export function mirrorMachiningProfileForRightHand(
+  profile: HardwareMachiningProfile,
+  hardwareWidthMm: number,
+): HardwareMachiningProfile | null {
+  const parts: HardwareMachiningPart[] = [];
+  for (const part of profile.parts) {
+    const operations: MachiningOperation[] = [];
+    for (const op of part.operations) {
+      const kind = op.kind.trim().toLowerCase();
+      if (kind !== 'blind_hole' && kind !== 'through_hole' && kind !== 'hole' && kind !== 'screw_pilot') {
+        return null;
+      }
+      operations.push({ ...op, xMm: hardwareWidthMm - op.xMm });
+    }
+    parts.push({ ...part, operations });
+  }
+  return { parts };
+}
+
+/**
  * Projects every declared member-host's catalog machining profile onto the
  * external module boards (pure; Go is the golden author — the shared
  * fixture memberHostDrilling.contract.json pins both runtimes).
@@ -317,7 +349,7 @@ export function projectMemberHostDrilling(input: MemberHostDrillingInput): Membe
         });
         continue;
       }
-      const profile = hw.machining;
+      let profile = hw.machining;
       if (!profile || profile.parts.length === 0) {
         issues.push({
           code: 'MEMBER_HOST_PROFILE_REQUIRED',
@@ -326,6 +358,33 @@ export function projectMemberHostDrilling(input: MemberHostDrillingInput): Membe
           message: `el miembro ${memberID} declara hostPlacement "${hostPlacement}" pero el herraje ${hw.code} no lleva perfil de mecanizado en catálogo`,
         });
         continue;
+      }
+      // #1512 M3 (#1554): a right-hand member consumes the LEFT-canonical
+      // catalog profile mirrored — hole center x' = HW − x. Requires the
+      // canonical hardware width; non-hole kinds fail closed (no invented
+      // mapping). Parity twin of the Go derivation.
+      if (member.hand === 'right') {
+        const widthMm = resolveHardwareDimensions(hw).widthMm;
+        if (!(widthMm > 0)) {
+          issues.push({
+            code: 'MEMBER_HOST_HAND_MIRROR_REQUIRES_DIMENSIONS',
+            memberId: memberID,
+            hostPlacement,
+            message: `el miembro ${memberID} declara hand right pero el herraje ${hw.code} no tiene ancho canónico (dimensions W) para espejar su perfil`,
+          });
+          continue;
+        }
+        const mirrored = mirrorMachiningProfileForRightHand(profile, widthMm);
+        if (!mirrored) {
+          issues.push({
+            code: 'MEMBER_HOST_HAND_MIRROR_UNSUPPORTED_KIND',
+            memberId: memberID,
+            hostPlacement,
+            message: `el miembro ${memberID} declara hand right y el herraje ${hw.code} lleva operaciones no-taladro en su perfil: el espejo v1 sólo cubre holes`,
+          });
+          continue;
+        }
+        profile = mirrored;
       }
       const translation = member.localTransform.translationMm;
       for (const profilePart of profile.parts) {

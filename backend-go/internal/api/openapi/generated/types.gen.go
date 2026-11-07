@@ -3418,6 +3418,69 @@ type HardwarePiece struct {
 	OffsetMm map[string]any `json:"offsetMm,omitempty"`
 }
 
+type HardwareKitSystemCreateRequest struct {
+	ExpectedExistingCodes []string                         `json:"expected_existing_codes"`
+	Hardware              []HardwareKitSystemHardwareRow   `json:"hardware"`
+	Agregado              HardwareKitSystemAgregadoRow     `json:"agregado"`
+	OptionGroup           *HardwareKitSystemOptionGroupRow `json:"option_group,omitempty"`
+}
+
+type HardwareKitSystemHardwareRow struct {
+	ID            string          `json:"id"`
+	Code          string          `json:"code"`
+	Name          string          `json:"name"`
+	Unit          string          `json:"unit"`
+	CostPerUnit   float64         `json:"cost_per_unit"`
+	Active        bool            `json:"active"`
+	PreviewShape  *string         `json:"preview_shape,omitempty"`
+	Notes         *string         `json:"notes,omitempty"`
+	KitHardwareID *string         `json:"kit_hardware_id,omitempty"`
+	Pieces        []HardwarePiece `json:"pieces,omitempty"`
+}
+
+type HardwareKitSystemAgregadoRow struct {
+	ID                      string                        `json:"id"`
+	Code                    string                        `json:"code"`
+	Name                    string                        `json:"name"`
+	Active                  bool                          `json:"active"`
+	WidthMm                 float64                       `json:"width_mm"`
+	HeightMm                float64                       `json:"height_mm"`
+	DepthMm                 float64                       `json:"depth_mm"`
+	CommercialKitHardwareID string                        `json:"commercial_kit_hardware_id"`
+	PresentationMotion      *map[string]any               `json:"presentation_motion,omitempty"`
+	VariantSets             []HardwareKitSystemVariantSet `json:"variant_sets"`
+}
+
+type HardwareKitSystemVariantSet struct {
+	ID        string                     `json:"id"`
+	Dimension string                     `json:"dimension"`
+	Variants  []HardwareKitSystemVariant `json:"variants"`
+}
+
+type HardwareKitSystemVariant struct {
+	NominalDimensionMm      float64 `json:"nominalDimensionMm"`
+	HardwareId              string  `json:"hardwareId"`
+	CommercialKitHardwareId *string `json:"commercialKitHardwareId,omitempty"`
+}
+
+type HardwareKitSystemOptionGroupRow struct {
+	ID            string   `json:"id"`
+	Code          string   `json:"code"`
+	Name          string   `json:"name"`
+	Kind          string   `json:"kind"`
+	Required      bool     `json:"required"`
+	OptionIds     []string `json:"option_ids"`
+	KitHardwareID string   `json:"kit_hardware_id"`
+}
+
+type HardwareKitSystemCreated struct {
+	CreatedCodes  []string `json:"created_codes"`
+	ReusedCodes   []string `json:"reused_codes"`
+	AgregadoID    string   `json:"agregado_id"`
+	AgregadoCode  string   `json:"agregado_code"`
+	VariantSetIds []string `json:"variant_set_ids"`
+}
+
 type WorkshopHardwareCategory struct {
 	ID        string  `json:"id"`
 	Name      string  `json:"name"`

@@ -68,6 +68,7 @@ import {
 } from './workspaceRepository';
 import { GraneteApiClient } from './apiClient';
 import type { ApiError } from './openapi/generated/types';
+import { parseGenerated } from './openapi/generated/types';
 import { CatalogEntityVersionUnknownError, GraneteApiError, HardwareVersionUnknownError, ModuleVersionUnknownError, GraneteNetworkError } from './apiErrors';
 
 /**
@@ -1041,6 +1042,50 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       throw new Error(`recipe change failed: ${res.status}`);
     }
     return agregadoFromApi((await res.json()) as Record<string, unknown>);
+  }
+
+  /**
+   * #1553 — alta transaccional del sistema generador de cajones: el plan
+   * materializado del asistente se aplica en UNA transacción server-side
+   * (409 tipado con los códigos en conflicto, 422 fail-closed, rollback
+   * total ante cualquier falla). La respuesta se valida con el parser
+   * fail-closed del contrato antes de salir del repositorio.
+   */
+  async createHardwareKitSystem(
+    req: import('./openapi/generated/types').HardwareKitSystemCreateRequest,
+  ): Promise<import('./openapi/generated/types').HardwareKitSystemCreated> {
+    let res: Response;
+    try {
+      res = await this.fetch(`${this.baseUrl}/catalog/hardware-kit-systems`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(req),
+      });
+    } catch (err) {
+      if (err instanceof TypeError) throw new GraneteNetworkError(err);
+      throw err;
+    }
+    const payload = (await res.json().catch(() => null)) as unknown;
+    if (!res.ok) {
+      const apiPayload = payload as
+        | { code?: string; message?: string; fieldErrors?: Record<string, string>; requestId?: string; retryable?: boolean; details?: Record<string, unknown> }
+        | null;
+      if (apiPayload && apiPayload.code) {
+        throw new GraneteApiError(res.status, {
+          code: apiPayload.code as ApiError['code'],
+          message: apiPayload.message ?? 'la creación del sistema falló',
+          fieldErrors: apiPayload.fieldErrors ?? {},
+          requestId: apiPayload.requestId ?? '',
+          retryable: apiPayload.retryable ?? res.status >= 500,
+          details: apiPayload.details ?? {},
+        });
+      }
+      throw new Error(`hardware kit system create failed: ${res.status}`);
+    }
+    return parseGenerated<import('./openapi/generated/types').HardwareKitSystemCreated>(
+      'HardwareKitSystemCreated',
+      payload,
+    );
   }
 
   async saveCatalog(catalog: Catalog): Promise<void> {

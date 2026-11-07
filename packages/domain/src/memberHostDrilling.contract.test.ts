@@ -42,12 +42,14 @@ interface MemberHostFixture {
       readonly hostPlacement: string;
       readonly xRef: string;
       readonly yOffsetMm?: number;
+      readonly hand?: string;
     }[];
   };
   readonly hardware: {
     readonly id: string;
     readonly code: string;
     readonly name: string;
+    readonly dimensions?: { readonly widthMm?: number };
     readonly operations: {
       readonly id: string;
       readonly kind: string;
@@ -131,6 +133,7 @@ const drawer: Agregado = {
     },
     bomRole: 'non_purchasing',
     hostPlacement: m.hostPlacement,
+    ...(m.hand ? { hand: m.hand as 'left' | 'right' | 'center' } : {}),
   })),
 };
 
@@ -141,6 +144,9 @@ const rails: Hardware[] = fixture.hardware.map((h) => ({
   unit: 'piece',
   costPerUnit: 0,
   active: true,
+  ...(h.dimensions?.widthMm
+    ? { dimensions: { widthMm: h.dimensions.widthMm, heightMm: 0, depthMm: 0 } }
+    : {}),
   machining: {
     parts: [
       {
@@ -302,9 +308,21 @@ describe('memberHostDrilling — dedupe y fail-closed en el pipeline (#1429 slic
     // El punto aparece EXACTAMENTE una vez (el manual): el member-host
     // equivalente se suprime, ni duplicado ni colisión.
     expect(enElPunto).toHaveLength(1);
-    // Las otras 5 filas Blum siguen perforando: 5 member-host + 1 manual.
-    const filas = lateral!.holes.filter((h) => h.face === 'front' && Math.abs(h.diameterMm - 3.2) < 0.01);
-    expect(filas).toHaveLength(6);
+    // Las otras 5 filas Blum siguen perforando + el manual en 207: las 6
+    // posiciones del golden original tienen EXACTAMENTE 1 agujero cada una.
+    // (El herraje canónico #1554 taladra en 429/464 y no entra en estas x.)
+    const filasBlum = [207, 239, 271, 303, 431, 463];
+    for (const x of filasBlum) {
+      expect(
+        lateral!.holes.filter(
+          (h) =>
+            h.face === 'front' &&
+            Math.abs(h.xMm - x) < 0.01 &&
+            Math.abs(h.diameterMm - 3.2) < 0.01,
+        ),
+        `fila Blum en x=${x}`,
+      ).toHaveLength(1);
+    }
   });
 
   it('hostPlacement sin pieza con ese rol → exactamente 1 issue fail-closed por template', () => {

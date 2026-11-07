@@ -71,6 +71,66 @@ export interface ApiCatalogDeps {
     },
   ) => Promise<RecipeChangeSimulationResponse>;
   readonly applyAgregadoRecipe: (id: string, expectedVersion: number, agregado: Agregado) => Promise<Agregado>;
+  /**
+   * #1553 — alta transaccional del sistema generador (M4): el plan
+   * materializado se aplica en UNA transacción server-side. Shape
+   * estructural del contrato (yaml HardwareKitSystemCreateRequest /
+   * HardwareKitSystemCreated); la respuesta llega validada por el parser
+   * fail-closed del repositorio.
+   */
+  readonly createHardwareKitSystem?: (req: {
+    readonly expected_existing_codes: readonly string[];
+    readonly hardware: readonly {
+      readonly id: string;
+      readonly code: string;
+      readonly name: string;
+      readonly unit: 'set' | 'piece';
+      readonly cost_per_unit: number;
+      readonly active: boolean;
+      readonly preview_shape?: string | null;
+      readonly notes?: string | null;
+      readonly kit_hardware_id?: string | null;
+      readonly pieces?: readonly {
+        readonly anchor: 'left' | 'right' | 'center';
+        readonly asset?: { readonly assetId: string; readonly assetRevisionId: string };
+      }[];
+    }[];
+    readonly agregado: {
+      readonly id: string;
+      readonly code: string;
+      readonly name: string;
+      readonly active: boolean;
+      readonly width_mm: number;
+      readonly height_mm: number;
+      readonly depth_mm: number;
+      readonly commercial_kit_hardware_id: string;
+      readonly presentation_motion?: Record<string, unknown> | null;
+      readonly variant_sets: readonly {
+        readonly id: string;
+        readonly dimension: 'width' | 'height' | 'depth';
+        readonly variants: readonly {
+          readonly nominalDimensionMm: number;
+          readonly hardwareId: string;
+          readonly commercialKitHardwareId?: string | null;
+        }[];
+      }[];
+    };
+    readonly option_group?: {
+      readonly id: string;
+      readonly code: string;
+      readonly name: string;
+      readonly kind: 'hardware';
+      readonly required: boolean;
+      readonly option_ids: readonly string[];
+      readonly kit_hardware_id: string;
+    } | null;
+  }) => Promise<{
+    readonly created_codes: readonly string[];
+    readonly reused_codes: readonly string[];
+    readonly agregado_id: string;
+    readonly agregado_code: string;
+    readonly variant_set_ids: readonly string[];
+  }>;
 }
 
 export interface RecipeChangeActions {
@@ -102,6 +162,8 @@ export interface CatalogStoreDeps {
   readonly simulateAgregadoRecipeChange?: ApiCatalogDeps['simulateAgregadoRecipeChange'];
   /** #1369: aplicar la receta candidata con If-Match (PUT por entidad, #443). */
   readonly applyAgregadoRecipe?: ApiCatalogDeps['applyAgregadoRecipe'];
+  /** #1553: alta transaccional del sistema generador en el servidor. */
+  readonly createHardwareKitSystem?: ApiCatalogDeps['createHardwareKitSystem'];
 }
 
 export interface CatalogState {

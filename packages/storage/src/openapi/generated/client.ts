@@ -67,6 +67,8 @@ import type {
   HardwareAssetRevisionGrant,
   HardwareAssetUploadSession,
   HardwareDeactivation,
+  HardwareKitSystemCreateRequest,
+  HardwareKitSystemCreated,
   HardwareProfile,
   HardwareProfileWrite,
   HardwareWrite,
@@ -368,6 +370,7 @@ export abstract class GeneratedGraneteApiClient {
   createCatalogModule(token: string, body: CatalogModuleWrite, signal?: AbortSignal): Promise<CatalogModule> { return this.request("POST", "/catalog/modules", { schema: "CatalogModule", token, bodySchema: "CatalogModuleWrite", body, signal }); }
   getCatalogModule(token: string, moduleId: string, signal?: AbortSignal): Promise<CatalogModule> { return this.request("GET", `/catalog/modules/${encodeURIComponent(moduleId)}`, { schema: "CatalogModule", token, signal }); }
   updateCatalogModule(token: string, moduleId: string, version: number, body: CatalogModuleWrite, signal?: AbortSignal): Promise<CatalogModule> { return this.request("PUT", `/catalog/modules/${encodeURIComponent(moduleId)}`, { schema: "CatalogModule", token, ifMatch: version, bodySchema: "CatalogModuleWrite", body, signal }); }
+  createHardwareKitSystem(token: string, body: HardwareKitSystemCreateRequest, signal?: AbortSignal): Promise<HardwareKitSystemCreated> { return this.request("POST", "/catalog/hardware-kit-systems", { schema: "HardwareKitSystemCreated", token, bodySchema: "HardwareKitSystemCreateRequest", body, signal }); }
   listHardware(token: string, signal?: AbortSignal): Promise<ReadonlyArray<Hardware>> { return this.request("GET", "/catalog/hardware", { arrayOf: "Hardware", token, signal }); }
   createHardware(token: string, body: HardwareWrite, signal?: AbortSignal): Promise<Hardware> { return this.request("POST", "/catalog/hardware", { schema: "Hardware", token, bodySchema: "HardwareWrite", body, signal }); }
   getHardware(token: string, hardwareId: string, signal?: AbortSignal): Promise<Hardware> { return this.request("GET", `/catalog/hardware/${encodeURIComponent(hardwareId)}`, { schema: "Hardware", token, signal }); }

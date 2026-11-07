@@ -630,6 +630,72 @@ func TestMirrorMachiningProfileForRightHand_1512(t *testing.T) {
 	}
 }
 
+// #1554: the right-hand mirror runs INSIDE the member-host derivation. A
+// member with Hand=right whose hardware carries a non-hole kind (counterbore
+// — valid vocabulary, outside the mirror whitelist) fails closed with the
+// exact issue code and emits ZERO member-host holes — never a partial mirror
+// (the cup hole mirrored while the bore was silently dropped).
+func TestMemberHostHandRightMirrorFailClosed_1554(t *testing.T) {
+	agr := domain.Agregado{
+		ID: "agr-mbox", Code: "CAJON-MBOX", Name: "Cajón MERIVOBOX", Active: true,
+		WidthMm: 400, HeightMm: 81, DepthMm: 500,
+		RigidMembers: []domain.AgregadoRigidMember{{
+			MemberID: "hand_rail", Role: "fixed_rail",
+			Source:        domain.RigidMemberSource{Kind: domain.RigidMemberSourceFixed, Fixed: &domain.FixedHardwareSource{HardwareID: "hw-canon-cb"}},
+			BOMRole:       domain.BOMRoleNonPurchasing,
+			HostPlacement: string(domain.PlacementLateralIzquierdo),
+			Hand:          "right",
+			Placement: domain.AssemblyAnchorRule{
+				X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+				Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 136},
+				Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+			},
+		}},
+	}
+	hw := domain.Hardware{
+		ID: "hw-canon-cb", Code: "RAIL-CANON-CB", Name: "Guía canónica con escariado",
+		Unit: domain.UnitPiece, Active: true,
+		Dimensions: &domain.HardwareDimensions{WidthMm: 91},
+		Machining: ptrProfile(domain.HardwareMachiningProfile{Parts: []domain.HardwareMachiningPart{{
+			ID: "pilot", Role: "cup",
+			Operations: []domain.MachiningOperation{
+				{ID: "cup", Kind: "blind_hole", DiameterMm: 35, DepthMm: ptrFloat64(12), XMm: 45.5, YMm: 9},
+				{ID: "bore", Kind: "counterbore", DiameterMm: 5, DepthMm: ptrFloat64(4), XMm: 45.5, YMm: 9},
+			},
+		}}}),
+	}
+	module, catalog := memberHostCabinet(400, 720, 500)
+	catalog.Agregados = append(catalog.Agregados, agr)
+	catalog.Hardware = append(catalog.Hardware, hw)
+	module.Agregados = []domain.ModuleAgregadoInstance{{AgregadoID: "agr-mbox", Quantity: 1}}
+
+	result, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module:  module,
+		Catalog: catalog,
+		Dims:    &LayoutDims{WidthMm: 400, HeightMm: 720, DepthMm: 500},
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	found := false
+	for _, issue := range result.ValidationIssues {
+		if issue.Code == "MEMBER_HOST_HAND_MIRROR_UNSUPPORTED_KIND" {
+			found = true
+		}
+		if issue.Code == "DRILLING_CONFLICT" {
+			t.Fatalf("a partial mirror must never exist, let alone collide: %+v", issue)
+		}
+	}
+	if !found {
+		t.Fatalf("expected MEMBER_HOST_HAND_MIRROR_UNSUPPORTED_KIND, got: %+v", result.ValidationIssues)
+	}
+	for _, op := range result.Machining.Operations {
+		if op.Provenance.SourceKind == "assemblyMemberHost" {
+			t.Fatalf("fail-closed member must emit ZERO member-host holes: %+v", op)
+		}
+	}
+}
+
 // #1518 F1 (regresión del bug pos:, review P1): una parte de kit MULTI-PIEZA
 // cuyo designParts[0].label trae pos: NO debe ver su placement pisado — el
 // placement sale de la pieza del catálogo (ancla + offsets); el label único

@@ -50,12 +50,16 @@ type memberHostFixture struct {
 			HostPlacement string  `json:"hostPlacement"`
 			XRef          string  `json:"xRef"`
 			YOffsetMm     float64 `json:"yOffsetMm"`
+			Hand          string  `json:"hand,omitempty"`
 		} `json:"members"`
 	} `json:"drawer"`
 	Hardware []struct {
 		ID         string `json:"id"`
 		Code       string `json:"code"`
 		Name       string `json:"name"`
+		Dimensions struct {
+			WidthMm float64 `json:"widthMm"`
+		} `json:"dimensions"`
 		Operations []struct {
 			ID          string   `json:"id"`
 			Kind        string   `json:"kind"`
@@ -127,6 +131,7 @@ func buildMemberHostScenario(f memberHostFixture) (domain.Module, domain.Catalog
 			Source:        domain.RigidMemberSource{Kind: domain.RigidMemberSourceFixed, Fixed: &domain.FixedHardwareSource{HardwareID: m.HardwareID}},
 			BOMRole:       domain.BOMRoleNonPurchasing,
 			HostPlacement: m.HostPlacement,
+			Hand:          m.Hand,
 			Placement: domain.AssemblyAnchorRule{
 				X: domain.AssemblyAxisPlacement{Ref: xRef},
 				Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: m.YOffsetMm},
@@ -145,12 +150,16 @@ func buildMemberHostScenario(f memberHostFixture) (domain.Module, domain.Catalog
 				XMm: op.XMm, YMm: op.YMm, Label: op.Label, Face: "anchor",
 			})
 		}
-		hardware = append(hardware, domain.Hardware{
+		hw := domain.Hardware{
 			ID: h.ID, Code: h.Code, Name: h.Name, Unit: domain.UnitPiece, Active: true,
 			Machining: &domain.HardwareMachiningProfile{Parts: []domain.HardwareMachiningPart{{
 				ID: "pilot", Role: "screw", Operations: ops,
 			}}},
-		})
+		}
+		if h.Dimensions.WidthMm > 0 {
+			hw.Dimensions = &domain.HardwareDimensions{WidthMm: h.Dimensions.WidthMm}
+		}
+		hardware = append(hardware, hw)
 	}
 
 	agr := domain.Agregado{

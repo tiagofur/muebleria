@@ -197,3 +197,41 @@ describe('HardwareKitWizardModal — plantillas (#1422 slice 2)', () => {
     expect(req?.input.templateId).toBe('hinge');
   });
 });
+
+describe('HardwareKitWizardModal — guard de cierre en vuelo (#1552)', () => {
+  it('cerrar durante running no cierra ni pierde la corrida', async () => {
+    const user = userEvent.setup();
+    let resolveCreate: (r: HardwareKitResult) => void = () => {};
+    const onCreateKit = vi.fn(
+      (_req: HardwareKitCreateRequest) =>
+        new Promise<HardwareKitResult>((resolve) => {
+          resolveCreate = resolve;
+        }),
+    );
+    const onClose = vi.fn();
+    render(
+      <HardwareKitWizardModal
+        open
+        onClose={onClose}
+        hardware={[]}
+        agregadoCodes={[]}
+        onCreateKit={onCreateKit}
+      />,
+    );
+    await fillBasics(user);
+    await user.click(screen.getByTestId('hardware-kit-wizard-submit'));
+
+    // Cancelar deshabilitado y cierre guardado: sin onClose durante running.
+    expect(screen.getByTestId('hardware-kit-wizard-cancel')).toBeDisabled();
+    await user.click(screen.getByTestId('hardware-kit-wizard-cancel'));
+    expect(onClose).not.toHaveBeenCalled();
+
+    resolveCreate(okResult);
+    await waitFor(() => {
+      expect(screen.getByTestId('hardware-kit-wizard-result')).toBeTruthy();
+    });
+    // «Listo» cierra (el hook resetea la máquina al hacerlo).
+    await user.click(screen.getByTestId('hardware-kit-wizard-close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});

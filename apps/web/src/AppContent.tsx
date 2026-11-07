@@ -284,6 +284,25 @@ export function AppContent({
         getProjectStoreState().projects ?? []
       ).filter((p) => p.status === 'draft').length,
     baseUrl: DEFAULT_API_BASE,
+    // #1553: en guest (LocalStorageRepository) el dep queda ausente y la
+    // acción usa su camino local; con sesión, el plan viaja al endpoint
+    // transaccional del sistema generador.
+    createHardwareKitSystem: (req) => {
+      const repo = getRepository();
+      if (typeof repo.createHardwareKitSystem !== 'function') {
+        return Promise.reject(
+          new GraneteApiError(501, {
+            code: 'METHOD_NOT_ALLOWED',
+            message: 'El sistema generador requiere una sesión con servidor.',
+            fieldErrors: {},
+            requestId: '',
+            retryable: false,
+            details: {},
+          }),
+        );
+      }
+      return repo.createHardwareKitSystem(req);
+    },
     // #1369: en guest (LocalStorageRepository) no hay backend: el store
     // responde 'invalid' con el mensaje y la UI lo explica.
     simulateAgregadoRecipeChange: (id, req) => {

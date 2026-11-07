@@ -107,6 +107,9 @@ type CatalogStore interface {
 	ListHardwares(ctx context.Context) ([]domain.Hardware, error)
 	GetHardwareByID(ctx context.Context, id string) (*domain.Hardware, error)
 	CreateHardware(ctx context.Context, h *domain.Hardware) error
+	// LockCatalogCodes (#1553): transaction advisory locks that serialize
+	// concurrent creations of the same catalog code (sorted input).
+	LockCatalogCodes(ctx context.Context, sortedCodes []string) error
 	UpdateHardware(ctx context.Context, id string, expectedVersion int64, h *domain.Hardware) error
 	DeactivateHardware(ctx context.Context, id string, expectedVersion int64) error
 

@@ -26,6 +26,7 @@ import {
 } from '@granete/domain';
 
 import type { CatalogStoreCtx } from './shared';
+import type { Catalog } from '@granete/domain';
 
 export type HardwareKitSlice = {
   readonly createHardwareKit: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
@@ -230,11 +231,19 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       };
     },
 
-    // #1546 M4: sistema generador — ejecuta el plan del sistema: un kit
-    // multi-diseño por altura, herrajes accesorios del E con piezas por
+    // #1546 M4 + #1553: sistema generador — ejecuta el plan del sistema: un
+    // kit multi-diseño por altura, herrajes accesorios del E con piezas por
     // ancla, grupo de accesorios vinculado al kit E y UN agregado con
     // variantes de altura cuya receta NO lleva miembros de kit fijos (el
     // sync por bahía materializa las partes del kit efectivo — paridad #1493).
+    //
+    // Con sesión, la aplicación es SERVER-SIDE (#1553): el plan materializado
+    // viaja al endpoint transaccional y el servidor lo aplica en UNA
+    // transacción (409 tipado con los códigos en conflicto, rollback total
+    // ante cualquier falla); el estado local se hace con los códigos y los
+    // ids de variant set que el SERVIDOR confirma. En guest (sin backend)
+    // queda el camino local de una sola mutación — mismo modelado, sin
+    // transacción multi-entidad.
     createHardwareKitSystem: async (req): Promise<HardwareKitResult> => {
       const catalog = ctx.get().catalog;
       if (!catalog) {
@@ -347,6 +356,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       // kit efectivo) materializa las partes de la altura elegida (#1493).
       const presentationMotion = presentationMotionFor(plan.agregado.motion, plan.agregado.depthMm);
       const baseKit = plan.kits[0]!;
+      const variantSetId = ctx.newId(); // server-assigned en sesión; local en guest (#1553)
       const agregado: Agregado = {
         id: ctx.newId(),
         code: plan.agregado.code,
@@ -361,7 +371,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         ...(presentationMotion ? { presentationMotion } : {}),
         variantSets: [
           {
-            id: `${req.input.code.trim()}-heights`,
+            id: variantSetId,
             dimension: 'height',
             variants: plan.agregado.variants.map((v) => ({
               nominalDimensionMm: v.khMinMm,
@@ -387,6 +397,92 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
             kitHardwareId: eKitId,
           };
         }
+      }
+
+      const serverApply = ctx.deps.createHardwareKitSystem;
+      const authed = ctx.deps.getSession() === 'auth';
+      if (serverApply && authed) {
+        // Camino transaccional (#1553): el servidor valida vocabulario y
+        // referencias, re-chequea códigos bajo advisory locks y aplica TODO
+        // en una tx — un fallo a mitad no deja sistema a medias.
+        const created = await serverApply({
+          expected_existing_codes: reusedCodes,
+          hardware: newHardware.map((h) => ({
+            id: h.id,
+            code: h.code,
+            name: h.name,
+            unit: h.unit === 'set' ? ('set' as const) : ('piece' as const),
+            cost_per_unit: h.costPerUnit,
+            active: h.active !== false,
+            preview_shape: h.previewShape ?? null,
+            notes: h.notes ?? null,
+            kit_hardware_id: h.kitHardwareId ?? null,
+            pieces: h.pieces?.map((p) => ({
+              anchor: p.anchor,
+              asset: p.asset
+                ? { assetId: p.asset.assetId, assetRevisionId: p.asset.assetRevisionId }
+                : undefined,
+            })),
+          })),
+          agregado: {
+            id: agregado.id,
+            code: agregado.code,
+            name: agregado.name,
+            active: agregado.active !== false,
+            width_mm: agregado.externalDims?.width ?? 0,
+            height_mm: agregado.externalDims?.height ?? 0,
+            depth_mm: agregado.externalDims?.depth ?? 0,
+            commercial_kit_hardware_id: agregado.commercialKitHardwareId ?? '',
+            presentation_motion: (agregado.presentationMotion as unknown as Record<string, unknown>) ?? null,
+            variant_sets: (agregado.variantSets ?? []).map((vs) => ({
+              id: '', // el servidor lo asigna (fin del id derivado del nombre)
+              dimension: vs.dimension,
+              variants: vs.variants.map((v) => ({
+                nominalDimensionMm: v.nominalDimensionMm,
+                hardwareId: v.hardwareId,
+                commercialKitHardwareId: v.commercialKitHardwareId ?? null,
+              })),
+            })),
+          },
+          option_group: accessoryGroupDraft
+            ? {
+                id: accessoryGroupDraft.id,
+                code: accessoryGroupDraft.code,
+                name: accessoryGroupDraft.name,
+                kind: 'hardware' as const,
+                required: accessoryGroupDraft.required,
+                option_ids: accessoryGroupDraft.optionIds,
+                kit_hardware_id: accessoryGroupDraft.kitHardwareId ?? '',
+              }
+            : null,
+        });
+
+        // El estado local adopta la verdad del servidor: códigos creados/
+        // reutilizados e ids de variant set asignados. Merge silencioso (la
+        // persistencia ya ocurrió transaccionalmente).
+        const serverAgregado: Agregado = {
+          ...agregado,
+          variantSets: (agregado.variantSets ?? []).map((vs, i) => ({
+            ...vs,
+            id: created.variant_set_ids[i] ?? vs.id,
+          })),
+        };
+        const merged: Catalog = {
+          ...catalog,
+          hardware: [...(catalog.hardware ?? []), ...newHardware],
+          agregados: [...(catalog.agregados ?? []), serverAgregado],
+          ...(accessoryGroupDraft
+            ? { optionGroups: [...(catalog.optionGroups ?? []), accessoryGroupDraft] }
+            : {}),
+        };
+        ctx.set({ catalog: merged });
+        ctx.toast({ type: 'success', message: `✓ Sistema «${req.input.code.trim()}» creado (${plan.kits.length} alturas)` });
+        return {
+          createdCodes: [...created.created_codes],
+          reusedCodes: [...created.reused_codes],
+          agregadoCode: created.agregado_code,
+          agregadoId: created.agregado_id,
+        };
       }
 
       await ctx.saveAndToast(
