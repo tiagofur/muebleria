@@ -299,7 +299,7 @@ test('1263: gola selection resolves its BOM and the quote freezes it with exact 
   await row.getByRole('button', { name: /detalle/i }).click();
   const drawer = page.getByTestId('pf-detail-modal');
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByTestId('pf-detail-opening-provenance')).toContainText(
+  await expect(drawer.getByTestId('pf-detail-grip-lines')).toContainText(
     `GOLA-L-8006 v${pinVersion} · puertas H−40`,
   );
   await drawer.getByRole('button', { name: 'Cerrar' }).click();
@@ -338,7 +338,7 @@ test('1263: gola selection resolves its BOM and the quote freezes it with exact 
   await expect(rowAfterEdit).toBeVisible({ timeout: 15_000 });
   await rowAfterEdit.getByRole('button', { name: /detalle/i }).click();
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByTestId('pf-detail-opening-provenance')).toContainText(
+  await expect(drawer.getByTestId('pf-detail-grip-lines')).toContainText(
     `GOLA-L-8006 v${pinVersion} · puertas H−40`,
     'the pin is frozen: the catalog edit must not leak into the design',
   );
@@ -365,7 +365,7 @@ test('1263: gola selection resolves its BOM and the quote freezes it with exact 
   await expect(rowAfterReapply).toBeVisible({ timeout: 15_000 });
   await rowAfterReapply.getByRole('button', { name: /detalle/i }).click();
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByTestId('pf-detail-opening-provenance')).toContainText(
+  await expect(drawer.getByTestId('pf-detail-grip-lines')).toContainText(
     `GOLA-L-8006 v${newPinVersion} · puertas H−35`,
   );
 });
