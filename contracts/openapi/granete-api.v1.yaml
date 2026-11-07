@@ -6107,6 +6107,44 @@
         }
       }
     },
+    "/catalog/hardware-kit-systems": {
+      "post": {
+        "operationId": "createHardwareKitSystem",
+        "summary": "Alta transaccional del sistema generador de cajones (#1553)",
+        "description": "Aplica el plan materializado por el asistente (kits multi-diseño por altura, piezas con anclas, accesorios del E, grupo de accesorios y UN agregado con variantes de altura) en UNA transacción: validación fail-closed del payload (vocabulario, referencias internas, ids), re-chequeo de códigos contra la base y alta atómica. Los códigos que el plan marcó nuevos no deben existir (409 tipado que nombra las filas en conflicto); los marcados existentes deben existir (422). La identidad de las filas es del cliente (#1398); el id del variant set lo asigna el servidor.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HardwareKitSystemCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sistema creado atómicamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareKitSystemCreated"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/catalog/hardware": {
       "get": {
         "operationId": "listHardware",
@@ -20210,6 +20248,216 @@
               "y": { "type": "number" },
               "z": { "type": "number" }
             }
+          }
+        }
+      },
+      "HardwareKitSystemCreateRequest": {
+        "type": "object",
+        "description": "#1553: plan materializado del sistema generador (M4). El planner TS deriva las filas; el servidor valida vocabulario/referencias y las aplica en una transacción.",
+        "required": [
+          "expected_existing_codes",
+          "hardware",
+          "agregado"
+        ],
+        "properties": {
+          "expected_existing_codes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Códigos que el plan marcó reutilizar; todos deben existir en la base (422 HARDWARE_KIT_SYSTEM_REFERENCE_MISSING si falta alguno)."
+          },
+          "hardware": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/HardwareKitSystemHardwareRow" }
+          },
+          "agregado": {
+            "$ref": "#/components/schemas/HardwareKitSystemAgregadoRow"
+          },
+          "option_group": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/HardwareKitSystemOptionGroupRow" },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
+      "HardwareKitSystemHardwareRow": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "unit",
+          "cost_per_unit",
+          "active"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identidad del cliente (#1398): uuid del asistente."
+          },
+          "code": { "type": "string" },
+          "name": { "type": "string" },
+          "unit": {
+            "type": "string",
+            "enum": ["set", "piece"]
+          },
+          "cost_per_unit": { "type": "number" },
+          "active": { "type": "boolean" },
+          "preview_shape": { "type": ["string", "null"] },
+          "notes": { "type": ["string", "null"] },
+          "kit_hardware_id": {
+            "type": ["string", "null"],
+            "description": "Debe referenciar el id de una fila kit (unit=set) del mismo payload."
+          },
+          "pieces": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/HardwarePiece" }
+          }
+        }
+      },
+      "HardwareKitSystemAgregadoRow": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "active",
+          "width_mm",
+          "height_mm",
+          "depth_mm",
+          "commercial_kit_hardware_id",
+          "variant_sets"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identidad del cliente (#1398)."
+          },
+          "code": { "type": "string" },
+          "name": { "type": "string" },
+          "active": { "type": "boolean" },
+          "width_mm": { "type": "number" },
+          "height_mm": { "type": "number" },
+          "depth_mm": { "type": "number" },
+          "commercial_kit_hardware_id": {
+            "type": "string",
+            "description": "Debe referenciar una fila kit del payload."
+          },
+          "presentation_motion": {
+            "description": "Motion de presentación (translate|rotate); viaja como objeto de dominio y pasa por la validación existente.",
+            "oneOf": [
+              { "type": "object" },
+              { "type": "null" }
+            ]
+          },
+          "variant_sets": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/components/schemas/HardwareKitSystemVariantSet" }
+          }
+        }
+      },
+      "HardwareKitSystemVariantSet": {
+        "type": "object",
+        "required": [
+          "id",
+          "dimension",
+          "variants"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Debe venir VACÍO: el servidor lo asigna (fin del id derivado del nombre, #1553)."
+          },
+          "dimension": {
+            "type": "string",
+            "enum": ["width", "height", "depth"]
+          },
+          "variants": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/components/schemas/HardwareKitSystemVariant" }
+          }
+        }
+      },
+      "HardwareKitSystemVariant": {
+        "type": "object",
+        "required": [
+          "nominalDimensionMm",
+          "hardwareId"
+        ],
+        "properties": {
+          "nominalDimensionMm": {
+            "type": "number",
+            "description": "KH mínimo nominal de la altura (mayor que 0).",
+            "exclusiveMinimum": 0
+          },
+          "hardwareId": {
+            "type": "string",
+            "description": "Kit de la variante: debe referenciar una fila kit del payload."
+          },
+          "commercialKitHardwareId": {
+            "type": ["string", "null"],
+            "description": "Kit comercial de la variante (#1493): debe referenciar una fila kit del payload."
+          }
+        }
+      },
+      "HardwareKitSystemOptionGroupRow": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "kind",
+          "required",
+          "option_ids",
+          "kit_hardware_id"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "code": { "type": "string" },
+          "name": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["hardware"]
+          },
+          "required": { "type": "boolean" },
+          "option_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" },
+            "description": "Ids de filas accesorio del payload."
+          },
+          "kit_hardware_id": {
+            "type": "string",
+            "description": "Kit al que se vincula el grupo: debe referenciar una fila kit del payload."
+          }
+        }
+      },
+      "HardwareKitSystemCreated": {
+        "type": "object",
+        "required": [
+          "created_codes",
+          "reused_codes",
+          "agregado_id",
+          "agregado_code",
+          "variant_set_ids"
+        ],
+        "properties": {
+          "created_codes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "reused_codes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "agregado_id": { "type": "string" },
+          "agregado_code": { "type": "string" },
+          "variant_set_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Ids asignados por el servidor, por índice de variant_sets del request."
           }
         }
       },
