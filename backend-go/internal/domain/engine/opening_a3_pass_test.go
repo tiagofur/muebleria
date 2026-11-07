@@ -118,9 +118,9 @@ func TestOpeningA3ReportedEqualsLayoutEqualsCutList(t *testing.T) {
 	}
 }
 
-// #1529 — a v1 pin resolves exactly as before on a single row (regression):
-// the one-door cabinet keeps 716 − 32 = 684 in both the layout and the cut
-// list, and its reported v1 resolution is untouched.
+// #1532 — a top discount of 32 resolves with A3 on a single row: the
+// one-door cabinet keeps 720 − 32 = 688 in both the layout and the cut list
+// (the discount measured from H, the bottom edge on the catalog reveal).
 func TestOpeningV1PinSingleRowRegression(t *testing.T) {
 	module, catalog := oneDoorCabinetCatalog()
 	catalog.Modules = append(catalog.Modules, module)
@@ -131,8 +131,8 @@ func TestOpeningV1PinSingleRowRegression(t *testing.T) {
 		t.Fatalf("v1 layout: %v", err)
 	}
 	for _, board := range boards {
-		if boardIsOpeningFront(&board) && (board.lengthMm != 684 || board.z != 2) {
-			t.Fatalf("v1 single door drifted: L %g @ z %g, want 684 @ 2", board.lengthMm, board.z)
+		if boardIsOpeningFront(&board) && (board.lengthMm != 688 || board.z != 2) {
+			t.Fatalf("single door drifted: L %g @ z %g, want 688 @ 2", board.lengthMm, board.z)
 		}
 	}
 	bom, err := ResolveBomForReleaseWithOpening(module, choices, catalog, &domain.ItemCustomDims{WidthMm: 600, HeightMm: 720, DepthMm: 560}, nil, fronts, nil, nil)
@@ -144,8 +144,8 @@ func TestOpeningV1PinSingleRowRegression(t *testing.T) {
 		for _, board := range boards {
 			if board.id == part.ID && boardIsOpeningFront(&board) {
 				doors++
-				if part.LengthMm != 684 {
-					t.Fatalf("v1 cut list drifted: %g, want 684", part.LengthMm)
+				if part.LengthMm != 688 {
+					t.Fatalf("cut list drifted: %g, want 688", part.LengthMm)
 				}
 			}
 		}

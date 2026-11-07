@@ -2562,6 +2562,199 @@
         }
       }
     },
+    "/projects/{projectId}/grip": {
+      "parameters": [
+        {
+          "name": "projectId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getProjectGrip",
+        "summary": "Read the project grip (#1532): the frozen snapshot, the furniture overrides and the A3 layout per furniture",
+        "responses": {
+          "200": {
+            "description": "Project grip with the per-furniture report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectGrip"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "setProjectGrip",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "summary": "Apply a grip style to the project: one complete frozen snapshot (A7), audited; If-Match on the grip version",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectGripWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated project grip",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectGrip"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/grip/furniture": {
+      "parameters": [
+        {
+          "name": "projectId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "put": {
+        "operationId": "setFurnitureGripOverrides",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "summary": "Set or clear the grip override of one or several furniture in ONE operation (#1532), audited; If-Match on the grip version",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FurnitureGripOverridesWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated project grip",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectGrip"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/grip:refresh": {
+      "parameters": [
+        {
+          "name": "projectId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "refreshProjectGrip",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "summary": "«Actualizar a los valores actuales del taller» (#1532, A7): re-freeze the project snapshot from its style's current values; never automatic, always audited; If-Match on the grip version",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectGripRefresh"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Refreshed project grip",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectGrip"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/projects/{projectId}/furniture-instances": {
       "get": {
         "operationId": "listProjectFurnitureInstances",
@@ -19423,6 +19616,353 @@
         ],
         "description": "#1531 — authorable fields; id/organization/version/timestamps/migrationReport are server-owned."
       },
+      "GripSnapshot": {
+        "type": "object",
+        "description": "#1532 (A7): the frozen copy of a grip style — one recipe per furniture type with every referenced profile frozen completely. Later workshop edits never change it until the explicit refresh.",
+        "additionalProperties": false,
+        "required": [
+          "styleId",
+          "styleName",
+          "recipes",
+          "frozenAt"
+        ],
+        "properties": {
+          "styleId": {
+            "type": "string",
+            "description": "The style it was frozen from; empty on a custom snapshot (migrated selections)."
+          },
+          "styleName": {
+            "type": "string"
+          },
+          "recipes": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/GripSnapshotRecipe"
+            }
+          },
+          "frozenAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GripSnapshotRecipe": {
+        "type": "object",
+        "description": "#1532: the frozen grip of one furniture type.",
+        "additionalProperties": false,
+        "required": [
+          "mode"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "handle",
+              "gola",
+              "bottom_overhang"
+            ]
+          },
+          "handleHardwareId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "top": {
+            "$ref": "#/components/schemas/FrozenGripProfile"
+          },
+          "between": {
+            "$ref": "#/components/schemas/FrozenGripProfile"
+          },
+          "overhangMm": {
+            "type": "number",
+            "description": "Whole millimetres > 0 (A4)."
+          },
+          "legacyBottomGola": {
+            "type": "boolean",
+            "description": "#1532: a migrated v1 bottom-gola selection; the A3 edge contract has no bottom gola, so the resolve blocks honestly."
+          }
+        }
+      },
+      "FrozenGripProfile": {
+        "type": "object",
+        "description": "#1532 (A7): one gola profile frozen completely — the values the engine and the quote consume, never a live-catalog join.",
+        "additionalProperties": false,
+        "required": [
+          "profileId",
+          "code",
+          "name",
+          "positions",
+          "compatiblePlacements",
+          "bomVersion"
+        ],
+        "properties": {
+          "profileId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "material": {
+            "type": "string",
+            "enum": [
+              "aluminum",
+              "melamine"
+            ]
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "top",
+                "between"
+              ]
+            }
+          },
+          "profileHeightMm": {
+            "type": "number"
+          },
+          "profileDepthMm": {
+            "type": "number"
+          },
+          "frontDiscountTopMm": {
+            "type": "integer"
+          },
+          "frontDiscountBetweenMm": {
+            "type": "integer"
+          },
+          "compatiblePlacements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bodyModifiers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "bomMembers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "bomVersion": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ProjectGrip": {
+        "type": "object",
+        "description": "#1532: the project's grip state.",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "gripStyleId",
+          "gripVersion",
+          "overrides"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "gripStyleId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/GripSnapshot"
+          },
+          "gripVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The If-Match token of every project-grip write."
+          },
+          "overrides": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "furnitureInstanceId",
+                "snapshot"
+              ],
+              "properties": {
+                "furnitureInstanceId": {
+                  "type": "string"
+                },
+                "snapshot": {
+                  "$ref": "#/components/schemas/GripSnapshot"
+                }
+              }
+            }
+          },
+          "report": {
+            "type": "object",
+            "description": "#1532 (owner decision): the A3 layout per furniture — the stack rows plus the applied discounts of the frozen copy.",
+            "additionalProperties": false,
+            "required": [
+              "items"
+            ],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "furnitureInstanceId",
+                    "furnitureType",
+                    "source",
+                    "recipeMode"
+                  ],
+                  "properties": {
+                    "furnitureInstanceId": {
+                      "type": "string"
+                    },
+                    "furnitureType": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "project",
+                        "override"
+                      ]
+                    },
+                    "recipeMode": {
+                      "type": "string"
+                    },
+                    "applied": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "layout": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "state"
+                      ],
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "resolved",
+                            "blocked",
+                            "unknown_dims"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "topEdgeMm": {
+                          "type": "number"
+                        },
+                        "bottomEdgeMm": {
+                          "type": "number"
+                        },
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "bottomMm",
+                              "heightMm"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "bottomMm": {
+                                "type": "number"
+                              },
+                              "heightMm": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        },
+                        "remainderRowId": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ProjectGripWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gripStyleId"
+        ],
+        "properties": {
+          "gripStyleId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "FurnitureGripOverridesWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "overrides"
+        ],
+        "properties": {
+          "overrides": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "furnitureInstanceId"
+              ],
+              "properties": {
+                "furnitureInstanceId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "gripStyleId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "nullable": true,
+                  "description": "Null (or absent) clears the override: the furniture inherits the project again."
+                }
+              }
+            }
+          }
+        }
+      },
+      "ProjectGripRefresh": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "includeOverrides": {
+            "type": "boolean",
+            "default": false,
+            "description": "Also re-freeze every override whose snapshot came from a style."
+          }
+        }
+      },
       "GripStyle": {
         "type": "object",
         "additionalProperties": false,
@@ -21101,6 +21641,11 @@
             "type": "string",
             "maxLength": 128,
             "description": "revisionId from GET /furniture/definitions — required, no implicit latest. Advisory when libraryReleaseId is present (the release pin replaces the revision as the reproducibility anchor)."
+          },
+          "furnitureInstanceId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "#1532: the furniture instance this resolve belongs to. Present → the server resolves the instance's effective grip (its override, else the project's frozen snapshot) and the v2 fronts constrain the door/drawer-front boards. Absent → the design's first furniture's effective grip applies (the #1274 scope)."
           },
           "libraryReleaseId": {
             "type": "string",

@@ -132,35 +132,3 @@ func openingA3Poses(boards []layoutBoard, grips OpeningEdgeGrips, cabinetHeightM
 	}
 	return poses, resolution, nil
 }
-
-// openingEdgeGripsFromV1Front converts a v1 pin's single-region front into
-// v2 edge grips for a stacked furniture (#1529: those were blocked by
-// #1528, so no resolved design changes). A v1 bottom gola has no v2
-// equivalent and stays blocked.
-func openingEdgeGripsFromV1Front(front OpeningResolvedFront) (OpeningEdgeGrips, error) {
-	var grips OpeningEdgeGrips
-	for _, grip := range front.Grips {
-		switch grip.Boundary {
-		case "top":
-			discount := float64(grip.ConsumedMm)
-			grips.TopDiscountMm = &discount
-		case "bottom":
-			// A negative bottom consumption is the overhang; a positive one
-			// is a bottom gola, which has no v2 equivalent.
-			if grip.ConsumedMm > 0 {
-				return grips, stackedFrontsError()
-			}
-			if grip.ConsumedMm < 0 {
-				overhang := float64(-grip.ConsumedMm)
-				grips.BottomOverhangMm = &overhang
-			}
-		default:
-			return grips, stackedFrontsError()
-		}
-	}
-	if front.OverhangMm != nil {
-		overhang := float64(*front.OverhangMm)
-		grips.BottomOverhangMm = &overhang
-	}
-	return grips, nil
-}

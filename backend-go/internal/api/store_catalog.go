@@ -41,6 +41,15 @@ type CatalogStore interface {
 	// Catalog: grip styles (#1531) — If-Match guarded, audited writes.
 	ListGripStyles(ctx context.Context) ([]domain.GripStyle, error)
 	GetGripStyle(ctx context.Context, id string) (*domain.GripStyle, error)
+
+	// Project grip (#1532, ADR-0009 Amendment 1 A2.3/A7): the project's
+	// frozen snapshot, per-furniture overrides and the explicit refresh.
+	GetProjectGrip(ctx context.Context, projectID string) (*storage.ProjectGrip, error)
+	SetProjectGrip(ctx context.Context, projectID, styleID string, expectedVersion int64, meta storage.ProjectGripWriteMeta) (*storage.ProjectGrip, error)
+	SetFurnitureGripOverrides(ctx context.Context, projectID string, overrides []storage.FurnitureGripOverrideCommand, expectedVersion int64, meta storage.ProjectGripWriteMeta) error
+	RefreshProjectGrip(ctx context.Context, projectID string, includeOverrides bool, expectedVersion int64, meta storage.ProjectGripWriteMeta) error
+	GetFurnitureEffectiveGrip(ctx context.Context, projectID, furnitureInstanceID string) (*domain.GripSnapshot, error)
+	ListFurnitureInstanceSummariesByProject(ctx context.Context, projectID string, withPresentation bool) ([]storage.FurnitureInstanceSummary, error)
 	CreateGripStyle(ctx context.Context, style *domain.GripStyle, meta storage.GripStyleWriteMeta) error
 	UpdateGripStyle(ctx context.Context, id string, expectedVersion int64, style *domain.GripStyle, meta storage.GripStyleWriteMeta) error
 	DeleteGripStyle(ctx context.Context, id string, expectedVersion int64, meta storage.GripStyleWriteMeta) error

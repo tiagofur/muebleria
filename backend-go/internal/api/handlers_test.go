@@ -122,8 +122,6 @@ type stubStore struct {
 	getDesignWorkingCopyErr    error
 	updateDesignWorkingCopyCmd *storage.UpdateDesignWorkingCopyCommand
 	// #1137: opening selection write.
-	setOpeningCmd *storage.SetDesignWorkingCopyOpeningCommand
-	setOpeningErr error
 	// Web-to-SketchUp pairing grants (#499 / DT-SU-1)
 	createPairingGrantCmd      *storage.CreateDesignPairingGrantCommand
 	createPairingGrantErr      error
@@ -516,6 +514,18 @@ type stubStore struct {
 	// #1531 — grip styles stub (in memory) and the error it returns.
 	gripStyles   []domain.GripStyle
 	gripStyleErr error
+
+	// #1532 — the design-opening facade: the derived state the GET renders
+	// and the write the PUT captures.
+	designGripFacadeState *storage.DesignOpeningFacadeState
+	designGripFacadeApply *designGripFacadeApplyCapture
+}
+
+// designGripFacadeApplyCapture records one facade write (#1532).
+type designGripFacadeApplyCapture struct {
+	DesignID               string
+	Selection              domain.DesignOpeningSelection
+	ExpectedWorkingVersion string
 }
 
 func (s *stubStore) stubNotUsed(name string) {

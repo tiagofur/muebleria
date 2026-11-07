@@ -5,9 +5,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // #1264 / V2 OPEN-FRONT — the authoring resolve with a designId: the design's
@@ -105,10 +108,34 @@ func openingResolvedDoor(t *testing.T, rec *httptest.ResponseRecorder) (int, [3]
 	return 0, [3]float64{}
 }
 
+// openingGripState builds the facade state the v2 resolve consumes (#1532):
+// the frozen gola recipe of the fixture, with the workshop discount and the
+// declared members the layout places.
+func openingGripState(doorDiscount int, heightMm, depthMm float64, members map[string]domain.OpeningBOMMember) *storage.DesignOpeningFacadeState {
+	discount := doorDiscount
+	frozen := &domain.FrozenGripProfile{
+		ProfileID: "profile.gola-l.alu", Code: "GOLA-L-ALU",
+		Material: "aluminum", Positions: []string{"top"},
+		ProfileHeightMm: &heightMm, ProfileDepthMm: &depthMm,
+		FrontDiscountTopMm:   &discount,
+		CompatiblePlacements: []string{"top"},
+		BOMVersion:           1,
+		BOMMembers:           members,
+	}
+	recipe := domain.GripSnapshotRecipe{Mode: "gola", TopProfile: frozen}
+	recipes := map[string]domain.GripSnapshotRecipe{"inferior": recipe, "superior": recipe, "alto": recipe}
+	return &storage.DesignOpeningFacadeState{
+		ProjectID: "proj-1", InstanceID: "fi-1", FurnitureType: "inferior",
+		Snapshot: &domain.GripSnapshot{Recipes: recipes, FrozenAt: time.Now().UTC()},
+	}
+}
+
 func TestAuthoringResolveDesignOpeningConstrainsFronts(t *testing.T) {
 	server, token, store := openingAuthoringServer(t)
 	const designID = "d1264000-0000-0000-0000-000000000001"
 	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{designID: openingDesignWC(designID, true)}
+	// The project's frozen grip (discount 40) governs the resolve.
+	store.designGripFacadeState = openingGripState(40, 56.5, 27.2, nil)
 
 	// WITHOUT the designId: the historical layout (door 716 = PH−4).
 	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
@@ -122,8 +149,8 @@ func TestAuthoringResolveDesignOpeningConstrainsFronts(t *testing.T) {
 		t.Fatalf("baseline door length = %d, want 716", length)
 	}
 
-	// WITH the designId: the gola's ficha consumption (38+2) constrains the
-	// door from the top — 716−40 = 676, bottom edge intact.
+	// WITH the designId: the frozen discount (40) constrains the door from
+	// the top under A3 — 720−40 = 680, bottom edge intact.
 	rec = postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
 		FurnitureDefinitionID: authoringFixtureModuleID,
 		DesignID:              designID,
@@ -133,26 +160,21 @@ func TestAuthoringResolveDesignOpeningConstrainsFronts(t *testing.T) {
 		t.Fatalf("designId status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	length, translation := openingResolvedDoor(t, rec)
-	if length != 676 {
-		t.Fatalf("opened door length = %d, want 676 (716 − 40)", length)
+	if length != 680 {
+		t.Fatalf("opened door length = %d, want 680 (720 − 40 under A3)", length)
 	}
 	if translation[2] != 2 {
 		t.Fatalf("opened door bottom edge must stay at z=2, got %v", translation)
 	}
 }
 
-// #1316 — the pin's declared door_reduction_mm WINS over the datasheet pair
-// in the AUTHORING resolve (the path the plugin's insert/sync consumes):
-// 716 − 30 = 686. This branch was the one that missed the field on the first
-// #1316 pass — the state snapshot resolved 30 while every placed mueble kept
-// 40 — so the pin-with-door shape is pinned here verbatim.
-func TestAuthoringResolveDesignOpeningPinDoorDiscountWins(t *testing.T) {
+// The FROZEN discount governs the AUTHORING resolve (the path the plugin's
+// insert/sync consumes): 720 − 30 = 690 — one number, never a pair.
+func TestAuthoringResolveDesignOpeningFrozenDiscountGoverns(t *testing.T) {
 	server, token, store := openingAuthoringServer(t)
 	const designID = "d1316000-0000-0000-0000-000000000031"
-	wc := openingDesignWC(designID, true)
-	thirty := 30
-	wc.AuthoringDefaults.Opening.ProfilePin.DoorReductionMm = &thirty
-	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{designID: wc}
+	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{designID: openingDesignWC(designID, true)}
+	store.designGripFacadeState = openingGripState(30, 56.5, 27.2, nil)
 
 	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
 		FurnitureDefinitionID: authoringFixtureModuleID,
@@ -163,17 +185,24 @@ func TestAuthoringResolveDesignOpeningPinDoorDiscountWins(t *testing.T) {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	length, _ := openingResolvedDoor(t, rec)
-	if length != 686 {
-		t.Fatalf("door length = %d, want 686 (716 − 30 door discount, not the 40 pair)", length)
+	if length != 690 {
+		t.Fatalf("door length = %d, want 690 (720 − 30 frozen discount)", length)
 	}
 }
 
-// A blocked opening (datasheet flipped pending) rejects the resolve — a
-// design that DECLARES an opening never renders a degraded layout.
+// A grip whose frozen recipe cannot produce its grips (a gola without its
+// top profile) rejects the resolve — a design that DECLARES a grip never
+// renders a degraded layout.
 func TestAuthoringResolveDesignOpeningFailsClosedWhenBlocked(t *testing.T) {
 	server, token, store := openingAuthoringServer(t)
 	const designID = "d1264000-0000-0000-0000-000000000002"
 	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{designID: openingDesignWC(designID, false)}
+	brokenRecipe := domain.GripSnapshotRecipe{Mode: "gola"}
+	recipes := map[string]domain.GripSnapshotRecipe{"inferior": brokenRecipe, "superior": brokenRecipe, "alto": brokenRecipe}
+	store.designGripFacadeState = &storage.DesignOpeningFacadeState{
+		ProjectID: "proj-1", InstanceID: "fi-1", FurnitureType: "inferior",
+		Snapshot: &domain.GripSnapshot{Recipes: recipes, FrozenAt: time.Now().UTC()},
+	}
 
 	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
 		FurnitureDefinitionID: authoringFixtureModuleID,
@@ -194,7 +223,7 @@ func TestAuthoringResolveDesignOpeningFailsClosedWhenBlocked(t *testing.T) {
 		t.Fatalf("decode rejection: %v", err)
 	}
 	if response.Status != "rejected" || len(response.Issues) == 0 ||
-		response.Issues[0].Code != "OPENING_PROFILE_DATASHEET_PENDING" ||
+		response.Issues[0].Code != "GRIP_SNAPSHOT_INVALID" ||
 		response.Issues[0].Path != "furniture.designId" {
 		t.Fatalf("unexpected rejection: %s", rec.Body.String())
 	}
@@ -210,23 +239,17 @@ func TestAuthoringResolveDesignOpeningPlacesPinnedMembers(t *testing.T) {
 	server, token, store := openingAuthoringServer(t)
 	const designID = "d1264000-0000-0000-0000-000000000004"
 	spacing := 400
-	wc := openingDesignWC(designID, true)
-	// #1283 / §13.2: the pin freezes the datasheet envelope (8006: 56.5 tall
-	// × 27.2 deep) and the accessories' declared dims; the layout places from
-	// these, never from engine constants.
-	wc.AuthoringDefaults.Opening.ProfilePin.ProfileHeightMm = 56.5
-	wc.AuthoringDefaults.Opening.ProfilePin.ProfileDepthMm = 27.2
+	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{designID: openingDesignWC(designID, true)}
+	// #1283 / §13.2: the frozen profile carries the datasheet envelope (8006:
+	// 56.5 tall × 27.2 deep) and the accessories' declared dims; the layout
+	// places from these, never from engine constants.
 	supportDims := [3]float64{17, 19.5, 39.5}
 	capDims := [3]float64{3, 28.8, 58}
-	wc.AuthoringDefaults.Opening.ProfilePin.BOM = &domain.DesignOpeningProfilePinBOM{
-		ProfileVersion: 1,
-		Members: map[string]domain.OpeningBOMMember{
-			"profile":  {HardwareID: "hw-gola-profile", Rule: "interior_width", Unit: "meter"},
-			"supports": {HardwareID: "hw-gola-support", Rule: "per_length", SpacingMm: &spacing, DimensionsMm: &supportDims},
-			"endCaps":  {HardwareID: "hw-gola-cap", Rule: "per_exposed_end", DimensionsMm: &capDims},
-		},
-	}
-	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{designID: wc}
+	store.designGripFacadeState = openingGripState(40, 56.5, 27.2, map[string]domain.OpeningBOMMember{
+		"profile":  {HardwareID: "hw-gola-profile", Rule: "interior_width", Unit: "meter"},
+		"supports": {HardwareID: "hw-gola-support", Rule: "per_length", SpacingMm: &spacing, DimensionsMm: &supportDims},
+		"endCaps":  {HardwareID: "hw-gola-cap", Rule: "per_exposed_end", DimensionsMm: &capDims},
+	})
 	if store.catalogOverride != nil {
 		shape := func(s string) *string { return &s }
 		store.catalogOverride.Hardware = append(store.catalogOverride.Hardware,
@@ -305,9 +328,12 @@ func TestAuthoringResolveDesignOpeningPlacesPinnedMembers(t *testing.T) {
 func TestAuthoringResolveDesignOpeningAppliesToEveryDesignFurniture(t *testing.T) {
 	server, token, store := openingAuthoringServer(t)
 	const designID = "d1264000-0000-0000-0000-000000000003"
-	wc := openingDesignWC(designID, true)
-	wc.Items[0].FurnitureDefinitionID = "other-module-of-the-same-design"
-	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{designID: wc}
+	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{designID: func() domain.DesignWorkingCopy {
+		wc := openingDesignWC(designID, true)
+		wc.Items[0].FurnitureDefinitionID = "other-module-of-the-same-design"
+		return wc
+	}()}
+	store.designGripFacadeState = openingGripState(40, 56.5, 27.2, nil)
 
 	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
 		FurnitureDefinitionID: authoringFixtureModuleID,
@@ -318,15 +344,15 @@ func TestAuthoringResolveDesignOpeningAppliesToEveryDesignFurniture(t *testing.T
 		t.Fatalf("scoped resolve status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	length, translation := openingResolvedDoor(t, rec)
-	if length != 676 {
-		t.Fatalf("a non-pilot module of the design must constrain its door (716 − 40), got %d", length)
+	if length != 680 {
+		t.Fatalf("a non-pilot module of the design must constrain its door (720 − 40 under A3), got %d", length)
 	}
 	if translation[2] != 2 {
 		t.Fatalf("constrained door bottom edge must stay at z=2, got %v", translation)
 	}
 
 	// The same furniture resolved at DIFFERENT dimensions constrains at its
-	// own size (600→640 tall: door 636 − 40 = 596) — the front region is
+	// own size (640 tall: 640 − 40 = 600 under A3) — the front region is
 	// never borrowed from another module's dims.
 	rec = postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
 		FurnitureDefinitionID: authoringFixtureModuleID,
@@ -336,7 +362,7 @@ func TestAuthoringResolveDesignOpeningAppliesToEveryDesignFurniture(t *testing.T
 	if rec.Code != http.StatusOK {
 		t.Fatalf("short resolve status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	if length, _ := openingResolvedDoor(t, rec); length != 596 {
-		t.Fatalf("short door must constrain at its own dims (636 − 40), got %d", length)
+	if length, _ := openingResolvedDoor(t, rec); length != 600 {
+		t.Fatalf("short door must constrain at its own dims (640 − 40 under A3), got %d", length)
 	}
 }

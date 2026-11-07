@@ -70,8 +70,9 @@ export type OpeningContractBodyModifier = {
   readonly notchDepthMm?: number;
   readonly notchAt?: string;
   /** #1327 slice 3: the declared 45° door bevel (italian gola). bevelAt is
-   * the door edge class (top_front | bottom_front) and must agree with the
-   * mounted boundary kind — front_boundary has no consumer and fails closed. */
+   * the door edge class (top_front | bottom_front, or front_boundary at a
+   * between boundary since #1532) and must agree with the mounted boundary
+   * kind. */
   readonly bevelAngleDeg?: number;
   readonly bevelSizeMm?: number;
   readonly bevelAt?: string;
@@ -80,7 +81,8 @@ export type OpeningContractBodyModifier = {
 /** The library slice the body-modifier resolution consumes (a projection of
  * the #1130 entity — the storage layer maps it). profileDepthMm /
  * profileHeightMm (#1317) are the datasheet envelope the depth reduction
- * derives from; zero/absent = the pin predates #1283. */
+ * derives from; zero/absent = the declaration does not exist (the truthful
+ * absence, never an invented default). */
 export type OpeningProfileBodyData = {
   readonly profileId: string;
   readonly compatiblePlacements: readonly string[];
@@ -267,7 +269,7 @@ function resolveEffect(
   }
   const band = profile.profileHeightMm ?? 0;
   // Go marshals profileHeightMm omitempty: 0 stays absent on the wire — the
-  // truthful absence of a pre-#1283 datasheet, not a zero band.
+  // truthful absence of a declared band, not a zero one.
   const depthModifier = (depthReductionMm: number): Omit<ResolvedOpeningBodyModifier, 'profileId' | 'boundary'> =>
     band > 0
       ? { effect: 'depth_reduction', role: modifier.role, depthReductionMm, profileHeightMm: band }
@@ -354,8 +356,15 @@ function resolveEffect(
       return fail('OPENING_BODY_MODIFIER_INVALID', 'el bisel exige un tamaño mayor a 0');
     }
     if (modifier.bevelAt === 'top_front') {
-      if (boundaryKind !== 'top') {
+      // #1532: at a between boundary the bevel cuts the TOP edge of every
+      // front just below the edge (§14.4.1) — the layout pass reads the real
+      // edge from the boards' stack.
+      if (boundaryKind !== 'top' && boundaryKind !== 'between') {
         return fail('OPENING_BODY_MODIFIER_INVALID', `el bisel top_front no aplica en la frontera ${boundaryKind}`);
+      }
+    } else if (modifier.bevelAt === 'front_boundary') {
+      if (boundaryKind !== 'between') {
+        return fail('OPENING_BODY_MODIFIER_INVALID', `el bisel front_boundary no aplica en la frontera ${boundaryKind}`);
       }
     } else if (modifier.bevelAt === 'bottom_front') {
       if (boundaryKind !== 'bottom') {
@@ -386,7 +395,10 @@ function resolveNotchOffset(
 ): number | { readonly ok: false; readonly errorCode: OpeningBodyModifierErrorCode; readonly message: string } {
   switch (notchAt) {
     case 'top_front':
-      if (boundaryKind !== 'top') {
+      // #1532: at a between boundary the side notch hangs from the bottom
+      // edge of the front above each between edge — the layout pass reads
+      // the real edges from the boards' stack, so the offset stays 0.
+      if (boundaryKind !== 'top' && boundaryKind !== 'between') {
         return fail(
           'OPENING_BODY_MODIFIER_INVALID',
           `el saque top_front no aplica en la frontera ${boundaryKind}`,

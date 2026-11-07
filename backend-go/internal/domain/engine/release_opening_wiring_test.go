@@ -82,8 +82,8 @@ func TestReleaseOpeningConstrainsBOMDoorAndAddsMembers(t *testing.T) {
 		t.Fatalf("opening unit: %v", err)
 	}
 	door = doorPart(with.BOM)
-	if door.LengthMm != 676 {
-		t.Fatalf("gola door must shrink by the consumed 40 mm (716→676), got %g", door.LengthMm)
+	if door.LengthMm != 680 {
+		t.Fatalf("gola door must carry the A3 measure of the 40 mm discount (720−40=680), got %g", door.LengthMm)
 	}
 
 	memberIDs := map[string]float64{}
@@ -102,7 +102,7 @@ func TestReleaseOpeningConstrainsBOMDoorAndAddsMembers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-resolve: %v", err)
 	}
-	if doorPart(again.BOM).LengthMm != 676 || len(again.BOM.HardwareLines) != len(with.BOM.HardwareLines) {
+	if doorPart(again.BOM).LengthMm != 680 || len(again.BOM.HardwareLines) != len(with.BOM.HardwareLines) {
 		t.Fatalf("repeated resolve must be stable")
 	}
 }

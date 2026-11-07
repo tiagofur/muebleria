@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -263,17 +262,18 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 			&domain.ReleasePreflightBlockedError{Result: preflight}
 	}
 
-	// 1b. Opening selection gate (#1302→#1305): a revision whose frozen
-	// selection declares a real opening (gola/rebase) must resolve it
-	// COMPLETELY before anything freezes. The synthesis itself runs after the
-	// catalog capture (step 2) — it needs the same catalog snapshot the
-	// collection resolve consumes. Handle system and legacy revisions (nil
-	// snapshot) resolve exactly as before.
-	selection, err := s.loadDesignRevisionOpeningSelection(ctx, designRevisionID)
+	// 1b. Project grip gate (#1302→#1305→#1532): a revision whose effective
+	// grip (each furniture's override, else the project's frozen snapshot)
+	// declares a real opening (gola/rebase) must resolve it COMPLETELY before
+	// anything freezes. The synthesis itself runs after the catalog capture
+	// (step 2) — it needs the same catalog snapshot the collection resolve
+	// consumes. Handle recipes and projects without a grip resolve exactly
+	// as before.
+	gripCtx, err := s.loadDesignRevisionGripContext(ctx, designRevisionID)
 	if err != nil {
 		return nil, err
 	}
-	openingGoverned := openingSelectionRequiresProductionIntegration(selection)
+	openingGoverned := releaseGripGoverned(gripCtx, items)
 
 	// 1c. Frozen base authority (#830): a quoted release loads the exact
 	// revision's immutable per-unit base contexts inside this same boundary.
@@ -320,7 +320,7 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 	// the command AND the preflight verdict — a partial opening never freezes.
 	var openings map[string]engine.ReleaseUnitOpening
 	if openingGoverned {
-		openings, err = s.resolveReleaseOpenings(ctx, selection, items, catalog)
+		openings, err = s.resolveReleaseOpenings(ctx, gripCtx, items, catalog)
 		if err != nil {
 			preflight = preflightBlockedByOpeningRelease(preflight, err)
 			return &releaseGateOutcome{items: items, preflight: preflight},
@@ -343,43 +343,70 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 	return &releaseGateOutcome{items: items, preflight: preflight, catalog: catalog, collection: collection}, nil
 }
 
-// loadDesignRevisionOpeningSelection reads the EXACT revision's frozen
-// authoring defaults and returns its opening selection: nil for a legacy
-// revision published before the snapshot contract existed (reads as
-// canonical empty) or for a revision without an opening declaration. The
-// snapshot is the versioned truth the release would pin — never the live
-// working copy.
-func (s *PostgresStore) loadDesignRevisionOpeningSelection(ctx context.Context, designRevisionID string) (*domain.DesignOpeningSelection, error) {
-	var rawDefaults []byte
-	err := s.db(ctx).QueryRow(ctx, `
-		SELECT COALESCE(authoring_defaults_snapshot, 'null'::jsonb)
-		FROM design_revisions WHERE id = $1
-	`, designRevisionID).Scan(&rawDefaults)
-	if err != nil {
+// releaseGripContext is the effective-grip state a release resolves with:
+// the project's frozen snapshot plus each furniture's override (#1532).
+type releaseGripContext struct {
+	ProjectID string
+	Snapshot  *domain.GripSnapshot
+	Overrides map[string]*domain.GripSnapshot
+}
+
+// loadDesignRevisionGripContext loads the release's grip state: the
+// revision's project frozen snapshot plus the overrides of its items'
+// furniture instances. nil snapshot = no grip anywhere (resolve exactly as
+// the pre-grip releases did).
+func (s *PostgresStore) loadDesignRevisionGripContext(ctx context.Context, designRevisionID string) (*releaseGripContext, error) {
+	var projectID string
+	if err := s.db(ctx).QueryRow(ctx,
+		`SELECT project_id FROM design_revisions WHERE id = $1`, designRevisionID).Scan(&projectID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignRevisionNotFound
 		}
 		return nil, err
 	}
-	if len(rawDefaults) == 0 || string(rawDefaults) == "null" {
-		return nil, nil
+	grip, err := s.GetProjectGrip(ctx, projectID)
+	if err != nil {
+		return nil, err
 	}
-	var defaults domain.DesignAuthoringDefaults
-	if err := json.Unmarshal(rawDefaults, &defaults); err != nil {
-		return nil, fmt.Errorf("%w: read back authoring defaults snapshot: %v", domain.ErrSerializationFailed, err)
+	gripCtx := &releaseGripContext{ProjectID: projectID, Overrides: map[string]*domain.GripSnapshot{}}
+	if grip.Snapshot != nil {
+		gripCtx.Snapshot = grip.Snapshot
 	}
-	return defaults.Opening, nil
+	for _, override := range grip.Overrides {
+		if override.Snapshot != nil {
+			gripCtx.Overrides[override.FurnitureInstanceID] = override.Snapshot
+		}
+	}
+	return gripCtx, nil
 }
 
-// openingSelectionRequiresProductionIntegration reports whether the frozen
-// opening selection declares a system whose production results the release
-// resolve cannot produce yet. The handle system is the baseline: the
-// authoring resolve itself treats it as no-opening (nil fronts/members/
-// modifiers), so a handle revision releases exactly as before. Any other
-// declared system (gola, bottom_overhang) changes front geometry the
-// release would silently ignore.
-func openingSelectionRequiresProductionIntegration(selection *domain.DesignOpeningSelection) bool {
-	return selection != nil && selection.System != domain.OpeningGripSystemHandle
+// effectiveReleaseSnapshot resolves one item's inheritance.
+func (gripCtx *releaseGripContext) effectiveReleaseSnapshot(furnitureInstanceID string) *domain.GripSnapshot {
+	if gripCtx == nil {
+		return nil
+	}
+	return domain.EffectiveGripSnapshot(gripCtx.Overrides[furnitureInstanceID], gripCtx.Snapshot)
+}
+
+// releaseGripGoverned reports whether any unit's effective recipe declares a
+// grip whose production results the release resolve must carry (gola or
+// rebase). Handle is the baseline; a project without a grip governs nothing.
+func releaseGripGoverned(gripCtx *releaseGripContext, items []domain.DesignRevisionItem) bool {
+	if gripCtx == nil {
+		return false
+	}
+	for _, item := range items {
+		snapshot := gripCtx.effectiveReleaseSnapshot(item.FurnitureInstanceID)
+		if snapshot == nil {
+			continue
+		}
+		for _, recipe := range snapshot.Recipes {
+			if recipe.Mode != domain.GripModeHandle || recipe.LegacyBottomGola {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // preflightBlockedByOpeningRelease derives the honest BLOCKED verdict from
@@ -405,99 +432,114 @@ func preflightBlockedByOpeningRelease(ready *domain.ManufacturingPreflightResult
 }
 
 // resolveReleaseOpenings synthesizes the per-furniture opening resolution
-// the release consumes (#1305): ONE ResolveDesignOpening per unit over the
-// frozen selection — pin-first profile slice (the same precedence the
-// authoring resolve uses), the backed overhang rule and the interior width
-// derived from the unit's own structure — never a second derivation. The
-// first incomplete resolution fails the whole gate with an actionable
-// reason: fronts at definition dimensions or missing member demand can
-// never freeze.
-func (s *PostgresStore) resolveReleaseOpenings(ctx context.Context, selection *domain.DesignOpeningSelection, items []domain.DesignRevisionItem, catalog domain.Catalog) (map[string]engine.ReleaseUnitOpening, error) {
-	profileData, bomProfiles, err := s.releaseOpeningProfileSlices(ctx, selection)
-	if err != nil {
-		return nil, err
-	}
-	overhangMm, err := s.GetOpeningOverhangRule(ctx)
-	if err != nil {
-		return nil, err
-	}
-
+// the release consumes (#1305→#1532): the unit's effective frozen recipe
+// (override, else the project snapshot) produces the v2 fronts (EdgeGrips),
+// the member hardware and the body modifiers from the FROZEN profiles, and
+// the BOM resolves with the same rules as the quote — the top run plus one
+// between-profile run per between edge of the unit's stack. The first
+// incomplete resolution fails the whole gate with an actionable reason:
+// fronts at definition dimensions or missing member demand can never freeze.
+func (s *PostgresStore) resolveReleaseOpenings(ctx context.Context, gripCtx *releaseGripContext, items []domain.DesignRevisionItem, catalog domain.Catalog) (map[string]engine.ReleaseUnitOpening, error) {
 	openings := make(map[string]engine.ReleaseUnitOpening, len(items))
 	for _, item := range items {
+		snapshot := gripCtx.effectiveReleaseSnapshot(item.FurnitureInstanceID)
+		if snapshot == nil {
+			continue
+		}
+		if err := domain.ValidateGripSnapshotShape(snapshot); err != nil {
+			return nil, fmt.Errorf("la copia congelada del agarre de %s no se puede usar: %s", item.FurnitureInstanceID, err.Error())
+		}
+		ftype := catalogModuleType(catalog, item.FurnitureDefinitionID)
+		recipe, recipeErr := snapshot.GripRecipeFor(ftype)
+		if recipeErr != nil {
+			return nil, fmt.Errorf("el agarre de %s no se puede resolver: %s", item.FurnitureInstanceID, recipeErr.Error())
+		}
+		if recipe == nil || recipe.Mode == domain.GripModeHandle {
+			continue
+		}
 		widthMm, heightMm, ok := releaseOpeningDims(item)
 		if !ok {
 			return nil, fmt.Errorf("la apertura no puede resolverse sin dimensiones explícitas para %s", item.FurnitureInstanceID)
 		}
-		bomCtx := &engine.DesignOpeningBOMContext{Ends: engine.OpeningBOMDefaultEnds, Profiles: bomProfiles}
-		bomCtx.CabinetInteriorWidthMm = releaseOpeningInteriorWidth(item.FurnitureDefinitionID, widthMm, catalog)
-		resolution, resErr := engine.ResolveDesignOpening(widthMm, heightMm, selection, profileData, engine.OpeningOverhangRuleMm(overhangMm), bomCtx)
-		if resErr != nil {
-			return nil, fmt.Errorf("resolución de apertura para %s: %s", item.FurnitureInstanceID, resErr.Code)
+		fronts, frontsErr := engine.ProjectGripFronts(recipe)
+		if frontsErr != nil {
+			return nil, fmt.Errorf("el agarre de %s no se puede resolver: %s", item.FurnitureInstanceID, frontsErr.Message)
 		}
-		if resolution.State != engine.DesignOpeningStateResolved {
-			return nil, fmt.Errorf("la apertura del diseño está bloqueada (%s) para %s", resolution.Reason, item.FurnitureInstanceID)
+		if len(fronts) == 0 {
+			continue
 		}
-		if resolution.BOMReason != "" {
-			return nil, fmt.Errorf("el BOM de la apertura no puede resolverse (%s) para %s", resolution.BOMReason, item.FurnitureInstanceID)
+		modifiers, modErr := engine.ResolveProjectGripModifiers(recipe)
+		if modErr != nil {
+			return nil, fmt.Errorf("los efectos declarados del agarre de %s no pueden resolverse (%s)", item.FurnitureInstanceID, modErr.Code)
+		}
+		// A rebase recipe has no profiles and no hardware: fronts only, no
+		// BOM section and no member demand (the truthful absence).
+		var lines []engine.OpeningResolvedBOMLine
+		if recipe.Mode == domain.GripModeGola {
+			dims := domain.CommercialDimsFromParameters(item.Parameters)
+			var depthMm int
+			if dims != nil {
+				depthMm = dims.DepthMm
+			}
+			interiorWidth := releaseOpeningInteriorWidth(item.FurnitureDefinitionID, widthMm, catalog)
+			betweenEdges, err := releaseGripBetweenEdges(catalog, item, recipe, widthMm, heightMm, depthMm)
+			if err != nil {
+				return nil, err
+			}
+			resolvedLines, bomErr := engine.ResolveProjectGripBOM(engine.ProjectGripBOMInput{
+				CabinetInteriorWidthMm: interiorWidth,
+				Ends:                   engine.OpeningBOMDefaultEnds,
+				Top:                    frozenBOMProfile(recipe.TopProfile),
+				Between:                frozenBOMProfile(recipe.BetweenProfile),
+				BetweenEdgeCount:       betweenEdges,
+			})
+			if bomErr != nil {
+				return nil, fmt.Errorf("el BOM de la apertura no puede resolverse (%s) para %s", bomErr.Code, item.FurnitureInstanceID)
+			}
+			lines = resolvedLines
 		}
 		openings[item.FurnitureInstanceID] = engine.ReleaseUnitOpening{
-			Fronts:    resolution.Fronts,
-			Members:   engine.OpeningMembersFromFrozenPin(selection),
-			Modifiers: resolution.BodyModifiers,
-			BOMLines:  resolution.BOM,
+			Fronts:    fronts,
+			Members:   engine.ProjectGripMembers(recipe.TopProfile),
+			Modifiers: modifiers,
+			BOMLines:  lines,
 		}
 	}
 	return openings, nil
 }
 
-// releaseOpeningProfileSlices builds the pin-first profile projections the
-// opening resolve consumes: a pinned selection resolves against ITS frozen
-// datasheet slice; a legacy pre-pin selection falls back to the live
-// catalog rows exactly like the authoring resolve.
-func (s *PostgresStore) releaseOpeningProfileSlices(ctx context.Context, selection *domain.DesignOpeningSelection) ([]engine.OpeningProfileData, []engine.OpeningProfileBOMData, error) {
-	if pin := selection.ProfilePin; pin != nil {
-		return []engine.OpeningProfileData{{
-			ProfileID:            selection.ProfileID,
-			DatasheetStatus:      pin.DatasheetStatus,
-			FrontReductionMm:     pin.FrontReductionMm,
-			GripClearanceMm:      pin.GripClearanceMm,
-			DoorReductionMm:      pin.DoorReductionMm,
-			ProfileDepthMm:       pin.ProfileDepthMm,
-			ProfileHeightMm:      pin.ProfileHeightMm,
-			CompatiblePlacements: pin.CompatiblePlacements,
-			BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
-		}}, nil, nil
+// releaseGripBetweenEdges counts the unit's between edges when the recipe
+// declares a between profile — the same stack the BOM-side derivation reads.
+func releaseGripBetweenEdges(catalog domain.Catalog, item domain.DesignRevisionItem, recipe *domain.GripSnapshotRecipe, widthMm, heightMm, depthMm int) (int, error) {
+	if recipe.BetweenProfile == nil {
+		return 0, nil
 	}
-	profiles, err := s.ListOpeningProfiles(ctx)
-	if err != nil {
-		return nil, nil, err
+	var module *domain.Module
+	for i := range catalog.Modules {
+		if catalog.Modules[i].ID == item.FurnitureDefinitionID {
+			module = &catalog.Modules[i]
+			break
+		}
 	}
-	profileData := make([]engine.OpeningProfileData, 0, len(profiles))
-	bomProfiles := make([]engine.OpeningProfileBOMData, 0, len(profiles))
-	for _, profile := range profiles {
-		profileData = append(profileData, engine.OpeningProfileData{
-			ProfileID:            profile.ID,
-			DatasheetStatus:      profile.DatasheetStatus,
-			FrontReductionMm:     derefOpeningInt(profile.FrontReductionMm),
-			GripClearanceMm:      derefOpeningInt(profile.GripClearanceMm),
-			DoorReductionMm:      profile.DoorReductionMm,
-			ProfileDepthMm:       derefOpeningFloat(profile.ProfileDepthMm),
-			ProfileHeightMm:      derefOpeningFloat(profile.ProfileHeightMm),
-			CompatiblePlacements: profile.CompatiblePlacements,
-			BodyModifiers:        engine.ContractBodyModifiersFromEntities(profile.BodyModifiers),
-		})
-		bomProfiles = append(bomProfiles, engine.OpeningProfileBOMData{
-			ProfileID:  profile.ID,
-			Version:    profile.Version,
-			BOMMembers: openingQuoteMembers(profile.BOMMembers),
-		})
+	if module == nil {
+		return 0, fmt.Errorf("la definición %s del mueble %s no existe en el catálogo congelado", item.FurnitureDefinitionID, item.FurnitureInstanceID)
 	}
-	return profileData, bomProfiles, nil
+	grips, gripsErr := engine.ProjectGripEdgeGrips(recipe)
+	if gripsErr != nil {
+		return 0, fmt.Errorf("el agarre de %s no se puede resolver: %s", item.FurnitureInstanceID, gripsErr.Message)
+	}
+	stack, stackErr := engine.OpeningFrontStackReport(*module, catalog, engine.LayoutDims{
+		WidthMm: widthMm, HeightMm: heightMm, DepthMm: depthMm,
+	}, item.MaterialChoices, grips)
+	if stackErr != nil {
+		return 0, fmt.Errorf("la pila de frentes de %s no se puede leer: %s", item.FurnitureInstanceID, stackErr.Error())
+	}
+	if stack == nil || len(stack.Rows) <= 1 {
+		return 0, nil
+	}
+	return len(stack.Rows) - 1, nil
 }
 
-// releaseOpeningDims extracts the explicit unit dimensions the opening
-// resolve consumes — the same parameters the release unit already requires
-// for structured definitions.
 func releaseOpeningDims(item domain.DesignRevisionItem) (int, int, bool) {
 	width, ok := item.Parameters["widthMm"].(float64)
 	if !ok || width <= 0 {

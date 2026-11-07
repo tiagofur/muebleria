@@ -9,6 +9,11 @@ import (
 // Contrato: autoría hacia hosts — model binding (#388), pairing one-time
 // (#499) y publish staged con artefactos (#392).
 type DesignAuthoringStore interface {
+	// Design-opening facade (#1532): the legacy endpoint derives from the
+	// effective grip and writes per-furniture overrides until #1535.
+	GetDesignOpeningFacadeState(ctx context.Context, designID string) (*storage.DesignOpeningFacadeState, error)
+	ApplyDesignOpeningFacade(ctx context.Context, designID string, selection domain.DesignOpeningSelection, expectedWorkingVersion string, meta storage.ProjectGripWriteMeta) error
+
 	// Authoritative Project/Design working context for SketchUp model
 	// binding validation (#388 / DT-4).
 	GetModelBindingContext(ctx context.Context, projectID, designID string, baseRevisionID *string) (*storage.ModelBindingContext, error)

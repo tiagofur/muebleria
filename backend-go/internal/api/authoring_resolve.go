@@ -441,17 +441,21 @@ type authoringResolveFurniture struct {
 	// published release, exactly as before this field existed.
 	LibraryReleaseID string `json:"libraryReleaseId,omitempty"`
 	// DesignID (#1264 / V2 OPEN-FRONT): the design this furniture belongs
-	// to. Present → the server resolves the design's persisted opening
-	// selection (pin-first, fail-closed on blocked states) and the front
-	// region constrains the door/drawer-front boards. Absent → byte-identical
-	// to the pre-opening resolve. The opening belongs to the design's FIRST
-	// module: resolving any other furniture never borrows it.
-	DesignID           string                         `json:"designId,omitempty"`
-	Parameters         map[string]any                 `json:"parameters,omitempty"`
-	MaterialChoices    map[string]string              `json:"materialChoices,omitempty"`
-	Components         []authoringOccurrenceWire      `json:"components,omitempty"`
-	Relationships      []engine.AuthoringRelationship `json:"relationships,omitempty"`
-	HardwarePlacements []authoringPlacementWire       `json:"hardwarePlacements,omitempty"`
+	// to. Present → the server resolves the furniture's effective grip
+	// (#1532: its override, else the project's frozen snapshot) and the v2
+	// fronts constrain the door/drawer-front boards. Absent → byte-identical
+	// to the pre-opening resolve.
+	DesignID string `json:"designId,omitempty"`
+	// FurnitureInstanceID (#1532): which furniture of the design this
+	// resolve belongs to. Present → ITS effective grip applies. Absent →
+	// the design's first furniture's effective grip applies (the #1274
+	// scope the plugin used before the field existed).
+	FurnitureInstanceID string                         `json:"furnitureInstanceId,omitempty"`
+	Parameters          map[string]any                 `json:"parameters,omitempty"`
+	MaterialChoices     map[string]string              `json:"materialChoices,omitempty"`
+	Components          []authoringOccurrenceWire      `json:"components,omitempty"`
+	Relationships       []engine.AuthoringRelationship `json:"relationships,omitempty"`
+	HardwarePlacements  []authoringPlacementWire       `json:"hardwarePlacements,omitempty"`
 }
 
 type authoringOccurrenceWire struct {

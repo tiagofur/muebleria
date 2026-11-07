@@ -41,83 +41,149 @@ type designOpeningPayload struct {
 	DimsKnown bool `json:"dimsKnown"`
 }
 
+// handleDesignOpeningState serves the facade GET (#1532): the state derives
+// from the EFFECTIVE grip (the design's first furniture's override, else the
+// project's frozen snapshot) as the v1-shaped selection the plugin renders.
+// The derived selection always carries a complete pin built from the frozen
+// profile — the live catalog is never consulted for a migrated design.
 func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request, wc *domain.DesignWorkingCopy) {
 	state := designOpeningPayload{
-		Opening:        wc.AuthoringDefaults.Opening,
 		WorkingVersion: wc.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
+	facadeState, err := s.Store.GetDesignOpeningFacadeState(r.Context(), wc.DesignID)
+	if err != nil {
+		respondWithInternalError(w, err, "design opening facade state")
+		return
+	}
+	if facadeState.Snapshot == nil {
+		respondWithJSON(w, http.StatusOK, state)
+		return
+	}
+	if err := domain.ValidateGripSnapshotShape(facadeState.Snapshot); err != nil {
+		// C1 (judgment-day r1): the SAME shape gate every authoritative
+		// surface applies — the plugin card sees the honest blocked state
+		// instead of a resolve this grip can never produce.
+		state.Resolution = &engine.DesignOpeningResolution{
+			State: engine.DesignOpeningStateBlocked, Reason: "GRIP_SNAPSHOT_INVALID",
+		}
+		respondWithJSON(w, http.StatusOK, state)
+		return
+	}
+	selection := derivedDesignOpeningSelection(facadeState.Snapshot, facadeState.FurnitureType)
+	if selection == nil {
+		// Reaching here after the shape gate means the snapshot does not
+		// cover this furniture's type (GRIP_TYPE_UNCOVERED): the SAME code
+		// the authoritative resolve reports for the condition.
+		state.Resolution = &engine.DesignOpeningResolution{
+			State: engine.DesignOpeningStateBlocked, Reason: "GRIP_SNAPSHOT_INVALID",
+		}
+		respondWithJSON(w, http.StatusOK, state)
+		return
+	}
+	state.Opening = selection
 	dims := designOpeningDims(wc)
-	if dims != nil {
-		state.DimsKnown = true
-		if state.Opening != nil {
-			// B2 (review of the review): the PINNED datasheet slice resolves
-			// the historical design — the live catalog is only a fallback for
-			// rows authored before the pin existed. A datasheet update never
-			// silently changes a persisted design's fronts.
-			var profileData []engine.OpeningProfileData
-			var bomProfiles []engine.OpeningProfileBOMData
-			if pin := state.Opening.ProfilePin; pin != nil {
-				profileData = []engine.OpeningProfileData{{
-					ProfileID:            state.Opening.ProfileID,
-					DatasheetStatus:      pin.DatasheetStatus,
-					FrontReductionMm:     pin.FrontReductionMm,
-					GripClearanceMm:      pin.GripClearanceMm,
-					DoorReductionMm:      pin.DoorReductionMm,
-					ProfileDepthMm:       pin.ProfileDepthMm,
-					ProfileHeightMm:      pin.ProfileHeightMm,
-					CompatiblePlacements: pin.CompatiblePlacements,
-					BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
-				}}
-			} else if profiles, err := s.Store.ListOpeningProfiles(r.Context()); err == nil {
-				profileData = make([]engine.OpeningProfileData, 0, len(profiles))
-				bomProfiles = make([]engine.OpeningProfileBOMData, 0, len(profiles))
-				for _, profile := range profiles {
-					profileData = append(profileData, engine.OpeningProfileData{
-						ProfileID:            profile.ID,
-						DatasheetStatus:      profile.DatasheetStatus,
-						FrontReductionMm:     derefInt(profile.FrontReductionMm),
-						GripClearanceMm:      derefInt(profile.GripClearanceMm),
-						DoorReductionMm:      profile.DoorReductionMm,
-						ProfileDepthMm:       derefFloat(profile.ProfileDepthMm),
-						ProfileHeightMm:      derefFloat(profile.ProfileHeightMm),
-						CompatiblePlacements: profile.CompatiblePlacements,
-						BodyModifiers:        engine.ContractBodyModifiersFromEntities(profile.BodyModifiers),
-					})
-					bomProfiles = append(bomProfiles, engine.OpeningProfileBOMData{
-						ProfileID:  profile.ID,
-						Version:    profile.Version,
-						BOMMembers: openingContractMembers(profile.BOMMembers),
-					})
-				}
+	if dims == nil {
+		respondWithJSON(w, http.StatusOK, state)
+		return
+	}
+	state.DimsKnown = true
+	// The derived pin resolves the historical design: the frozen profile IS
+	// the pin (A7). A datasheet update never silently changes the fronts.
+	// Handle and rebase selections carry no profile: the baseline resolve.
+	var profileData []engine.OpeningProfileData
+	var bomProfiles []engine.OpeningProfileBOMData
+	if pin := selection.ProfilePin; pin != nil {
+		profileData = []engine.OpeningProfileData{{
+			ProfileID:            selection.ProfileID,
+			DatasheetStatus:      "verified",
+			FrontReductionMm:     pin.FrontReductionMm,
+			GripClearanceMm:      pin.GripClearanceMm,
+			DoorReductionMm:      pin.DoorReductionMm,
+			ProfileDepthMm:       pin.ProfileDepthMm,
+			ProfileHeightMm:      pin.ProfileHeightMm,
+			CompatiblePlacements: pin.CompatiblePlacements,
+			BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
+		}}
+		bomProfiles = []engine.OpeningProfileBOMData{{
+			ProfileID:  selection.ProfileID,
+			Version:    pin.BOM.ProfileVersion,
+			BOMMembers: openingContractMembers(pin.BOM.Members),
+		}}
+	}
+	if rule, ruleErr := s.Store.GetOpeningOverhangRule(r.Context()); ruleErr == nil {
+		var bomCtx *engine.DesignOpeningBOMContext
+		if selection.System == domain.OpeningGripSystemGola {
+			bomCtx = s.designOpeningBOMContext(r, wc, bomProfiles)
+		}
+		resolution, resErr := engine.ResolveDesignOpening(dims.widthMm, dims.heightMm, selection, profileData, engine.OpeningOverhangRuleMm(rule), bomCtx)
+		if resErr != nil {
+			state.Resolution = &engine.DesignOpeningResolution{
+				State: engine.DesignOpeningStateBlocked, Reason: resErr.Code,
 			}
-			if profileData != nil {
-				// #1138: the backed case C rule rides with the overlay. A
-				// broken overlay fails closed like the profile catalog: no
-				// resolution rendered instead of a stale or invented one.
-				if rule, ruleErr := s.Store.GetOpeningOverhangRule(r.Context()); ruleErr == nil {
-					var bomCtx *engine.DesignOpeningBOMContext
-					if state.Opening.System == domain.OpeningGripSystemGola {
-						bomCtx = s.designOpeningBOMContext(r, wc, bomProfiles)
-					}
-					resolution, resErr := engine.ResolveDesignOpening(dims.widthMm, dims.heightMm, state.Opening, profileData, engine.OpeningOverhangRuleMm(rule), bomCtx)
-					if resErr != nil {
-						state.Resolution = &engine.DesignOpeningResolution{
-							State: engine.DesignOpeningStateBlocked, Reason: resErr.Code,
-						}
-					} else {
-						state.Resolution = resolution
-					}
-				}
-			}
-			// A broken profile catalog fails closed: no resolution rendered
-			// instead of a stale or invented one.
+		} else {
+			state.Resolution = resolution
 		}
 	}
 	respondWithJSON(w, http.StatusOK, state)
 }
 
-// openingContractMembers maps the persisted entity members onto the engine
-// contract shape (nil-safe: a profile may declare no BOM members).
+// derivedDesignOpeningSelection maps the effective frozen snapshot onto the
+// v1 selection shape the plugin consumes until #1535. The pin is built FROM
+// the frozen profile — the complete copy, never a partial capture.
+func derivedDesignOpeningSelection(snapshot *domain.GripSnapshot, furnitureType string) *domain.DesignOpeningSelection {
+	recipe, err := snapshot.GripRecipeFor(furnitureType)
+	if err != nil || recipe == nil {
+		return nil
+	}
+	switch recipe.Mode {
+	case domain.GripModeHandle:
+		if recipe.LegacyBottomGola {
+			// unreachable for handle mode; kept for shape safety
+			return nil
+		}
+		return &domain.DesignOpeningSelection{System: domain.OpeningGripSystemHandle}
+	case domain.GripModeBottomOverhang:
+		return &domain.DesignOpeningSelection{System: domain.OpeningGripSystemBottomOverhang}
+	case domain.GripModeGola:
+		if recipe.TopProfile == nil || recipe.TopProfile.FrontDiscountTopMm == nil || *recipe.TopProfile.FrontDiscountTopMm <= 0 {
+			// C1 (judgment-day r1): a frozen copy without its top discount is
+			// exactly what the authoritative surfaces block as
+			// GRIP_PROFILE_UNUSABLE — the facade NEVER substitutes 0 (A6: no
+			// invented values); the caller reports the honest blocked state.
+			return nil
+		}
+		placements := []string{"top"}
+		if recipe.LegacyBottomGola {
+			placements = []string{"bottom"}
+		}
+		top := recipe.TopProfile
+		members := top.BOMMembers
+		if members == nil {
+			members = map[string]domain.OpeningBOMMember{}
+		}
+		discount := *top.FrontDiscountTopMm
+		return &domain.DesignOpeningSelection{
+			System:     domain.OpeningGripSystemGola,
+			ProfileID:  top.ProfileID,
+			Placements: placements,
+			ProfilePin: &domain.DesignOpeningProfilePin{
+				ProfileCode:          top.Code,
+				DoorReductionMm:      &discount,
+				DatasheetStatus:      "verified",
+				ProfileHeightMm:      derefFloat(top.ProfileHeightMm),
+				ProfileDepthMm:       derefFloat(top.ProfileDepthMm),
+				CompatiblePlacements: top.CompatiblePlacements,
+				BodyModifiers:        top.BodyModifiers,
+				BOM: &domain.DesignOpeningProfilePinBOM{
+					ProfileVersion: top.BOMVersion,
+					Members:        members,
+				},
+			},
+		}
+	}
+	return nil
+}
+
 func openingContractMembers(members map[string]domain.OpeningBOMMember) map[string]engine.OpeningContractBOMMember {
 	converted := make(map[string]engine.OpeningContractBOMMember, len(members))
 	for key, member := range members {
@@ -298,42 +364,6 @@ func (s *Server) handleDesignOpeningPut(w http.ResponseWriter, r *http.Request, 
 		ProfileID:  selection.ProfileID,
 		Placements: selection.Placements,
 	}, capabilities, profileSelection, overhangRule)
-	if validation.State == engine.OpeningSelectionValid && selection.System == domain.OpeningGripSystemGola {
-		// B2: capture the datasheet slice the selection was validated
-		// against — the historical resolution consumes the pin, never the
-		// live catalog. #1263: the slice includes the BOM members + revision
-		// so the historical quote resolves the same physical truth.
-		for _, profile := range profileList {
-			if profile.ID == selection.ProfileID {
-				members := profile.BOMMembers
-				if members == nil {
-					members = map[string]domain.OpeningBOMMember{}
-				}
-				selection.ProfilePin = &domain.DesignOpeningProfilePin{
-					ProfileCode:      profile.Code,
-					FrontReductionMm: derefInt(profile.FrontReductionMm),
-					GripClearanceMm:  derefInt(profile.GripClearanceMm),
-					DoorReductionMm:  profile.DoorReductionMm,
-					DatasheetStatus:  profile.DatasheetStatus,
-					// #1283 / §13.2: the datasheet physical envelope rides
-					// with the frozen slice — the historical layout places
-					// the member hardware from these, never live values.
-					ProfileHeightMm: derefFloat(profile.ProfileHeightMm),
-					ProfileDepthMm:  derefFloat(profile.ProfileDepthMm),
-					// #1287 / §13.3: the declared modifier slice freezes too —
-					// the historical resolve materializes the notch the
-					// selection was validated against.
-					CompatiblePlacements: profile.CompatiblePlacements,
-					BodyModifiers:        profile.BodyModifiers,
-					BOM: &domain.DesignOpeningProfilePinBOM{
-						ProfileVersion: profile.Version,
-						Members:        members,
-					},
-				}
-				break
-			}
-		}
-	}
 	if validation.State != engine.OpeningSelectionValid {
 		respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
 			"code":    "INVALID_OPENING_CONFIGURATION",
@@ -347,54 +377,41 @@ func (s *Server) handleDesignOpeningPut(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// Persist surgically: the write touches only the defaults' opening —
-	// never the working items. The version token protects concurrent
-	// authoring writes when the client declares its read.
-	wc, err := s.Store.GetDesignWorkingCopy(r.Context(), designID)
-	if err != nil {
-		respondWithDesignError(w, err)
-		return
-	}
-	var expected *time.Time
-	if strings.TrimSpace(body.ExpectedWorkingVersion) != "" {
-		parsed, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(body.ExpectedWorkingVersion))
-		if parseErr != nil {
-			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "expected_working_version inválido", nil)
-			return
-		}
-		expected = &parsed
-	} else {
-		token := wc.UpdatedAt
-		expected = &token
-	}
-	defaults, err := s.Store.SetDesignWorkingCopyOpening(r.Context(), storage.SetDesignWorkingCopyOpeningCommand{
-		DesignID:               designID,
-		ExpectedWorkingVersion: expected,
-		Opening:                &selection,
-		ActorUserID:            userID,
-	})
-	if err != nil {
-		if err == storage.ErrWorkingCopyVersionConflict || err == storage.ErrWorkingCopyPreconditionRequired {
+	// The facade write (#1532): the selection maps onto per-furniture
+	// override snapshots over the design's instances — ONE operation under
+	// the working-copy version the plugin sends; the project grip version
+	// bumps and the audit commits with the mutation. The real surface is the
+	// project grip API; this facade dies with #1535.
+	expectedVersion := strings.TrimSpace(body.ExpectedWorkingVersion)
+	if expectedVersion == "" {
+		wc, err := s.Store.GetDesignWorkingCopy(r.Context(), designID)
+		if err != nil {
 			respondWithDesignError(w, err)
 			return
 		}
-		if errors.Is(err, domain.ErrInvalidDesignCommand) {
-			// #1337/#1393 — el rechazo de dominio en la frontera de
-			// persistencia (p.ej. un pin congelado que nunca produce un
-			// descuento de puerta efectivo) es error de input del cliente:
-			// 422, nunca 500. El storage valida ANTES del UPDATE, así que la
-			// selección persistida queda intacta.
+		expectedVersion = wc.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if err := s.Store.ApplyDesignOpeningFacade(r.Context(), designID, selection, expectedVersion, storage.ProjectGripWriteMeta{
+		RequestID: RequestIDFromContext(r.Context()), IP: clientIP(r),
+	}); err != nil {
+		if errors.Is(err, storage.ErrWorkingCopyVersionConflict) || errors.Is(err, storage.ErrWorkingCopyPreconditionRequired) {
+			respondWithDesignError(w, err)
+			return
+		}
+		var invalid *domain.GripSnapshotValidationError
+		if errors.As(err, &invalid) {
 			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
 				"code":    "INVALID_OPENING_CONFIGURATION",
-				"message": "la configuración de apertura no es válida: " + err.Error(),
+				"message": invalid.Message,
 				"details": map[string]any{
+					"reason":    invalid.Code,
 					"system":    selection.System,
 					"profileId": selection.ProfileID,
 				},
 			})
 			return
 		}
-		respondWithInternalError(w, err, "design opening write")
+		respondWithInternalError(w, err, "design opening facade write")
 		return
 	}
 
@@ -405,7 +422,6 @@ func (s *Server) handleDesignOpeningPut(w http.ResponseWriter, r *http.Request, 
 		respondWithInternalError(w, err, "design working copy read")
 		return
 	}
-	_ = defaults
 	s.handleDesignOpeningState(w, r, fresh)
 }
 
@@ -431,16 +447,17 @@ type designOpeningResolveFailure struct {
 	message string
 }
 
-// designOpeningFrontsForResolve resolves the design's persisted opening over
-// the resolve request's dimensions (#1264 / V2 OPEN-FRONT). Returns nil
-// fronts with nil failure when there is nothing to constrain: no designId,
-// no selection, or the handle baseline. A BLOCKED opening fails closed — a
-// design that declares an opening never resolves a degraded layout, exactly
-// like its quote never under-prices it (#1263).
-//
-// #1274: the selection's pinned member set rides along so the layout can
-// materialize the gola run and its companions as derived hardware — the
-// same frozen slice the BOM resolves from, never the live catalog.
+// designOpeningFrontsForResolve produces the v2 fronts of ONE furniture
+// (#1532): the furniture's effective grip — its override when the resolve
+// declares its instance id, else the design's first furniture's effective
+// grip — yields the recipe for its type, and the engine producer emits the
+// EdgeGrips fronts, the member hardware and the declared body modifiers
+// from the FROZEN profiles. The A3 arithmetic (#1529) consumes them; the
+// live catalog is never consulted here. Returns nil fronts with nil failure
+// when there is nothing to constrain: no designId, no grip anywhere, or the
+// handle baseline. A BLOCKED grip fails closed — a design that declares a
+// grip never resolves a degraded layout, exactly like its quote never
+// under-prices it.
 func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringResolveRequest, module *domain.Module, dims *engine.LayoutDims) ([]engine.OpeningResolvedFront, *engine.OpeningMembers, []engine.ResolvedOpeningBodyModifier, *designOpeningResolveFailure) {
 	designID := strings.TrimSpace(req.Furniture.DesignID)
 	if designID == "" {
@@ -449,79 +466,52 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 	if !isValidUUID(designID) {
 		return nil, nil, nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el designId no es un identificador válido"}
 	}
-	wc, err := s.Store.GetDesignWorkingCopy(r.Context(), designID)
+	facadeState, err := s.Store.GetDesignOpeningFacadeState(r.Context(), designID)
 	if err != nil {
 		return nil, nil, nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el diseño no existe o no es accesible"}
 	}
-	selection := wc.AuthoringDefaults.Opening
-	if selection == nil || selection.System == domain.OpeningGripSystemHandle {
+	snapshot := facadeState.Snapshot
+	ftype := facadeState.FurnitureType
+	if instanceID := strings.TrimSpace(req.Furniture.FurnitureInstanceID); instanceID != "" {
+		if !isValidUUID(instanceID) {
+			return nil, nil, nil, &designOpeningResolveFailure{code: "FURNITURE_INSTANCE_UNKNOWN", message: "el furnitureInstanceId no es un identificador válido"}
+		}
+		effective, gripErr := s.Store.GetFurnitureEffectiveGrip(r.Context(), facadeState.ProjectID, instanceID)
+		if gripErr != nil {
+			var invalid *domain.GripSnapshotValidationError
+			if errors.As(gripErr, &invalid) {
+				return nil, nil, nil, &designOpeningResolveFailure{code: invalid.Code, message: invalid.Message}
+			}
+			return nil, nil, nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el agarre del mueble no está disponible"}
+		}
+		snapshot = effective
+	}
+	if module != nil && strings.TrimSpace(module.FurnitureType) != "" {
+		ftype = module.FurnitureType
+	}
+	if snapshot == nil {
 		return nil, nil, nil, nil
 	}
-	// #1274: the opening belongs to the DESIGN — every furniture of the
-	// design constrains ITS front boards at its OWN dimensions. The
-	// pilot-module scope of #1261 died on real multi-module designs, where
-	// the "first item with a definition" is arbitrary (the owner's IZQ
-	// cabinet stopped constraining the moment a DER cabinet came first).
-	widthMm, heightMm := module.WidthMm, module.HeightMm
-	if dims != nil {
-		widthMm, heightMm = dims.WidthMm, dims.HeightMm
+	if err := domain.ValidateGripSnapshotShape(snapshot); err != nil {
+		return nil, nil, nil, &designOpeningResolveFailure{code: "GRIP_SNAPSHOT_INVALID", message: err.Error()}
 	}
-	var profileData []engine.OpeningProfileData
-	if pin := selection.ProfilePin; pin != nil {
-		profileData = []engine.OpeningProfileData{{
-			ProfileID:            selection.ProfileID,
-			DatasheetStatus:      pin.DatasheetStatus,
-			FrontReductionMm:     pin.FrontReductionMm,
-			GripClearanceMm:      pin.GripClearanceMm,
-			DoorReductionMm:      pin.DoorReductionMm,
-			ProfileDepthMm:       pin.ProfileDepthMm,
-			ProfileHeightMm:      pin.ProfileHeightMm,
-			CompatiblePlacements: pin.CompatiblePlacements,
-			BodyModifiers:        engine.ContractBodyModifiersFromEntities(pin.BodyModifiers),
-		}}
-	} else {
-		profiles, listErr := s.Store.ListOpeningProfiles(r.Context())
-		if listErr != nil {
-			return nil, nil, nil, &designOpeningResolveFailure{code: "OPENING_PROFILE_UNKNOWN", message: "el catálogo de perfiles de apertura no está disponible"}
-		}
-		profileData = make([]engine.OpeningProfileData, 0, len(profiles))
-		for _, profile := range profiles {
-			profileData = append(profileData, engine.OpeningProfileData{
-				ProfileID:            profile.ID,
-				DatasheetStatus:      profile.DatasheetStatus,
-				FrontReductionMm:     derefInt(profile.FrontReductionMm),
-				GripClearanceMm:      derefInt(profile.GripClearanceMm),
-				DoorReductionMm:      profile.DoorReductionMm,
-				ProfileDepthMm:       derefFloat(profile.ProfileDepthMm),
-				ProfileHeightMm:      derefFloat(profile.ProfileHeightMm),
-				CompatiblePlacements: profile.CompatiblePlacements,
-				BodyModifiers:        engine.ContractBodyModifiersFromEntities(profile.BodyModifiers),
-			})
-		}
+	recipe, recipeErr := snapshot.GripRecipeFor(ftype)
+	if recipeErr != nil {
+		return nil, nil, nil, &designOpeningResolveFailure{code: "GRIP_SNAPSHOT_INVALID", message: recipeErr.Error()}
 	}
-	rule, ruleErr := s.Store.GetOpeningOverhangRule(r.Context())
-	if ruleErr != nil {
-		return nil, nil, nil, &designOpeningResolveFailure{code: "OPENING_OVERHANG_RULE_UNAVAILABLE", message: ruleErr.Error()}
+	fronts, frontsErr := engine.ProjectGripFronts(recipe)
+	if frontsErr != nil {
+		return nil, nil, nil, &designOpeningResolveFailure{code: frontsErr.Code, message: frontsErr.Message}
 	}
-	resolution, resErr := engine.ResolveDesignOpening(widthMm, heightMm, selection, profileData, engine.OpeningOverhangRuleMm(rule), nil)
-	if resErr != nil {
-		return nil, nil, nil, &designOpeningResolveFailure{code: resErr.Code, message: resErr.Message}
+	if len(fronts) == 0 {
+		return nil, nil, nil, nil
 	}
-	if resolution.State != engine.DesignOpeningStateResolved {
-		return nil, nil, nil, &designOpeningResolveFailure{code: resolution.Reason, message: "la apertura del diseño está bloqueada"}
+	members := engine.ProjectGripMembers(recipe.TopProfile)
+	modifiers, modErr := engine.ResolveProjectGripModifiers(recipe)
+	if modErr != nil {
+		return nil, nil, nil, &designOpeningResolveFailure{code: modErr.Code, message: modErr.Message}
 	}
 	// #1287 / §13.3: the resolved declared body effects ride with the fronts
 	// so the layout pass materializes the notch from the SAME definition.
-	return resolution.Fronts, openingMembersFromPin(selection), resolution.BodyModifiers, nil
-}
-
-// openingMembersFromPin projects the selection's frozen BOM slice onto the
-// layout's member placement set (#1274). Absent pin/BOM or members without
-// hardware place nothing — the truthful absence, never a live-catalog guess.
-// #1283 / §13.2: the pinned datasheet envelope (profile height/depth and the
-// accessories' declared dims) rides along; a pin authored before the envelope
-// existed carries zeros and the layout places nothing until the selection is
-// re-applied — never an invented constant.
-func openingMembersFromPin(selection *domain.DesignOpeningSelection) *engine.OpeningMembers {
-	return engine.OpeningMembersFromFrozenPin(selection)
+	return fronts, members, modifiers, nil
 }

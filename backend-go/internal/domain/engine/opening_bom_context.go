@@ -11,9 +11,6 @@ import "github.com/tiagofur/muebles-backend/internal/domain"
 // BOM absence reasons for a gola selection (truthful states, never invented
 // lines). Mirrored verbatim by the surfaces that render them.
 const (
-	// OpeningReasonBOMPinSliceMissing: the pin predates #1263 and never froze
-	// the BOM slice — no live-catalog fallback for historical designs.
-	OpeningReasonBOMPinSliceMissing = "OPENING_BOM_PIN_SLICE_MISSING"
 	// OpeningReasonBOMBodyContextMissing: the body context (cabinet interior
 	// width) cannot be derived for this design's furniture — no BOM lines.
 	OpeningReasonBOMBodyContextMissing = "OPENING_BOM_BODY_CONTEXT_MISSING"
