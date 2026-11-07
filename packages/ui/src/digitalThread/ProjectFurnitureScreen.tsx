@@ -333,6 +333,22 @@ export function ProjectFurnitureScreen({
     placeholderData: keepPreviousData,
   });
 
+  // #1532: the design-opening FACADE is the v1 read-model of the furniture's
+  // effective grip (its override, else the project's frozen snapshot) — the
+  // authoring defaults' opening is retired dead data. The drawer's
+  // provenance reads THIS derived selection, the same truth the plugin card
+  // renders until #1535.
+  const openingFacadeQuery = useQuery({
+    queryKey: queryKeys.designWorkingCopy?.(`${designContext.designId ?? ''}-opening-facade`) ?? queryKeys.designs,
+    queryFn: ({ signal }) =>
+      api.request<DesignAuthoringDefaults | null>('GET', `/designs/${designContext.designId as string}/opening`, {
+        token,
+        signal,
+      }),
+    enabled: designContext.designId != null,
+    placeholderData: keepPreviousData,
+  });
+
   const quoteRevisions: readonly QuoteRevisionDetail[] = quoteRevisionsQuery.data ?? [];
   const designs: readonly Design[] = designsQuery.data ?? [];
 
@@ -366,20 +382,20 @@ export function ProjectFurnitureScreen({
   const selectedDesignRevision =
     designRevisions.find((revision) => revision.id === designContext.designRevisionId) ?? null;
 
-  // #1330: the detail drawer's read-only opening procedencia — the durable
-  // selection with its frozen pin, from the WORKING copy when the context is
-  // the editable design and from the revision's frozen snapshot otherwise.
-  const detailOpeningDefaults: DesignAuthoringDefaults | null | undefined =
-    designContext.kind === 'working'
-      ? (detailWorkingCopyQuery.data?.authoring_defaults ?? null)
-      : designContext.kind === 'revision'
-        ? (selectedDesignRevision?.authoring_defaults_snapshot ?? null)
-        : null;
+  // #1330/#1532: the drawer's read-only opening procedencia — the derived
+  // selection the facade serves (the effective grip with its complete frozen
+  // pin), never the retired authoring defaults. `null` payload = the design
+  // declares no grip (the truthful absence).
+  const facadePayload = openingFacadeQuery.data as
+    | { readonly opening?: DesignAuthoringDefaults['opening'] }
+    | null
+    | undefined;
+  const detailOpeningDefaults: DesignAuthoringDefaults | null = facadePayload
+    ? ({ opening: facadePayload.opening ?? null } as DesignAuthoringDefaults)
+    : null;
   const detailOpeningProvenance = openingProvenanceView(
     detailOpeningDefaults,
-    designContext.kind === 'working' &&
-      designContext.designId != null &&
-      detailWorkingCopyQuery.isPending,
+    openingFacadeQuery.isPending,
   );
 
   // Single authoritative backend read-model query: POST /projects/{projectId}/furniture-workspace

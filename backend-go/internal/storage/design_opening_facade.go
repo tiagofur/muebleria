@@ -186,9 +186,25 @@ func (s *PostgresStore) facadeRecipe(ctx context.Context, selection domain.Desig
 			return nil, &domain.GripSnapshotValidationError{
 				Code: "GRIP_PROFILE_UNKNOWN", Message: "el perfil de gola no existe en el catálogo"}
 		}
-		if usage := profile.UsageAt(domain.GolaPositionTop); !usage.Usable {
+		// The facade is transitional (#1535 retires it): a workshop catalog may
+		// still hold legacy-shaped profiles that declare only the #1316 pair.
+		// The EFFECTIVE discount is one number either way — declared (v2) or
+		// derived from the pair (the same derivation the #1530 write bridge
+		// uses) — so the freeze consumes it and the resolve never invents one.
+		discount := profile.FrontDiscountTopMm
+		if discount == nil {
+			if profile.DoorReductionMm != nil && *profile.DoorReductionMm > 0 {
+				discount = profile.DoorReductionMm
+			} else if profile.FrontReductionMm != nil && profile.GripClearanceMm != nil &&
+				*profile.FrontReductionMm+*profile.GripClearanceMm > 0 {
+				sum := *profile.FrontReductionMm + *profile.GripClearanceMm
+				discount = &sum
+			}
+		}
+		if discount == nil || *discount <= 0 {
 			return nil, &domain.GripSnapshotValidationError{
-				Code: "GRIP_PROFILE_UNUSABLE", Message: "el perfil " + profile.Code + " no se puede usar: " + usage.Message}
+				Code: "GRIP_PROFILE_UNUSABLE",
+				Message: "el perfil " + profile.Code + " no tiene descuento de frente declarado arriba (ni el número único del taller ni el par de la ficha)"}
 		}
 		frozen := &domain.FrozenGripProfile{
 			ProfileID:              profile.ID,
@@ -198,7 +214,7 @@ func (s *PostgresStore) facadeRecipe(ctx context.Context, selection domain.Desig
 			Positions:              append([]string{}, profile.Positions...),
 			ProfileHeightMm:        profile.ProfileHeightMm,
 			ProfileDepthMm:         profile.ProfileDepthMm,
-			FrontDiscountTopMm:     profile.FrontDiscountTopMm,
+			FrontDiscountTopMm:     discount,
 			FrontDiscountBetweenMm: profile.FrontDiscountBetweenMm,
 			CompatiblePlacements:   append([]string{}, profile.CompatiblePlacements...),
 			BodyModifiers:          append([]domain.OpeningBodyModifier{}, profile.BodyModifiers...),
