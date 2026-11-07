@@ -17,6 +17,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import type {
+  Agregado,
   MaterialBoard,
   Module,
   ModuleCategory,
@@ -608,5 +609,57 @@ describe('ProjectAddItemModal — Quitar selección', () => {
 
     await user.click(addBtn());
     expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── #1555 (B2 del review #1563): el accesorio exigido en el alta sigue al
+// cajón ELEGIDO (elecciones efectivas: draft sobre proyecto), nunca al
+// agregado default de la instancia. ──
+describe('ProjectAddItemModal — accesorio del kit del cajón elegido (#1555)', () => {
+  const kitE = 'kit-e';
+  const drawerAgregados: Agregado[] = [
+    { id: 'agr-e', code: 'AGR-E', name: 'Cajón E', active: true, commercialKitHardwareId: kitE },
+    { id: 'agr-m', code: 'AGR-M', name: 'Cajón M', active: true, commercialKitHardwareId: 'kit-m' },
+  ];
+  const drawerGroups: OptionGroup[] = [
+    {
+      id: 'g-cajon', code: 'CAJON', name: 'Cajón', kind: 'agregado',
+      required: true, optionIds: ['agr-e', 'agr-m'],
+    },
+    {
+      id: 'g-lat-e', code: 'LATERAL_E', name: 'Lateral superior E', kind: 'hardware',
+      required: true, optionIds: ['hw-gal-e'], kitHardwareId: kitE,
+    },
+  ];
+  const drawerModule: Module = {
+    id: 'mod-drawer', code: 'MOD-DRW', name: 'Base con cajón', categoryId: 'cat-cocina',
+    hardwareLines: [],
+    agregados: [{ id: 'inst-1', agregadoId: 'agr-e', optionRole: 'CAJON', quantity: 1 }],
+  } as unknown as Module;
+
+  async function submitDrawer(projectLevelChoices: Record<string, string>) {
+    const user = userEvent.setup();
+    const { onSubmit } = renderModal({
+      modules: [drawerModule],
+      optionGroups: drawerGroups,
+      catalogAgregados: drawerAgregados,
+      projectLevelChoices,
+    });
+    await pickModule(user, /MOD-DRW — Base con cajón/);
+    fireEvent.submit(addForm());
+    return onSubmit;
+  }
+
+  it('con el cajón E efectivo exige su accesorio requerido (y no envía)', async () => {
+    const onSubmit = await submitDrawer({ CAJON: 'agr-e' });
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/Falta elegir: Lateral superior E \(LATERAL_E\)/)).toBeInTheDocument();
+  });
+
+  it('con el cajón M efectivo NO exige el accesorio del kit E (sin bloqueo falso)', async () => {
+    const onSubmit = await submitDrawer({ CAJON: 'agr-m' });
+    expect(screen.queryByText(/LATERAL_E/)).not.toBeInTheDocument();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0]?.[0]?.moduleId).toBe('mod-drawer');
   });
 });

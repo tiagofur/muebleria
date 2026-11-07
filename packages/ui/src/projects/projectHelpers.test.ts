@@ -1004,6 +1004,45 @@ describe('canShowProjectPricePreview', () => {
       );
       expect(gate.ok).toBe(true);
     });
+
+    // P2 del review #1563: el rol de AGREGADO requerido no bloquea el PRECIO
+    // (el motor cae al default de la instancia) — un ítem legacy sin elección
+    // de CAJÓN sigue cotizable; el accesorio del kit DEFAULT sí se exige.
+    const drawerRoleGroup: OptionGroup = {
+      id: 'og-cajon', code: 'CAJON', name: 'Cajón', kind: 'agregado',
+      required: true, optionIds: ['agr-e', 'agr-m'],
+    };
+
+    it('un ítem legacy sin elección de CAJÓN no se bloquea por el rol de agregado', () => {
+      const moduleDefaultM = {
+        ...(moduleWithDrawer as object),
+        agregados: [{ agregadoId: 'agr-m', quantity: 1, optionRole: 'CAJON' }],
+      } as unknown as Parameters<typeof canShowProjectPricePreview>[1][number];
+      const project: Project = {
+        ...baseProject(),
+        items: [{ id: 'i1', moduleId: 'm1', quantity: 1, optionChoices: {} }],
+      };
+      const gate = canShowProjectPricePreview(
+        project, [moduleDefaultM], [drawerRoleGroup, ...accessoryGroups],
+        undefined, undefined, kitAgregados, [drawerRoleGroup, ...accessoryGroups],
+      );
+      expect(gate.ok).toBe(true);
+    });
+
+    it('sin elección de CAJÓN exige SÓLO el accesorio requerido del kit default (no el rol)', () => {
+      const project: Project = {
+        ...baseProject(),
+        items: [{ id: 'i1', moduleId: 'm1', quantity: 1, optionChoices: {} }],
+      };
+      const gate = canShowProjectPricePreview(
+        project, [moduleWithDrawer], [drawerRoleGroup, ...accessoryGroups],
+        undefined, undefined, kitAgregados, [drawerRoleGroup, ...accessoryGroups],
+      );
+      expect(gate.ok).toBe(false);
+      if (!gate.ok) {
+        expect(gate.missingGroups).toEqual(['LATERAL_E']);
+      }
+    });
   });
 });
 

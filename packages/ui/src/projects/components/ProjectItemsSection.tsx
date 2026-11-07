@@ -24,6 +24,7 @@ import {
   formatRevisionUnitDimensions,
 } from '../quoteRevisionPresentation';
 import { finishOptionsForGroupChoice } from '../helpers/projectOptionHelpers';
+import { effectiveOptionChoices } from '@granete/domain';
 
 /** Drag-over visual feedback state. */
 type DropPosition = 'above' | 'below' | null;
@@ -566,8 +567,9 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
               item.baseMode,
               // #1502: grupos de accesorios declarados por los kits de los agregados.
               optionGroups,
-              // #1555: el accesorio ofertado sigue la elección de CAJÓN del item.
-              item.optionChoices,
+              // #1555: el accesorio ofertado sigue la elección EFECTIVA de
+              // CAJÓN (ítem sobre proyecto) — la misma que usa el gate.
+              effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
             );
 
             // Drop indicator classes
