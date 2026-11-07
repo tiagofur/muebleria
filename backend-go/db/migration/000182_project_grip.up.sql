@@ -17,10 +17,13 @@
 -- Concurrency token: projects.grip_version gates every project-grip write
 -- with If-Match (style change, batch overrides, refresh).
 
+-- grip_version starts at 1: the token must be expressible as If-Match
+-- ("v0" is not a strong ETag the API accepts), so a brand-new project is
+-- already at its first grip revision.
 ALTER TABLE projects
     ADD COLUMN IF NOT EXISTS grip_style_id UUID REFERENCES grip_styles(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS grip_snapshot JSONB,
-    ADD COLUMN IF NOT EXISTS grip_version BIGINT NOT NULL DEFAULT 0;
+    ADD COLUMN IF NOT EXISTS grip_version BIGINT NOT NULL DEFAULT 1;
 
 ALTER TABLE furniture_instances
     ADD COLUMN IF NOT EXISTS grip_snapshot JSONB;

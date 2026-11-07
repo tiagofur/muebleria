@@ -10,6 +10,7 @@ import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required, moduleCreatePayload 
 
 const STRUCTURE_ID = '71820000-0000-4000-8000-000000000001';
 const LATERAL_COMPONENT_ID = '71820000-0000-4000-8000-000000000002';
+const DOOR_COMPONENT_ID = '71820000-0000-4000-8000-00000000000a';
 const HW_PROFILE_8006 = '71820000-0000-4000-8000-000000000003';
 const HW_SUPPORT_SU116 = '71820000-0000-4000-8000-000000000004';
 const HW_CAPS_CF8006TP = '71820000-0000-4000-8000-000000000005';
@@ -98,7 +99,17 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
       },
     ],
     components: [
-      ...(catalog.components ?? []).filter((component) => component.id !== LATERAL_COMPONENT_ID),
+      ...(catalog.components ?? []).filter((component) => component.id !== LATERAL_COMPONENT_ID && component.id !== DOOR_COMPONENT_ID),
+      {
+        id: DOOR_COMPONENT_ID,
+        code: '1532-DOOR',
+        name: 'Puerta agarre',
+        placement: 'puerta' as const,
+        geometry: { kind: 'rectangular_board' as const, lengthMm: 716, widthMm: 560, thicknessMm: 18 },
+        defaultEdges: [],
+        optionRoles: [LATERAL_GROUP_CODE],
+        active: true,
+      },
       {
         id: LATERAL_COMPONENT_ID,
         code: '1532-LATERAL',
@@ -118,7 +129,10 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
         code: '1532-EST-GRIP',
         name: 'Cuerpo agarre',
         externalDims: { width: 600, height: 720, depth: depthMm },
-        components: [{ componentId: LATERAL_COMPONENT_ID, quantity: 2 }],
+        components: [
+          { componentId: LATERAL_COMPONENT_ID, quantity: 2 },
+          { componentId: DOOR_COMPONENT_ID, quantity: 1 },
+        ],
         active: true,
       },
     ],
@@ -153,6 +167,7 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
       code: 'GOLA-L-8006-1532',
       name: 'Gola L Cymisa 8006',
       grip_type: 'gola',
+      cross_section_shape: 'L',
       material: 'aluminum',
       positions: ['top'],
       front_discount_top_mm: 40,
@@ -176,8 +191,8 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
     body: {
       name: GOLA_STYLE_NAME,
       offered: true,
-      is_default: false,
-      by_furniture_type: {
+      isDefault: false,
+      byFurnitureType: {
         inferior: { mode: 'gola', topProfileId: OPENING_PROFILE_ID },
         superior: { mode: 'gola', topProfileId: OPENING_PROFILE_ID },
         alto: { mode: 'gola', topProfileId: OPENING_PROFILE_ID },
@@ -189,8 +204,8 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
     body: {
       name: HANDLE_STYLE_NAME,
       offered: true,
-      is_default: false,
-      by_furniture_type: {
+      isDefault: false,
+      byFurnitureType: {
         inferior: { mode: 'handle' },
         superior: { mode: 'handle' },
         alto: { mode: 'handle' },
@@ -240,26 +255,40 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
   const afterApply = await client.request<ProjectGripState>('PUT', `/projects/${projectId}/grip`, {
     token,
     body: { gripStyleId: golaStyle.id },
-    headers: { 'If-Match': `"v${initialGrip.gripVersion}"` },
+    ifMatch: initialGrip.gripVersion,
   });
   expect(afterApply.gripVersion).toBe(initialGrip.gripVersion + 1);
   expect(afterApply.snapshot?.styleId).toBe(golaStyle.id);
   expect(afterApply.snapshot?.recipes.inferior.mode).toBe('gola');
 
-  // available ≠ valid: a stale If-Match on the style change is a conflict.
+  // The facade (the plugin's card until #1535): the design derives the
+  // effective grip of its furniture — the frozen discount 40 gives 680.
+  // (Checked before any override exists, so every furniture inherits.)
+  const facade = await client.request<{
+    readonly opening?: { readonly system: string } | null;
+    readonly resolution?: { readonly state: string; readonly fronts?: readonly { readonly heightMm: number }[] } | null;
+  }>('GET', `/designs/${designId}/opening`, { token });
+  expect(facade.opening?.system).toBe('gola');
+  expect(facade.resolution?.state).toBe('resolved');
+  expect(facade.resolution?.fronts?.[0]?.heightMm).toBe(680);
+
+  // available ≠ valid: a stale If-Match on the style change is a conflict
+  // (the client surfaces non-2xx as thrown errors with the status).
   const stale = await client.request<unknown>('PUT', `/projects/${projectId}/grip`, {
     token,
     body: { gripStyleId: handleStyle.id },
-    headers: { 'If-Match': `"v${initialGrip.gripVersion}"` },
-    failOnStatusCode: false,
-  });
-  expect(stale.status).toBe(412);
+    ifMatch: initialGrip.gripVersion,
+  }).then(
+    () => null,
+    (err: unknown) => err as { status?: number },
+  );
+  expect(stale?.status).toBe(412);
 
   // The exception: furniture B freezes the handle style (one operation).
   const afterOverride = await client.request<ProjectGripState>('PUT', `/projects/${projectId}/grip/furniture`, {
     token,
     body: { overrides: [{ furnitureInstanceId: furnitureB.id, gripStyleId: handleStyle.id }] },
-    headers: { 'If-Match': `"v${afterApply.gripVersion}"` },
+    ifMatch: afterApply.gripVersion,
   });
   expect(afterOverride.gripVersion).toBe(afterApply.gripVersion + 1);
 
@@ -272,16 +301,6 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
   expect(reportByInstance[furnitureB.id]?.source).toBe('override');
   expect(reportByInstance[furnitureB.id]?.recipeMode).toBe('handle');
   expect(reportByInstance[furnitureA.id]?.layout?.state).toBe('resolved');
-
-  // The facade (the plugin's card until #1535): the design derives the
-  // effective grip of its furniture — the frozen discount 40 gives 680.
-  const facade = await client.request<{
-    readonly opening?: { readonly system: string } | null;
-    readonly resolution?: { readonly state: string; readonly fronts?: readonly { readonly heightMm: number }[] } | null;
-  }>('GET', `/designs/${designId}/opening`, { token });
-  expect(facade.opening?.system).toBe('gola');
-  expect(facade.resolution?.state).toBe('resolved');
-  expect(facade.resolution?.fronts?.[0]?.heightMm).toBe(680);
 
   // Quote: the frozen snapshot section carries exactly the inherited grip's
   // lines for the gola unit (0.564 m run, 3 supports, 2 caps); the handle
@@ -315,6 +334,7 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
       code: 'GOLA-L-8006-1532',
       name: 'Gola L Cymisa 8006',
       grip_type: 'gola',
+      cross_section_shape: 'L',
       material: 'aluminum',
       positions: ['top'],
       front_discount_top_mm: 60,
@@ -329,10 +349,12 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
       },
       active: true,
     },
-    headers: { 'If-Match': `"v${profileRead.version}"` },
+    ifMatch: profileRead.version,
   });
   const afterWorkshopEdit = await client.request<ProjectGripState>('GET', `/projects/${projectId}/grip`, { token });
-  const frozenRows = afterWorkshopEdit.report?.items.find((item) => item.furnitureInstanceId === furnitureA.id)?.layout?.rows ?? [];
+  const frozenItem = afterWorkshopEdit.report?.items.find((item) => item.furnitureInstanceId === furnitureA.id);
+  expect(frozenItem?.layout?.state, JSON.stringify(afterWorkshopEdit.report)).toBe('resolved');
+  const frozenRows = frozenItem?.layout?.rows ?? [];
   const frozenDoor = frozenRows[frozenRows.length - 1];
   expect(frozenDoor?.heightMm).toBe(680);
 
@@ -341,7 +363,7 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
   const refreshed = await client.request<ProjectGripState>('POST', `/projects/${projectId}/grip:refresh`, {
     token,
     body: { includeOverrides: true },
-    headers: { 'If-Match': `"v${afterWorkshopEdit.gripVersion}"` },
+    ifMatch: afterWorkshopEdit.gripVersion,
   });
   expect(refreshed.gripVersion).toBe(afterWorkshopEdit.gripVersion + 1);
   const afterRefresh = await client.request<ProjectGripState>('GET', `/projects/${projectId}/grip`, { token });
@@ -354,7 +376,7 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
   const afterClear = await client.request<ProjectGripState>('PUT', `/projects/${projectId}/grip/furniture`, {
     token,
     body: { overrides: [{ furnitureInstanceId: furnitureB.id, gripStyleId: null }] },
-    headers: { 'If-Match': `"v${refreshed.gripVersion}"` },
+    ifMatch: refreshed.gripVersion,
   });
   expect(afterClear.gripVersion).toBe(refreshed.gripVersion + 1);
   const finalReport = await client.request<ProjectGripState>('GET', `/projects/${projectId}/grip`, { token });
