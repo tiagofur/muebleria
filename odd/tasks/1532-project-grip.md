@@ -60,3 +60,9 @@ No objetivos: UI web #1533, editor perfiles #1534, Inspector/host SketchUp #1535
 ## Entrega
 
 Un PR contra main. Completo si toda la aceptación corre; parcial si queda alcance explícito.
+
+## Judgment Day (ronda 1, 2026-11-07)
+
+- Dos jueces ciegos sobre f3f4c2c1..a3e9d050: 1 confirmado (C1, MAJOR: la fachada GET inventaba doorReductionMm 0 y resolvía sin el gate de forma), 5 MAJOR suspects (S1 If-Match del cliente generado, S2 Actualizar vs offered §14.8, S3 gates de modificadores, S4 pruebas between, S5 nullability 3.1) y 11 MINOR suspects. Ledger: /tmp/1532-review/ledger-round1.md.
+- Alcance aprobado por el owner: C1 + S1/S2/S5 + S4. Delta a3e9d050..8476912c (después 8476912c incluye la regresión determinista). S3 y el resto de MINOR quedan info en el ledger.
+- Verificación del delta: suite Go sin DB verde, drift current, gates 1263/#1532 PASS, CI 22/22 en 8476912c. Re-juzgado acotado en curso (A+B sobre ledger + delta).
