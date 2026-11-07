@@ -467,7 +467,16 @@ func TestProjectGripWritesRaceAuditRollback(t *testing.T) {
 
 	// §14.8 (judgment-day r1 S2): un-checking «Ofrecer» hides the style for
 	// NEW choices only — the explicit «Actualizar» on a project already using
-	// it re-freezes from the style's CURRENT values and never 422s.
+	// it re-freezes from the style's CURRENT values and never 422s. Apply the
+	// style FIRST so this section does not depend on which write won the
+	// race above (the override winner leaves the project without a style).
+	styleApplyBase := isolationFamilyValue(t, fixture, orgA, func(txCtx context.Context) (*storage.ProjectGrip, error) {
+		return store.GetProjectGrip(txCtx, projectID)
+	})
+	isolationFamilyError(t, fixture, orgA, func(txCtx context.Context) error {
+		_, err := store.SetProjectGrip(txCtx, projectID, gola, styleApplyBase.Version, storage.ProjectGripWriteMeta{})
+		return err
+	})
 	appliedStyle := isolationFamilyValue(t, fixture, orgA, func(txCtx context.Context) (*domain.GripStyle, error) {
 		return store.GetGripStyle(txCtx, gola)
 	})
@@ -478,14 +487,17 @@ func TestProjectGripWritesRaceAuditRollback(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("un-offer the applied style: %v", err)
 	}
+	fresh := isolationFamilyValue(t, fixture, orgA, func(txCtx context.Context) (*storage.ProjectGrip, error) {
+		return store.GetProjectGrip(txCtx, projectID)
+	})
 	if applyErr := isolationFamilyError(t, fixture, orgA, func(txCtx context.Context) error {
-		_, err := store.SetProjectGrip(txCtx, projectID, gola, after.Version, storage.ProjectGripWriteMeta{})
+		_, err := store.SetProjectGrip(txCtx, projectID, gola, fresh.Version, storage.ProjectGripWriteMeta{})
 		return err
 	}); applyErr == nil {
 		t.Fatal("applying an un-offered style is a NEW choice and must be refused")
 	}
 	if err := isolationFamilyError(t, fixture, orgA, func(txCtx context.Context) error {
-		return store.RefreshProjectGrip(txCtx, projectID, false, after.Version, storage.ProjectGripWriteMeta{})
+		return store.RefreshProjectGrip(txCtx, projectID, false, fresh.Version, storage.ProjectGripWriteMeta{})
 	}); err != nil {
 		t.Fatalf("«Actualizar» on a project using an un-offered style must succeed (§14.8): %v", err)
 	}
