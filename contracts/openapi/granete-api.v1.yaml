@@ -7003,7 +7003,7 @@
     "/catalog/opening-profiles/preview": {
       "post": {
         "operationId": "previewOpeningProfile",
-        "summary": "Resolve the gola profile editor's live preview sentences server-side (#1534): «Mueble de 720: una puerta = 680 · dos frentes con esta C = 322» with the A3 contract; React renders them verbatim. POST-as-read: the fields are IN EDITING, nothing is saved",
+        "summary": "Resolve the gola profile editor's live preview sentences server-side (#1534): «Mueble de 720: una puerta = 680 · dos frentes = 322 y 322 mm» with the A3 contract; React renders them verbatim. POST-as-read: the fields are IN EDITING, nothing is saved",
         "requestBody": {
           "required": true,
           "content": {

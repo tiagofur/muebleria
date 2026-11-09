@@ -330,24 +330,30 @@ export function suggestOpeningProfileId(code: string): string {
 
 /**
  * #1534 round 1 — the datasheet status the write carries, derived from the
- * declared envelope with the SAME rule the legacy authoring gate enforces
+ * DECLARED envelope with the SAME rule the legacy authoring gate enforces
  * (AuthoringReady: alto + profundidad + un descuento efectivo — el número
- * declarado o el par de ficha — y el origen de los valores). The v2 editor
- * has no manual verified selector: declaring the complete envelope WITH its
- * origin IS the verification; anything less stays pending and the design
- * opening authoring gate reports what is missing (disponible ≠ válido).
+ * superior declarado o el par de ficha — y el origen de los valores). The v2
+ * editor has no manual verified selector: declaring the complete envelope
+ * WITH its origin IS the verification; anything less stays pending and the
+ * design opening authoring gate reports what is missing (disponible ≠
+ * válido). Round 2: only DECLARED positions count — a value left in a hidden
+ * field (the preset filled it before another chip turned the position off)
+ * never verifies a write that omits it.
  *
- * Never DEMOTES: a row that arrived verified stays verified (the editor does
- * not expose every legacy field; hiding them must not silently un-verify).
+ * Demotion is honest and visible: a verified row that loses its visible top
+ * discount (with no hidden legacy pair holding it) goes back to pending —
+ * the editor shows the ficha line changing, and the in-progress save stays
+ * valid (a verified write without any door discount is server-rejected).
  */
 export function datasheetStatusOfDraft(draft: OpeningProfileDraft): 'pending' | 'verified' {
   const hasDims = Number(draft.profileHeightMm) > 0 && Number(draft.profileDepthMm) > 0;
-  const hasDiscount =
-    Number(draft.frontDiscountTopMm) > 0 ||
-    (Number(draft.frontReductionMm) > 0 && draft.gripClearanceMm !== '' && Number(draft.gripClearanceMm) >= 0);
+  const pairPresent =
+    Number(draft.frontReductionMm) > 0 && draft.gripClearanceMm !== '' && Number(draft.gripClearanceMm) >= 0;
+  const hasDiscount = (draft.top && Number(draft.frontDiscountTopMm) > 0) || pairPresent;
   const hasOrigin = draft.geometryOrigin.trim() !== '';
   const derived = hasDims && hasDiscount && hasOrigin;
-  return draft.datasheetStatus === 'verified' || derived ? 'verified' : 'pending';
+  if (draft.datasheetStatus === 'verified') return derived || pairPresent ? 'verified' : 'pending';
+  return derived ? 'verified' : 'pending';
 }
 
 /** The honest workshop-facing list of what keeps the datasheet pending. */
@@ -356,9 +362,15 @@ export function datasheetPendingReasons(draft: OpeningProfileDraft): readonly st
   if (Number(draft.profileHeightMm) <= 0 || Number(draft.profileDepthMm) <= 0) {
     reasons.push('el alto y la profundidad del perfil');
   }
-  if (!(Number(draft.frontDiscountTopMm) > 0) &&
-    !(Number(draft.frontReductionMm) > 0 && draft.gripClearanceMm !== '' && Number(draft.gripClearanceMm) >= 0)) {
-    reasons.push('el descuento superior');
+  const pairPresent =
+    Number(draft.frontReductionMm) > 0 && draft.gripClearanceMm !== '' && Number(draft.gripClearanceMm) >= 0;
+  if (draft.top) {
+    if (!(Number(draft.frontDiscountTopMm) > 0) && !pairPresent) reasons.push('el descuento superior');
+  } else if (draft.between) {
+    // Between-only: the legacy authoring gate consumes top/bottom profiles —
+    // demanding a top discount here would name a requirement the profile
+    // cannot meet honestly.
+    reasons.push('la autoría por la fachada exige un perfil con posición superior');
   }
   if (draft.geometryOrigin.trim() === '') reasons.push('el origen de los valores');
   return reasons;

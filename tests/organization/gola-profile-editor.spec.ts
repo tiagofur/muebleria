@@ -144,8 +144,11 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
   expect(await page.getByTestId('gola-discount-top').inputValue()).toBe('40');
   await expect(page.getByTestId('gola-profile-preview-una_puerta-0')).toContainText('Mueble de 720: una puerta = 680');
   // Visual evidence (## Visual Evidence in the PR): the editor with the
-  // server preview + schematic section + effects + parts.
-  await page.screenshot({ path: 'docs/demo/evidence/1534/editor-gola-l-preview.png', fullPage: true, animations: 'disabled' });
+  // server preview + schematic section — the modal scrolls internally, so
+  // the capture brings the preview fieldset into the viewport.
+  await page.getByTestId('gola-profile-preview').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: 'docs/demo/evidence/1534/editor-gola-l-preview.png', animations: 'disabled' });
 
   // Piezas por rol.
   await pickFromPicker(page, 'gola-part-profile', '8006-1534');
@@ -178,9 +181,12 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
   await expect(page.getByTestId('gola-bevel-size')).toHaveValue('25.2'); // profundidad − 2, derivada por el servidor
   await pickFromPicker(page, 'gola-part-strip', 'TIRA-1534');
   await expect(page.getByTestId('gola-part-strip-height')).toHaveValue('70');
-  // Visual evidence: the Italiana editor (preset del servidor, tira, bisel
-  // derivado, sección con la tira) — the #1534 brief's second material.
-  await page.screenshot({ path: 'docs/demo/evidence/1534/editor-gola-italiana.png', fullPage: true, animations: 'disabled' });
+  // Visual evidence: the Italiana editor (preset del servidor, bisel
+  // derivado por el servidor, efectos) — the #1534 brief's second material;
+  // the effects fieldset carries the derived bevel.
+  await page.getByTestId('gola-effect-bevel').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: 'docs/demo/evidence/1534/editor-gola-italiana.png', animations: 'disabled' });
 
   await saveProfile(page, 'ITALIANA-70-1534');
 

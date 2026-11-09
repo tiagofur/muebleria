@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
+  datasheetPendingReasons,
   emptyOpeningProfileDraft,
   membersMapOfDraft,
   toOpeningProfileDraft,
@@ -577,5 +578,148 @@ describe('OpeningProfilesCatalog — Uso honesto y round-trip (#1534 aceptación
       gripClearanceMm: '4',
     };
     expect(openingProfileWriteBody(verifiedRow).datasheet_status).toBe('verified');
+  });
+});
+
+describe('OpeningProfilesCatalog — ronda 2: defectos de la corrección (re-juicio)', () => {
+  it('re-marcar «Bisel 45°» tras desmarcarlo vuelve a activarlo (con tamaño previo, sin esperar al servidor)', async () => {
+    const user = userEvent.setup();
+    renderCatalog(vi.fn(), [], apiStubWith(25.2));
+    await openCreate(user);
+    await user.click(screen.getByTestId('gola-material-italiana'));
+    await waitFor(() =>
+      expect((screen.getByTestId('gola-bevel-size') as HTMLInputElement).value).toBe('25.2'),
+    );
+    await user.click(screen.getByTestId('gola-effect-bevel'));
+    expect((screen.getByTestId('gola-effect-bevel') as HTMLInputElement).checked).toBe(false);
+    await user.click(screen.getByTestId('gola-effect-bevel'));
+    expect((screen.getByTestId('gola-effect-bevel') as HTMLInputElement).checked).toBe(true);
+    // The size the draft already held is kept — the server never rewrites it.
+    expect((screen.getByTestId('gola-bevel-size') as HTMLInputElement).value).toBe('25.2');
+  });
+
+  it('una sesión nueva no hereda el marcador de bisel derivado: el bisel tecleado de una ficha guardada nunca se reescribe', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    const savedItalian = {
+      id: 'profile.it-manual',
+      code: 'IT-MANUAL',
+      name: 'Italiana con bisel tecleado',
+      version: 1,
+      gripType: 'gola',
+      crossSection: 'flat',
+      placements: ['top', 'between'],
+      datasheetStatus: 'verified',
+      doorReductionMm: 36,
+      frontDiscountTopMm: 36,
+      frontDiscountBetweenMm: 36,
+      material: 'melamine',
+      profileHeightMm: 56.5,
+      profileDepthMm: 27.2,
+      geometryOrigin: 'Ficha del taller',
+      bodyModifiers: [{ role: 'door', bevel_angle_deg: 45, bevel_size_mm: 20, bevel_at: 'top_front' }],
+      bomMembers: { strip: { hardware_id: '', component_id: 'comp-tira', rule: 'interior_width', height_mm: 70 } },
+      active: true,
+      manufacturer: null,
+    } as unknown as OpeningProfileRow;
+    render(
+      <OpeningProfilesCatalog
+        api={apiStubWith(28) as unknown as import('@granete/storage').GraneteApiClient}
+        token="tok"
+        profiles={[savedItalian]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onDeactivate={vi.fn()}
+        hardwareOptions={hardwareOptions}
+        componentOptions={componentOptions}
+      />,
+    );
+    // Session 1 (create): the italiana chip arms the derived marker; cancel.
+    await user.click(screen.getByTestId('opening-profile-create-btn'));
+    await user.click(screen.getByTestId('gola-material-italiana'));
+    await user.click(screen.getByTestId('gola-profile-cancel'));
+    await vi.waitFor(() => expect(screen.queryByTestId('gola-profile-editor')).toBeNull());
+    // Session 2 (edit the saved profile with the TYPED bevel 20): editing the
+    // depth must NOT overwrite it with the server's 28.
+    fireEvent.click(screen.getByRole('button', { name: 'Editar IT-MANUAL' }));
+    await waitFor(() => expect(screen.getByTestId('gola-profile-editor')).toBeInTheDocument());
+    expect((screen.getByTestId('gola-bevel-size') as HTMLInputElement).value).toBe('20');
+    await user.clear(screen.getByTestId('gola-profile-depth'));
+    await user.type(screen.getByTestId('gola-profile-depth'), '30');
+    // Debounce (350ms) + server roundtrip would land 28 if the marker leaked.
+    await new Promise((r) => setTimeout(r, 600));
+    expect((screen.getByTestId('gola-bevel-size') as HTMLInputElement).value).toBe('20');
+    await user.click(within(screen.getByTestId('gola-profile-editor')).getByTestId('gola-profile-save'));
+    await vi.waitFor(() => {
+      expect(onUpdate).toHaveBeenCalledTimes(1);
+      const draft = onUpdate.mock.calls[0]![2] as OpeningProfileDraft;
+      expect(draft.bevelSizeMm).toBe('20');
+    });
+  });
+
+  it('un descuento inválido en una posición OCULTA no bloquea el guardado (la escritura la omite)', async () => {
+    const user = userEvent.setup();
+    const onCreate = renderCatalog();
+    await openCreate(user);
+    await user.click(screen.getByTestId('gola-material-c'));
+    // The C preset filled the between discount; corrupt it, then hide the
+    // position: the write omits it and the save must pass.
+    await user.clear(screen.getByTestId('gola-discount-between'));
+    await user.type(screen.getByTestId('gola-discount-between'), '36.5');
+    await user.click(screen.getByTestId('gola-position-between'));
+    await user.click(screen.getByTestId('gola-position-top'));
+    await user.clear(screen.getByTestId('gola-discount-top'));
+    await user.type(screen.getByTestId('gola-discount-top'), '40');
+    await user.click(screen.getByTestId('gola-profile-save'));
+    await vi.waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('gola-profile-error')).toBeNull();
+  });
+
+  it('la ficha derivada sólo cuenta posiciones DECLARADAS: sólo-entre-frentes queda pendiente con el motivo cierto y sin door_reduction fantasma', () => {
+    const base = emptyOpeningProfileDraft();
+    const betweenOnly: OpeningProfileDraft = {
+      ...base,
+      material: 'aluminum',
+      crossSection: 'C',
+      top: false,
+      between: true,
+      // Stale value left by a previous preset in the hidden top field.
+      frontDiscountTopMm: '36',
+      frontDiscountBetweenMm: '36',
+      profileHeightMm: '56.5',
+      profileDepthMm: '27.2',
+      geometryOrigin: 'Ficha SCILM',
+    };
+    const body = openingProfileWriteBody(betweenOnly);
+    expect(body.datasheet_status).toBe('pending');
+    expect(body.front_discount_top_mm).toBeUndefined();
+    expect(body.door_reduction_mm).toBeUndefined();
+    expect(body.front_discount_between_mm).toBe(36);
+    // The honest reason names the facade requirement, not a fictitious top
+    // discount the profile cannot declare.
+    const reasons = datasheetPendingReasons(betweenOnly);
+    expect(reasons.join(' ')).toContain('la autoría por la fachada exige un perfil con posición superior');
+    expect(reasons.join(' ')).not.toContain('el descuento superior');
+  });
+
+  it('una ficha verificada que pierde su descuento superior VISIBLE (sin par legacy) baja a pendiente — el guardado en progreso sigue siendo válido', () => {
+    const base = emptyOpeningProfileDraft();
+    const verifiedTop: OpeningProfileDraft = {
+      ...base,
+      material: 'aluminum',
+      top: true,
+      frontDiscountTopMm: '40',
+      profileHeightMm: '56.5',
+      profileDepthMm: '27.2',
+      geometryOrigin: 'Ficha SCILM',
+    };
+    const withVerifiedRow: OpeningProfileDraft = { ...verifiedTop, datasheetStatus: 'verified' };
+    expect(openingProfileWriteBody(withVerifiedRow).datasheet_status).toBe('verified');
+    // Clearing the visible discount with no hidden legacy pair: pending.
+    const cleared: OpeningProfileDraft = { ...withVerifiedRow, frontDiscountTopMm: '' };
+    expect(openingProfileWriteBody(cleared).datasheet_status).toBe('pending');
+    // The legacy pair (hidden fields) keeps the row verified.
+    const withPair: OpeningProfileDraft = { ...cleared, frontReductionMm: '30', gripClearanceMm: '4' };
+    expect(openingProfileWriteBody(withPair).datasheet_status).toBe('verified');
   });
 });

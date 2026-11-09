@@ -28,5 +28,12 @@ Prerrequisito UX: brief publicado y aprobado por el owner (comentario en la issu
 - E2E gates PASS (3/3): members-picker (fachada #1263 resuelve con la ficha derivada — el fallo de CI sanado), catálogo (en-progreso → edición completa → Verificada en la lista → readback), editor (L 680, italiana en orden natural con bisel 25.2 del servidor, estilo que usa ambos, aceptación 3 con copy exacto + evidencia). Screenshots en docs/demo/evidence/1534/ (4 capturas distintas).
 - CI: pendiente en el HEAD final de la ronda 1.
 
+## Ronda final acotada (ronda 2 del contrato, HEAD 53115474 → fix r2)
+Re-juicio escopado (A: 2 MAJOR + 5 MINOR; B: 1 MAJOR + 2 MINOR): TODOS los arreglos de la ronda 1 confirmados. Defectos causados por la propia corrección, corregidos aquí:
+- MAJOR ×2 jueces: re-marcar «Bisel 45°» tras desmarcarlo moría en silencio (rama asíncrona con guard de tamaño vacío) → enable síncrono; el tamaño sólo lo llena el servidor si está vacío (guard funcional en la aplicación).
+- MAJOR juez A: el marcador de bisel derivado no se reseteaba entre sesiones del editor (siempre montado) y reescribía a silencio un bisel tecleado → reset por sesión al abrir.
+- MINOR ×2 jueces: la validación de enteros revisaba campos ocultos (posiciones no declaradas) → guard por posición declarada; la derivación de ficha ignoraba posiciones declaradas (sólo-entre-frentes pedía «descuento superior» fantasma y un valor oculto verificaba una escritura que lo omite) → sólo posiciones declaradas; democión honesta y visible al borrar el descuento superior sin par legacy; door_reduction_mm sólo viaja con superior declarado.
+- MINOR juez A: carreras de sugerencias (aplicación tardía sin guard de chip vigente; lista única nunca almacenada si el load inicial era superado) → guard por chip + toda lista aterrizada se almacena; aria-describedby estático (descripción accesible ajena) → dinámico por sección; capturas de evidencia no mostraban lo documentado (scroll interno del modal) → capturas con scroll al sujeto (preview 680 + sección; bisel 25.2); summary del yaml con copy viejo → neutral.
+
 ## Entrega
-Un PR contra main. Completo respecto del alcance (aceptación 1–4 de la issue).
+Un PR contra main. Completo respecto del alcance (aceptación 1–4 de la issue). Re-juicio final escopado sobre el delta r2 = última pasada del presupuesto del contrato.

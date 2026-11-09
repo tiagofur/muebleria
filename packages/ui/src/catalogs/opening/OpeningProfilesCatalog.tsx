@@ -281,8 +281,14 @@ export function OpeningProfilesCatalog({
     }
     // #1534 r1 — the contract carries integers (*int); a decimal here used
     // to die in the generated client with an English internal-key error.
-    for (const [field, value] of [['superior', current.frontDiscountTopMm], ['entre frentes', current.frontDiscountBetweenMm]] as const) {
-      if (value !== '' && (!Number.isInteger(Number(value)) || Number(value) <= 0)) {
+    for (const [field, value, declared] of [
+      ['superior', current.frontDiscountTopMm, current.top],
+      ['entre frentes', current.frontDiscountBetweenMm, current.between],
+    ] as const) {
+      // Only DECLARED positions: the write omits an undeclared position's
+      // discount, and the field is hidden — naming it would block a save
+      // the server accepts with an error the user cannot act on.
+      if (declared && value !== '' && (!Number.isInteger(Number(value)) || Number(value) <= 0)) {
         return `El descuento ${field} debe ser un número entero mayor a 0`;
       }
     }
@@ -677,9 +683,11 @@ export function openingProfileWriteBody(
     datasheet_status: datasheetStatusOfDraft(draft),
     // #1316/#1530: the workshop-facing discount travels as ONE number; the
     // v2 bridge keeps door_reduction_mm = front_discount_top_mm coherent,
-    // and the legacy datasheet pair round-trips as documentation.
+    // and the legacy datasheet pair round-trips as documentation. Only a
+    // DECLARED top position mirrors it (r2: a stale hidden value never
+    // travels in a write that omits the position).
     ...(draft.material !== ''
-      ? draft.frontDiscountTopMm !== ''
+      ? draft.top && draft.frontDiscountTopMm !== ''
         ? { door_reduction_mm: Number(draft.frontDiscountTopMm) }
         : {}
       : draft.doorReductionMm !== ''

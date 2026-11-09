@@ -244,7 +244,20 @@ export function GolaProfileEditorModal({
   // True while the bevel size holds (or awaits) the server-derived value —
   // a depth change may refresh it; a manual edit flips it off forever.
   const bevelDerived = useRef(false);
+  // The chip the user chose last: a late suggestions fetch may only apply
+  // its preset while its chip is STILL the user's choice (r2: a stale
+  // response must never revert the form to an older chip).
+  const lastChip = useRef<string | null>(null);
   const depthDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // A fresh editor session: the editor stays mounted across opens, so the
+  // previous session's derived-bevel marker and chip choice must not leak
+  // into this one (a hand-typed size is never silently rewritten).
+  useEffect(() => {
+    if (!open) return;
+    bevelDerived.current = false;
+    lastChip.current = null;
+  }, [open]);
 
   const refreshPreview = useCallback(async () => {
     if (!token) return;
@@ -287,7 +300,9 @@ export function GolaProfileEditorModal({
         const list = await api.request<readonly GolaProfileSuggestionWire[]>(
           'GET', `/catalog/opening-profiles/suggestions${query}`, { token, arrayOf: 'GolaProfileSuggestion' },
         );
-        return epoch === suggestionsEpoch.current ? list : null;
+        if (epoch !== suggestionsEpoch.current) return null;
+        setSuggestions(list); // any landed list serves the «sugerencia» buttons
+        return list;
       } catch {
         // Suggestions are a convenience, never a gate: a failed fetch leaves
         // the fields empty and the workshop types its values.
@@ -380,6 +395,7 @@ export function GolaProfileEditorModal({
 
   const chooseMaterial = (chip: (typeof MATERIAL_CHIPS)[number]) => {
     const depth = Number(draft.profileDepthMm);
+    lastChip.current = chip.testId;
     const suggestion = suggestions ? suggestionForChip(suggestions, chip) : null;
     applyPreset(chip, suggestion);
     // The italiana preset is depth-aware (the bevel = profundidad − 2 is
@@ -389,7 +405,9 @@ export function GolaProfileEditorModal({
     const needsFresh = chip.value === 'melamine' || suggestion == null;
     if (needsFresh) {
       void fetchSuggestions(depth > 0 ? depth : null).then((list) => {
-        const fresh = list ? suggestionForChip(list, chip) : null;
+        // Apply only while this chip is STILL the user's choice.
+        if (list == null || lastChip.current !== chip.testId) return;
+        const fresh = suggestionForChip(list, chip);
         if (fresh != null) applyPreset(chip, fresh);
       });
     }
@@ -478,7 +496,7 @@ export function GolaProfileEditorModal({
             step="any"
             value={value}
             data-testid={testId}
-            aria-describedby="gola-profile-error"
+            aria-describedby={errorSection === 'descuento' ? 'gola-profile-error' : undefined}
             onChange={(e) => set(position === 'top' ? { frontDiscountTopMm: e.target.value } : { frontDiscountBetweenMm: e.target.value })}
           />
         </label>
@@ -702,22 +720,26 @@ export function GolaProfileEditorModal({
               disabled={saving}
               data-testid="gola-effect-bevel"
               onChange={(e) => {
-                const checked = e.target.checked;
-                if (checked) {
-                  // The size comes from the server suggestion (depth − 2);
-                  // when the depth is still undeclared it stays empty and
-                  // the depth input asks the server again (never a React
-                  // constant).
-                  bevelDerived.current = true;
-                  void fetchSuggestions(Number(draft.profileDepthMm) > 0 ? Number(draft.profileDepthMm) : null).then((list) => {
-                    const fresh = list ? suggestionForChip(list, MATERIAL_CHIPS[2]!) : null;
-                    const size = fresh?.body_modifiers.find((m) => m.bevel_size_mm != null)?.bevel_size_mm;
-                    if (size != null && bevelDerived.current && draft.bevelSizeMm === '') {
-                      set({ bevelEnabled: true, bevelAt: 'top_front', bevelSizeMm: formatMmInput(size) });
-                    } else if (draft.bevelSizeMm === '') {
-                      set({ bevelEnabled: true, bevelAt: 'top_front' });
-                    }
-                  });
+                if (e.target.checked) {
+                  // The CHOICE is the user's: enable synchronously — a stale
+                  // size in the draft must never dead-lock the checkbox (r2
+                  // MAJOR). The size itself comes from the server suggestion
+                  // (depth − 2) only while EMPTY; the depth input asks the
+                  // server again for an empty, derived size (never a React
+                  // constant, never a rewrite of a typed value).
+                  set({ bevelEnabled: true, bevelAt: 'top_front' });
+                  if (draft.bevelSizeMm === '') {
+                    bevelDerived.current = true;
+                    void fetchSuggestions(Number(draft.profileDepthMm) > 0 ? Number(draft.profileDepthMm) : null).then((list) => {
+                      const fresh = list ? suggestionForChip(list, MATERIAL_CHIPS[2]!) : null;
+                      const size = fresh?.body_modifiers.find((m) => m.bevel_size_mm != null)?.bevel_size_mm;
+                      if (size != null && bevelDerived.current) {
+                        setDraft((current) =>
+                          current.bevelSizeMm !== '' ? current : { ...current, bevelSizeMm: formatMmInput(size) },
+                        );
+                      }
+                    });
+                  }
                 } else {
                   bevelDerived.current = false;
                   toggleEffect({ bevelEnabled: false });
@@ -764,7 +786,7 @@ export function GolaProfileEditorModal({
                   value={supportsMember.spacingMm}
                   disabled={saving}
                   data-testid="gola-part-supports-spacing"
-                  aria-describedby="gola-profile-error"
+                  aria-describedby={errorSection === 'piezas' ? 'gola-profile-error' : undefined}
                   onChange={(e) => setDraft((current) => ({ ...current, members: current.members.map((m) => (m.key === 'supports' ? { ...m, spacingMm: e.target.value } : m)) }))}
                 />
               </label>
