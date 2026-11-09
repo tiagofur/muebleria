@@ -24,6 +24,8 @@ export interface OpeningProfileBodyModifierLike {
   readonly effect?: string;
   readonly depth_reduction_mm?: number | null;
   readonly notch_height_mm?: number | null;
+  readonly notch_depth_source?: string | null;
+  readonly notch_clearance_mm?: number | null;
   readonly notch_depth_mm?: number | null;
   readonly notch_at?: string | null;
   readonly bevel_angle_deg?: number | null;
@@ -46,6 +48,8 @@ export interface OpeningProfileMemberDraft {
   readonly spacingMm: string;
   /** Declared envelope [along-run, depth, height]; empty strings = undeclared. */
   readonly dims: readonly [string, string, string];
+  /** #1534 — the strip's height (tira italiana, 70 by default). */
+  readonly heightMm: string;
 }
 
 export interface OpeningProfileDraft {
@@ -65,6 +69,10 @@ export interface OpeningProfileDraft {
   readonly doorReductionMm: string;
   readonly frontReductionMm: string;
   readonly gripClearanceMm: string;
+  /** #1534 — v2 fields: the editor always writes v2-shaped. */
+  readonly material: '' | 'aluminum' | 'melamine';
+  readonly frontDiscountTopMm: string;
+  readonly frontDiscountBetweenMm: string;
   readonly profileHeightMm: string;
   readonly profileDepthMm: string;
   readonly geometryOrigin: string;
@@ -73,6 +81,9 @@ export interface OpeningProfileDraft {
   readonly notchHeightMm: string;
   readonly notchDepthMm: string;
   readonly notchAt: OpeningNotchAtDraft;
+  /** #1530 — «strip_thickness»: the notch depth follows the strip. */
+  readonly notchDepthSource: '' | 'strip_thickness';
+  readonly notchClearanceMm: string;
   readonly depthReductionEnabled: boolean;
   /** true = declare WITHOUT a value: the engine derives profile_depth_mm. */
   readonly depthReductionDerived: boolean;
@@ -100,6 +111,9 @@ export function emptyOpeningProfileDraft(): OpeningProfileDraft {
     doorReductionMm: '',
     frontReductionMm: '',
     gripClearanceMm: '',
+    material: '',
+    frontDiscountTopMm: '',
+    frontDiscountBetweenMm: '',
     profileHeightMm: '',
     profileDepthMm: '',
     geometryOrigin: '',
@@ -107,6 +121,8 @@ export function emptyOpeningProfileDraft(): OpeningProfileDraft {
     notchHeightMm: '',
     notchDepthMm: '',
     notchAt: 'top_front',
+    notchDepthSource: '' as '' | 'strip_thickness',
+    notchClearanceMm: '',
     depthReductionEnabled: false,
     depthReductionDerived: true,
     depthReductionMm: '',
@@ -118,7 +134,7 @@ export function emptyOpeningProfileDraft(): OpeningProfileDraft {
 }
 
 export function emptyMemberDraft(): OpeningProfileMemberDraft {
-  return { key: '', kind: 'hardware', hardwareId: '', componentId: '', rule: 'interior_width', unit: 'piece', spacingMm: '', dims: ['', '', ''] };
+  return { key: '', kind: 'hardware', hardwareId: '', componentId: '', rule: 'interior_width', unit: 'piece', spacingMm: '', dims: ['', '', ''], heightMm: '' };
 }
 
 /**
@@ -129,6 +145,16 @@ export function emptyMemberDraft(): OpeningProfileMemberDraft {
  */
 export const HARDWARE_MEMBER_ROLES = ['profile', 'supports', 'endCaps'] as const;
 export type HardwareMemberRole = (typeof HARDWARE_MEMBER_ROLES)[number];
+
+/** #1534 — the component role the italiana mounts (the full-depth strip). */
+export const STRIP_MEMBER_ROLE = 'strip';
+
+/** The member roles the editor knows (#1526 hardware + the #1534 strip).
+ * Migration 000180 may keep rows with OTHER keys: the editor discloses them
+ * and the save drops them (the server rejects unknown roles on write). */
+export function isKnownMemberRole(key: string): boolean {
+  return (HARDWARE_MEMBER_ROLES as readonly string[]).includes(key) || key === STRIP_MEMBER_ROLE;
+}
 
 export function isHardwareMemberRole(key: string): key is HardwareMemberRole {
   return (HARDWARE_MEMBER_ROLES as readonly string[]).includes(key);
@@ -162,6 +188,11 @@ export interface OpeningProfileRowLike {
   readonly gripClearanceMm: number | null;
   /** #1316 — the workshop-facing door discount; null = legacy pair only. */
   readonly doorReductionMm: number | null;
+  /** #1534 — v2 fields served since #1530; null/undefined = legacy row. */
+  readonly material?: string | null;
+  readonly frontDiscountTopMm?: number | null;
+  readonly frontDiscountBetweenMm?: number | null;
+  readonly usage?: Record<string, { usable?: boolean; message?: string | null }>;
   readonly profileHeightMm: number | null;
   readonly profileDepthMm: number | null;
   readonly geometryOrigin: string | null;
@@ -205,6 +236,16 @@ export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfil
           : '',
     frontReductionMm: row.frontReductionMm != null ? formatMmInput(row.frontReductionMm) : '',
     gripClearanceMm: row.gripClearanceMm != null ? formatMmInput(row.gripClearanceMm) : '',
+    // #1534: v2 discounts read from the v2 fields; legacy rows fall back to
+    // the #1316 bridge value for the top position (never invented).
+    material: (row.material as OpeningProfileDraft['material']) ?? '',
+    frontDiscountTopMm:
+      row.frontDiscountTopMm != null
+        ? formatMmInput(row.frontDiscountTopMm)
+        : row.doorReductionMm != null
+          ? formatMmInput(row.doorReductionMm)
+          : '',
+    frontDiscountBetweenMm: row.frontDiscountBetweenMm != null ? formatMmInput(row.frontDiscountBetweenMm) : '',
     profileHeightMm: row.profileHeightMm != null ? formatMmInput(row.profileHeightMm) : '',
     profileDepthMm: row.profileDepthMm != null ? formatMmInput(row.profileDepthMm) : '',
     geometryOrigin: row.geometryOrigin ?? '',
@@ -212,6 +253,8 @@ export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfil
     notchHeightMm: notch?.notch_height_mm != null ? formatMmInput(notch.notch_height_mm) : '',
     notchDepthMm: notch?.notch_depth_mm != null ? formatMmInput(notch.notch_depth_mm) : '',
     notchAt: (notch?.notch_at as OpeningNotchAtDraft) ?? 'top_front',
+    notchDepthSource: (notch?.notch_depth_source as '' | 'strip_thickness') ?? '',
+    notchClearanceMm: notch?.notch_clearance_mm != null ? formatMmInput(notch.notch_clearance_mm) : '',
     depthReductionEnabled: reduction != null,
     depthReductionDerived: reduction == null || reduction.depth_reduction_mm == null,
     depthReductionMm: reduction?.depth_reduction_mm != null ? formatMmInput(reduction.depth_reduction_mm) : '',
@@ -239,18 +282,28 @@ function membersOfMap(members: OpeningProfileBOMMembersLike | null): readonly Op
         unit: member.unit ?? '',
         spacingMm: member.spacing_mm != null ? formatMmInput(member.spacing_mm) : '',
         dims: (member.dimensions_mm ?? [null, null, null]).map((d) => (d != null ? formatMmInput(d) : '')) as [string, string, string],
+        heightMm: member.height_mm != null ? formatMmInput(member.height_mm) : '',
       };
     });
 }
 
-/** The editable member drafts → the persisted snake_case map (#1327). */
+/**
+ * The editable member drafts → the persisted snake_case map (#1327). A member
+ * whose pick was cleared («Quitar selección») or whose role the editor does
+ * not know (migration 000180 keeps them on read; the server rejects them on
+ * write, and the editor DISCLOSES the drop before saving) is not emitted —
+ * an empty reference never travels to fail the save.
+ */
 export function membersMapOfDraft(
   members: readonly OpeningProfileMemberDraft[],
 ): OpeningProfileBOMMembersLike {
   const map: Record<string, OpeningProfileBOMMember> = {};
   for (const member of members) {
+    const key = member.key.trim();
+    if (key === '' || !isKnownMemberRole(key)) continue;
+    if (member.kind === 'component' ? member.componentId.trim() === '' : member.hardwareId.trim() === '') continue;
     const dims = member.dims.map((d) => (d.trim() !== '' ? Number(d) : null));
-    map[member.key.trim()] = {
+    map[key] = {
       // hardware_id is the required contract key; component members carry it
       // empty and reference through component_id (#1327).
       hardware_id: member.kind === 'component' ? '' : member.hardwareId.trim(),
@@ -259,6 +312,7 @@ export function membersMapOfDraft(
       ...(member.unit.trim() !== '' ? { unit: member.unit.trim() } : {}),
       ...(member.spacingMm.trim() !== '' ? { spacing_mm: Number(member.spacingMm) } : {}),
       ...(dims.some((d) => d != null) ? { dimensions_mm: dims.map((d) => (d == null ? 0 : d)) } : {}),
+      ...(member.heightMm.trim() !== '' ? { height_mm: Number(member.heightMm) } : {}),
     };
   }
   return map;
@@ -275,6 +329,58 @@ export function suggestOpeningProfileId(code: string): string {
 }
 
 /**
+ * #1534 round 1 — the datasheet status the write carries, derived from the
+ * DECLARED envelope with the SAME rule the legacy authoring gate enforces
+ * (AuthoringReady: alto + profundidad + un descuento efectivo — el número
+ * superior declarado o el par de ficha — y el origen de los valores). The v2
+ * editor has no manual verified selector: declaring the complete envelope
+ * WITH its origin IS the verification; anything less stays pending and the
+ * design opening authoring gate reports what is missing (disponible ≠
+ * válido). Round 2: only DECLARED positions count — a value left in a hidden
+ * field (the preset filled it before another chip turned the position off)
+ * never verifies a write that omits it.
+ *
+ * Demotion is honest and visible: a verified row that loses its visible top
+ * discount (with no hidden legacy pair holding it) goes back to pending —
+ * the editor shows the ficha line changing, and the in-progress save stays
+ * valid (a verified write without any door discount is server-rejected).
+ */
+export function datasheetStatusOfDraft(draft: OpeningProfileDraft): 'pending' | 'verified' {
+  const hasDims = Number(draft.profileHeightMm) > 0 && Number(draft.profileDepthMm) > 0;
+  const pairPresent =
+    Number(draft.frontReductionMm) > 0 && draft.gripClearanceMm !== '' && Number(draft.gripClearanceMm) >= 0;
+  const hasDiscount = (draft.top && Number(draft.frontDiscountTopMm) > 0) || pairPresent;
+  const hasOrigin = draft.geometryOrigin.trim() !== '';
+  const derived = hasDims && hasDiscount && hasOrigin;
+  if (draft.datasheetStatus === 'verified') return derived || pairPresent ? 'verified' : 'pending';
+  return derived ? 'verified' : 'pending';
+}
+
+/** The honest workshop-facing list of what keeps the datasheet pending. */
+export function datasheetPendingReasons(draft: OpeningProfileDraft): readonly string[] {
+  const reasons: string[] = [];
+  if (Number(draft.profileHeightMm) <= 0 || Number(draft.profileDepthMm) <= 0) {
+    reasons.push('el alto y la profundidad del perfil');
+  }
+  const pairPresent =
+    Number(draft.frontReductionMm) > 0 && draft.gripClearanceMm !== '' && Number(draft.gripClearanceMm) >= 0;
+  if (!draft.top && !draft.between) {
+    // Neither position declared: the profile grips nothing yet (the save is
+    // blocked separately; the line must still name what is missing).
+    reasons.push('declarar al menos una posición (superior o entre frentes)');
+  } else if (draft.top) {
+    if (!(Number(draft.frontDiscountTopMm) > 0) && !pairPresent) reasons.push('el descuento superior');
+  } else {
+    // Between-only: the legacy authoring gate consumes top/bottom profiles —
+    // demanding a top discount here would name a requirement the profile
+    // cannot meet honestly.
+    reasons.push('la autoría por la fachada exige un perfil con posición superior');
+  }
+  if (draft.geometryOrigin.trim() === '') reasons.push('el origen de los valores');
+  return reasons;
+}
+
+/**
  * The declared body modifiers of the draft, in the persisted snake_case
  * contract. Depth reduction without an explicit value carries ONLY the
  * effect name — the derivation source is the profile's own datasheet.
@@ -285,7 +391,9 @@ export function bodyModifiersOfDraft(draft: OpeningProfileDraft): OpeningProfile
     modifiers.push({
       role: 'lateral',
       notch_height_mm: Number(draft.notchHeightMm),
-      notch_depth_mm: Number(draft.notchDepthMm),
+      ...(draft.notchDepthSource === 'strip_thickness'
+        ? { notch_depth_source: draft.notchDepthSource, notch_clearance_mm: Number(draft.notchClearanceMm || 1) }
+        : { notch_depth_mm: Number(draft.notchDepthMm) }),
       notch_at: draft.notchAt,
     });
   }

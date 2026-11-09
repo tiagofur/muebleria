@@ -1415,7 +1415,7 @@ describe('openingProfileFromApi/ToApi — gola v2 (#1530)', () => {
         between: {
           usable: false,
           missing: ['front_discount_between_mm'],
-          message: 'Para usar el perfil entre frentes falta el descuento del frente entre frentes.',
+          message: 'No se puede usar entre frentes: falta el descuento',
         },
       },
       body_modifiers: [

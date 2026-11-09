@@ -103,7 +103,9 @@ func (p *OpeningProfile) UsageAt(position string) OpeningProfilePositionUsage {
 	requirements := []requirement{
 		{"profile_height_mm", "el alto del perfil", p.ProfileHeightMm != nil},
 		{"profile_depth_mm", "la profundidad del perfil", p.ProfileDepthMm != nil},
-		{discountField, "el descuento del frente " + label, discount != nil},
+		// #1534 r1: the issue's workshop-facing copy names it plain —
+		// «No se puede usar entre frentes: falta el descuento».
+		{discountField, "el descuento", discount != nil},
 	}
 	missing := []string{}
 	labels := []string{}
@@ -118,7 +120,7 @@ func (p *OpeningProfile) UsageAt(position string) OpeningProfilePositionUsage {
 	}
 	return OpeningProfilePositionUsage{
 		Missing: missing,
-		Message: fmt.Sprintf("Para usar el perfil %s falta %s.", label, joinSpanish(labels)),
+		Message: fmt.Sprintf("No se puede usar %s: falta %s", label, joinSpanish(labels)),
 	}
 }
 
@@ -187,6 +189,17 @@ func NormalizeOpeningProfileWrite(p *OpeningProfile, existing *OpeningProfile) {
 		}
 		if p.Material == GolaMaterialMelamine && strings.TrimSpace(p.CrossSectionShape) == "" {
 			p.CrossSectionShape = "flat"
+		}
+		// #1534 — the bridge is SYMMETRIC: a client may declare the positions
+		// through either field (the gola editor sends compatible_placements
+		// as the #1530 bridge did). Whichever carries the declaration feeds
+		// the other, restricted to the v2 positions vocabulary.
+		if len(p.Positions) == 0 && len(p.CompatiblePlacements) > 0 {
+			for _, position := range GolaPositions {
+				if containsString(p.CompatiblePlacements, position) {
+					p.Positions = append(p.Positions, position)
+				}
+			}
 		}
 		p.CompatiblePlacements = append([]string{}, p.Positions...)
 		// A client that round-trips the whole row and edits only the legacy

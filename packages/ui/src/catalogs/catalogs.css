@@ -1476,3 +1476,108 @@
 .catalog-form__fieldset--inline {
   padding: var(--space-2) var(--space-3) var(--space-3);
 }
+
+/* #1534 — editor v2 de perfiles de gola: chips de material, interruptores de
+   posición, vista previa del servidor + sección esquemática y efectos, todo
+   con tokens (§8: 0 px sueltos). */
+.gola-editor__chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.gola-editor__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.gola-editor__chip--selected {
+  border-width: 2px;
+  font-weight: 600;
+}
+
+.gola-editor__positions {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.gola-editor__switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.gola-editor__discount {
+  margin-bottom: var(--space-2);
+}
+
+.gola-editor__preview {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.gola-editor__preview-lines {
+  flex: 1;
+  min-width: 14rem;
+}
+
+.gola-editor__drawing {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.gola-editor__drawing-label {
+  font-size: var(--text-xs);
+}
+
+.gola-editor__effect {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+}
+
+.gola-editor__effect-detail {
+  margin: 0 0 var(--space-2) var(--space-4);
+}
+
+.gola-editor__part-dims {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.gola-editor__alert {
+  color: var(--danger);
+  margin: 0 0 var(--space-2);
+}
+
+.gola-editor__ficha-line {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+}
+
+/* Miembro con rol desconocido (mig 000180): se muestra, se revela su baja al
+   guardar y no viaja en la escritura (el servidor rechaza roles ajenos). */
+.gola-editor__unknown-member {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  font-size: var(--text-sm);
+}
+
+/* Columna Uso (#1534): los motivos por posición del servidor, verbatim. */
+.gola-editor__uso-list {
+  font-size: var(--text-xs);
+}
+
+.gola-editor__uso-line {
+  display: block;
+}

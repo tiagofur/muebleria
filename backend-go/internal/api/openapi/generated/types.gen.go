@@ -3195,6 +3195,17 @@ type GripStyleWrite struct {
 	ByFurnitureType map[string]any `json:"byFurnitureType"`
 }
 
+type OpeningProfilePreviewRequest struct {
+	HeightMm               int64    `json:"heightMm"`
+	Positions              []string `json:"positions"`
+	FrontDiscountTopMm     *int64   `json:"frontDiscountTopMm,omitempty"`
+	FrontDiscountBetweenMm *int64   `json:"frontDiscountBetweenMm,omitempty"`
+}
+
+type OpeningProfilePreviewResponse struct {
+	Previews []map[string]any `json:"previews"`
+}
+
 type GripStylePreviewRequest struct {
 	HeightMm        int64          `json:"heightMm"`
 	ByFurnitureType map[string]any `json:"byFurnitureType"`
