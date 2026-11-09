@@ -170,11 +170,10 @@ export function GolaProfileEditorModal({
       const response = await api.previewOpeningProfile(token, {
         heightMm: 720,
         positions: [...(draft.top ? ['top' as const] : []), ...(draft.between ? ['between' as const] : [])],
-        frontDiscountTopMm: draft.frontDiscountTopMm !== '' ? Number(draft.frontDiscountTopMm) : undefined,
-        frontDiscountBetweenMm: draft.frontDiscountBetweenMm !== '' ? Number(draft.frontDiscountBetweenMm) : undefined,
+        frontDiscountTopMm: draft.frontDiscountTopMm !== '' ? Number(draft.frontDiscountTopMm) : null,
+        frontDiscountBetweenMm: draft.frontDiscountBetweenMm !== '' ? Number(draft.frontDiscountBetweenMm) : null,
       });
-      const previews = (response.previews ?? []) as readonly { readonly key: string; readonly preview: string }[];
-      setPreviewLines(previews);
+      setPreviewLines((response.previews ?? []) as readonly { readonly key: string; readonly preview: string }[]);
     } catch (err) {
       setPreviewError(err instanceof Error ? err.message : 'La vista previa no pudo resolverse.');
     } finally {
@@ -183,7 +182,7 @@ export function GolaProfileEditorModal({
     // The preview re-resolves on open and on DISCRETE changes (position
     // switches or discounts) — identity/origin typing never triggers it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, token, open, draft.top, draft.between, draft.frontDiscountTopMm, draft.frontDiscountBetweenMm, draft.profileHeightMm]);
+  }, [api, token, open, draft.top, draft.between, draft.frontDiscountTopMm, draft.frontDiscountBetweenMm]);
 
   useEffect(() => {
     if (!open) return;
@@ -191,8 +190,6 @@ export function GolaProfileEditorModal({
   }, [refreshPreview]);
 
   const set = (patch: Partial<OpeningProfileDraft>) => setDraft((current) => ({ ...current, ...patch }));
-
-  const setRow = (patch: Partial<OpeningProfileDraft>) => set(patch);
 
   const chooseMaterial = (chip: (typeof MATERIAL_CHIPS)[number]) => {
     const depth = Number(draft.profileDepthMm);
@@ -232,11 +229,9 @@ export function GolaProfileEditorModal({
   const togglePosition = (position: 'top' | 'between', checked: boolean) =>
     setDraft((current) => ({ ...current, [position]: checked }));
 
-  const discountRow = (
-    position: 'top' | 'between',
-    label: string,
-    value: string,
-  ): ReactNode => {
+  const toggleEffect = (patch: Partial<OpeningProfileDraft>) => set(patch);
+
+  const discountRow = (position: 'top' | 'between', label: string, value: string): ReactNode => {
     const suggestion = SUGGESTIONS[position];
     const testId = position === 'top' ? 'gola-discount-top' : 'gola-discount-between';
     return (
@@ -249,20 +244,14 @@ export function GolaProfileEditorModal({
             step="any"
             value={value}
             data-testid={testId}
-            onChange={(e) => setRow({ [position === 'top' ? 'frontDiscountTopMm' : 'frontDiscountBetweenMm']: e.target.value } as Partial<OpeningProfileDraft>)}
+            onChange={(e) => set(position === 'top' ? { frontDiscountTopMm: e.target.value } : { frontDiscountBetweenMm: e.target.value })}
           />
         </label>
         <button
           type="button"
           className="btn btn--small"
           data-testid={`gola-discount-suggest-${position}`}
-          onClick={() =>
-            setRow(
-              position === 'top'
-                ? { frontDiscountTopMm: String(suggestion) }
-                : { frontDiscountBetweenMm: String(suggestion) },
-            )
-          }
+          onClick={() => set(position === 'top' ? { frontDiscountTopMm: String(suggestion) } : { frontDiscountBetweenMm: String(suggestion) })}
         >
           sugerencia: {suggestion}
         </button>
@@ -270,42 +259,63 @@ export function GolaProfileEditorModal({
     );
   };
 
-  // Strip member: present iff material is melamine.
-  const ensureStrip = () => {
-    const strip = draft.members.find((m) => m.key === 'strip');
-    if (strip) return;
-    setDraft((current) => ({
-      ...current,
-      members: [
-        ...current.members,
-        {
-          key: 'strip',
-          kind: 'component' as const,
-          hardwareId: '',
-          componentId: '',
-          rule: 'interior_width',
-          unit: 'piece',
-          spacingMm: '',
-          dims: ['', '', ''] as [string, string, string],
-          heightMm: '70',
-        },
-      ],
-    }));
+  const upsertMember = (key: string, kind: 'hardware' | 'component', id: string, patch: Partial<OpeningProfileMemberDraft>) =>
+    setDraft((current) => {
+      const existing = current.members.find((m) => m.key === key);
+      if (existing) {
+        return {
+          ...current,
+          members: current.members.map((m) =>
+            m.key === key
+              ? { ...m, kind, ...(kind === 'hardware' ? { hardwareId: id } : { componentId: id }), ...patch }
+              : m,
+          ),
+        };
+      }
+      return {
+        ...current,
+        members: [
+          ...current.members,
+          {
+            key,
+            kind,
+            hardwareId: kind === 'hardware' ? id : '',
+            componentId: kind === 'component' ? id : '',
+            rule: 'interior_width',
+            unit: 'piece',
+            spacingMm: '',
+            dims: ['', '', ''] as [string, string, string],
+            heightMm: '',
+            ...patch,
+          },
+        ],
+      };
+    });
+
+  const supportsMember = draft.members.find((m) => m.key === 'supports');
+  const stripMember = draft.members.find((m) => m.key === 'strip');
+
+  const saveErrorAnchor = (message: string): 'name' | 'inferior' | 'superior' | 'alto' => {
+    const lowered = message.toLowerCase();
+    if (lowered.includes('inferior') || lowered.includes('muebles bajos')) return 'inferior';
+    if (lowered.includes('superior') || lowered.includes('alacena')) return 'superior';
+    if (lowered.includes('muebles altos') || lowered.match(/\balto\b/)) return 'alto';
+    return 'name';
   };
-  const dropStrip = () =>
-    setDraft((current) => ({ ...current, members: current.members.filter((m) => m.key !== 'strip') }));
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={() => {
+        if (!saving) onClose();
+      }}
       title={identity ? `Editar perfil: ${identity.code} — ${identity.name}` : 'Nuevo perfil de gola'}
       size="lg"
       dataTestId="gola-profile-editor"
     >
       <form id={formId} onSubmit={onSubmit}>
         {error ? (
-          <p role="alert" data-testid="gola-profile-error" className="catalog-form__hint" style={{ color: 'var(--danger)' }}>
+          <p role="alert" data-testid="gola-profile-error" style={{ color: 'var(--danger)' }}>
             {error}
           </p>
         ) : null}
@@ -314,32 +324,15 @@ export function GolaProfileEditorModal({
           <legend className="catalog-form__section-title">Identidad</legend>
           <label className="catalog-form__field">
             <span>Código</span>
-            <input
-              value={draft.code}
-              maxLength={80}
-              required
-              data-testid="gola-profile-code"
-              onChange={(e) => set({ code: e.target.value })}
-            />
+            <input value={draft.code} maxLength={80} required data-testid="gola-profile-code" onChange={(e) => set({ code: e.target.value })} />
           </label>
           <label className="catalog-form__field">
             <span>Nombre</span>
-            <input
-              value={draft.name}
-              maxLength={120}
-              required
-              data-testid="gola-profile-name"
-              onChange={(e) => set({ name: e.target.value })}
-            />
+            <input value={draft.name} maxLength={120} required data-testid="gola-profile-name" onChange={(e) => set({ name: e.target.value })} />
           </label>
           <label className="catalog-form__field">
             <span>Fabricante</span>
-            <input
-              value={draft.manufacturer}
-              maxLength={80}
-              data-testid="gola-profile-manufacturer"
-              onChange={(e) => set({ manufacturer: e.target.value })}
-            />
+            <input value={draft.manufacturer} maxLength={80} data-testid="gola-profile-manufacturer" onChange={(e) => set({ manufacturer: e.target.value })} />
           </label>
         </fieldset>
 
@@ -347,12 +340,10 @@ export function GolaProfileEditorModal({
           <legend className="catalog-form__section-title">Material</legend>
           <div role="radiogroup" aria-label="Material del perfil" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {MATERIAL_CHIPS.map((chip) => {
-              const selected =
-                material === chip.value &&
-                (chip.value !== 'aluminum' || draft.crossSection === chip.crossSection);
+              const selected = material === chip.value && (chip.value !== 'aluminum' || draft.crossSection === chip.crossSection);
               return (
                 <label
-                  key={chip.label}
+                  key={chip.testId}
                   style={{
                     border: selected ? '2px solid var(--border)' : '1px solid var(--border)',
                     borderRadius: 6,
@@ -376,25 +367,11 @@ export function GolaProfileEditorModal({
           </div>
           <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={draft.top}
-                disabled={saving}
-                data-testid="gola-position-top"
-                onChange={(e) => togglePosition('top', e.target.checked)}
-              />
+              <input type="checkbox" role="switch" checked={draft.top} disabled={saving} data-testid="gola-position-top" onChange={(e) => togglePosition('top', e.target.checked)} />
               Superior
             </label>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={draft.between}
-                disabled={saving}
-                data-testid="gola-position-between"
-                onChange={(e) => togglePosition('between', e.target.checked)}
-              />
+              <input type="checkbox" role="switch" checked={draft.between} disabled={saving} data-testid="gola-position-between" onChange={(e) => togglePosition('between', e.target.checked)} />
               Entre frentes
             </label>
           </div>
@@ -404,25 +381,11 @@ export function GolaProfileEditorModal({
           <legend className="catalog-form__section-title">Dimensiones</legend>
           <label className="catalog-form__field">
             <span>Alto del perfil (mm)</span>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              value={draft.profileHeightMm}
-              data-testid="gola-profile-height"
-              onChange={(e) => set({ profileHeightMm: e.target.value })}
-            />
+            <input type="number" min="0" step="any" value={draft.profileHeightMm} data-testid="gola-profile-height" onChange={(e) => set({ profileHeightMm: e.target.value })} />
           </label>
           <label className="catalog-form__field">
             <span>Profundidad (mm)</span>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              value={draft.profileDepthMm}
-              data-testid="gola-profile-depth"
-              onChange={(e) => set({ profileDepthMm: e.target.value })}
-            />
+            <input type="number" min="0" step="any" value={draft.profileDepthMm} data-testid="gola-profile-depth" onChange={(e) => set({ profileDepthMm: e.target.value })} />
           </label>
         </fieldset>
 
@@ -448,7 +411,7 @@ export function GolaProfileEditorModal({
               {previewLoading ? (
                 <p className="catalog-form__hint" aria-busy="true">Resolviendo vista previa…</p>
               ) : (
-                (previewLines ?? []).map((line) => (
+                previewLines.map((line) => (
                   <p key={line.key} data-testid={`gola-profile-preview-${line.key}`}>
                     {line.preview}
                   </p>
@@ -476,7 +439,7 @@ export function GolaProfileEditorModal({
               checked={draft.depthReductionEnabled}
               disabled={saving}
               data-testid="gola-effect-depth"
-              onChange={(e) => set({ depthReductionEnabled: e.target.checked, depthReductionDerived: true })}
+              onChange={(e) => toggleEffect({ depthReductionEnabled: e.target.checked, depthReductionDerived: true })}
             />
             Acortar el techo o mover el manguete frontal (usa la profundidad)
           </label>
@@ -492,14 +455,14 @@ export function GolaProfileEditorModal({
                   // Melamine (tira italiana): the depth FOLLOWS the strip
                   // thickness + clearance. Aluminum: explicit depth.
                   const italian = material === 'melamine';
-                  set({
+                  toggleEffect({
                     notchEnabled: true,
                     notchHeightMm: draft.notchHeightMm !== '' ? draft.notchHeightMm : italian ? '70' : '',
                     notchDepthSource: italian ? 'strip_thickness' : '',
                     notchClearanceMm: italian && draft.notchClearanceMm !== '' ? draft.notchClearanceMm : '1',
                   });
                 } else {
-                  set({ notchEnabled: false, notchDepthSource: '' });
+                  toggleEffect({ notchEnabled: false, notchDepthSource: '' });
                 }
               }}
             />
@@ -509,38 +472,17 @@ export function GolaProfileEditorModal({
             <div style={{ margin: '0 0 8px 24px' }}>
               <label className="catalog-form__field">
                 <span>Alto de la muesca (mm)</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={draft.notchHeightMm}
-                  data-testid="gola-notch-height"
-                  onChange={(e) => set({ notchHeightMm: e.target.value })}
-                />
+                <input type="number" min="0" step="any" value={draft.notchHeightMm} data-testid="gola-notch-height" onChange={(e) => set({ notchHeightMm: e.target.value })} />
               </label>
               {draft.notchDepthSource === 'strip_thickness' ? (
                 <label className="catalog-form__field">
                   <span>Holgura de la muesca (mm)</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={draft.notchClearanceMm}
-                    data-testid="gola-notch-clearance"
-                    onChange={(e) => set({ notchClearanceMm: e.target.value })}
-                  />
+                  <input type="number" min="0" step="any" value={draft.notchClearanceMm} data-testid="gola-notch-clearance" onChange={(e) => set({ notchClearanceMm: e.target.value })} />
                 </label>
               ) : (
                 <label className="catalog-form__field">
                   <span>Profundidad de la muesca (mm)</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={draft.notchDepthMm}
-                    data-testid="gola-notch-depth"
-                    onChange={(e) => set({ notchDepthMm: e.target.value })}
-                  />
+                  <input type="number" min="0" step="any" value={draft.notchDepthMm} data-testid="gola-notch-depth" onChange={(e) => set({ notchDepthMm: e.target.value })} />
                 </label>
               )}
             </div>
@@ -555,7 +497,7 @@ export function GolaProfileEditorModal({
                 const checked = e.target.checked;
                 const depth = Number(draft.profileDepthMm);
                 if (checked) {
-                  set({
+                  toggleEffect({
                     bevelEnabled: true,
                     bevelAt: 'top_front',
                     bevelSizeMm:
@@ -566,7 +508,7 @@ export function GolaProfileEditorModal({
                           : '',
                   });
                 } else {
-                  set({ bevelEnabled: false });
+                  toggleEffect({ bevelEnabled: false });
                 }
               }}
             />
@@ -575,14 +517,7 @@ export function GolaProfileEditorModal({
           {draft.bevelEnabled ? (
             <label className="catalog-form__field" style={{ margin: '0 0 8px 24px' }}>
               <span>Tamaño del bisel (mm)</span>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={draft.bevelSizeMm}
-                data-testid="gola-bevel-size"
-                onChange={(e) => set({ bevelSizeMm: e.target.value })}
-              />
+              <input type="number" min="0" step="any" value={draft.bevelSizeMm} data-testid="gola-bevel-size" onChange={(e) => set({ bevelSizeMm: e.target.value })} />
             </label>
           ) : null}
         </fieldset>
@@ -594,48 +529,28 @@ export function GolaProfileEditorModal({
             data-testid="gola-part-profile"
             items={hardwareOptions ?? []}
             value={draft.members.find((m) => m.key === 'profile')?.hardwareId ?? ''}
-            onChange={(id) =>
-              setDraft((current) => ({
-                ...current,
-                members: upsertMember(current.members, 'profile', 'hardware', id, (m: OpeningProfileMemberDraft) => ({
-                  ...m,
-                  rule: 'interior_width',
-                  unit: 'meter',
-                })),
-              }))
-            }
+            disabled={saving}
+            onChange={(id) => upsertMember('profile', 'hardware', id, { rule: 'interior_width', unit: 'meter' })}
           />
           <CatalogPicker
             label="Soportes"
             data-testid="gola-part-supports"
             items={hardwareOptions ?? []}
-            value={draft.members.find((m) => m.key === 'supports')?.hardwareId ?? ''}
-            onChange={(id) =>
-              setDraft((current) => ({
-                ...current,
-                members: upsertMember(current.members, 'supports', 'hardware', id, (m: OpeningProfileMemberDraft) => ({
-                  ...m,
-                  rule: 'per_length',
-                  unit: 'piece',
-                })),
-              }))
-            }
+            value={supportsMember?.hardwareId ?? ''}
+            disabled={saving}
+            onChange={(id) => upsertMember('supports', 'hardware', id, { rule: 'per_length', unit: 'piece' })}
           />
-          {draft.members.find((m) => m.key === 'supports')?.hardwareId ? (
+          {supportsMember?.hardwareId ? (
             <label className="catalog-form__field">
               <span>Soportes cada (mm)</span>
               <input
                 type="number"
                 min="0"
                 step="any"
-                value={draft.members.find((m) => m.key === 'supports')?.spacingMm ?? ''}
+                value={supportsMember.spacingMm}
+                disabled={saving}
                 data-testid="gola-part-supports-spacing"
-                onChange={(e) =>
-                  setDraft((current) => ({
-                    ...current,
-                    members: current.members.map((m) => (m.key === 'supports' ? { ...m, spacingMm: e.target.value } : m)),
-                  }))
-                }
+                onChange={(e) => setDraft((current) => ({ ...current, members: current.members.map((m) => (m.key === 'supports' ? { ...m, spacingMm: e.target.value } : m)) }))}
               />
             </label>
           ) : null}
@@ -644,16 +559,8 @@ export function GolaProfileEditorModal({
             data-testid="gola-part-endcaps"
             items={hardwareOptions ?? []}
             value={draft.members.find((m) => m.key === 'endCaps')?.hardwareId ?? ''}
-            onChange={(id) =>
-              setDraft((current) => ({
-                ...current,
-                members: upsertMember(current.members, 'endCaps', 'hardware', id, (m: OpeningProfileMemberDraft) => ({
-                  ...m,
-                  rule: 'per_exposed_end',
-                  unit: 'piece',
-                })),
-              }))
-            }
+            disabled={saving}
+            onChange={(id) => upsertMember('endCaps', 'hardware', id, { rule: 'per_exposed_end', unit: 'piece' })}
           />
           {isItalian ? (
             <>
@@ -661,13 +568,10 @@ export function GolaProfileEditorModal({
                 label="Tira (componente)"
                 data-testid="gola-part-strip"
                 items={componentOptions ?? []}
-                value={draft.members.find((m) => m.key === 'strip')?.componentId ?? ''}
+                value={stripMember?.componentId ?? ''}
+                disabled={saving}
                 onChange={(id) => {
-                  ensureStrip();
-                  setDraft((current) => ({
-                    ...current,
-                    members: current.members.map((m) => (m.key === 'strip' ? { ...m, kind: 'component', componentId: id } : m)),
-                  }));
+                  upsertMember('strip', 'component', id, { rule: 'interior_width', unit: 'piece', heightMm: stripMember?.heightMm ?? '70' });
                 }}
               />
               <label className="catalog-form__field">
@@ -676,14 +580,10 @@ export function GolaProfileEditorModal({
                   type="number"
                   min="0"
                   step="any"
-                  value={draft.members.find((m) => m.key === 'strip')?.heightMm ?? '70'}
+                  value={stripMember?.heightMm ?? '70'}
+                  disabled={saving}
                   data-testid="gola-part-strip-height"
-                  onChange={(e) =>
-                    setDraft((current) => ({
-                      ...current,
-                      members: current.members.map((m) => (m.key === 'strip' ? { ...m, heightMm: e.target.value } : m)),
-                    }))
-                  }
+                  onChange={(e) => setDraft((current) => ({ ...current, members: current.members.map((m) => (m.key === 'strip' ? { ...m, heightMm: e.target.value } : m)) }))}
                 />
               </label>
             </>
@@ -694,17 +594,12 @@ export function GolaProfileEditorModal({
           <legend className="catalog-form__section-title">Origen</legend>
           <label className="catalog-form__field">
             <span>Origen de los valores (opcional)</span>
-            <input
-              value={draft.geometryOrigin}
-              maxLength={200}
-              data-testid="gola-profile-origin"
-              onChange={(e) => set({ geometryOrigin: e.target.value })}
-            />
+            <input value={draft.geometryOrigin} maxLength={200} data-testid="gola-profile-origin-input" onChange={(e) => set({ geometryOrigin: e.target.value })} />
           </label>
         </fieldset>
 
         <div className="catalog-form__actions">
-          <button type="button" className="btn" onClick={onClose} disabled={saving} data-testid="gola-profile-cancel">
+          <button type="button" className="btn" onClick={() => { if (!saving) onClose(); }} disabled={saving} data-testid="gola-profile-cancel">
             Cancelar
           </button>
           <button type="submit" className="btn btn--primary" disabled={saving} data-testid="gola-profile-save">
@@ -715,6 +610,7 @@ export function GolaProfileEditorModal({
     </Modal>
   );
 }
+
 
 function upsertMember(
   members: readonly OpeningProfileMemberDraft[],
