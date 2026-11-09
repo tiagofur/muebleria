@@ -183,7 +183,14 @@ test('1526: el perfil se arma eligiendo herrajes por nombre o código y su BOM r
   await page.getByTestId('gola-profile-depth').fill('27.2');
   await uiClick(page, 'gola-discount-suggest-top');
   await expect(page.getByTestId('gola-discount-top')).toHaveValue('40');
-  await page.getByTestId('gola-profile-origin-input').fill('Ficha SCILM 2022-04-01 p. 42 (E2E #1526)');
+  try {
+    await page.getByTestId('gola-profile-origin-input').fill('Ficha SCILM 2022-04-01 p. 42 (E2E #1526)', { timeout: 5000 });
+  } catch (err) {
+    const dump = await page.locator('[data-testid="gola-profile-editor"]').innerHTML().catch(() => 'MODAL NO RENDERIZADO');
+    const fs = await import('fs');
+    fs.writeFileSync('docs/demo/evidence/1534/debug-origin.html', dump);
+    throw err;
+  }
 
   await pickFromPicker(page, 'gola-part-profile', 'Perfil GOLA');
   await pickFromPicker(page, 'gola-part-supports', 'SU116');
