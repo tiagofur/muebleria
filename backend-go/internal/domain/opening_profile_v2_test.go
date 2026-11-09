@@ -255,3 +255,26 @@ func TestGolaProfileSuggestions(t *testing.T) {
 		t.Fatalf("without depth the bevel size stays empty")
 	}
 }
+
+// #1534 — the v2 bridge is SYMMETRIC: a write that declares the positions
+// through compatible_placements only (the gola editor's shape) derives
+// positions from it, restricted to the v2 vocabulary.
+func TestNormalizeOpeningProfileWriteDerivesPositionsFromCompatible(t *testing.T) {
+	p := OpeningProfile{
+		GripType:              "gola",
+		CrossSectionShape:     "L",
+		Material:              GolaMaterialAluminum,
+		CompatiblePlacements:  []string{"top", "bottom"}, // bottom is not a v2 position
+		FrontDiscountTopMm:    intPtr(40),
+	}
+	NormalizeOpeningProfileWrite(&p, nil)
+	if len(p.Positions) != 1 || p.Positions[0] != GolaPositionTop {
+		t.Fatalf("positions = %v, want [top] (bottom never becomes a v2 position)", p.Positions)
+	}
+	if len(p.CompatiblePlacements) != 1 || p.CompatiblePlacements[0] != GolaPositionTop {
+		t.Fatalf("compatible_placements normalized to %v, want [top]", p.CompatiblePlacements)
+	}
+	if p.DoorReductionMm == nil || *p.DoorReductionMm != 40 {
+		t.Fatalf("door bridge drifted: %v", p.DoorReductionMm)
+	}
+}

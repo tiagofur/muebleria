@@ -15,10 +15,46 @@ const HW_STRIP = '71840000-0000-4000-8000-00000000000c';
 const COMP_TIRA = '71840000-0000-4000-8000-00000000000d';
 const STRUCT_TIRA = '71840000-0000-4000-8000-00000000000e';
 
+let lastProfilePost: string | null = null;
+
 async function uiClick(page: import('@playwright/test').Page, testId: string): Promise<void> {
   const locator = page.getByTestId(testId);
   await locator.waitFor({ state: 'visible', timeout: 15_000 });
   await locator.evaluate((el) => (el as HTMLElement).click());
+}
+
+async function pickFromPicker(
+  page: import('@playwright/test').Page,
+  testId: string,
+  query: string,
+): Promise<void> {
+  // The picker's own keyboard contract (#1526): focus the trigger,
+  // ArrowDown opens the list and the search auto-focuses, typing filters,
+  // ArrowDown+Enter select the (single) filtered option.
+  const trigger = page.getByTestId(testId).getByRole('button');
+  await trigger.waitFor({ state: 'visible', timeout: 15_000 });
+  await trigger.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.type(query);
+  await page.waitForTimeout(300);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(200);
+}
+
+async function saveProfile(page: import('@playwright/test').Page, code: string): Promise<void> {
+  await uiClick(page, 'gola-profile-save');
+  // Surface the modal's own error when the save fails (422/validation);
+  // when the modal closes, the error element never appears and the save
+  // succeeded.
+  const errorText = await page
+    .getByTestId('gola-profile-error')
+    .textContent({ timeout: 8_000 })
+    .catch(() => null);
+  if (errorText) {
+    throw new Error(`save ${code} failed: ${errorText} | last POST: ${lastProfilePost ?? 'captura no disponible'}`);
+  }
+  await expect(page.getByText(code).first()).toBeVisible({ timeout: 15_000 });
 }
 
 test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bisel, y ambas se usan desde un estilo', async ({ page }) => {
@@ -50,7 +86,7 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
         placement: 'base' as const,
         geometry: { kind: 'rectangular_board' as const, lengthMm: 720, widthMm: 27, thicknessMm: 16 },
         defaultEdges: [],
-        optionRoles: [],
+        optionRoles: ['FRENTE'],
         active: true,
       },
     ],
@@ -75,6 +111,14 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
     ],
   });
 
+  // Capture profile POST payloads for honest failure diagnostics.
+  lastProfilePost = null;
+  page.on('request', (req) => {
+    if (req.url().includes('/catalog/opening-profiles') && req.method() === 'POST') {
+      lastProfilePost = req.postData() ?? null;
+    }
+  });
+
   // UI session.
   await page.goto('/');
   await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_A_OWNER_EMAIL'));
@@ -84,7 +128,7 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
   const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
   if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 
-  await page.goto('/catalogs/opening-profiles');
+  await page.goto('/opening-profiles');
 
   // 1. «Gola L 8006»: material L, posición superior, descuento por la
   //    sugerencia del fabricante → la vista previa del SERVIDOR resuelve
@@ -102,16 +146,12 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
   await page.screenshot({ path: 'docs/demo/evidence/1534/editor-gola-l-preview.png', fullPage: true, animations: 'disabled' });
 
   // Piezas por rol.
-  await uiClick(page, 'gola-part-profile');
-  await page.getByRole('option', { name: /Perfil GOLA L 8006|8006-1534/ }).first().click();
-  await uiClick(page, 'gola-part-supports');
-  await page.getByRole('option', { name: /Soporte GOLA/ }).first().click();
+  await pickFromPicker(page, 'gola-part-profile', '8006-1534');
+  await pickFromPicker(page, 'gola-part-supports', 'SU116-1534');
   await page.getByTestId('gola-part-supports-spacing').fill('600');
-  await uiClick(page, 'gola-part-endcaps');
-  await page.getByRole('option', { name: /Tapas GOLA/ }).first().click();
+  await pickFromPicker(page, 'gola-part-endcaps', 'CF8006TP-1534');
 
-  await uiClick(page, 'gola-profile-save');
-  await expect(page.getByText('GOLA-L-8006-1534')).toBeVisible({ timeout: 15_000 });
+  await saveProfile(page, 'GOLA-L-8006-1534');
 
   // 2. «Italiana 70»: melamina, superior + entre frentes, descuentos 36,
   //    efectos de fábrica, tira de componentes con alto 70 y bisel de
@@ -134,8 +174,7 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
   await page.getByTestId('gola-part-strip').getByRole('option', { name: /Tira/ }).first().click();
   await expect(page.getByTestId('gola-part-strip-height')).toHaveValue('70');
 
-  await uiClick(page, 'gola-profile-save');
-  await expect(page.getByText('ITALIANA-70-1534')).toBeVisible({ timeout: 15_000 });
+  await saveProfile(page, 'ITALIANA-70-1534');
 
   // 3. Ambos se usan desde un estilo: inferior = L arriba + Italiana entre
   //    frentes (creado por la API de #1533 que el editor de Ajustes usa).

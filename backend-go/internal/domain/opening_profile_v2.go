@@ -188,6 +188,17 @@ func NormalizeOpeningProfileWrite(p *OpeningProfile, existing *OpeningProfile) {
 		if p.Material == GolaMaterialMelamine && strings.TrimSpace(p.CrossSectionShape) == "" {
 			p.CrossSectionShape = "flat"
 		}
+		// #1534 — the bridge is SYMMETRIC: a client may declare the positions
+		// through either field (the gola editor sends compatible_placements
+		// as the #1530 bridge did). Whichever carries the declaration feeds
+		// the other, restricted to the v2 positions vocabulary.
+		if len(p.Positions) == 0 && len(p.CompatiblePlacements) > 0 {
+			for _, position := range GolaPositions {
+				if containsString(p.CompatiblePlacements, position) {
+					p.Positions = append(p.Positions, position)
+				}
+			}
+		}
 		p.CompatiblePlacements = append([]string{}, p.Positions...)
 		// A client that round-trips the whole row and edits only the legacy
 		// door_reduction_mm meant the top discount: apply it there.
