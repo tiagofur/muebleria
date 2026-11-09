@@ -104,10 +104,13 @@ class GraneteInspectorJsTest < Minitest::Test
       'onDeleteResult' => 'function (result)',
       'onMaterialChoiceApplied' => 'function (payload)',
       'activateInspectorTab' => 'function ()',
-      # #1137/#1261: the Apertura card's two answers must stay wired — the
-      # Ruby bridge pushes them via execute_bridge('onDesignOpening…').
-      'onDesignOpening' => 'function (payload)',
-      'onDesignOpeningApplied' => 'function (payload)'
+      # #1535: the grip answers must stay wired — the Ruby bridge pushes
+      # them via execute_bridge('onProjectGrip…'); the facade answers died
+      # with the duplicated cards.
+      'onProjectGrip' => 'function (payload)',
+      'onProjectGripApplied' => 'function (payload)',
+      'onProjectGripUndone' => 'function (payload)',
+      'onProjectGripRedone' => 'function (payload)'
     }.each do |name, signature|
       assert_includes html, "#{name}: #{signature}",
                       "GraneteDialog.#{name} must stay as the Ruby-facing wrapper"
@@ -122,9 +125,9 @@ class GraneteInspectorJsTest < Minitest::Test
       "onMaterialChoiceApplied: function (payload) {\n            " \
       'window.GraneteUI.inspector.onMaterialChoiceApplied(payload);',
       "activateInspectorTab: function () {\n            window.GraneteUI.inspector.activateInspectorTab();",
-      "onDesignOpening: function (payload) {\n            window.GraneteUI.opening.onDesignOpening(payload);",
-      "onDesignOpeningApplied: function (payload) {\n            " \
-      'window.GraneteUI.opening.onDesignOpeningApplied(payload);'
+      "onProjectGrip: function (payload) {\n            window.GraneteUI.grip.onProjectGrip(payload);",
+      "onProjectGripApplied: function (payload) {\n            " \
+      'window.GraneteUI.grip.onProjectGripApplied(payload);'
     ].each do |body|
       assert_includes html, body, 'GraneteDialog wrapper must delegate to window.GraneteUI.inspector'
     end

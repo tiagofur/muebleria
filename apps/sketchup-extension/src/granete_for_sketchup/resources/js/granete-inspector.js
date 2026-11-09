@@ -141,9 +141,6 @@
   var inspectorHardwareGroupsContainer = document.getElementById("inspector-hardware-groups-container");
   var inspectorMaterialsContainer = document.getElementById("inspector-materials-container");
   // #1261: card Apertura del diseño (resumen visible al seleccionar mueble).
-  var inspectorOpeningSummaryCard = document.getElementById("inspector-opening-summary-card");
-  var inspectorOpeningSummaryText = document.getElementById("inspector-opening-summary-text");
-  var btnConfigureDesignOpening = document.getElementById("btn-configure-design-opening");
   // #529: card Apertura y Accesorios (solo definiciones con doorSwing).
   var inspectorOpeningAccessoriesCard = document.getElementById("inspector-opening-accessories-card");
   var inspectorOpeningAccessoriesContainer = document.getElementById("inspector-opening-accessories-container");
@@ -345,57 +342,6 @@
   // ofreciendo un botón para deseleccionar y configurar la apertura en
   // el diseño conectado.
   // ------------------------------------------------------------------
-
-  if (btnConfigureDesignOpening) {
-    btnConfigureDesignOpening.addEventListener("click", function () {
-      var openingMod = window.GraneteUI && window.GraneteUI.opening;
-      if (openingMod && typeof openingMod.toggleInlineEditor === "function") {
-        openingMod.toggleInlineEditor();
-      }
-    });
-  }
-
-  function renderOpeningSummaryCard() {
-    if (!inspectorOpeningSummaryCard || !inspectorOpeningSummaryText) return;
-    var bound = bindingIdentity && bindingIdentity !== "unbound";
-    if (!bound) {
-      inspectorOpeningSummaryCard.style.display = "none";
-      return;
-    }
-    var openingMod = window.GraneteUI && window.GraneteUI.opening;
-    var summary = openingMod && typeof openingMod.getSummary === "function" && openingMod.getSummary();
-    if (btnConfigureDesignOpening && openingMod && typeof openingMod.isInlineActive === "function") {
-      btnConfigureDesignOpening.textContent = openingMod.isInlineActive() ? "Cerrar" : "Configurar";
-    }
-    if (!summary) {
-      var designId = bindingIdentity.split("|")[0];
-      if (designId && openingMod && typeof openingMod.ensureLoaded === "function") {
-        openingMod.ensureLoaded(designId);
-      }
-      inspectorOpeningSummaryCard.style.display = "none";
-      return;
-    }
-    inspectorOpeningSummaryCard.style.display = "block";
-    var parts = [];
-    if (summary.loadStatus === "error") {
-      // #1261: an honest failure line — never a misleading default when the
-      // authoritative read failed (transport/credential/binding).
-      parts.push("No se pudo cargar la apertura del diseño" +
-        (summary.errorReason ? " (" + summary.errorReason + ")" : "") + ".");
-    } else if (summary.isGola && summary.profileName) {
-      var golaDesc = summary.systemLabel + ": " + summary.profileName;
-      if (summary.placementLabel) golaDesc += " (" + summary.placementLabel + ")";
-      parts.push(golaDesc);
-    } else if (summary.system === "handle") {
-      parts.push("Sistema: Jaladera (predeterminado)");
-    } else {
-      parts.push("Sistema: " + summary.systemLabel);
-    }
-    if (summary.loadStatus !== "error" && summary.resolvedText) {
-      parts.push("Frente: " + summary.resolvedText);
-    }
-    inspectorOpeningSummaryText.textContent = parts.join(" · ");
-  }
 
   // ------------------------------------------------------------------
   // #529 — Apertura y Accesorios (SketchUp Inspector).
@@ -862,6 +808,8 @@
       // the legacy empty state.
       var designInspector = window.GraneteUI.designInspector;
       if (designInspector && designInspector.handleNoSelection()) {
+        // #1535: «Agarre del proyecto» vive en el carril del diseño.
+        if (window.GraneteUI.grip) window.GraneteUI.grip.renderProjectSection();
         renderManufacturingCard(null);
         return;
       }
@@ -872,6 +820,8 @@
 
     if (context.kind === "batch") {
       renderBatchInspector(context);
+      // #1535: excepción de agarre para el lote en UNA operación.
+      if (window.GraneteUI.grip) window.GraneteUI.grip.renderBatchBlock(context.furniture || []);
       renderManufacturingCard(null);
       return;
     }
@@ -1540,8 +1490,8 @@
     }
     // #1046 S3: card Herrajes del mueble (sólo grupos consumidos).
     renderInspectorHardwareGroups();
-    // #1261: card Apertura del diseño (resumen visible al seleccionar mueble).
-    renderOpeningSummaryCard();
+    // #1535: card Agarre (hereda del estilo del proyecto o excepción).
+    if (window.GraneteUI.grip) window.GraneteUI.grip.renderFurnitureCard(context);
     // #529: card Apertura y Accesorios (nivel mueble, después de params/materiales).
     renderOpeningAccessoriesCard(context, inspectorParams);
 
@@ -1688,13 +1638,13 @@
     var binding = (status && status.binding) || {};
     var connected = !!(status && status.state === "connected" && binding.designId);
     var identity = connected ? binding.designId + "|" + (binding.projectId || "") : "unbound";
-    if (connected && window.GraneteUI && window.GraneteUI.opening && binding.designId) {
-      window.GraneteUI.opening.ensureLoaded(binding.designId);
+    if (connected && window.GraneteUI && window.GraneteUI.grip && binding.projectId) {
+      window.GraneteUI.grip.onBindingStatus({ state: "connected", binding: binding });
     }
     if (identity === bindingIdentity) return;
     bindingIdentity = identity;
     if (selectedContext && selectedContext.kind === "furniture") {
-      renderOpeningSummaryCard();
+      if (window.GraneteUI.grip) window.GraneteUI.grip.renderFurnitureCard(selectedContext);
     }
     if (!draft) return;
     draft = null;
@@ -1903,7 +1853,22 @@
     // #1046 S2: inventario de herrajes del proyecto (respuesta del escaneo).
     getDefinition: function () { return inspectorDef; },
     getMaterialsCard: function () { return inspectorMaterialsCard; },
-    updateOpeningSummary: renderOpeningSummaryCard,
+    // #1535: the grip answers land asynchronously — re-render only the grip
+    // surfaces for the CURRENT lane (no full inspector re-render).
+    refreshGripAreas: function () {
+      var context = selectedContext;
+      if (!context) {
+        if (window.GraneteUI.grip) window.GraneteUI.grip.renderProjectSection();
+        return;
+      }
+      if (context.kind === "batch") {
+        if (window.GraneteUI.grip) window.GraneteUI.grip.renderBatchBlock(context.furniture || []);
+        return;
+      }
+      if (context.kind === "furniture") {
+        if (window.GraneteUI.grip) window.GraneteUI.grip.renderFurnitureCard(context);
+      }
+    },
     setHardwareCatalog: setHardwareCatalog,
     setAgregadosCatalog: function (agregados) { catalogAgregados = agregados || []; },
     getAgregadosCatalog: function () { return catalogAgregados; },

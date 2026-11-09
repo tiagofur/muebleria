@@ -15,7 +15,7 @@ module Granete
         include ProjectFurnitureBridge
         include PlacementPreviewBridge
         include DesignInspectorBridge
-        include DesignOpeningBridge
+        include ProjectGripBridge
         include DesignOpeningGeometryBridge
         include DesignOpeningChannelBridge
         include DesignInheritanceBridge
@@ -256,7 +256,7 @@ module Granete
           register_project_furniture_callbacks(dialog)
           register_placement_preview_callbacks(dialog)
           register_design_inspector_callbacks(dialog)
-          register_design_opening_callbacks(dialog)
+          register_project_grip_callbacks(dialog)
           register_design_workflow_callbacks(dialog)
           # #460 SEC-3: webviews re-mint expired media grants on demand; the
           # session credential itself never crosses into the dialog.

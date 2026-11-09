@@ -534,7 +534,7 @@
         <!-- Tab 3: Contextual Inspector (capability-driven, #476) -->
         <section id="pane-inspector" class="tab-pane" role="tabpanel">
           <!-- #1256: con el modelo sin vincular, las tarjetas de nivel
-               diseño (Herrajes del diseño, Apertura del diseño) no existen
+               diseño (Herrajes del diseño, Agarre del proyecto) no existen
                para el usuario y la conexión vive en la pestaña Proyecto.
                Nota informativa — la acción de conectar NO se duplica aquí.
                La visibilidad la gobierna granete-model-binding.js
@@ -621,14 +621,16 @@
               <div id="design-inspector-hardware-body" style="margin-top: var(--space-2);"></div>
             </div>
 
-            <!-- #1137 / OPEN-FRONT: «Apertura» del diseño — selección
-                 semántica (sistema/perfil/posición) filtrada por las
-                 capacidades de fábrica; los frentes son SALIDA read-only del
-                 resolve del servidor. Rendering lives in
-                 js/granete-opening.js. -->
-            <div class="card" id="design-inspector-opening-card" style="display: none; margin-bottom: var(--space-3);">
-              <div class="card-title">Apertura del diseño</div>
-              <div id="design-inspector-opening-body" style="margin-top: var(--space-2);"></div>
+            <!-- #1535: «Agarre del proyecto» — el estilo que gobierna todo
+                 el diseño (ADR-0009 A2.3). Filas de opción servidas por el
+                 backend; un clic manda la intención y es deshacible.
+                 Rendering in js/granete-grip.js. -->
+            <div class="card" id="design-grip-card" style="display: none; margin-bottom: var(--space-3);">
+              <div class="card-header-row">
+                <div class="card-title">Agarre del proyecto</div>
+                <button id="grip-undo" type="button" class="btn btn-sm btn-ghost" style="display: none;">Deshacer</button>
+              </div>
+              <div id="design-grip-body" style="margin-top: var(--space-2);"></div>
             </div>
 
             <!-- #784 R2: pending defaults footer (Aplicar = ONE working-copy
@@ -660,6 +662,11 @@
             <div id="inspector-batch-params-card" style="margin-top: var(--space-3);">
               <p class="presets-block-label">Parámetros compartidos</p>
               <div id="inspector-batch-params"></div>
+            </div>
+            <!-- #1535: excepción de agarre para el lote en UNA operación -->
+            <div id="inspector-batch-grip-card" style="display: none; margin-top: var(--space-3);">
+              <p class="presets-block-label">Agarre del lote</p>
+              <div id="inspector-batch-grip"></div>
             </div>
             <!-- #471 R2: Apply explícito del lote — todo-o-nada, un undo -->
             <div id="inspector-batch-footer" style="display: none; margin-top: var(--space-3);">
@@ -700,31 +707,30 @@
                 <div id="inspector-params-container" style="margin-top: var(--space-2);"></div>
               </div>
 
-              <!-- #1261: Resumen de apertura del diseño conectado. Hace
-                   descubrible la selección (Jaladera / Gola / Rebase) cuando un
-                   mueble está seleccionado, sin tener que adivinar que el editor
-                   completo vive en el carril sin selección. -->
-              <div class="card" id="inspector-opening-summary-card" style="display: none;">
+              <!-- #1535: tarjeta «Agarre» — hereda del estilo del proyecto
+                   o declara la excepción del mueble; el resultado viaja en
+                   el reporte del servidor (plugin nunca calcula).
+                   Rendering in js/granete-grip.js. -->
+              <div class="card" id="inspector-grip-card" style="display: none;">
                 <div class="card-header-row">
                   <div style="flex: 1; min-width: 0;">
-                    <div class="card-title">Apertura del diseño</div>
-                    <div id="inspector-opening-summary-text" class="subhead" style="margin-top: var(--space-1); font-size: var(--text-xs); line-height: 1.4;">
-                      --
-                    </div>
+                    <div class="card-title">Agarre</div>
+                    <div id="inspector-grip-body" class="subhead" style="margin-top: var(--space-1); font-size: var(--text-xs); line-height: 1.4;">--</div>
                   </div>
-                  <button id="btn-configure-design-opening" type="button" class="btn btn-sm btn-secondary" style="margin-left: var(--space-2); white-space: nowrap;" title="Configurar apertura del diseño">Configurar</button>
+                  <span id="inspector-grip-badge" class="status-badge valid">Hereda</span>
                 </div>
-                <div id="inspector-opening-inline-editor" style="display: none; margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--border-color, #e0e0e0);"></div>
               </div>
 
               <!-- #529 / #1377: Card condicional de presentación y apertura (puertas y cajones).
                    Se muestra si el mueble tiene puertas o cajones detectados (metadata
                    gestionada, parámetro doorSwing o doorAccessories del resolve).
-                   #1256: renombrada de «Apertura» a «Apertura y presentación». -->
+                   #1256 renombró «Apertura» → «Apertura y presentación»;
+                   #1535 vuelve a «Apertura»: la ADR reserva Apertura para el
+                   vaivén y la presentación; el agarre vive en su tarjeta. -->
               <div class="card" id="inspector-opening-accessories-card" style="display: none;">
                 <div class="card-header-row">
                   <div>
-                    <div class="card-title">Apertura y presentación</div>
+                    <div class="card-title">Apertura</div>
                     <div id="opening-accessories-summary" class="subhead" style="margin-top: var(--space-1); font-size: var(--text-xs);">
                       Vista de presentación: abrir o cerrar no modifica el diseño.
                     </div>
@@ -1305,7 +1311,7 @@
     <script src="js/granete-design-inspector.js"></script>
     <!-- #1137: the Apertura card module — loads AFTER the design inspector
          (its lane lifecycle drives the card) and BEFORE granete-inspector.js. -->
-    <script src="js/granete-opening.js"></script>
+    <script src="js/granete-grip.js"></script>
     <script src="js/granete-inspector.js"></script>
 
     <!-- #848 Phase B C4.8: model binding module under window.GraneteUI.
@@ -1535,6 +1541,8 @@
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.setBinding(status);
             if (window.GraneteCommercialBootstrap) window.GraneteCommercialBootstrap.setBinding(status);
             if (status && status.state === "connected") window.GraneteUI.projectFurniture.requestProjectFurniture();
+            // #1535: the grip surfaces follow the bound project.
+            if (window.GraneteUI.grip) window.GraneteUI.grip.onBindingStatus(status);
           },
           onCommercialProjection: function (payload) {
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.receive(payload);
@@ -1572,13 +1580,19 @@
           onHardwareGroups: function (payload) {
             window.GraneteUI.designInspector.onHardwareGroups(payload);
           },
-          // #1137 / #1261: the Apertura card's answers (requestId-correlated;
-          // late/foreign responses are discarded inside the module).
-          onDesignOpening: function (payload) {
-            window.GraneteUI.opening.onDesignOpening(payload);
+          // #1535: the grip answers (requestId-correlated; late/foreign
+          // PROJECT responses are discarded inside the module).
+          onProjectGrip: function (payload) {
+            window.GraneteUI.grip.onProjectGrip(payload);
           },
-          onDesignOpeningApplied: function (payload) {
-            window.GraneteUI.opening.onDesignOpeningApplied(payload);
+          onProjectGripApplied: function (payload) {
+            window.GraneteUI.grip.onProjectGripApplied(payload);
+          },
+          onProjectGripUndone: function (payload) {
+            window.GraneteUI.grip.onProjectGripUndone(payload);
+          },
+          onProjectGripRedone: function (payload) {
+            window.GraneteUI.grip.onProjectGripRedone(payload);
           },
           onDeleteResult: function (result) {
             window.GraneteUI.inspector.onDeleteResult(result);
@@ -2072,12 +2086,13 @@
           showToast: function (kind, text) { showToast(kind, text); }
         });
 
-        if (window.GraneteUI.opening && window.GraneteUI.opening.init) {
-          window.GraneteUI.opening.init({
+        if (window.GraneteUI.grip && window.GraneteUI.grip.init) {
+          window.GraneteUI.grip.init({
             sketchup: window.sketchup,
-            onSummaryChanged: function () {
-              if (window.GraneteUI.inspector && window.GraneteUI.inspector.updateOpeningSummary) {
-                window.GraneteUI.inspector.updateOpeningSummary();
+            showToast: function (kind, text) { showToast(kind, text); },
+            onStateChange: function () {
+              if (window.GraneteUI.inspector && window.GraneteUI.inspector.refreshGripAreas) {
+                window.GraneteUI.inspector.refreshGripAreas();
               }
             }
           });
