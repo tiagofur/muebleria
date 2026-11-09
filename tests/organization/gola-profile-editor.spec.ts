@@ -143,6 +143,8 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
   await uiClick(page, 'gola-discount-suggest-top');
   expect(await page.getByTestId('gola-discount-top').inputValue()).toBe('40');
   await expect(page.getByTestId('gola-profile-preview-una_puerta')).toContainText('Mueble de 720: una puerta = 680');
+  // Visual evidence (## Visual Evidence in the PR): the editor with the
+  // server preview + schematic section + effects + parts.
   await page.screenshot({ path: 'docs/demo/evidence/1534/editor-gola-l-preview.png', fullPage: true, animations: 'disabled' });
 
   // Piezas por rol.
@@ -159,6 +161,10 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
   await uiClick(page, 'opening-profile-create-btn');
   await page.getByTestId('gola-profile-code').fill('ITALIANA-70-1534');
   await page.getByTestId('gola-profile-name').fill('Italiana 70');
+  // The datasheet first, then the material: the Italian preset derives the
+  // bevel from the declared depth (profundidad − 2).
+  await page.getByTestId('gola-profile-height').fill('56.5');
+  await page.getByTestId('gola-profile-depth').fill('27.2');
   await uiClick(page, 'gola-material-italiana');
   await expect(page.getByTestId('gola-position-top')).toBeChecked();
   await expect(page.getByTestId('gola-position-between')).toBeChecked();
@@ -167,11 +173,8 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
   await expect(page.getByTestId('gola-effect-depth')).toBeChecked();
   await expect(page.getByTestId('gola-effect-notch')).toBeChecked();
   await expect(page.getByTestId('gola-effect-bevel')).toBeChecked();
-  await page.getByTestId('gola-profile-depth').fill('27.2');
   await expect(page.getByTestId('gola-bevel-size')).toHaveValue('25.2'); // profundidad − 2
-  await uiClick(page, 'gola-part-strip');
-  await page.getByTestId('gola-part-strip').getByRole('textbox').fill('TIRA-1534');
-  await page.getByTestId('gola-part-strip').getByRole('option', { name: /Tira/ }).first().click();
+  await pickFromPicker(page, 'gola-part-strip', 'TIRA-1534');
   await expect(page.getByTestId('gola-part-strip-height')).toHaveValue('70');
 
   await saveProfile(page, 'ITALIANA-70-1534');
@@ -206,7 +209,8 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
     .locator('[data-testid^="grip-style-summary-"]', { hasText: 'GOLA-L-8006-1534' })
     .first()
     .textContent();
-  expect(summary).toContain('entre frentes');
+  expect(summary).toContain('entre cajones');
+  await page.screenshot({ path: 'docs/demo/evidence/1534/agarres-estilo-ambos.png', fullPage: true, animations: 'disabled' });
 
   // Visual evidence (## Visual Evidence in the PR).
   await page.screenshot({ path: 'docs/demo/evidence/1534/agarres-estilo-1534.png', fullPage: true, animations: 'disabled' });
