@@ -65,6 +65,10 @@ test('gola profile v2: identity-only create → full declaration edit → plain-
   await page.getByTestId('gola-effect-notch').click();
   await page.getByTestId('gola-notch-height').fill('56.5');
   await page.getByTestId('gola-notch-depth').fill('27.2');
+  // The derived depth reduction («deriva de la ficha») rides as the second
+  // declared effect.
+  await page.getByTestId('gola-effect-depth').click();
+  await page.getByTestId('gola-profile-origin-input').fill('Ficha SCILM 2022-04-01 pp. 42-45 (E2E #1325)');
   // The explicit depth is the aluminum default — no derived radio.
   // The derived source is the DEFAULT and names the datasheet value.
   await uiClick(page, 'gola-profile-save');
