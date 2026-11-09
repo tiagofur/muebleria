@@ -489,14 +489,17 @@ export function GolaProfileEditorModal({
               onChange={(e) => {
                 const checked = e.target.checked;
                 if (checked) {
+                  // Melamine (tira italiana): the depth FOLLOWS the strip
+                  // thickness + clearance. Aluminum: explicit depth.
+                  const italian = material === 'melamine';
                   set({
                     notchEnabled: true,
-                    notchHeightMm: draft.notchHeightMm !== '' ? draft.notchHeightMm : '70',
-                    notchDepthSource: 'strip_thickness',
-                    notchClearanceMm: draft.notchClearanceMm !== '' ? draft.notchClearanceMm : '1',
+                    notchHeightMm: draft.notchHeightMm !== '' ? draft.notchHeightMm : italian ? '70' : '',
+                    notchDepthSource: italian ? 'strip_thickness' : '',
+                    notchClearanceMm: italian && draft.notchClearanceMm !== '' ? draft.notchClearanceMm : '1',
                   });
                 } else {
-                  set({ notchEnabled: false });
+                  set({ notchEnabled: false, notchDepthSource: '' });
                 }
               }}
             />
@@ -515,18 +518,31 @@ export function GolaProfileEditorModal({
                   onChange={(e) => set({ notchHeightMm: e.target.value })}
                 />
               </label>
-              <label className="catalog-form__field">
-                <span>Holgura de la muesca (mm)</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={draft.notchClearanceMm}
-                  data-testid="gola-notch-clearance"
-                  onChange={(e) => set({ notchClearanceMm: e.target.value })}
-                />
-              </label>
-              <p className="catalog-form__hint">Profundidad = espesor de la tira + holgura.</p>
+              {draft.notchDepthSource === 'strip_thickness' ? (
+                <label className="catalog-form__field">
+                  <span>Holgura de la muesca (mm)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={draft.notchClearanceMm}
+                    data-testid="gola-notch-clearance"
+                    onChange={(e) => set({ notchClearanceMm: e.target.value })}
+                  />
+                </label>
+              ) : (
+                <label className="catalog-form__field">
+                  <span>Profundidad de la muesca (mm)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={draft.notchDepthMm}
+                    data-testid="gola-notch-depth"
+                    onChange={(e) => set({ notchDepthMm: e.target.value })}
+                  />
+                </label>
+              )}
             </div>
           ) : null}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>

@@ -1,9 +1,10 @@
 /**
- * #1526 browser proof: the opening profile editor picks its parts from the
- * catalogs (search by name or code, no UUID typing), keys hardware members by
- * the roles the engine reads, and carries spacing + envelope. The profile
- * created ONLY through the screen is then applied to a design and the server
- * resolves its three BOM lines (perfil, soportes, tapas).
+ * #1526/#1534 browser proof: the gola profile editor v2 picks its parts by
+ * role from the catalogs (search by name or code, no UUID typing), carries
+ * spacing + envelope, and writes v2-shaped (material + positions + per-
+ * position discounts). The profile created ONLY through the screen is then
+ * applied to a design and the server resolves its three BOM lines (perfil,
+ * soportes, tapas).
  *
  * The catalog seeding mirrors opening-bom-quote.spec.ts (#1263) with its own
  * ids, so the two specs never share rows.
@@ -51,14 +52,21 @@ async function loginToA(page: Page): Promise<void> {
   if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 }
 
-async function addHardwareMember(page: Page, index: number, role: string, query: string, option: RegExp): Promise<void> {
-  await page.getByTestId('opening-profile-member-add').click();
-  const row = page.getByTestId('opening-profile-member-row').nth(index);
-  await row.getByTestId('opening-profile-member-role').selectOption(role);
-  const picker = row.getByTestId('opening-profile-member-picker');
-  await picker.getByRole('button').first().click();
-  await picker.getByLabel('Nombre o código').fill(query);
-  await picker.getByRole('option', { name: option }).click();
+async function uiClick(page: Page, testId: string): Promise<void> {
+  const locator = page.getByTestId(testId);
+  await locator.waitFor({ state: 'visible', timeout: 15_000 });
+  await locator.evaluate((el) => (el as HTMLElement).click());
+}
+
+async function pickFromPicker(page: Page, testId: string, query: string): Promise<void> {
+  // Keyboard contract (#1526): focus the trigger, ArrowDown opens the list
+  // and auto-focuses the search (rendered in a PORTAL), typing filters, then
+  // click the single filtered option.
+  await page.getByTestId(testId).getByRole('button').click();
+  const search = page.getByRole('textbox', { name: 'Buscar…' });
+  await search.waitFor({ state: 'visible', timeout: 15_000 });
+  await search.fill(query);
+  await page.getByTestId(testId).getByRole('option').first().click();
 }
 
 test('1526: el perfil se arma eligiendo herrajes por nombre o código y su BOM resuelve', async ({ page }) => {
@@ -160,36 +168,33 @@ test('1526: el perfil se arma eligiendo herrajes por nombre o código y su BOM r
     ],
   });
 
-  // The profile is created ONLY through the screen: parts picked by name or
-  // code from the catalog, roles from the select, spacing and envelope typed.
+  // The profile is created ONLY through the screen: material chip L, parts
+  // picked by name or code by role, spacing and envelope typed, discount via
+  // the suggestion. The id derives from the code on submit (#1534).
+  const CODE = `GOLA-1526-${RUN}`;
+  const DERIVED_ID = `profile.gola-1526-${RUN}`;
   await loginToA(page);
   await page.goto('/opening-profiles');
   await page.getByTestId('opening-profile-create-btn').click();
-  await page.getByTestId('opening-profile-id-input').fill(PROFILE_ID);
-  await page.getByTestId('opening-profile-code-input').fill(`GOLA-1526-${RUN}`);
-  await page.getByTestId('opening-profile-name-input').fill('Gola L 8006 (picker)');
-  await expect(page.getByTestId('opening-profile-grip-select').locator('option')).toHaveCount(1);
-  await page.getByTestId('opening-profile-status-select').selectOption('verified');
-  await page.getByTestId('opening-profile-door-reduction').fill('40');
-  await page.getByTestId('opening-profile-height').fill('56.5');
-  await page.getByTestId('opening-profile-depth').fill('27.2');
-  await page.getByTestId('opening-profile-origin-input').fill('Ficha SCILM 2022-04-01 p. 42 (E2E #1526)');
+  await page.getByTestId('gola-profile-code').fill(CODE);
+  await page.getByTestId('gola-profile-name').fill('Gola L 8006 (picker)');
+  await uiClick(page, 'gola-material-l');
+  await page.getByTestId('gola-profile-height').fill('56.5');
+  await page.getByTestId('gola-profile-depth').fill('27.2');
+  await uiClick(page, 'gola-discount-suggest-top');
+  await expect(page.getByTestId('gola-discount-top')).toHaveValue('40');
+  await page.getByTestId('gola-profile-origin-input').fill('Ficha SCILM 2022-04-01 p. 42 (E2E #1526)');
 
-  await addHardwareMember(page, 0, 'profile', 'Perfil GOLA', /Perfil GOLA L 8006/);
-  await addHardwareMember(page, 1, 'supports', 'SU116', /Soporte GOLA atornillar/);
-  const supports = page.getByTestId('opening-profile-member-row').nth(1);
-  await supports.getByTestId('opening-profile-member-spacing').fill('600');
-  await supports.getByTestId('opening-profile-member-dim-0').fill('39.5');
-  await supports.getByTestId('opening-profile-member-dim-1').fill('16.5');
-  await supports.getByTestId('opening-profile-member-dim-2').fill('20');
-  await addHardwareMember(page, 2, 'endCaps', 'tapas', /Juego tapas terminales/);
-  await expect(page.getByTestId('opening-profile-member-ref')).toHaveCount(0);
-  await page.getByTestId('opening-profile-form-submit-btn').click();
-  await expect(page.getByTestId('opening-profile-form-modal')).toHaveCount(0, { timeout: 15_000 });
+  await pickFromPicker(page, 'gola-part-profile', 'Perfil GOLA');
+  await pickFromPicker(page, 'gola-part-supports', 'SU116');
+  await page.getByTestId('gola-part-supports-spacing').fill('600');
+  await pickFromPicker(page, 'gola-part-endcaps', 'tapas');
+  await uiClick(page, 'gola-profile-save');
+  await expect(page.getByTestId('gola-profile-editor')).toHaveCount(0, { timeout: 15_000 });
 
   // The server stored the exact keys, references, spacing and envelope.
   const stored = await client.request<{ bom_members: Record<string, { hardware_id: string; rule: string; spacing_mm?: number; dimensions_mm?: number[] }> }>(
-    'GET', `/catalog/opening-profiles/${PROFILE_ID}`, { token },
+    'GET', `/catalog/opening-profiles/${DERIVED_ID}`, { token },
   );
   expect(Object.keys(stored.bom_members).sort()).toEqual(['endCaps', 'profile', 'supports']);
   expect(stored.bom_members.profile).toMatchObject({ hardware_id: HW_PROFILE_8006, rule: 'interior_width' });
@@ -218,7 +223,7 @@ test('1526: el perfil se arma eligiendo herrajes por nombre o código y su BOM r
   const before = await client.getDesignWorkingCopy(token, designId);
   const applied = await client.request<DesignOpeningPayload>('PUT', `/designs/${designId}/opening`, {
     token,
-    body: { system: 'gola', profileId: PROFILE_ID, placements: ['top'], expectedWorkingVersion: before.updated_at },
+    body: { system: 'gola', profileId: DERIVED_ID, placements: ['top'], expectedWorkingVersion: before.updated_at },
   });
   expect(applied.resolution?.state).toBe('resolved');
   expect(applied.resolution?.bomReason).toBeUndefined();
