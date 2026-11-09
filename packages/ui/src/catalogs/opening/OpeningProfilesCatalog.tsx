@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { suggestDuplicateCode } from '@granete/domain';
-import type { OpeningProfileWrite } from '@granete/storage';
+import { GraneteApiError, type GraneteApiClient, type OpeningProfileWrite } from '@granete/storage';
 import { Copy, Eye, EyeOff, DoorOpen, Pencil, Plus, SearchX } from 'lucide-react';
 import {
   ConfirmDialog,
@@ -33,7 +33,7 @@ import {
   validateUniqueCode,
 } from '../catalogHelpers';
 import { ActiveBadge, CatalogTable, type CatalogColumn } from '../CatalogTable';
-import { OpeningProfileFormModal } from './OpeningProfileFormModal';
+import { GolaProfileEditorModal } from './GolaProfileEditorModal';
 import type { CatalogPickerOption } from '../CatalogPicker';
 import {
   bodyModifiersOfDraft,
@@ -64,6 +64,11 @@ export interface OpeningProfileRow {
   readonly frontReductionMm: number | null;
   readonly gripClearanceMm: number | null;
   readonly doorReductionMm: number | null;
+  /** #1534 — v2 fields; optional because legacy rows predate them. */
+  readonly material?: string | null;
+  readonly frontDiscountTopMm?: number | null;
+  readonly frontDiscountBetweenMm?: number | null;
+  readonly usage?: Record<string, { usable?: boolean; message?: string | null }>;
   readonly profileHeightMm: number | null;
   readonly profileDepthMm: number | null;
   readonly geometryOrigin: string | null;
@@ -87,6 +92,40 @@ export interface OpeningProfilesCatalogProps {
   /** #1526 — hardware and components to pick members from (search by name or code). */
   readonly hardwareOptions?: readonly CatalogPickerOption[] | null;
   readonly componentOptions?: readonly CatalogPickerOption[] | null;
+  /** #1534 — the API handle + session token for the editor's live preview. */
+  readonly api?: GraneteApiClient | null;
+  readonly token?: string | null;
+}
+
+/** #1534 — the Agarre column: v2 material/positions for gola rows. */
+function gripColumn(r: OpeningProfileRow): string {
+  if (r.gripType !== 'gola') return GRIP_SHORT[r.gripType] ?? r.gripType;
+  const materialLabel = r.material === 'melamine' ? 'Italiana' : r.crossSection ? `Gola ${r.crossSection}` : 'Gola';
+  const positions = [
+    ...(r.placements.includes('top') ? ['superior'] : []),
+    ...(r.placements.includes('between') ? ['entre frentes'] : []),
+  ];
+  return `${materialLabel} (${positions.join(' + ') || 'sin posición'})`;
+}
+
+/** #1534 — the Uso column: the per-position use rule served by the API
+ * (disponible ≠ válido), verbatim. */
+function usabilityColumn(r: OpeningProfileRow): ReactNode {
+  const usage = r.usage ?? {};
+  const parts: string[] = [];
+  for (const [position, label] of [['top', 'superior'], ['between', 'entre frentes']] as const) {
+    if (!r.placements.includes(position)) continue;
+    const verdict = usage[position];
+    parts.push(verdict?.usable === true ? `${label}: OK` : `${label}: ${verdict?.message ?? 'no utilizable'}`);
+  }
+  if (parts.length === 0) return '—';
+  return (
+    <span style={{ fontSize: 12 }}>
+      {parts.map((part) => (
+        <span key={part} style={{ display: 'block' }}>{part}</span>
+      ))}
+    </span>
+  );
 }
 
 const GRIP_SHORT: Readonly<Record<string, string>> = {
@@ -130,7 +169,9 @@ export function OpeningProfilesCatalog({
   canMutate = true,
   hardwareOptions = null,
   componentOptions = null,
-}: OpeningProfilesCatalogProps): ReactNode {
+
+  api = null,
+  token = null,}: OpeningProfilesCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
@@ -201,93 +242,37 @@ export function OpeningProfilesCatalog({
     setModalOpen(true);
   };
 
-  const validate = (): string | null => {
+  const validate = (current: OpeningProfileDraft): string | null => {
     if (editingId == null) {
-      if (draft.id.trim() === '') return 'El identificador del perfil es obligatorio';
+      if (current.id.trim() === '') return 'El identificador del perfil es obligatorio';
     }
     const codeErr = validateUniqueCode(
-      draft.code,
+      current.code,
       profiles,
       editingId ?? undefined,
     );
     if (codeErr) return codeErr;
-    const nameErr = validateRequiredName(draft.name);
+    const nameErr = validateRequiredName(current.name);
     if (nameErr) return nameErr;
-    if (draft.gripType === 'gola' && draft.crossSection === '') {
-      return 'Elegí la sección del perfil gola (L, C, J o plano)';
+    // #1534 — v2 rules: height/depth > 0 (the use rule needs them). A
+    // declared position's discount is OPTIONAL (disponible ≠ válido: the
+    // preview and the Uso column report it honestly); the datasheet barrier
+    // is GONE (#1530 made datasheet_status data-only).
+    if (!Number.isFinite(Number(current.profileHeightMm)) || Number(current.profileHeightMm) <= 0 ||
+      !Number.isFinite(Number(current.profileDepthMm)) || Number(current.profileDepthMm) <= 0) {
+      return 'El alto y la profundidad del perfil deben ser mayores a 0';
     }
-    if (!draft.top && !draft.between && !draft.bottom) {
-      return 'Elegí al menos una frontera compatible';
-    }
-    // #1327: members reference exactly one thing each, with unique keys.
-    const seenKeys = new Set<string>();
-    for (const [index, member] of draft.members.entries()) {
-      if (member.key.trim() === '') {
-        return member.kind === 'hardware'
-          ? `Elige el rol del herraje ${index + 1}: Perfil, Soportes o Tapas`
-          : `La clave del elemento ${index + 1} es obligatoria`;
+    if (current.notchEnabled) {
+      if (!Number.isFinite(Number(current.notchHeightMm)) || Number(current.notchHeightMm) <= 0) {
+        return 'La muesca exige un alto mayor a 0';
       }
-      if (seenKeys.has(member.key.trim())) return `La clave "${member.key.trim()}" está repetida`;
-      seenKeys.add(member.key.trim());
-      if (member.kind === 'component' && member.componentId.trim() === '') {
-        return `El componente del elemento ${index + 1} no fue indicado`;
-      }
-      if (member.kind === 'hardware' && member.hardwareId.trim() === '') {
-        return `El herraje del elemento ${index + 1} no fue indicado`;
-      }
-      // #1526: a hardware member under any other key is silently ignored by
-      // the engine. Keys saved before keep working as they did (a legacy key
-      // left untouched is preserved), but none can be created.
-      if (member.kind === 'hardware' && !isHardwareMemberRole(member.key.trim())) {
-        const existingKeys = editingProfile?.bomMemberKeys ?? [];
-        if (!existingKeys.includes(member.key.trim())) {
-          return `Elige el rol del herraje ${index + 1}: Perfil, Soportes o Tapas`;
-        }
-      }
-      if (member.rule === 'per_length') {
-        const spacing = Number(member.spacingMm);
-        if (member.spacingMm.trim() === '' || !Number.isInteger(spacing) || spacing <= 0) {
-          return `Indica cada cuántos mm va el elemento ${index + 1} (entero mayor que 0)`;
-        }
-      }
-      for (const [axisIndex, dim] of member.dims.entries()) {
-        if (dim.trim() !== '' && (!Number.isFinite(Number(dim)) || Number(dim) <= 0)) {
-          return `La medida ${axisIndex + 1} del elemento ${index + 1} debe ser mayor que 0`;
-        }
+      if (current.notchDepthSource !== 'strip_thickness' &&
+        (!Number.isFinite(Number(current.notchDepthMm)) || Number(current.notchDepthMm) <= 0)) {
+        return 'La muesca exige una profundidad mayor a 0 (o el origen por espesor de tira)';
       }
     }
-    if (draft.doorReductionMm !== '') {
-      // #1316: the owner scoped the metal gola to 30–40 mm until SCILM
-      // confirms in writing; the contract itself only refuses nonsense.
-      const door = Number(draft.doorReductionMm);
-      if (!Number.isInteger(door) || door < 30 || door > 40) {
-        return 'El descuento de puerta debe ser un número entero entre 30 y 40 mm';
-      }
-    }
-    if (draft.datasheetStatus === 'verified') {
-      // #1316: verified exige la envolvente (alto + profundo), el origen y
-      // un descuento efectivo — el número de taller o el par de ficha.
-      if (!Number.isFinite(Number(draft.profileHeightMm)) || Number(draft.profileHeightMm) <= 0 ||
-        !Number.isFinite(Number(draft.profileDepthMm)) || Number(draft.profileDepthMm) <= 0) {
-        return 'La ficha verificada exige el alto y la profundidad del perfil mayores a 0';
-      }
-      const hasDoor = draft.doorReductionMm !== '';
-      const hasPair = draft.frontReductionMm !== '' && draft.gripClearanceMm !== '';
-      if (!hasDoor && !hasPair) {
-        return 'La ficha verificada exige un descuento de puerta (o el par frontal + holgura)';
-      }
-      if (draft.geometryOrigin.trim() === '') {
-        return 'La ficha verificada exige el origen auditable de sus valores';
-      }
-    }
-    if (draft.notchEnabled) {
-      if (!Number.isFinite(Number(draft.notchHeightMm)) || Number(draft.notchHeightMm) <= 0 ||
-        !Number.isFinite(Number(draft.notchDepthMm)) || Number(draft.notchDepthMm) <= 0) {
-        return 'La muesca exige alto y profundidad mayores a 0';
-      }
-    }
-    if (draft.depthReductionEnabled && !draft.depthReductionDerived) {
-      if (!Number.isFinite(Number(draft.depthReductionMm)) || Number(draft.depthReductionMm) <= 0) {
+    if (current.depthReductionEnabled && !current.depthReductionDerived) {
+      if (!Number.isFinite(Number(current.depthReductionMm)) || Number(current.depthReductionMm) <= 0) {
         return 'El descuento explícito debe ser mayor a 0';
       }
     }
@@ -297,7 +282,11 @@ export function OpeningProfilesCatalog({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (saving) return;
-    const err = validate();
+    // #1534: the v2 editor has no id field — derive it from the code.
+    const current = editingId == null && draft.id.trim() === '' && draft.code.trim() !== ''
+      ? { ...draft, id: suggestOpeningProfileId(draft.code) }
+      : draft;
+    const err = validate(current);
     if (err) {
       setError(err);
       return;
@@ -306,9 +295,9 @@ export function OpeningProfilesCatalog({
     setSaving(true);
     try {
       if (editingId) {
-        await onUpdate(editingId, editingVersion, draft);
+        await onUpdate(editingId, editingVersion, current);
       } else {
-        await onCreate(draft.id.trim(), draft);
+        await onCreate(current.id.trim(), current);
       }
       closeModal();
     } catch (err: unknown) {
@@ -349,10 +338,12 @@ export function OpeningProfilesCatalog({
       {
         key: 'grip',
         header: 'Agarre',
-        render: (r) =>
-          r.gripType === 'gola' && r.crossSection
-            ? `Gola ${r.crossSection}`
-            : (GRIP_SHORT[r.gripType] ?? r.gripType),
+        render: (r) => gripColumn(r),
+      },
+      {
+        key: 'usabilidad',
+        header: 'Uso',
+        render: (r) => usabilityColumn(r),
       },
       {
         key: 'datasheet',
@@ -573,7 +564,7 @@ export function OpeningProfilesCatalog({
         )}
       </div>
 
-      <OpeningProfileFormModal
+      <GolaProfileEditorModal
         open={modalOpen}
         identity={editingProfile ? { code: editingProfile.code, name: editingProfile.name } : undefined}
         editingId={editingId}
@@ -585,6 +576,8 @@ export function OpeningProfilesCatalog({
         saving={saving}
         onSubmit={handleSubmit}
         onClose={closeModal}
+        api={api ?? (undefined as unknown as GraneteApiClient)}
+        token={token}
         hardwareOptions={hardwareOptions}
         componentOptions={componentOptions}
       />
@@ -612,24 +605,44 @@ export function OpeningProfilesCatalog({
 export function openingProfileWriteBody(
   draft: OpeningProfileDraft,
 ): OpeningProfileWrite {
+  // #1534: the v2 editor always writes v2-shaped — material + positions +
+  // per-position discounts, with the #1530 bridge fields kept coherent
+  // (grip_type=gola, compatible_placements=positions,
+  // door_reduction_mm=front_discount_top_mm).
+  const positions = [
+    ...(draft.top ? ['top'] : []),
+    ...(draft.between ? ['between'] : []),
+  ];
   return {
     code: draft.code.trim(),
     name: draft.name.trim(),
     // #1329: informational maker name; absent stays absent (never "").
     ...(draft.manufacturer.trim() !== '' ? { manufacturer: draft.manufacturer.trim() } : {}),
-    grip_type: draft.gripType,
-    ...(draft.gripType === 'gola' && draft.crossSection !== ''
-      ? { cross_section_shape: draft.crossSection }
+    grip_type: 'gola',
+    ...(draft.crossSection !== '' ? { cross_section_shape: draft.crossSection } : {}),
+    ...(draft.material !== '' ? { material: draft.material } : {}),
+    compatible_placements: positions,
+    ...(draft.material !== ''
+      ? {
+          ...(draft.frontDiscountTopMm !== '' && draft.top
+            ? { front_discount_top_mm: Number(draft.frontDiscountTopMm) }
+            : {}),
+          ...(draft.frontDiscountBetweenMm !== '' && draft.between
+            ? { front_discount_between_mm: Number(draft.frontDiscountBetweenMm) }
+            : {}),
+        }
       : {}),
-    compatible_placements: [
-      ...(draft.top ? ['top'] : []),
-      ...(draft.between ? ['between'] : []),
-      ...(draft.bottom ? ['bottom'] : []),
-    ],
     datasheet_status: draft.datasheetStatus,
-    // #1316: the workshop-facing discount travels as ONE number; the
-    // datasheet pair round-trips untouched as documentation.
-    ...(draft.doorReductionMm !== '' ? { door_reduction_mm: Number(draft.doorReductionMm) } : {}),
+    // #1316/#1530: the workshop-facing discount travels as ONE number; the
+    // v2 bridge keeps door_reduction_mm = front_discount_top_mm coherent,
+    // and the legacy datasheet pair round-trips as documentation.
+    ...(draft.material !== ''
+      ? draft.frontDiscountTopMm !== ''
+        ? { door_reduction_mm: Number(draft.frontDiscountTopMm) }
+        : {}
+      : draft.doorReductionMm !== ''
+        ? { door_reduction_mm: Number(draft.doorReductionMm) }
+        : {}),
     ...(draft.frontReductionMm !== '' ? { front_reduction_mm: Number(draft.frontReductionMm) } : {}),
     ...(draft.gripClearanceMm !== '' ? { grip_clearance_mm: Number(draft.gripClearanceMm) } : {}),
     ...(draft.profileHeightMm !== '' ? { profile_height_mm: Number(draft.profileHeightMm) } : {}),

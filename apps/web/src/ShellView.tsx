@@ -2093,6 +2093,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       ) : null}
       {navId === 'openingProfiles' ? (
         <OpeningProfilesCatalog
+          api={settingsClient}
+          token={session === 'auth' ? authToken : null}
           profiles={openingProfiles.profiles}
           onCreate={openingProfiles.create}
           onUpdate={openingProfiles.update}

@@ -26,6 +26,10 @@ const v7Row: OpeningProfileRowLike = {
   frontReductionMm: 38,
   gripClearanceMm: 2,
   doorReductionMm: null,
+  material: 'aluminum',
+  frontDiscountTopMm: 40,
+  frontDiscountBetweenMm: null,
+  usage: { top: { usable: true } },
   profileHeightMm: 56.5,
   profileDepthMm: 27.2,
   geometryOrigin: 'docs/fichas/perfil_gola_l_ficha_tecnica.pdf',
@@ -161,11 +165,24 @@ describe('#1316 — descuento de puerta como un solo número', () => {
     expect(draft.doorReductionMm).toBe('32');
   });
 
-  it('el write body lleva door_reduction_mm y el par intacto como documentación', async () => {
+  it('#1534 — el write body es v2-shaped: material, posiciones y descuentos por posición; el bridge mantiene door_reduction_mm coherente', async () => {
     const { openingProfileWriteBody } = await import('./OpeningProfilesCatalog');
-    const draft = { ...toOpeningProfileDraft(v7Row), doorReductionMm: '32' };
+    const draft = {
+      ...toOpeningProfileDraft(v7Row),
+      material: 'aluminum' as const,
+      top: true,
+      between: false,
+      frontDiscountTopMm: '40',
+      doorReductionMm: '40',
+    };
     const body = openingProfileWriteBody(draft) as unknown as Record<string, unknown>;
-    expect(body.door_reduction_mm).toBe(32);
+    expect(body.material).toBe('aluminum');
+    expect(body.compatible_placements).toEqual(['top']);
+    expect(body.front_discount_top_mm).toBe(40);
+    expect(body.grip_type).toBe('gola');
+    expect(body.cross_section_shape).toBe('L');
+    // The #1530 bridge: door_reduction_mm stays coherent with the v2 top discount.
+    expect(body.door_reduction_mm).toBe(40);
     expect(body.front_reduction_mm).toBe(38);
     expect(body.grip_clearance_mm).toBe(2);
   });
@@ -189,16 +206,31 @@ describe('#1327 — miembro tipo componente (tira del gola italiano)', () => {
     expect(profile?.kind).toBe('hardware');
   });
 
-  it('el write body reconstruye el mapa con component_id y sin perder el herraje', async () => {
+  it('el write body reconstruye el mapa con component_id, height_mm de la tira y sin perder el herraje', async () => {
     const { openingProfileWriteBody } = await import('./OpeningProfilesCatalog');
-    const body = openingProfileWriteBody({ ...toOpeningProfileDraft(tiraRow), doorReductionMm: '35' }) as unknown as Record<string, Record<string, unknown>>;
+    const body = openingProfileWriteBody(toOpeningProfileDraft(tiraRow)) as unknown as Record<string, Record<string, unknown>>;
     expect(body.bom_members).toEqual({
       profile: expect.objectContaining({ hardware_id: 'hw-8006' }),
       tira: expect.objectContaining({ component_id: 'comp-tira-gola-it', rule: 'interior_width', unit: 'piece' }),
     });
     // hardware_id stays as the required contract key, EMPTY for component members.
     expect((body.bom_members as Record<string, unknown>).tira).toHaveProperty('hardware_id', '');
-    expect(body.door_reduction_mm).toBe(35);
+    // The #1530 bridge: door_reduction_mm = front_discount_top_mm (40 on v7Row).
+    expect(body.door_reduction_mm).toBe(40);
+  });
+
+  it('#1534 — height_mm de la tira viaja en el mapa (tira italiana 70)', async () => {
+    const { openingProfileWriteBody } = await import('./OpeningProfilesCatalog');
+    const draft = toOpeningProfileDraft({
+      ...v7Row,
+      material: 'melamine',
+      bomMembers: {
+        profile: { hardware_id: 'hw-8006', rule: 'interior_width' },
+        tira: { hardware_id: '', component_id: 'comp-tira-gola-it', rule: 'interior_width', unit: 'piece', height_mm: 70 },
+      },
+    });
+    const body = openingProfileWriteBody(draft) as unknown as Record<string, Record<string, unknown>>;
+    expect((body.bom_members as Record<string, unknown>).tira).toHaveProperty('height_mm', 70);
   });
 });
 

@@ -24,6 +24,8 @@ export interface OpeningProfileBodyModifierLike {
   readonly effect?: string;
   readonly depth_reduction_mm?: number | null;
   readonly notch_height_mm?: number | null;
+  readonly notch_depth_source?: string | null;
+  readonly notch_clearance_mm?: number | null;
   readonly notch_depth_mm?: number | null;
   readonly notch_at?: string | null;
   readonly bevel_angle_deg?: number | null;
@@ -46,6 +48,8 @@ export interface OpeningProfileMemberDraft {
   readonly spacingMm: string;
   /** Declared envelope [along-run, depth, height]; empty strings = undeclared. */
   readonly dims: readonly [string, string, string];
+  /** #1534 — the strip's height (tira italiana, 70 by default). */
+  readonly heightMm: string;
 }
 
 export interface OpeningProfileDraft {
@@ -65,6 +69,10 @@ export interface OpeningProfileDraft {
   readonly doorReductionMm: string;
   readonly frontReductionMm: string;
   readonly gripClearanceMm: string;
+  /** #1534 — v2 fields: the editor always writes v2-shaped. */
+  readonly material: '' | 'aluminum' | 'melamine';
+  readonly frontDiscountTopMm: string;
+  readonly frontDiscountBetweenMm: string;
   readonly profileHeightMm: string;
   readonly profileDepthMm: string;
   readonly geometryOrigin: string;
@@ -73,6 +81,9 @@ export interface OpeningProfileDraft {
   readonly notchHeightMm: string;
   readonly notchDepthMm: string;
   readonly notchAt: OpeningNotchAtDraft;
+  /** #1530 — «strip_thickness»: the notch depth follows the strip. */
+  readonly notchDepthSource: '' | 'strip_thickness';
+  readonly notchClearanceMm: string;
   readonly depthReductionEnabled: boolean;
   /** true = declare WITHOUT a value: the engine derives profile_depth_mm. */
   readonly depthReductionDerived: boolean;
@@ -100,6 +111,9 @@ export function emptyOpeningProfileDraft(): OpeningProfileDraft {
     doorReductionMm: '',
     frontReductionMm: '',
     gripClearanceMm: '',
+    material: '',
+    frontDiscountTopMm: '',
+    frontDiscountBetweenMm: '',
     profileHeightMm: '',
     profileDepthMm: '',
     geometryOrigin: '',
@@ -107,6 +121,8 @@ export function emptyOpeningProfileDraft(): OpeningProfileDraft {
     notchHeightMm: '',
     notchDepthMm: '',
     notchAt: 'top_front',
+    notchDepthSource: '' as '' | 'strip_thickness',
+    notchClearanceMm: '',
     depthReductionEnabled: false,
     depthReductionDerived: true,
     depthReductionMm: '',
@@ -118,7 +134,7 @@ export function emptyOpeningProfileDraft(): OpeningProfileDraft {
 }
 
 export function emptyMemberDraft(): OpeningProfileMemberDraft {
-  return { key: '', kind: 'hardware', hardwareId: '', componentId: '', rule: 'interior_width', unit: 'piece', spacingMm: '', dims: ['', '', ''] };
+  return { key: '', kind: 'hardware', hardwareId: '', componentId: '', rule: 'interior_width', unit: 'piece', spacingMm: '', dims: ['', '', ''], heightMm: '' };
 }
 
 /**
@@ -162,6 +178,11 @@ export interface OpeningProfileRowLike {
   readonly gripClearanceMm: number | null;
   /** #1316 — the workshop-facing door discount; null = legacy pair only. */
   readonly doorReductionMm: number | null;
+  /** #1534 — v2 fields served since #1530; null/undefined = legacy row. */
+  readonly material?: string | null;
+  readonly frontDiscountTopMm?: number | null;
+  readonly frontDiscountBetweenMm?: number | null;
+  readonly usage?: Record<string, { usable?: boolean; message?: string | null }>;
   readonly profileHeightMm: number | null;
   readonly profileDepthMm: number | null;
   readonly geometryOrigin: string | null;
@@ -205,6 +226,16 @@ export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfil
           : '',
     frontReductionMm: row.frontReductionMm != null ? formatMmInput(row.frontReductionMm) : '',
     gripClearanceMm: row.gripClearanceMm != null ? formatMmInput(row.gripClearanceMm) : '',
+    // #1534: v2 discounts read from the v2 fields; legacy rows fall back to
+    // the #1316 bridge value for the top position (never invented).
+    material: (row.material as OpeningProfileDraft['material']) ?? '',
+    frontDiscountTopMm:
+      row.frontDiscountTopMm != null
+        ? formatMmInput(row.frontDiscountTopMm)
+        : row.doorReductionMm != null
+          ? formatMmInput(row.doorReductionMm)
+          : '',
+    frontDiscountBetweenMm: row.frontDiscountBetweenMm != null ? formatMmInput(row.frontDiscountBetweenMm) : '',
     profileHeightMm: row.profileHeightMm != null ? formatMmInput(row.profileHeightMm) : '',
     profileDepthMm: row.profileDepthMm != null ? formatMmInput(row.profileDepthMm) : '',
     geometryOrigin: row.geometryOrigin ?? '',
@@ -212,6 +243,8 @@ export function toOpeningProfileDraft(row: OpeningProfileRowLike): OpeningProfil
     notchHeightMm: notch?.notch_height_mm != null ? formatMmInput(notch.notch_height_mm) : '',
     notchDepthMm: notch?.notch_depth_mm != null ? formatMmInput(notch.notch_depth_mm) : '',
     notchAt: (notch?.notch_at as OpeningNotchAtDraft) ?? 'top_front',
+    notchDepthSource: (notch?.notch_depth_source as '' | 'strip_thickness') ?? '',
+    notchClearanceMm: notch?.notch_clearance_mm != null ? formatMmInput(notch.notch_clearance_mm) : '',
     depthReductionEnabled: reduction != null,
     depthReductionDerived: reduction == null || reduction.depth_reduction_mm == null,
     depthReductionMm: reduction?.depth_reduction_mm != null ? formatMmInput(reduction.depth_reduction_mm) : '',
@@ -239,6 +272,7 @@ function membersOfMap(members: OpeningProfileBOMMembersLike | null): readonly Op
         unit: member.unit ?? '',
         spacingMm: member.spacing_mm != null ? formatMmInput(member.spacing_mm) : '',
         dims: (member.dimensions_mm ?? [null, null, null]).map((d) => (d != null ? formatMmInput(d) : '')) as [string, string, string],
+        heightMm: member.height_mm != null ? formatMmInput(member.height_mm) : '',
       };
     });
 }
@@ -259,6 +293,7 @@ export function membersMapOfDraft(
       ...(member.unit.trim() !== '' ? { unit: member.unit.trim() } : {}),
       ...(member.spacingMm.trim() !== '' ? { spacing_mm: Number(member.spacingMm) } : {}),
       ...(dims.some((d) => d != null) ? { dimensions_mm: dims.map((d) => (d == null ? 0 : d)) } : {}),
+      ...(member.heightMm.trim() !== '' ? { height_mm: Number(member.heightMm) } : {}),
     };
   }
   return map;
@@ -285,7 +320,9 @@ export function bodyModifiersOfDraft(draft: OpeningProfileDraft): OpeningProfile
     modifiers.push({
       role: 'lateral',
       notch_height_mm: Number(draft.notchHeightMm),
-      notch_depth_mm: Number(draft.notchDepthMm),
+      ...(draft.notchDepthSource === 'strip_thickness'
+        ? { notch_depth_source: draft.notchDepthSource, notch_clearance_mm: Number(draft.notchClearanceMm || 1) }
+        : { notch_depth_mm: Number(draft.notchDepthMm) }),
       notch_at: draft.notchAt,
     });
   }
