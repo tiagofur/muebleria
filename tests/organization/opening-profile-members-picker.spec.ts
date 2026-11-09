@@ -59,14 +59,11 @@ async function uiClick(page: Page, testId: string): Promise<void> {
 }
 
 async function pickFromPicker(page: Page, testId: string, query: string): Promise<void> {
-  // Keyboard contract (#1526): focus the trigger, ArrowDown opens the list
-  // and auto-focuses the search (rendered in a PORTAL), typing filters, then
-  // click the single filtered option.
-  await page.getByTestId(testId).getByRole('button').click();
-  const search = page.getByRole('textbox', { name: 'Buscar…' });
-  await search.waitFor({ state: 'visible', timeout: 15_000 });
-  await search.fill(query);
-  await page.getByTestId(testId).getByRole('option').first().click();
+  // Proven CatalogPicker interaction (agregados): the trigger opens the
+  // listbox INSIDE the picker root; the option label carries code — name.
+  const picker = page.getByTestId(testId);
+  await picker.getByRole('button').click();
+  await picker.getByRole('option', { name: new RegExp(query, 'i') }).first().click();
 }
 
 test('1526: el perfil se arma eligiendo herrajes por nombre o código y su BOM resuelve', async ({ page }) => {
@@ -183,15 +180,10 @@ test('1526: el perfil se arma eligiendo herrajes por nombre o código y su BOM r
   await page.getByTestId('gola-profile-depth').fill('27.2');
   await uiClick(page, 'gola-discount-suggest-top');
   await expect(page.getByTestId('gola-discount-top')).toHaveValue('40');
-  try {
-    await page.getByTestId('gola-profile-origin-input').fill('Ficha SCILM 2022-04-01 p. 42 (E2E #1526)', { timeout: 5000 });
-  } catch (err) {
-    const dump = await page.locator('[data-testid="gola-profile-editor"]').innerHTML().catch(() => 'MODAL NO RENDERIZADO');
-    const fs = await import('fs');
-    fs.writeFileSync('docs/demo/evidence/1534/debug-origin.html', dump);
-    throw err;
-  }
+  await page.getByTestId('gola-profile-origin-input').fill('Ficha SCILM 2022-04-01 p. 42 (E2E #1526)');
 
+  // Piezas por rol (#1534): pickers por rol con búsqueda — patrón probado
+  // en agregados (clic al botón, clic al opción filtrado por nombre).
   await pickFromPicker(page, 'gola-part-profile', 'Perfil GOLA');
   await pickFromPicker(page, 'gola-part-supports', 'SU116');
   await page.getByTestId('gola-part-supports-spacing').fill('600');
