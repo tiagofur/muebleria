@@ -74,7 +74,7 @@ func TestGolaProfileV2UsagePerPosition(t *testing.T) {
 	if usage.Usable || len(usage.Missing) != 1 || usage.Missing[0] != "front_discount_between_mm" {
 		t.Fatalf("between must be blocked by its discount: %+v", usage)
 	}
-	if !strings.Contains(usage.Message, "descuento del frente entre frentes") {
+	if !strings.Contains(usage.Message, "No se puede usar entre frentes: falta el descuento") {
 		t.Fatalf("the message must name the missing field in Spanish: %q", usage.Message)
 	}
 	if err := p.UsageError(GolaPositionBetween); err == nil || !IsOpeningProfileValidationError(err) {
@@ -261,11 +261,11 @@ func TestGolaProfileSuggestions(t *testing.T) {
 // positions from it, restricted to the v2 vocabulary.
 func TestNormalizeOpeningProfileWriteDerivesPositionsFromCompatible(t *testing.T) {
 	p := OpeningProfile{
-		GripType:              "gola",
-		CrossSectionShape:     "L",
-		Material:              GolaMaterialAluminum,
-		CompatiblePlacements:  []string{"top", "bottom"}, // bottom is not a v2 position
-		FrontDiscountTopMm:    intPtr(40),
+		GripType:             "gola",
+		CrossSectionShape:    "L",
+		Material:             GolaMaterialAluminum,
+		CompatiblePlacements: []string{"top", "bottom"}, // bottom is not a v2 position
+		FrontDiscountTopMm:   intPtr(40),
 	}
 	NormalizeOpeningProfileWrite(&p, nil)
 	if len(p.Positions) != 1 || p.Positions[0] != GolaPositionTop {

@@ -1,16 +1,18 @@
 /**
  * Catálogo › Perfiles de gola — editor v2 (#1534, ADR-0009 A2.1/§14.2/§14.6).
  * Replaces the #1526 modal: material/posiciones/descuento por posición con
- * sugerencia del fabricante, vista previa resuelta POR EL SERVIDOR
- * (previewOpeningProfile — React nunca calcula), dibujo esquemático de la
- * sección, efectos sobre el cuerpo en texto llano y piezas por rol
- * (#1526 selectors). Escribe SIEMPRE v2-shaped (material + posiciones +
- * descuentos; el bridge #1530 mantiene los campos coherentes).
+ * la sugerencia del SERVIDOR (GET /catalog/opening-profiles/suggestions —
+ * React nunca inventa los valores de fábrica), vista previa resuelta POR EL
+ * SERVIDOR (previewOpeningProfile), dibujo esquemático de la sección,
+ * efectos sobre el cuerpo en texto llano y piezas por rol (#1526 selectors).
+ * Escribe SIEMPRE v2-shaped (material + posiciones + descuentos; el bridge
+ * #1530 mantiene los campos coherentes).
  */
 
- import {
+import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type Dispatch,
   type FormEvent,
@@ -21,7 +23,12 @@ import { Modal } from '../../common';
 import { CatalogPicker, type CatalogPickerOption } from '../CatalogPicker';
 import type { GraneteApiClient } from '@granete/storage';
 import {
+  datasheetPendingReasons,
+  datasheetStatusOfDraft,
+  emptyMemberDraft,
   formatMmInput,
+  isKnownMemberRole,
+  STRIP_MEMBER_ROLE,
   type OpeningProfileDraft,
   type OpeningProfileMemberDraft,
 } from './openingProfileDraft';
@@ -38,17 +45,149 @@ const MATERIAL_CHIPS: readonly {
   { value: 'melamine', label: 'Italiana (melamina)', crossSection: 'flat', testId: 'gola-material-italiana' },
 ];
 
-/** Manufacturer/owner suggestion shown beside each discount (#1524/#1530). */
-const SUGGESTIONS: Readonly<Record<string, number>> = {
-  top: 40,
-  between: 36,
-};
-
 const SECTION_LABEL: Readonly<Record<string, string>> = {
   L: 'L',
   C: 'C',
   flat: 'tira',
 };
+
+/** Wire shape of one server suggestion (#1530): a starting point per
+ * material, in the profile-write vocabulary. React never hardcodes the
+ * manufacturer numbers — the server is their only source. */
+interface GolaProfileSuggestionWire {
+  readonly key: string;
+  readonly label: string;
+  readonly source: string;
+  readonly manufacturer?: string;
+  readonly material: string;
+  readonly cross_section_shape: string;
+  readonly positions: readonly string[];
+  readonly front_discount_top_mm?: number | null;
+  readonly front_discount_between_mm?: number | null;
+  readonly body_modifiers: readonly {
+    readonly role: string;
+    readonly effect?: string;
+    readonly depth_reduction_mm?: number | null;
+    readonly notch_height_mm?: number | null;
+    readonly notch_depth_source?: string | null;
+    readonly notch_clearance_mm?: number | null;
+    readonly bevel_angle_deg?: number | null;
+    readonly bevel_size_mm?: number | null;
+    readonly bevel_at?: string | null;
+  }[];
+  readonly bom_members: Readonly<Record<string, { readonly height_mm?: number | null }>>;
+}
+
+function suggestionForChip(
+  suggestions: readonly GolaProfileSuggestionWire[],
+  chip: (typeof MATERIAL_CHIPS)[number],
+): GolaProfileSuggestionWire | null {
+  return (
+    suggestions.find(
+      (s) => s.material === chip.value && s.cross_section_shape === chip.crossSection,
+    ) ?? null
+  );
+}
+
+/** The schematic section: declarative SVG from the DECLARED fields — a
+ * drawing of the values, never a formula computation. */
+export function GolaSectionDrawing({
+  material,
+  crossSection,
+  heightMm,
+  depthMm,
+  topDiscountMm,
+}: {
+  readonly material: OpeningProfileDraft['material'];
+  readonly crossSection: string;
+  readonly heightMm: number;
+  readonly depthMm: number;
+  /** Declared top discount — drawn as the door annotation, never computed. */
+  readonly topDiscountMm: string;
+}): ReactNode {
+  const h = Number.isFinite(heightMm) && heightMm > 0 ? heightMm : 60;
+  const d = Number.isFinite(depthMm) && depthMm > 0 ? depthMm : 30;
+  // Scale: 1 mm = 0.6px, box 150×100 with margins.
+  const s = 0.6;
+  const label = `Sección ${SECTION_LABEL[crossSection] ?? ''}: alto ${heightMm || '—'} × profundidad ${depthMm || '—'} mm`.trim();
+  return (
+    <svg
+      role="img"
+      aria-label={label}
+      data-testid="gola-section-drawing"
+      width={150}
+      height={100}
+      viewBox="0 0 150 100"
+      className="gola-editor__drawing"
+    >
+      <g transform="translate(30, 12)">
+        {material === 'melamine' ? (
+          <>
+            {/* Italian strip: full-depth vertical board with the 45° bevel
+                hinted at the front edge. */}
+            <rect x={0} y={0} width={d * s} height={h * s} fill="none" stroke="currentColor" strokeWidth={1.5} />
+            <line x1={0} y1={0} x2={d * s * 0.45} y2={0} stroke="currentColor" strokeWidth={2.5} />
+            <text className="gola-editor__drawing-label" x={d * s + 6} y={h * s / 2} fill="currentColor">{`alto ${heightMm || '—'}`}</text>
+            <text className="gola-editor__drawing-label" x={d * s / 2 - 14} y={h * s + 14} fill="currentColor">{`prof. ${depthMm || '—'}`}</text>
+          </>
+        ) : crossSection === 'C' ? (
+          <>
+            {/* C channel: three strokes. */}
+            <path
+              d={`M ${d * s} 0 L 0 0 L 0 ${h * s} L ${d * s} ${h * s}`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            />
+            <text className="gola-editor__drawing-label" x={d * s + 6} y={h * s / 2} fill="currentColor">{`alto ${heightMm || '—'}`}</text>
+            <text className="gola-editor__drawing-label" x={d * s / 2 - 14} y={h * s + 14} fill="currentColor">{`prof. ${depthMm || '—'}`}</text>
+          </>
+        ) : (
+          <>
+            {/* L profile: vertical + horizontal strokes from the top-front
+                corner; the declared discount rides as the door annotation
+                (H − descuento), a labeled fact — never a computed cut. */}
+            <path
+              d={`M ${d * s} 0 L 0 0 L 0 ${h * s}`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            />
+            <text className="gola-editor__drawing-label" x={d * s + 6} y={h * s / 2} fill="currentColor">{`alto ${heightMm || '—'}`}</text>
+            <text className="gola-editor__drawing-label" x={4} y={h * s + 14} fill="currentColor">{`prof. ${depthMm || '—'}`}</text>
+          </>
+        )}
+        {topDiscountMm !== '' ? (
+          <text
+            className="gola-editor__drawing-label"
+            data-testid="gola-drawing-discount"
+            x={0}
+            y={-4}
+            fill="currentColor"
+          >
+            {`puerta H − ${topDiscountMm}`}
+          </text>
+        ) : null}
+      </g>
+    </svg>
+  );
+}
+
+/** Where a save error anchors: the section the workshop fixes, per the brief
+ * («el mensaje exacto de la API junto al campo que falla»). */
+function sectionForMessage(message: string): string | null {
+  const lowered = message.toLowerCase();
+  if (lowered.includes('muesca') || lowered.includes('bisel')) return 'efectos';
+  if (lowered.includes('herraje') || lowered.includes('componente') || lowered.includes('tira') ||
+      lowered.includes('soportes') || lowered.includes('rol') || lowered.includes('spacing')) return 'piezas';
+  if (lowered.includes('descuento')) return 'descuento';
+  if (lowered.includes('material') || lowered.includes('italiana') || lowered.includes('melamina') ||
+      lowered.includes('aluminio') || lowered.includes('posición')) return 'material';
+  if (lowered.includes('alto') || lowered.includes('profundidad')) return 'dimensiones';
+  if (lowered.includes('origen')) return 'origen';
+  if (lowered.includes('código') || lowered.includes('nombre')) return 'identidad';
+  return null;
+}
 
 export interface GolaProfileEditorModalProps {
   readonly identity?: { readonly code: string; readonly name: string };
@@ -58,6 +197,10 @@ export interface GolaProfileEditorModalProps {
   readonly draft: OpeningProfileDraft;
   readonly setDraft: Dispatch<SetStateAction<OpeningProfileDraft>>;
   readonly error: string | null;
+  /** #1534 r1 — the SAVED profile's per-position use rule served by the
+   * API: the editor shows the server truth next to the discount fields
+   * (disponible ≠ válido), the same strings the list's Uso column carries. */
+  readonly savedUsage?: Readonly<Record<string, { readonly usable?: boolean; readonly message?: string | null }>> | null;
   readonly canMutate: boolean;
   readonly saving?: boolean;
   readonly onSubmit: (e: FormEvent) => void;
@@ -70,75 +213,6 @@ export interface GolaProfileEditorModalProps {
   readonly componentOptions?: readonly CatalogPickerOption[] | null;
 }
 
-/** The schematic section: declarative SVG from the DECLARED fields — a
- * drawing of the values, never a formula computation. */
-export function GolaSectionDrawing({
-  material,
-  crossSection,
-  heightMm,
-  depthMm,
-}: {
-  readonly material: OpeningProfileDraft['material'];
-  readonly crossSection: string;
-  readonly heightMm: number;
-  readonly depthMm: number;
-}): ReactNode {
-  const h = Number.isFinite(heightMm) && heightMm > 0 ? heightMm : 60;
-  const d = Number.isFinite(depthMm) && depthMm > 0 ? depthMm : 30;
-  // Scale: 1 mm = 0.6px, box 140×90 with margins.
-  const s = 0.6;
-  const label = `Sección ${SECTION_LABEL[crossSection] ?? ''}: alto ${heightMm || '—'} × profundidad ${depthMm || '—'} mm`.trim();
-  return (
-    <svg
-      role="img"
-      aria-label={label}
-      data-testid="gola-section-drawing"
-      width={150}
-      height={100}
-      viewBox="0 0 150 100"
-      style={{ border: '1px solid var(--border)', borderRadius: 6 }}
-    >
-      <g transform="translate(30, 12)">
-        {material === 'melamine' ? (
-          <>
-            {/* Italian strip: full-depth vertical board with the 45° bevel
-                hinted at the front edge. */}
-            <rect x={0} y={0} width={d * s} height={h * s} fill="none" stroke="currentColor" strokeWidth={1.5} />
-            <line x1={0} y1={0} x2={d * s * 0.45} y2={0} stroke="currentColor" strokeWidth={2.5} />
-            <text x={d * s + 6} y={h * s / 2} fontSize={9} fill="currentColor">{`alto ${heightMm || '—'}`}</text>
-            <text x={d * s / 2 - 14} y={h * s + 14} fontSize={9} fill="currentColor">{`prof. ${depthMm || '—'}`}</text>
-          </>
-        ) : crossSection === 'C' ? (
-          <>
-            {/* C channel: three strokes. */}
-            <path
-              d={`M ${d * s} 0 L 0 0 L 0 ${h * s} L ${d * s} ${h * s}`}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            />
-            <text x={d * s + 6} y={h * s / 2} fontSize={9} fill="currentColor">{`alto ${heightMm || '—'}`}</text>
-            <text x={d * s / 2 - 14} y={h * s + 14} fontSize={9} fill="currentColor">{`prof. ${depthMm || '—'}`}</text>
-          </>
-        ) : (
-          <>
-            {/* L profile: vertical + horizontal strokes from the top-front
-                corner. */}
-            <path
-              d={`M ${d * s} 0 L 0 0 L 0 ${h * s}`}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            />
-            <text x={d * s + 6} y={h * s / 2} fontSize={9} fill="currentColor">{`alto ${heightMm || '—'}`}</text>
-            <text x={4} y={h * s + 14} fontSize={9} fill="currentColor">{`prof. ${depthMm || '—'}`}</text>
-          </>
-        )}
-      </g>
-    </svg>
-  );
-}
-
 export function GolaProfileEditorModal({
   identity,
   open,
@@ -147,6 +221,7 @@ export function GolaProfileEditorModal({
   draft,
   setDraft,
   error,
+  savedUsage = null,
   canMutate,
   saving = false,
   onSubmit,
@@ -161,9 +236,19 @@ export function GolaProfileEditorModal({
   const [previewLines, setPreviewLines] = useState<readonly { readonly key: string; readonly preview: string }[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewEpoch = useRef(0);
+  // Server suggestions (#1530): the manufacturer/owner defaults. Null until
+  // the first fetch lands; the editor applies them fill-only-empty.
+  const [suggestions, setSuggestions] = useState<readonly GolaProfileSuggestionWire[] | null>(null);
+  const suggestionsEpoch = useRef(0);
+  // True while the bevel size holds (or awaits) the server-derived value —
+  // a depth change may refresh it; a manual edit flips it off forever.
+  const bevelDerived = useRef(false);
+  const depthDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshPreview = useCallback(async () => {
     if (!token) return;
+    const epoch = ++previewEpoch.current;
     setPreviewLoading(true);
     setPreviewError(null);
     try {
@@ -173,11 +258,13 @@ export function GolaProfileEditorModal({
         frontDiscountTopMm: draft.frontDiscountTopMm !== '' ? Number(draft.frontDiscountTopMm) : null,
         frontDiscountBetweenMm: draft.frontDiscountBetweenMm !== '' ? Number(draft.frontDiscountBetweenMm) : null,
       });
+      if (epoch !== previewEpoch.current) return; // a newer request won
       setPreviewLines((response.previews ?? []) as readonly { readonly key: string; readonly preview: string }[]);
     } catch (err) {
+      if (epoch !== previewEpoch.current) return;
       setPreviewError(err instanceof Error ? err.message : 'La vista previa no pudo resolverse.');
     } finally {
-      setPreviewLoading(false);
+      if (epoch === previewEpoch.current) setPreviewLoading(false);
     }
     // The preview re-resolves on open and on DISCRETE changes (position
     // switches or discounts) — identity/origin typing never triggers it.
@@ -189,75 +276,144 @@ export function GolaProfileEditorModal({
     void refreshPreview();
   }, [refreshPreview]);
 
+  const fetchSuggestions = useCallback(
+    async (depthMm: number | null): Promise<readonly GolaProfileSuggestionWire[] | null> => {
+      if (!token) return null;
+      const epoch = ++suggestionsEpoch.current;
+      const query = depthMm != null && Number.isFinite(depthMm) && depthMm > 0
+        ? `?profile_depth_mm=${depthMm}`
+        : '';
+      try {
+        const list = await api.request<readonly GolaProfileSuggestionWire[]>(
+          'GET', `/catalog/opening-profiles/suggestions${query}`, { token, arrayOf: 'GolaProfileSuggestion' },
+        );
+        return epoch === suggestionsEpoch.current ? list : null;
+      } catch {
+        // Suggestions are a convenience, never a gate: a failed fetch leaves
+        // the fields empty and the workshop types its values.
+        return null;
+      }
+    },
+    [api, token],
+  );
+
+  useEffect(() => {
+    if (!open || suggestions !== null) return;
+    void fetchSuggestions(null).then((list) => { if (list) setSuggestions(list); });
+  }, [open, suggestions, fetchSuggestions]);
+
+  useEffect(() => () => {
+    if (depthDebounce.current) clearTimeout(depthDebounce.current);
+  }, []);
+
   const set = (patch: Partial<OpeningProfileDraft>) => setDraft((current) => ({ ...current, ...patch }));
+
+  /** Applies one server preset to the draft: positions follow the preset
+   * (the chip IS the preset choice); values fill ONLY empty fields — typed
+   * numbers are never overwritten. Switching away from the italiana drops
+   * the strip and the strip-following notch state (nothing unsavable stays
+   * behind). */
+  const applyPreset = (chip: (typeof MATERIAL_CHIPS)[number], suggestion: GolaProfileSuggestionWire | null) => {
+    setDraft((current) => {
+      const body = suggestion?.body_modifiers ?? [];
+      const notch = body.find((m) => m.notch_height_mm != null || m.notch_depth_source != null) ?? null;
+      const reduction = body.find((m) => m.effect === 'depth_reduction' || m.depth_reduction_mm !== undefined) ?? null;
+      const bevel = body.find((m) => m.bevel_angle_deg != null || m.bevel_size_mm !== undefined || m.bevel_at != null) ?? null;
+      const stripPreset = suggestion?.bom_members?.[STRIP_MEMBER_ROLE];
+      const wantsStrip = stripPreset != null && suggestion?.material === 'melamine';
+
+      // Strip: preset-owned presence — dropped when the preset has none.
+      let members = current.members;
+      if (!wantsStrip) {
+        members = members.filter((m) => m.key !== STRIP_MEMBER_ROLE);
+      } else if (!members.some((m) => m.key === STRIP_MEMBER_ROLE)) {
+        members = [
+          ...members,
+          {
+            ...emptyMemberDraft(),
+            key: STRIP_MEMBER_ROLE,
+            kind: 'component',
+            rule: 'interior_width',
+            unit: 'piece',
+            heightMm: stripPreset.height_mm != null ? formatMmInput(stripPreset.height_mm) : '',
+          },
+        ];
+      }
+
+      // Effects follow the preset; values fill only empty fields. An
+      // aluminum preset carries no notch/bevel: they turn OFF and the
+      // strip-following source resets (the tira is italiana-only).
+      const nextNotchEnabled = notch != null;
+      const nextNotchSource = notch?.notch_depth_source === 'strip_thickness' ? 'strip_thickness' as const : '';
+      const bevelSize = bevel?.bevel_size_mm != null ? formatMmInput(bevel.bevel_size_mm) : '';
+      bevelDerived.current = bevel != null;
+
+      return {
+        ...current,
+        material: chip.value,
+        crossSection: chip.crossSection,
+        gripType: 'gola',
+        top: suggestion ? suggestion.positions.includes('top') : current.top,
+        between: suggestion ? suggestion.positions.includes('between') : current.between,
+        manufacturer: current.manufacturer !== '' ? current.manufacturer : suggestion?.manufacturer ?? '',
+        frontDiscountTopMm:
+          current.frontDiscountTopMm !== ''
+            ? current.frontDiscountTopMm
+            : suggestion?.front_discount_top_mm != null ? String(suggestion.front_discount_top_mm) : '',
+        frontDiscountBetweenMm:
+          current.frontDiscountBetweenMm !== ''
+            ? current.frontDiscountBetweenMm
+            : suggestion?.front_discount_between_mm != null ? String(suggestion.front_discount_between_mm) : '',
+        depthReductionEnabled: reduction != null,
+        depthReductionDerived: reduction == null || reduction.depth_reduction_mm == null,
+        notchEnabled: nextNotchEnabled,
+        notchHeightMm: current.notchHeightMm !== '' ? current.notchHeightMm : notch?.notch_height_mm != null ? formatMmInput(notch.notch_height_mm) : '',
+        notchDepthSource: nextNotchSource,
+        notchClearanceMm: current.notchClearanceMm !== '' ? current.notchClearanceMm : notch?.notch_clearance_mm != null ? formatMmInput(notch.notch_clearance_mm) : '',
+        bevelEnabled: bevel != null,
+        bevelAt: (bevel?.bevel_at as OpeningProfileDraft['bevelAt']) ?? 'top_front',
+        bevelSizeMm: current.bevelSizeMm !== '' ? current.bevelSizeMm : bevelSize,
+        members,
+      };
+    });
+  };
 
   const chooseMaterial = (chip: (typeof MATERIAL_CHIPS)[number]) => {
     const depth = Number(draft.profileDepthMm);
-    const italianDefaults = chip.value === 'melamine'
-      ? {
-          // The Italian preset (#1524): both positions + the body effects
-          // pre-filled with the workshop defaults, ALL editable.
-          top: true,
-          between: true,
-          frontDiscountTopMm: draft.frontDiscountTopMm !== '' ? draft.frontDiscountTopMm : '36',
-          frontDiscountBetweenMm: draft.frontDiscountBetweenMm !== '' ? draft.frontDiscountBetweenMm : '36',
-          depthReductionEnabled: true,
-          depthReductionDerived: true,
-          notchEnabled: true,
-          notchHeightMm: draft.notchHeightMm !== '' ? draft.notchHeightMm : '70',
-          notchDepthSource: 'strip_thickness' as const,
-          notchClearanceMm: draft.notchClearanceMm !== '' ? draft.notchClearanceMm : '1',
-          bevelEnabled: true,
-          bevelAt: 'top_front' as const,
-          bevelSizeMm:
-            draft.bevelSizeMm !== ''
-              ? draft.bevelSizeMm
-              : Number.isFinite(depth) && depth > 2
-                ? formatMmInput(depth - 2)
-                : '',
-        }
-      : {};
-    setDraft((current) => ({
-      ...current,
-      material: chip.value,
-      crossSection: chip.crossSection,
-      gripType: 'gola',
-      ...italianDefaults,
-    }));
+    const suggestion = suggestions ? suggestionForChip(suggestions, chip) : null;
+    applyPreset(chip, suggestion);
+    // The italiana preset is depth-aware (the bevel = profundidad − 2 is
+    // the SERVER's derivation, asked with profile_depth_mm): re-ask with the
+    // declared depth — the second apply is idempotent and fill-only-empty.
+    // An unloaded list also fetches here so the chip always lands served.
+    const needsFresh = chip.value === 'melamine' || suggestion == null;
+    if (needsFresh) {
+      void fetchSuggestions(depth > 0 ? depth : null).then((list) => {
+        const fresh = list ? suggestionForChip(list, chip) : null;
+        if (fresh != null) applyPreset(chip, fresh);
+      });
+    }
+  };
+
+  const onDepthInput = (value: string) => {
+    set({ profileDepthMm: value });
+    if (material !== 'melamine' || !draft.bevelEnabled || !bevelDerived.current) return;
+    if (depthDebounce.current) clearTimeout(depthDebounce.current);
+    depthDebounce.current = setTimeout(() => {
+      const depth = Number(value);
+      if (!(depth > 0)) return;
+      void fetchSuggestions(depth).then((list) => {
+        const fresh = list ? suggestionForChip(list, MATERIAL_CHIPS[2]!) : null;
+        const size = fresh?.body_modifiers.find((m) => m.bevel_size_mm != null)?.bevel_size_mm;
+        if (size != null && bevelDerived.current) set({ bevelSizeMm: formatMmInput(size) });
+      });
+    }, 350);
   };
 
   const togglePosition = (position: 'top' | 'between', checked: boolean) =>
     setDraft((current) => ({ ...current, [position]: checked }));
 
   const toggleEffect = (patch: Partial<OpeningProfileDraft>) => set(patch);
-
-  const discountRow = (position: 'top' | 'between', label: string, value: string): ReactNode => {
-    const suggestion = SUGGESTIONS[position];
-    const testId = position === 'top' ? 'gola-discount-top' : 'gola-discount-between';
-    return (
-      <div>
-        <label className="catalog-form__field">
-          <span>Descuento del frente — {label}</span>
-          <input
-            type="number"
-            min="0"
-            step="any"
-            value={value}
-            data-testid={testId}
-            onChange={(e) => set(position === 'top' ? { frontDiscountTopMm: e.target.value } : { frontDiscountBetweenMm: e.target.value })}
-          />
-        </label>
-        <button
-          type="button"
-          className="btn btn--small"
-          data-testid={`gola-discount-suggest-${position}`}
-          onClick={() => set(position === 'top' ? { frontDiscountTopMm: String(suggestion) } : { frontDiscountBetweenMm: String(suggestion) })}
-        >
-          sugerencia: {suggestion}
-        </button>
-      </div>
-    );
-  };
 
   const upsertMember = (key: string, kind: 'hardware' | 'component', id: string, patch: Partial<OpeningProfileMemberDraft>) =>
     setDraft((current) => {
@@ -293,14 +449,52 @@ export function GolaProfileEditorModal({
     });
 
   const supportsMember = draft.members.find((m) => m.key === 'supports');
-  const stripMember = draft.members.find((m) => m.key === 'strip');
+  const stripMember = draft.members.find((m) => m.key === STRIP_MEMBER_ROLE);
+  const unknownMembers = draft.members.filter((m) => !isKnownMemberRole(m.key));
 
-  const saveErrorAnchor = (message: string): 'name' | 'inferior' | 'superior' | 'alto' => {
-    const lowered = message.toLowerCase();
-    if (lowered.includes('inferior') || lowered.includes('muebles bajos')) return 'inferior';
-    if (lowered.includes('superior') || lowered.includes('alacena')) return 'superior';
-    if (lowered.includes('muebles altos') || lowered.match(/\balto\b/)) return 'alto';
-    return 'name';
+  const errorSection = error ? sectionForMessage(error) : null;
+  const sectionAlert = (section: string): ReactNode =>
+    error && errorSection === section ? (
+      <p role="alert" id="gola-profile-error" data-testid="gola-profile-error" className="gola-editor__alert">
+        {error}
+      </p>
+    ) : null;
+
+  const fichaPending = datasheetStatusOfDraft(draft) === 'pending';
+  const pendingReasons = fichaPending ? datasheetPendingReasons(draft) : [];
+
+  const discountRow = (position: 'top' | 'between', label: string, value: string): ReactNode => {
+    const testId = position === 'top' ? 'gola-discount-top' : 'gola-discount-between';
+    const chip = MATERIAL_CHIPS.find((c) => c.value === material && c.crossSection === draft.crossSection) ?? null;
+    const suggestion = suggestions && chip ? suggestionForChip(suggestions, chip) : null;
+    const suggested = position === 'top' ? suggestion?.front_discount_top_mm : suggestion?.front_discount_between_mm;
+    return (
+      <div className="gola-editor__discount">
+        <label className="catalog-form__field">
+          <span>Descuento del frente — {label}</span>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={value}
+            data-testid={testId}
+            aria-describedby="gola-profile-error"
+            onChange={(e) => set(position === 'top' ? { frontDiscountTopMm: e.target.value } : { frontDiscountBetweenMm: e.target.value })}
+          />
+        </label>
+        {suggested != null ? (
+          <button
+            type="button"
+            className="btn btn--small"
+            id={`gola-discount-suggest-${position}`}
+            data-testid={`gola-discount-suggest-${position}`}
+            onClick={() => set(position === 'top' ? { frontDiscountTopMm: String(suggested) } : { frontDiscountBetweenMm: String(suggested) })}
+          >
+            sugerencia: {suggested}
+          </button>
+        ) : null}
+      </div>
+    );
   };
 
   return (
@@ -314,14 +508,15 @@ export function GolaProfileEditorModal({
       dataTestId="gola-profile-editor"
     >
       <form id={formId} onSubmit={onSubmit}>
-        {error ? (
-          <p role="alert" data-testid="gola-profile-error" style={{ color: 'var(--danger)' }}>
+        {error && errorSection === null ? (
+          <p role="alert" id="gola-profile-error" data-testid="gola-profile-error" className="gola-editor__alert">
             {error}
           </p>
         ) : null}
 
         <fieldset className="catalog-form__section" disabled={saving}>
           <legend className="catalog-form__section-title">Identidad</legend>
+          {sectionAlert('identidad')}
           <label className="catalog-form__field">
             <span>Código</span>
             <input value={draft.code} maxLength={80} required data-testid="gola-profile-code" onChange={(e) => set({ code: e.target.value })} />
@@ -338,19 +533,12 @@ export function GolaProfileEditorModal({
 
         <fieldset className="catalog-form__section" disabled={saving}>
           <legend className="catalog-form__section-title">Material</legend>
-          <div role="radiogroup" aria-label="Material del perfil" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {sectionAlert('material')}
+          <div role="radiogroup" aria-label="Material del perfil" className="gola-editor__chips">
             {MATERIAL_CHIPS.map((chip) => {
               const selected = material === chip.value && (chip.value !== 'aluminum' || draft.crossSection === chip.crossSection);
               return (
-                <label
-                  key={chip.testId}
-                  style={{
-                    border: selected ? '2px solid var(--border)' : '1px solid var(--border)',
-                    borderRadius: 6,
-                    padding: '6px 10px',
-                    fontWeight: selected ? 600 : 400,
-                  }}
-                >
+                <label key={chip.testId} className={`gola-editor__chip${selected ? ' gola-editor__chip--selected' : ''}`}>
                   <input
                     type="radio"
                     name="gola-material"
@@ -365,12 +553,12 @@ export function GolaProfileEditorModal({
               );
             })}
           </div>
-          <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <div className="gola-editor__positions">
+            <label className="gola-editor__switch">
               <input type="checkbox" role="switch" checked={draft.top} disabled={saving} data-testid="gola-position-top" onChange={(e) => togglePosition('top', e.target.checked)} />
               Superior
             </label>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <label className="gola-editor__switch">
               <input type="checkbox" role="switch" checked={draft.between} disabled={saving} data-testid="gola-position-between" onChange={(e) => togglePosition('between', e.target.checked)} />
               Entre frentes
             </label>
@@ -379,45 +567,64 @@ export function GolaProfileEditorModal({
 
         <fieldset className="catalog-form__section" disabled={saving}>
           <legend className="catalog-form__section-title">Dimensiones</legend>
+          {sectionAlert('dimensiones')}
           <label className="catalog-form__field">
             <span>Alto del perfil (mm)</span>
             <input type="number" min="0" step="any" value={draft.profileHeightMm} data-testid="gola-profile-height" onChange={(e) => set({ profileHeightMm: e.target.value })} />
           </label>
           <label className="catalog-form__field">
             <span>Profundidad (mm)</span>
-            <input type="number" min="0" step="any" value={draft.profileDepthMm} data-testid="gola-profile-depth" onChange={(e) => set({ profileDepthMm: e.target.value })} />
+            <input type="number" min="0" step="any" value={draft.profileDepthMm} data-testid="gola-profile-depth" onChange={(e) => onDepthInput(e.target.value)} />
           </label>
         </fieldset>
 
         <fieldset className="catalog-form__section" disabled={saving}>
           <legend className="catalog-form__section-title">Descuento del frente</legend>
+          {sectionAlert('descuento')}
           {draft.top ? discountRow('top', 'Superior', draft.frontDiscountTopMm) : null}
           {draft.between ? discountRow('between', 'Entre frentes', draft.frontDiscountBetweenMm) : null}
           {!draft.top && !draft.between ? (
             <p className="catalog-form__hint">Marcá al menos una posición para declarar el descuento.</p>
           ) : null}
+          {savedUsage && (draft.top || draft.between) ? (
+            <div data-testid="gola-profile-saved-usage" className="gola-editor__uso-list">
+              <span className="catalog-form__hint">Estado guardado:</span>
+              {(['top', 'between'] as const).map((position) => {
+                if (!(position === 'top' ? draft.top : draft.between)) return null;
+                const verdict = savedUsage[position];
+                if (!verdict) return null; // toggled on in-flight — the preview reports it
+                const label = position === 'top' ? 'superior' : 'entre frentes';
+                return (
+                  <span key={position} className="gola-editor__uso-line">
+                    {verdict.usable === true ? `${label}: OK` : verdict.message ?? `${label}: no utilizable`}
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
         </fieldset>
 
         <fieldset className="catalog-form__section" disabled={saving}>
           <legend className="catalog-form__section-title">Vista previa y sección</legend>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div className="gola-editor__preview">
             <GolaSectionDrawing
               material={material}
               crossSection={draft.crossSection}
               heightMm={Number(draft.profileHeightMm)}
               depthMm={Number(draft.profileDepthMm)}
+              topDiscountMm={draft.top ? draft.frontDiscountTopMm : ''}
             />
-            <div data-testid="gola-profile-preview" style={{ flex: 1, minWidth: 220 }}>
+            <div data-testid="gola-profile-preview" className="gola-editor__preview-lines">
               {previewLoading ? (
                 <p className="catalog-form__hint" aria-busy="true">Resolviendo vista previa…</p>
               ) : (
-                previewLines.map((line) => (
-                  <p key={line.key} data-testid={`gola-profile-preview-${line.key}`}>
+                previewLines.map((line, index) => (
+                  <p key={`${line.key}-${index}`} data-testid={`gola-profile-preview-${line.key}-${index}`}>
                     {line.preview}
                   </p>
                 ))
               )}
-              {previewError ? <p role="alert" style={{ color: 'var(--danger)' }}>{previewError}</p> : null}
+              {previewError ? <p role="alert" className="gola-editor__alert">{previewError}</p> : null}
               <button
                 type="button"
                 className="btn btn--small"
@@ -433,7 +640,8 @@ export function GolaProfileEditorModal({
 
         <fieldset className="catalog-form__section" disabled={saving}>
           <legend className="catalog-form__section-title">Efectos sobre el cuerpo</legend>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          {sectionAlert('efectos')}
+          <label className="gola-editor__effect">
             <input
               type="checkbox"
               checked={draft.depthReductionEnabled}
@@ -443,7 +651,7 @@ export function GolaProfileEditorModal({
             />
             Acortar el techo o mover el manguete frontal (usa la profundidad)
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <label className="gola-editor__effect">
             <input
               type="checkbox"
               checked={draft.notchEnabled}
@@ -469,7 +677,7 @@ export function GolaProfileEditorModal({
             Muesca en costados
           </label>
           {draft.notchEnabled ? (
-            <div style={{ margin: '0 0 8px 24px' }}>
+            <div className="gola-editor__effect-detail">
               <label className="catalog-form__field">
                 <span>Alto de la muesca (mm)</span>
                 <input type="number" min="0" step="any" value={draft.notchHeightMm} data-testid="gola-notch-height" onChange={(e) => set({ notchHeightMm: e.target.value })} />
@@ -487,7 +695,7 @@ export function GolaProfileEditorModal({
               )}
             </div>
           ) : null}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <label className="gola-editor__effect">
             <input
               type="checkbox"
               checked={draft.bevelEnabled}
@@ -495,19 +703,23 @@ export function GolaProfileEditorModal({
               data-testid="gola-effect-bevel"
               onChange={(e) => {
                 const checked = e.target.checked;
-                const depth = Number(draft.profileDepthMm);
                 if (checked) {
-                  toggleEffect({
-                    bevelEnabled: true,
-                    bevelAt: 'top_front',
-                    bevelSizeMm:
-                      draft.bevelSizeMm !== ''
-                        ? draft.bevelSizeMm
-                        : Number.isFinite(depth) && depth > 2
-                          ? formatMmInput(depth - 2)
-                          : '',
+                  // The size comes from the server suggestion (depth − 2);
+                  // when the depth is still undeclared it stays empty and
+                  // the depth input asks the server again (never a React
+                  // constant).
+                  bevelDerived.current = true;
+                  void fetchSuggestions(Number(draft.profileDepthMm) > 0 ? Number(draft.profileDepthMm) : null).then((list) => {
+                    const fresh = list ? suggestionForChip(list, MATERIAL_CHIPS[2]!) : null;
+                    const size = fresh?.body_modifiers.find((m) => m.bevel_size_mm != null)?.bevel_size_mm;
+                    if (size != null && bevelDerived.current && draft.bevelSizeMm === '') {
+                      set({ bevelEnabled: true, bevelAt: 'top_front', bevelSizeMm: formatMmInput(size) });
+                    } else if (draft.bevelSizeMm === '') {
+                      set({ bevelEnabled: true, bevelAt: 'top_front' });
+                    }
                   });
                 } else {
+                  bevelDerived.current = false;
                   toggleEffect({ bevelEnabled: false });
                 }
               }}
@@ -515,15 +727,16 @@ export function GolaProfileEditorModal({
             Bisel 45° en la puerta (mm)
           </label>
           {draft.bevelEnabled ? (
-            <label className="catalog-form__field" style={{ margin: '0 0 8px 24px' }}>
+            <label className="catalog-form__field gola-editor__effect-detail">
               <span>Tamaño del bisel (mm)</span>
-              <input type="number" min="0" step="any" value={draft.bevelSizeMm} data-testid="gola-bevel-size" onChange={(e) => set({ bevelSizeMm: e.target.value })} />
+              <input type="number" min="0" step="any" value={draft.bevelSizeMm} data-testid="gola-bevel-size" onChange={(e) => { bevelDerived.current = false; set({ bevelSizeMm: e.target.value }); }} />
             </label>
           ) : null}
         </fieldset>
 
         <fieldset className="catalog-form__section" disabled={saving}>
           <legend className="catalog-form__section-title">Piezas</legend>
+          {sectionAlert('piezas')}
           <CatalogPicker
             label="Perfil"
             data-testid="gola-part-profile"
@@ -551,10 +764,11 @@ export function GolaProfileEditorModal({
                   value={supportsMember.spacingMm}
                   disabled={saving}
                   data-testid="gola-part-supports-spacing"
+                  aria-describedby="gola-profile-error"
                   onChange={(e) => setDraft((current) => ({ ...current, members: current.members.map((m) => (m.key === 'supports' ? { ...m, spacingMm: e.target.value } : m)) }))}
                 />
               </label>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div className="gola-editor__part-dims">
                 {(['largo', 'profundo', 'alto'] as const).map((axis, index) => (
                   <label key={axis} className="catalog-form__field">
                     <span>{`Medida ${axis} (mm)`}</span>
@@ -598,7 +812,7 @@ export function GolaProfileEditorModal({
                 value={stripMember?.componentId ?? ''}
                 disabled={saving}
                 onChange={(id) => {
-                  upsertMember('strip', 'component', id, { rule: 'interior_width', unit: 'piece', heightMm: stripMember?.heightMm ?? '70' });
+                  upsertMember(STRIP_MEMBER_ROLE, 'component', id, { rule: 'interior_width', unit: 'piece', heightMm: stripMember?.heightMm ?? '70' });
                 }}
               />
               <label className="catalog-form__field">
@@ -610,19 +824,30 @@ export function GolaProfileEditorModal({
                   value={stripMember?.heightMm ?? '70'}
                   disabled={saving}
                   data-testid="gola-part-strip-height"
-                  onChange={(e) => setDraft((current) => ({ ...current, members: current.members.map((m) => (m.key === 'strip' ? { ...m, heightMm: e.target.value } : m)) }))}
+                  onChange={(e) => setDraft((current) => ({ ...current, members: current.members.map((m) => (m.key === STRIP_MEMBER_ROLE ? { ...m, heightMm: e.target.value } : m)) }))}
                 />
               </label>
             </>
           ) : null}
+          {unknownMembers.map((member) => (
+            <p key={member.key} className="gola-editor__unknown-member" data-testid={`gola-unknown-member-${member.key}`}>
+              Esta pieza declara el rol «{member.key}», que este editor no reconoce (viene de una versión anterior). Al guardar se quita: el catálogo ya no acepta ese rol.
+            </p>
+          ))}
         </fieldset>
 
         <fieldset className="catalog-form__section" disabled={saving}>
           <legend className="catalog-form__section-title">Origen</legend>
+          {sectionAlert('origen')}
           <label className="catalog-form__field">
             <span>Origen de los valores (opcional)</span>
             <input value={draft.geometryOrigin} maxLength={200} data-testid="gola-profile-origin-input" onChange={(e) => set({ geometryOrigin: e.target.value })} />
           </label>
+          <p className="gola-editor__ficha-line" data-testid="gola-profile-ficha">
+            {fichaPending
+              ? `Ficha: pendiente — para autorizar aperturas faltan ${pendingReasons.join(', ')}.`
+              : 'Ficha: verificada — el perfil puede autorizar aperturas.'}
+          </p>
         </fieldset>
 
         <div className="catalog-form__actions">
@@ -636,37 +861,4 @@ export function GolaProfileEditorModal({
       </form>
     </Modal>
   );
-}
-
-
-function upsertMember(
-  members: readonly OpeningProfileMemberDraft[],
-  key: string,
-  kind: 'hardware' | 'component',
-  id: string,
-  patch: (base: OpeningProfileMemberDraft) => Partial<OpeningProfileMemberDraft>,
-): readonly OpeningProfileMemberDraft[] {
-  const existing = members.find((m) => m.key === key);
-  if (existing) {
-    return members.map((m) =>
-      m.key === key
-        ? { ...m, kind, ...(kind === 'hardware' ? { hardwareId: id } : { componentId: id }), ...patch(m) }
-        : m,
-    );
-  }
-  return [
-    ...members,
-    {
-      key,
-      kind,
-      hardwareId: kind === 'hardware' ? id : '',
-      componentId: kind === 'component' ? id : '',
-      rule: 'interior_width',
-      unit: 'piece',
-      spacingMm: '',
-      dims: ['', '', ''] as [string, string, string],
-      heightMm: '',
-      ...patch({ key, kind } as OpeningProfileMemberDraft),
-    },
-  ];
 }

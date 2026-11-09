@@ -103,7 +103,9 @@ func (p *OpeningProfile) UsageAt(position string) OpeningProfilePositionUsage {
 	requirements := []requirement{
 		{"profile_height_mm", "el alto del perfil", p.ProfileHeightMm != nil},
 		{"profile_depth_mm", "la profundidad del perfil", p.ProfileDepthMm != nil},
-		{discountField, "el descuento del frente " + label, discount != nil},
+		// #1534 r1: the issue's workshop-facing copy names it plain —
+		// «No se puede usar entre frentes: falta el descuento».
+		{discountField, "el descuento", discount != nil},
 	}
 	missing := []string{}
 	labels := []string{}
@@ -118,7 +120,7 @@ func (p *OpeningProfile) UsageAt(position string) OpeningProfilePositionUsage {
 	}
 	return OpeningProfilePositionUsage{
 		Missing: missing,
-		Message: fmt.Sprintf("Para usar el perfil %s falta %s.", label, joinSpanish(labels)),
+		Message: fmt.Sprintf("No se puede usar %s: falta %s", label, joinSpanish(labels)),
 	}
 }
 

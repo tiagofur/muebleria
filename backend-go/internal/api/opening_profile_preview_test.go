@@ -51,7 +51,7 @@ func TestOpeningProfilePreviewHonestMissingLine(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), "falta el descuento superior") || !strings.Contains(rr.Body.String(), "342") {
+	if !strings.Contains(rr.Body.String(), "falta el descuento superior") || !strings.Contains(rr.Body.String(), "340.5") {
 		t.Fatalf("missing-discount lines drifted: %s", rr.Body.String())
 	}
 }

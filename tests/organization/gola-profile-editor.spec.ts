@@ -142,7 +142,7 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
   await page.getByTestId('gola-profile-depth').fill('27.2');
   await uiClick(page, 'gola-discount-suggest-top');
   expect(await page.getByTestId('gola-discount-top').inputValue()).toBe('40');
-  await expect(page.getByTestId('gola-profile-preview-una_puerta')).toContainText('Mueble de 720: una puerta = 680');
+  await expect(page.getByTestId('gola-profile-preview-una_puerta-0')).toContainText('Mueble de 720: una puerta = 680');
   // Visual evidence (## Visual Evidence in the PR): the editor with the
   // server preview + schematic section + effects + parts.
   await page.screenshot({ path: 'docs/demo/evidence/1534/editor-gola-l-preview.png', fullPage: true, animations: 'disabled' });
@@ -157,14 +157,13 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
 
   // 2. «Italiana 70»: melamina, superior + entre frentes, descuentos 36,
   //    efectos de fábrica, tira de componentes con alto 70 y bisel de
-  //    profundidad − 2.
+  //    profundidad − 2 — in the NATURAL top-to-bottom order: the chip comes
+  //    first with the depth still empty (the bevel waits, never a React
+  //    constant), and declaring the depth asks the SERVER again with
+  //    profile_depth_mm so the bevel lands as 27.2 − 2 = 25.2.
   await uiClick(page, 'opening-profile-create-btn');
   await page.getByTestId('gola-profile-code').fill('ITALIANA-70-1534');
   await page.getByTestId('gola-profile-name').fill('Italiana 70');
-  // The datasheet first, then the material: the Italian preset derives the
-  // bevel from the declared depth (profundidad − 2).
-  await page.getByTestId('gola-profile-height').fill('56.5');
-  await page.getByTestId('gola-profile-depth').fill('27.2');
   await uiClick(page, 'gola-material-italiana');
   await expect(page.getByTestId('gola-position-top')).toBeChecked();
   await expect(page.getByTestId('gola-position-between')).toBeChecked();
@@ -173,9 +172,15 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
   await expect(page.getByTestId('gola-effect-depth')).toBeChecked();
   await expect(page.getByTestId('gola-effect-notch')).toBeChecked();
   await expect(page.getByTestId('gola-effect-bevel')).toBeChecked();
-  await expect(page.getByTestId('gola-bevel-size')).toHaveValue('25.2'); // profundidad − 2
+  await expect(page.getByTestId('gola-bevel-size')).toHaveValue('');
+  await page.getByTestId('gola-profile-height').fill('56.5');
+  await page.getByTestId('gola-profile-depth').fill('27.2');
+  await expect(page.getByTestId('gola-bevel-size')).toHaveValue('25.2'); // profundidad − 2, derivada por el servidor
   await pickFromPicker(page, 'gola-part-strip', 'TIRA-1534');
   await expect(page.getByTestId('gola-part-strip-height')).toHaveValue('70');
+  // Visual evidence: the Italiana editor (preset del servidor, tira, bisel
+  // derivado, sección con la tira) — the #1534 brief's second material.
+  await page.screenshot({ path: 'docs/demo/evidence/1534/editor-gola-italiana.png', fullPage: true, animations: 'disabled' });
 
   await saveProfile(page, 'ITALIANA-70-1534');
 
@@ -212,6 +217,25 @@ test('1534: el editor v2 crea Gola L (una puerta = 680), la Italiana 70 con bise
   expect(summary).toContain('entre cajones');
   await page.screenshot({ path: 'docs/demo/evidence/1534/agarres-estilo-ambos.png', fullPage: true, animations: 'disabled' });
 
-  // Visual evidence (## Visual Evidence in the PR).
-  await page.screenshot({ path: 'docs/demo/evidence/1534/agarres-estilo-1534.png', fullPage: true, animations: 'disabled' });
+  // 4. Aceptación 3: un perfil SIN el descuento de una posición se guarda
+  //    (disponible ≠ válido) y la lista muestra el motivo exacto por
+  //    posición servido por la API.
+  await page.goto('/opening-profiles');
+  await uiClick(page, 'opening-profile-create-btn');
+  await page.getByTestId('gola-profile-code').fill('GOLA-C-1534');
+  await page.getByTestId('gola-profile-name').fill('Gola C sin descuento entre frentes');
+  await uiClick(page, 'gola-material-c');
+  // The C preset brings the between discount 36: cleared to declare the
+  // pending state on purpose.
+  await expect(page.getByTestId('gola-position-between')).toBeChecked();
+  await expect(page.getByTestId('gola-discount-suggest-between')).toContainText('sugerencia: 36');
+  await page.getByTestId('gola-discount-between').fill('');
+  await page.getByTestId('gola-profile-height').fill('56.5');
+  await page.getByTestId('gola-profile-depth').fill('27.2');
+  await saveProfile(page, 'GOLA-C-1534');
+  await expect(
+    page.getByText('No se puede usar entre frentes: falta el descuento').first(),
+  ).toBeVisible({ timeout: 15_000 });
+  // Visual evidence: the list with the honest per-position Uso state.
+  await page.screenshot({ path: 'docs/demo/evidence/1534/lista-uso-1534.png', fullPage: true, animations: 'disabled' });
 });

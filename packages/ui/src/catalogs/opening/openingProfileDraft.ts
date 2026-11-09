@@ -146,6 +146,16 @@ export function emptyMemberDraft(): OpeningProfileMemberDraft {
 export const HARDWARE_MEMBER_ROLES = ['profile', 'supports', 'endCaps'] as const;
 export type HardwareMemberRole = (typeof HARDWARE_MEMBER_ROLES)[number];
 
+/** #1534 — the component role the italiana mounts (the full-depth strip). */
+export const STRIP_MEMBER_ROLE = 'strip';
+
+/** The member roles the editor knows (#1526 hardware + the #1534 strip).
+ * Migration 000180 may keep rows with OTHER keys: the editor discloses them
+ * and the save drops them (the server rejects unknown roles on write). */
+export function isKnownMemberRole(key: string): boolean {
+  return (HARDWARE_MEMBER_ROLES as readonly string[]).includes(key) || key === STRIP_MEMBER_ROLE;
+}
+
 export function isHardwareMemberRole(key: string): key is HardwareMemberRole {
   return (HARDWARE_MEMBER_ROLES as readonly string[]).includes(key);
 }
@@ -277,14 +287,23 @@ function membersOfMap(members: OpeningProfileBOMMembersLike | null): readonly Op
     });
 }
 
-/** The editable member drafts → the persisted snake_case map (#1327). */
+/**
+ * The editable member drafts → the persisted snake_case map (#1327). A member
+ * whose pick was cleared («Quitar selección») or whose role the editor does
+ * not know (migration 000180 keeps them on read; the server rejects them on
+ * write, and the editor DISCLOSES the drop before saving) is not emitted —
+ * an empty reference never travels to fail the save.
+ */
 export function membersMapOfDraft(
   members: readonly OpeningProfileMemberDraft[],
 ): OpeningProfileBOMMembersLike {
   const map: Record<string, OpeningProfileBOMMember> = {};
   for (const member of members) {
+    const key = member.key.trim();
+    if (key === '' || !isKnownMemberRole(key)) continue;
+    if (member.kind === 'component' ? member.componentId.trim() === '' : member.hardwareId.trim() === '') continue;
     const dims = member.dims.map((d) => (d.trim() !== '' ? Number(d) : null));
-    map[member.key.trim()] = {
+    map[key] = {
       // hardware_id is the required contract key; component members carry it
       // empty and reference through component_id (#1327).
       hardware_id: member.kind === 'component' ? '' : member.hardwareId.trim(),
@@ -307,6 +326,42 @@ export function suggestOpeningProfileId(code: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return slug ? `profile.${slug}` : '';
+}
+
+/**
+ * #1534 round 1 — the datasheet status the write carries, derived from the
+ * declared envelope with the SAME rule the legacy authoring gate enforces
+ * (AuthoringReady: alto + profundidad + un descuento efectivo — el número
+ * declarado o el par de ficha — y el origen de los valores). The v2 editor
+ * has no manual verified selector: declaring the complete envelope WITH its
+ * origin IS the verification; anything less stays pending and the design
+ * opening authoring gate reports what is missing (disponible ≠ válido).
+ *
+ * Never DEMOTES: a row that arrived verified stays verified (the editor does
+ * not expose every legacy field; hiding them must not silently un-verify).
+ */
+export function datasheetStatusOfDraft(draft: OpeningProfileDraft): 'pending' | 'verified' {
+  const hasDims = Number(draft.profileHeightMm) > 0 && Number(draft.profileDepthMm) > 0;
+  const hasDiscount =
+    Number(draft.frontDiscountTopMm) > 0 ||
+    (Number(draft.frontReductionMm) > 0 && draft.gripClearanceMm !== '' && Number(draft.gripClearanceMm) >= 0);
+  const hasOrigin = draft.geometryOrigin.trim() !== '';
+  const derived = hasDims && hasDiscount && hasOrigin;
+  return draft.datasheetStatus === 'verified' || derived ? 'verified' : 'pending';
+}
+
+/** The honest workshop-facing list of what keeps the datasheet pending. */
+export function datasheetPendingReasons(draft: OpeningProfileDraft): readonly string[] {
+  const reasons: string[] = [];
+  if (Number(draft.profileHeightMm) <= 0 || Number(draft.profileDepthMm) <= 0) {
+    reasons.push('el alto y la profundidad del perfil');
+  }
+  if (!(Number(draft.frontDiscountTopMm) > 0) &&
+    !(Number(draft.frontReductionMm) > 0 && draft.gripClearanceMm !== '' && Number(draft.gripClearanceMm) >= 0)) {
+    reasons.push('el descuento superior');
+  }
+  if (draft.geometryOrigin.trim() === '') reasons.push('el origen de los valores');
+  return reasons;
 }
 
 /**

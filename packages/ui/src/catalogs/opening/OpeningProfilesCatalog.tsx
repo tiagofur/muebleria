@@ -37,6 +37,7 @@ import { GolaProfileEditorModal } from './GolaProfileEditorModal';
 import type { CatalogPickerOption } from '../CatalogPicker';
 import {
   bodyModifiersOfDraft,
+  datasheetStatusOfDraft,
   emptyOpeningProfileDraft,
   isHardwareMemberRole,
   membersMapOfDraft,
@@ -109,20 +110,21 @@ function gripColumn(r: OpeningProfileRow): string {
 }
 
 /** #1534 — the Uso column: the per-position use rule served by the API
- * (disponible ≠ válido), verbatim. */
+ * (disponible ≠ válido), verbatim — the message already names the position
+ * («No se puede usar entre frentes: falta el descuento»). */
 function usabilityColumn(r: OpeningProfileRow): ReactNode {
   const usage = r.usage ?? {};
   const parts: string[] = [];
   for (const [position, label] of [['top', 'superior'], ['between', 'entre frentes']] as const) {
     if (!r.placements.includes(position)) continue;
     const verdict = usage[position];
-    parts.push(verdict?.usable === true ? `${label}: OK` : `${label}: ${verdict?.message ?? 'no utilizable'}`);
+    parts.push(verdict?.usable === true ? `${label}: OK` : verdict?.message ?? `${label}: no utilizable`);
   }
   if (parts.length === 0) return '—';
   return (
-    <span style={{ fontSize: 12 }}>
+    <span className="gola-editor__uso-list">
       {parts.map((part) => (
-        <span key={part} style={{ display: 'block' }}>{part}</span>
+        <span key={part} className="gola-editor__uso-line">{part}</span>
       ))}
     </span>
   );
@@ -254,16 +256,35 @@ export function OpeningProfilesCatalog({
     if (codeErr) return codeErr;
     const nameErr = validateRequiredName(current.name);
     if (nameErr) return nameErr;
-    // #1534 — v2 rules: a declared position's discount is OPTIONAL
-    // (disponible ≠ válido: the preview and the Uso column report it
-    // honestly), and so are the dims — an identity-only pending profile is
-    // allowed and the Uso column reports what the use rule is missing.
+    // #1534 r1 — the editor ALWAYS writes v2-shaped: without a material the
+    // write would fall to the legacy bridge and the typed discounts would
+    // vanish silently (judgment A/B MAJOR-1). The material is the preset
+    // choice — the brief makes it the first reordering decision.
+    if (current.material === '') {
+      return 'Elegí el material del perfil: aluminio L, aluminio C o italiana.';
+    }
+    // #1534 r1 — at least one position: the server rejects an empty
+    // compatible set, and the honest client message names the choice.
+    if (!current.top && !current.between) {
+      return 'Marcá al menos una posición: superior o entre frentes.';
+    }
+    // #1534 r1 — a declared position's discount is OPTIONAL (disponible ≠
+    // válido: the preview and the Uso column report it honestly), and so
+    // are the dims — an in-progress profile saves and the Uso column shows
+    // what the use rule is missing.
     const hasDims =
       Number.isFinite(Number(current.profileHeightMm)) && Number(current.profileHeightMm) > 0 &&
       Number.isFinite(Number(current.profileDepthMm)) && Number(current.profileDepthMm) > 0;
     const hasAnyDiscount = current.frontDiscountTopMm !== '' || current.frontDiscountBetweenMm !== '';
     if (!hasDims && hasAnyDiscount) {
       return 'Un perfil con descuento exige el alto y la profundidad del perfil mayores a 0';
+    }
+    // #1534 r1 — the contract carries integers (*int); a decimal here used
+    // to die in the generated client with an English internal-key error.
+    for (const [field, value] of [['superior', current.frontDiscountTopMm], ['entre frentes', current.frontDiscountBetweenMm]] as const) {
+      if (value !== '' && (!Number.isInteger(Number(value)) || Number(value) <= 0)) {
+        return `El descuento ${field} debe ser un número entero mayor a 0`;
+      }
     }
     if (current.notchEnabled) {
       if (!Number.isFinite(Number(current.notchHeightMm)) || Number(current.notchHeightMm) <= 0) {
@@ -278,6 +299,19 @@ export function OpeningProfilesCatalog({
       if (!Number.isFinite(Number(current.depthReductionMm)) || Number(current.depthReductionMm) <= 0) {
         return 'El descuento explícito debe ser mayor a 0';
       }
+    }
+    if (current.bevelEnabled && (!Number.isFinite(Number(current.bevelSizeMm)) || Number(current.bevelSizeMm) <= 0)) {
+      // The size comes from the server suggestion (depth − 2); with the
+      // depth still undeclared the workshop declares it or clears the
+      // effect — the server rejected bevel 0 with no teaching message.
+      return 'El bisel exige un tamaño mayor a 0: declará la profundidad del perfil y volvé a elegir la italiana, o desmarcá el bisel.';
+    }
+    // #1534 r1 — supports without spacing saved and only failed later, at
+    // BOM time inside a design (the base editor taught it here).
+    const supports = current.members.find((m) => m.key === 'supports');
+    if (supports && supports.hardwareId !== '' &&
+      (!Number.isInteger(Number(supports.spacingMm)) || Number(supports.spacingMm) <= 0)) {
+      return 'Indica cada cuántos mm van los soportes (un número entero mayor a 0)';
     }
     return null;
   };
@@ -575,6 +609,7 @@ export function OpeningProfilesCatalog({
         draft={draft}
         setDraft={setDraft}
         error={error}
+        savedUsage={editingProfile?.usage ?? null}
         canMutate={canMutate}
         saving={saving}
         onSubmit={handleSubmit}
@@ -635,7 +670,11 @@ export function openingProfileWriteBody(
             : {}),
         }
       : {}),
-    datasheet_status: draft.datasheetStatus,
+    // #1534 r1 — the datasheet status derives from the declared envelope
+    // (alto + profundidad + descuento efectivo + origen, the legacy
+    // authoring rule): declaring the complete datasheet WITH its origin is
+    // the verification. Never demotes a row that arrived verified.
+    datasheet_status: datasheetStatusOfDraft(draft),
     // #1316/#1530: the workshop-facing discount travels as ONE number; the
     // v2 bridge keeps door_reduction_mm = front_discount_top_mm coherent,
     // and the legacy datasheet pair round-trips as documentation.

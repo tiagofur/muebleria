@@ -140,7 +140,7 @@ func TestOpeningProfilesV2WriteRulesAnd422(t *testing.T) {
 		t.Fatalf("unknown role: status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	rr = post(`{` + base + `,"front_discount_top_mm":0}`)
-	if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "descuento del frente arriba") {
+	if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "el descuento del frente arriba debe ser mayor a 0") {
 		t.Fatalf("zero discount: status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	rr = post(`{` + base + `,"positions":["top","between"],"front_discount_top_mm":52}`)
@@ -148,7 +148,7 @@ func TestOpeningProfilesV2WriteRulesAnd422(t *testing.T) {
 		t.Fatalf("create: status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	for _, want := range []string{`"door_reduction_mm":52`, `"grip_type":"gola"`, `"usage":`, `"front_discount_between_mm"`, `descuento del frente entre frentes`} {
+	for _, want := range []string{`"door_reduction_mm":52`, `"grip_type":"gola"`, `"usage":`, `"front_discount_between_mm"`, `No se puede usar entre frentes: falta el descuento`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("create readback missing %s: %s", want, body)
 		}

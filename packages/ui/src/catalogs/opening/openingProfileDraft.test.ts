@@ -208,13 +208,22 @@ describe('#1327 — miembro tipo componente (tira del gola italiano)', () => {
 
   it('el write body reconstruye el mapa con component_id, height_mm de la tira y sin perder el herraje', async () => {
     const { openingProfileWriteBody } = await import('./OpeningProfilesCatalog');
-    const body = openingProfileWriteBody(toOpeningProfileDraft(tiraRow)) as unknown as Record<string, Record<string, unknown>>;
+    // The canonical v2 strip role is «strip» (#1530); a «tira» key is an
+    // unknown role the editor discloses and drops (the server rejects it).
+    const stripRow = {
+      ...tiraRow,
+      bomMembers: {
+        profile: { hardware_id: 'hw-8006', rule: 'interior_width' },
+        strip: { hardware_id: '', component_id: 'comp-tira-gola-it', rule: 'interior_width', unit: 'piece' },
+      },
+    };
+    const body = openingProfileWriteBody(toOpeningProfileDraft(stripRow)) as unknown as Record<string, Record<string, unknown>>;
     expect(body.bom_members).toEqual({
       profile: expect.objectContaining({ hardware_id: 'hw-8006' }),
-      tira: expect.objectContaining({ component_id: 'comp-tira-gola-it', rule: 'interior_width', unit: 'piece' }),
+      strip: expect.objectContaining({ component_id: 'comp-tira-gola-it', rule: 'interior_width', unit: 'piece' }),
     });
     // hardware_id stays as the required contract key, EMPTY for component members.
-    expect((body.bom_members as Record<string, unknown>).tira).toHaveProperty('hardware_id', '');
+    expect((body.bom_members as Record<string, unknown>).strip).toHaveProperty('hardware_id', '');
     // The #1530 bridge: door_reduction_mm = front_discount_top_mm (40 on v7Row).
     expect(body.door_reduction_mm).toBe(40);
   });
@@ -226,11 +235,11 @@ describe('#1327 — miembro tipo componente (tira del gola italiano)', () => {
       material: 'melamine',
       bomMembers: {
         profile: { hardware_id: 'hw-8006', rule: 'interior_width' },
-        tira: { hardware_id: '', component_id: 'comp-tira-gola-it', rule: 'interior_width', unit: 'piece', height_mm: 70 },
+        strip: { hardware_id: '', component_id: 'comp-tira-gola-it', rule: 'interior_width', unit: 'piece', height_mm: 70 },
       },
     });
     const body = openingProfileWriteBody(draft) as unknown as Record<string, Record<string, unknown>>;
-    expect((body.bom_members as Record<string, unknown>).tira).toHaveProperty('height_mm', 70);
+    expect((body.bom_members as Record<string, unknown>).strip).toHaveProperty('height_mm', 70);
   });
 });
 
