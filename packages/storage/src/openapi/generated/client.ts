@@ -111,6 +111,8 @@ import type {
   OffboardMembershipRequest,
   OffboardMembershipResponse,
   OpeningProfile,
+  OpeningProfilePreviewRequest,
+  OpeningProfilePreviewResponse,
   OpeningProfileWrite,
   OrganizationEntitlements,
   OrganizationLifecycleMutationRequest,
@@ -391,6 +393,7 @@ export abstract class GeneratedGraneteApiClient {
   deleteGripStyle(token: string, gripStyleId: string, version: number, signal?: AbortSignal): Promise<GripStyleDeleted> { return this.request("DELETE", `/catalog/grip-styles/${encodeURIComponent(gripStyleId)}`, { schema: "GripStyleDeleted", token, ifMatch: version, signal }); }
   listOpeningProfiles(token: string, signal?: AbortSignal): Promise<ReadonlyArray<OpeningProfile>> { return this.request("GET", "/catalog/opening-profiles", { arrayOf: "OpeningProfile", token, signal }); }
   createOpeningProfile(token: string, body: OpeningProfileWrite, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("POST", "/catalog/opening-profiles", { schema: "OpeningProfile", token, bodySchema: "OpeningProfileWrite", body, signal }); }
+  previewOpeningProfile(token: string, body: OpeningProfilePreviewRequest, signal?: AbortSignal): Promise<OpeningProfilePreviewResponse> { return this.request("POST", "/catalog/opening-profiles/preview", { schema: "OpeningProfilePreviewResponse", token, bodySchema: "OpeningProfilePreviewRequest", body, signal }); }
   listOpeningProfileSuggestions(token: string, signal?: AbortSignal): Promise<ReadonlyArray<GolaProfileSuggestion>> { return this.request("GET", "/catalog/opening-profiles/suggestions", { arrayOf: "GolaProfileSuggestion", token, signal }); }
   getOpeningProfile(token: string, profileId: string, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("GET", `/catalog/opening-profiles/${encodeURIComponent(profileId)}`, { schema: "OpeningProfile", token, signal }); }
   updateOpeningProfile(token: string, profileId: string, version: number, body: OpeningProfileWrite, signal?: AbortSignal): Promise<OpeningProfile> { return this.request("PUT", `/catalog/opening-profiles/${encodeURIComponent(profileId)}`, { schema: "OpeningProfile", token, ifMatch: version, bodySchema: "OpeningProfileWrite", body, signal }); }

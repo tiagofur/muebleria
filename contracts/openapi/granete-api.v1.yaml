@@ -7000,6 +7000,40 @@
         }
       }
     },
+    "/catalog/opening-profiles/preview": {
+      "post": {
+        "operationId": "previewOpeningProfile",
+        "summary": "Resolve the gola profile editor's live preview sentences server-side (#1534): «Mueble de 720: una puerta = 680 · dos frentes con esta C = 322» with the A3 contract; React renders them verbatim. POST-as-read: the fields are IN EDITING, nothing is saved",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpeningProfilePreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One resolved sentence per declared position (a declared position without its discount reports what is missing — disponible ≠ válido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpeningProfilePreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/catalog/opening-profiles/suggestions": {
       "get": {
         "operationId": "listOpeningProfileSuggestions",
@@ -19674,6 +19708,73 @@
           "byFurnitureType"
         ],
         "description": "#1531 — authorable fields; id/organization/version/timestamps/migrationReport are server-owned."
+      },
+      "OpeningProfilePreviewRequest": {
+        "type": "object",
+        "description": "#1534: the gola profile editor's in-flight fields (nothing saved yet). The server resolves the datasheet sentences with the A3 contract.",
+        "additionalProperties": false,
+        "required": [
+          "heightMm",
+          "positions"
+        ],
+        "properties": {
+          "heightMm": {
+            "type": "integer",
+            "description": "The reference cabinet height (e.g. 720)."
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "top",
+                "between"
+              ]
+            }
+          },
+          "frontDiscountTopMm": {
+            "type": "integer",
+            "nullable": true
+          },
+          "frontDiscountBetweenMm": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "OpeningProfilePreviewResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "previews"
+        ],
+        "properties": {
+          "previews": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "preview"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "enum": [
+                    "una_puerta",
+                    "dos_frentes",
+                    "falta"
+                  ]
+                },
+                "preview": {
+                  "type": "string",
+                  "description": "The resolved Spanish sentence the UI renders verbatim."
+                }
+              }
+            }
+          }
+        }
       },
       "GripStylePreviewRequest": {
         "type": "object",
