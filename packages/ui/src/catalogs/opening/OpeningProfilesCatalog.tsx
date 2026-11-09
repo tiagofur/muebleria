@@ -679,7 +679,9 @@ export function openingProfileWriteBody(
     // #1534 r1 — the datasheet status derives from the declared envelope
     // (alto + profundidad + descuento efectivo + origen, the legacy
     // authoring rule): declaring the complete datasheet WITH its origin is
-    // the verification. Never demotes a row that arrived verified.
+    // the verification. A row that arrived verified keeps it while the
+    // hidden legacy pair stands; clearing the VISIBLE top discount with no
+    // pair demotes honestly (the ficha line shows it as it happens).
     datasheet_status: datasheetStatusOfDraft(draft),
     // #1316/#1530: the workshop-facing discount travels as ONE number; the
     // v2 bridge keeps door_reduction_mm = front_discount_top_mm coherent,

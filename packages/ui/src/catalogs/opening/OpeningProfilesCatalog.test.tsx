@@ -702,6 +702,24 @@ describe('OpeningProfilesCatalog — ronda 2: defectos de la corrección (re-jui
     expect(reasons.join(' ')).not.toContain('el descuento superior');
   });
 
+  it('sin posiciones declaradas la línea de ficha nombra lo que falta (nunca «faltan .»)', () => {
+    const base = emptyOpeningProfileDraft();
+    const noneDeclared: OpeningProfileDraft = {
+      ...base,
+      material: 'aluminum',
+      top: false,
+      between: false,
+      profileHeightMm: '56.5',
+      profileDepthMm: '27.2',
+      geometryOrigin: 'Ficha SCILM',
+    };
+    const reasons = datasheetPendingReasons(noneDeclared);
+    expect(reasons.join(' ')).toContain('declarar al menos una posición');
+    // The rendered sentence can never dangle: the list is never empty while
+    // the profile is pending.
+    expect(reasons.length).toBeGreaterThan(0);
+  });
+
   it('una ficha verificada que pierde su descuento superior VISIBLE (sin par legacy) baja a pendiente — el guardado en progreso sigue siendo válido', () => {
     const base = emptyOpeningProfileDraft();
     const verifiedTop: OpeningProfileDraft = {

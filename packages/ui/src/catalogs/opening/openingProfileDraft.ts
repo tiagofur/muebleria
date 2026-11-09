@@ -364,9 +364,13 @@ export function datasheetPendingReasons(draft: OpeningProfileDraft): readonly st
   }
   const pairPresent =
     Number(draft.frontReductionMm) > 0 && draft.gripClearanceMm !== '' && Number(draft.gripClearanceMm) >= 0;
-  if (draft.top) {
+  if (!draft.top && !draft.between) {
+    // Neither position declared: the profile grips nothing yet (the save is
+    // blocked separately; the line must still name what is missing).
+    reasons.push('declarar al menos una posición (superior o entre frentes)');
+  } else if (draft.top) {
     if (!(Number(draft.frontDiscountTopMm) > 0) && !pairPresent) reasons.push('el descuento superior');
-  } else if (draft.between) {
+  } else {
     // Between-only: the legacy authoring gate consumes top/bottom profiles —
     // demanding a top discount here would name a requirement the profile
     // cannot meet honestly.
