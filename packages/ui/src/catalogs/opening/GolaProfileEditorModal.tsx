@@ -541,18 +541,45 @@ export function GolaProfileEditorModal({
             onChange={(id) => upsertMember('supports', 'hardware', id, { rule: 'per_length', unit: 'piece' })}
           />
           {supportsMember?.hardwareId ? (
-            <label className="catalog-form__field">
-              <span>Soportes cada (mm)</span>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={supportsMember.spacingMm}
-                disabled={saving}
-                data-testid="gola-part-supports-spacing"
-                onChange={(e) => setDraft((current) => ({ ...current, members: current.members.map((m) => (m.key === 'supports' ? { ...m, spacingMm: e.target.value } : m)) }))}
-              />
-            </label>
+            <>
+              <label className="catalog-form__field">
+                <span>Soportes cada (mm)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={supportsMember.spacingMm}
+                  disabled={saving}
+                  data-testid="gola-part-supports-spacing"
+                  onChange={(e) => setDraft((current) => ({ ...current, members: current.members.map((m) => (m.key === 'supports' ? { ...m, spacingMm: e.target.value } : m)) }))}
+                />
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(['largo', 'profundo', 'alto'] as const).map((axis, index) => (
+                  <label key={axis} className="catalog-form__field">
+                    <span>{`Medida ${axis} (mm)`}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={supportsMember.dims[index] ?? ''}
+                      data-testid={`gola-part-supports-dim-${index}`}
+                      onChange={(e) =>
+                        setDraft((current) => ({
+                          ...current,
+                          members: current.members.map((m) => {
+                            if (m.key !== 'supports') return m;
+                            const dims = [...m.dims] as [string, string, string];
+                            dims[index] = e.target.value;
+                            return { ...m, dims };
+                          }),
+                        }))
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            </>
           ) : null}
           <CatalogPicker
             label="Tapas"

@@ -254,13 +254,16 @@ export function OpeningProfilesCatalog({
     if (codeErr) return codeErr;
     const nameErr = validateRequiredName(current.name);
     if (nameErr) return nameErr;
-    // #1534 — v2 rules: height/depth > 0 (the use rule needs them). A
-    // declared position's discount is OPTIONAL (disponible ≠ válido: the
-    // preview and the Uso column report it honestly); the datasheet barrier
-    // is GONE (#1530 made datasheet_status data-only).
-    if (!Number.isFinite(Number(current.profileHeightMm)) || Number(current.profileHeightMm) <= 0 ||
-      !Number.isFinite(Number(current.profileDepthMm)) || Number(current.profileDepthMm) <= 0) {
-      return 'El alto y la profundidad del perfil deben ser mayores a 0';
+    // #1534 — v2 rules: a declared position's discount is OPTIONAL
+    // (disponible ≠ válido: the preview and the Uso column report it
+    // honestly), and so are the dims — an identity-only pending profile is
+    // allowed and the Uso column reports what the use rule is missing.
+    const hasDims =
+      Number.isFinite(Number(current.profileHeightMm)) && Number(current.profileHeightMm) > 0 &&
+      Number.isFinite(Number(current.profileDepthMm)) && Number(current.profileDepthMm) > 0;
+    const hasAnyDiscount = current.frontDiscountTopMm !== '' || current.frontDiscountBetweenMm !== '';
+    if (!hasDims && hasAnyDiscount) {
+      return 'Un perfil con descuento exige el alto y la profundidad del perfil mayores a 0';
     }
     if (current.notchEnabled) {
       if (!Number.isFinite(Number(current.notchHeightMm)) || Number(current.notchHeightMm) <= 0) {

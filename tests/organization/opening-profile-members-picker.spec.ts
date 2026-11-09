@@ -187,6 +187,9 @@ test('1526: el perfil se arma eligiendo herrajes por nombre o código y su BOM r
   await pickFromPicker(page, 'gola-part-profile', 'Perfil GOLA');
   await pickFromPicker(page, 'gola-part-supports', 'SU116');
   await page.getByTestId('gola-part-supports-spacing').fill('600');
+  await page.getByTestId('gola-part-supports-dim-0').fill('39.5');
+  await page.getByTestId('gola-part-supports-dim-1').fill('16.5');
+  await page.getByTestId('gola-part-supports-dim-2').fill('20');
   await pickFromPicker(page, 'gola-part-endcaps', 'tapas');
   await uiClick(page, 'gola-profile-save');
   await expect(page.getByTestId('gola-profile-editor')).toHaveCount(0, { timeout: 15_000 });
