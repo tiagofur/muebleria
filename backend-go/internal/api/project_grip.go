@@ -253,7 +253,10 @@ func (s *Server) HandleProjectGripRefresh(w http.ResponseWriter, r *http.Request
 func (s *Server) respondProjectGripError(w http.ResponseWriter, err error, op string) {
 	var invalid *domain.GripSnapshotValidationError
 	if errors.As(err, &invalid) {
-		respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeConflict, invalid.Message, nil)
+		// #1535: the workshop-facing map in the plugin keys on the code —
+		// the same `reason` detail the design-opening facade sends.
+		respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeConflict,
+			invalid.Message, map[string]any{"reason": invalid.Code})
 		return
 	}
 	if errors.Is(err, storage.ErrVersionConflict) {

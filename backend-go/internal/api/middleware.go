@@ -692,6 +692,11 @@ var extensionClientGetPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^/api/catalog/opening-profiles$`),
 	// #668: read hardware asset details and revision list for visual mount-frame preparation.
 	regexp.MustCompile(`^/api/hardware-assets/[^/]+$`),
+	// #1535 AGARRE-4a: the project grip state (snapshot + per-furniture
+	// report) and the offered grip styles feed the Inspector's «Agarre del
+	// proyecto» section — read-only; writes ride the PUT allowlist below.
+	regexp.MustCompile(`^/api/projects/[^/]+/grip$`),
+	regexp.MustCompile(`^/api/catalog/grip-styles$`),
 }
 
 // extensionClientMayAccess is the deny-by-default boundary for the SketchUp
@@ -822,6 +827,11 @@ var extensionTokenMayPutPatterns = []*regexp.Regexp{
 	// opening selection (capabilities + catalog validated server-side, 422
 	// with the stable reason on refusal).
 	regexp.MustCompile(`^/api/designs/[^/]+/opening$`),
+	// #1535 AGARRE-4a: the Inspector's grip intents — project style pick and
+	// per-furniture override snapshots (server-authoritative freeze + If-Match
+	// on the project grip version; 412/422 typed refusals).
+	regexp.MustCompile(`^/api/projects/[^/]+/grip$`),
+	regexp.MustCompile(`^/api/projects/[^/]+/grip/furniture$`),
 }
 
 func extensionTokenMayPost(path string) bool {

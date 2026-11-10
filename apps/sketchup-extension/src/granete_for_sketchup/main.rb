@@ -118,7 +118,7 @@ module Granete
         host/placement_environment
         ui/bridges/placement_preview_bridge
         ui/bridges/design_inspector_bridge
-        ui/bridges/design_opening_bridge
+        ui/bridges/project_grip_bridge
         ui/bridges/design_opening_geometry_bridge
         ui/bridges/design_opening_channel_bridge
         ui/bridges/design_inheritance_bridge

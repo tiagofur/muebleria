@@ -212,6 +212,39 @@ module Granete
             request(:get, '/catalog/opening-capabilities')
           end
 
+          # #1535 — project grip (ADR-0009 A2.3): the plugin sends INTENT and
+          # paints what the server returns. Every write takes the project's
+          # grip_version as If-Match "v<n>"; staleness answers the typed 412.
+          def get_project_grip(project_id)
+            request(:get, "/projects/#{project_id}/grip")
+          end
+
+          def put_project_grip_style(project_id, grip_style_id, expected_version:)
+            unless expected_version.is_a?(Integer) && expected_version >= 1
+              raise ArgumentError, 'expected_version es obligatorio (If-Match del agarre del proyecto)'
+            end
+
+            request(:put, "/projects/#{project_id}/grip", { 'gripStyleId' => grip_style_id },
+                    extra_headers: { 'If-Match' => "\"v#{expected_version}\"" })
+          end
+
+          def put_project_grip_furniture(project_id, overrides, expected_version:)
+            unless expected_version.is_a?(Integer) && expected_version >= 1
+              raise ArgumentError, 'expected_version es obligatorio (If-Match del agarre del proyecto)'
+            end
+            unless overrides.is_a?(Array) && !overrides.empty? &&
+                   overrides.all? { |o| o.is_a?(Hash) && o['furnitureInstanceId'].to_s != '' }
+              raise ArgumentError, 'overrides es obligatorio (muebles de la excepción)'
+            end
+
+            request(:put, "/projects/#{project_id}/grip/furniture", { 'overrides' => overrides },
+                    extra_headers: { 'If-Match' => "\"v#{expected_version}\"" })
+          end
+
+          def fetch_grip_styles
+            request(:get, '/catalog/grip-styles')
+          end
+
           def fetch_opening_profiles
             request(:get, '/catalog/opening-profiles')
           end
@@ -253,6 +286,11 @@ module Granete
               raise Error.new(:invalid_configuration, error_message(response), status: status,
                                                                                api_code: api_code,
                                                                                details: error_details(response))
+            when 412
+              # #1535: the grip staleness — typed, never "unexpected".
+              raise Error.new(:precondition_failed, error_message(response),
+                              status: status, api_code: api_code,
+                              details: error_details(response))
             when 428 then raise Error.new(:precondition_required, error_message(response), status: status,
                                                                                            api_code: api_code)
             else raise Error.new(:bad_response, "respuesta inesperada del servidor (#{status})", status: status,

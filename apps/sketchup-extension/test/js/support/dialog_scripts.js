@@ -29,6 +29,7 @@ function dialogSources() {
     materialRoles: fs.readFileSync(path.join(RESOURCES, 'js/granete-material-roles.js'), 'utf8'),
     inspectorChild: fs.readFileSync(path.join(RESOURCES, 'js/granete-inspector-child.js'), 'utf8'),
     inspector: fs.readFileSync(path.join(RESOURCES, 'js/granete-inspector.js'), 'utf8'),
+    grip: fs.readFileSync(path.join(RESOURCES, 'js/granete-grip.js'), 'utf8'),
     designInspector: fs.readFileSync(path.join(RESOURCES, 'js/granete-design-inspector.js'), 'utf8'),
     modelBinding: fs.readFileSync(path.join(RESOURCES, 'js/granete-model-binding.js'), 'utf8'),
     projectFurniture: fs.readFileSync(path.join(RESOURCES, 'js/granete-project-furniture.js'), 'utf8'),
@@ -55,6 +56,7 @@ function runDialogScripts(sandbox) {
   vm.runInContext(sources.inspectorChild, sandbox, { filename: 'granete-inspector-child.js' });
   vm.runInContext(sources.designInspector, sandbox, { filename: 'granete-design-inspector.js' });
   vm.runInContext(sources.inspector, sandbox, { filename: 'granete-inspector.js' });
+  vm.runInContext(sources.grip, sandbox, { filename: 'granete-grip.js' });
   vm.runInContext(sources.modelBinding, sandbox, { filename: 'granete-model-binding.js' });
   vm.runInContext(sources.projectFurniture, sandbox, { filename: 'granete-project-furniture.js' });
   vm.runInContext(sources.paramForm, sandbox, { filename: 'granete-param-form.js' });
