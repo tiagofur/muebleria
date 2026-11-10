@@ -10,7 +10,6 @@ Granete does not need a second architecture. It needs the existing rigorous arch
 This roadmap replaces the phase ordering in the previous version of this file. Historical readiness reports remain evidence snapshots, not live priority:
 
 - docs/demo-mvp-plan-2026-09-05.md
-- docs/demo-golden-path-readiness-20260905.md
 - docs/demo/demo-golden-path-rehearsal-20260906.md
 
 GitHub issues own implementation. Architecture documents own invariants. This roadmap only orders those authorities and records what each phase must not absorb.

@@ -3,7 +3,7 @@
 **Estado:** IMPLEMENTED_PENDING_REVIEW (fases A–G; A MERGEADA, B–G en PRs apilados)
 **Lane:** Delegated Direct (sustancial, multi-archivo). Un writer: GLM (ZCode).
 **Issue:** #1017 (`status:approved`, 2026-10-03, autorización del owner en sesión).
-**Plan rector:** `docs/backend-agent-first-refactor-plan-2026-09-27.md` (§4 fases, §5 métricas, §6 no-goals, §8 verificación).
+**Plan rector:** `docs/backend-agent-first-refactor-plan-2026-09-27.md` (documento retirado del árbol; el alcance vive en #1017) (§4 fases, §5 métricas, §6 no-goals, §8 verificación).
 **Metodología:** `docs/agent-first-methodology.md` (P1–P8; §8.1 extracción al tocar, aquí elevada a programa completo).
 
 ## Resultado observable

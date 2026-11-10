@@ -47,6 +47,9 @@ prerequisites listed below.
 | Deploy, environment, database operations | [Deployment](deployment.md) | [PostgreSQL RLS operations](postgresql-rls-operations.md), [desktop release](desktop-release.md) |
 | Tests, CI, release evidence | [Verification](verification.md) | [Test database isolation](architecture/test-database-isolation.md), [pilot readiness](pilot-readiness.md), exact workflow |
 | Agent workflow / G-ODD / execution artifact | [Root AGENTS](../AGENTS.md), [human-start contract](demo/software-factory-human-start.md), [clean-context review](demo/software-factory-clean-context-review.md) | Role skill under `.agents/skills/`, then exactly the approved issue's `odd/tasks/<issue>-<slug>.md` if the chosen topology requires one |
+| Intercambio de agregados por rol / grupos de opciones (propuesto) | [Architecture contract](architecture.md) | [Interchangeable agregados](architecture/interchangeable-agregados-and-option-groups.md), [catalog option selector](architecture/catalog-option-selector.md) |
+| Regresión E2E del hilo digital (DT-1…DT-14) | [Digital thread E2E gate](architecture/digital-thread-e2e-regression-gate.md) | [Project/design digital thread](architecture/project-design-digital-thread.md) |
+| Cotizaciones: continuación de autoridad comercial (plan fechado 2026-09-11) | [Quote authority continuation](demo/quote-authority-continuation-2026-09-11.md) | Issues #642/#643/#644; verificar estado actual en GitHub |
 | How to reorganize code/docs for agents | [Agent-first methodology](agent-first-methodology.md) | Applicable local `AGENTS.md` and exact change scope |
 
 ## Canonical vs. dated / historical documents

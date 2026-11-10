@@ -205,7 +205,7 @@ PRODUCCIÓN
 \* El hub conserva las tabs de piso mientras M2 migra Piso a las pantallas de
 estación. Ver `docs/history/roadmap-screens/00-overview.md` §2b + §M2.
 
-**Fuente ejecutable de rutas y acceso:** [`apps/web/src/routes.ts`](../apps/web/src/routes.ts)
+**Fuente ejecutable de rutas y acceso:** [`apps/web/src/routes.ts`](../../apps/web/src/routes.ts)
 → `NAV_PATHS` y `roleCanAccessNav` son la autoridad. Este documento describe
 ownership y roadmap; no inventa paths ni permisos. En el nav actual,
 `orders` → `/orders` es la cola/hub OP y `production` → `/production` son las

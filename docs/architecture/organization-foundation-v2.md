@@ -1,6 +1,6 @@
 # Organization Foundation v2 — Identity, Multi-Workshop and Sales Network
 
-- **Status:** Proposed canonical contract
+- **Status:** Accepted canonical contract (implementation in progress under #446)
 - **Date:** 2026-08-28
 - **Program:** #446
 - **Decision record:** [ADR-0006](../adr/0006-membership-lifecycle-and-organization-relationships.md)

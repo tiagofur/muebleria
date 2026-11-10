@@ -15,8 +15,8 @@ fuente operativa. Si falta o hay conflicto sobre su alcance, no infieras una
 aprobación más amplia: registra la discrepancia y pide aclaración antes de
 convertir la propuesta general en requisito.
 
-El primer caso de aplicación formal es
-`docs/backend-agent-first-refactor-plan-2026-09-27.md` (pendiente de issue).
+El primer caso de aplicación formal fue el refactor backend de #1017
+(ver `odd/tasks/1017-backend-agent-first.md`).
 
 **Tesis en una línea:** el primer lector y el primer escritor de este repo son
 agentes de IA; los humanos son arquitectos de contexto, verificadores y
@@ -242,7 +242,7 @@ corroboración de dirección, no autoridad.
    presupuestos estructurales; ajustar cifras si el owner requiere otros
    umbrales. La metodología completa permanece como propuesta hasta esa decisión.
 2. **Piloto backend (issue + ODD, lane sustancial):** ejecutar el plan
-   2026-09-27 (`docs/backend-agent-first-refactor-plan-2026-09-27.md`) mediante
+   2026-09-27 (documento retirado; vive en #1017 y `odd/tasks/1017-backend-agent-first.md`) mediante
    el issue autorizado #1017 (fases A–G, moves mecánicos, verde por commit). Su
    ejecución demuestra la viabilidad de refactors mecánicos por dominio, pero no
    sustituye la ratificación formal de toda la metodología.
@@ -302,5 +302,5 @@ externas arriba explican por qué funcionan):
   ownership, plan pre-código, verificación)
 - `docs/demo/software-factory-human-start.md` — contrato portátil G-ODD
   (lanes, un writer, reviewer fresco, V0/V1/V2, one-shot, publicación)
-- `docs/backend-agent-first-refactor-plan-2026-09-27.md` — diagnóstico y plan
-  backend (segunda aplicación del patrón)
+- `odd/tasks/1017-backend-agent-first.md` — plan y ejecución backend
+  (segunda aplicación del patrón)
