@@ -37,8 +37,14 @@ func TestOpeningBetweenStripBoardsOnePerBetweenEdge(t *testing.T) {
 			{Key: "strip", ComponentID: "comp-tira-1536", DepthMm: 16, HeightMm: 70},
 		},
 	}
+	modifiers := []ResolvedOpeningBodyModifier{
+		{Effect: OpeningModifierEffectBevel, Role: "door", ProfileID: "it", Boundary: "top", BevelAngleDeg: 45, BevelSizeMm: 14},
+		{Effect: OpeningModifierEffectBevel, Role: "door", ProfileID: "it", Boundary: "between:column", BevelAngleDeg: 45, BevelSizeMm: 14},
+		{Effect: OpeningModifierEffectNotch, Role: "lateral", ProfileID: "it", Boundary: "between:column", NotchHeightMm: 70, NotchDepthMm: 16},
+		{Effect: OpeningModifierEffectDepthReduction, Role: "horizontal", ProfileID: "it", Boundary: "top", DepthReductionMm: 16, ProfileHeightMm: 56.5},
+	}
 	_, boards, err := resolveFurnitureLayoutOpts(module, catalog, &LayoutDims{WidthMm: 600, HeightMm: 720, DepthMm: 560}, nil,
-		resolveOptions{fronts: fronts, openingMembers: members})
+		resolveOptions{fronts: fronts, openingMembers: members, openingBodyModifiers: modifiers})
 	if err != nil {
 		t.Fatalf("3-drawer italian column: %v", err)
 	}
