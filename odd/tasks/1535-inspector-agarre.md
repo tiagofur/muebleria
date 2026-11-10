@@ -16,6 +16,21 @@ Prerrequisito UX: brief publicado y aprobado por el owner (comentario #674934172
 - Backend: go test domain/domain-engine/api/storage ok.
 - Hallazgos corregidos durante el host run: contrato camelCase (JS manda projectId; el bridge leía project_id — la guarda de proyecto ajeno estaba muerta) y el quirk de delete_attribute.
 
+## Ledger del juicio dual (relanzado tras límite de uso)
+Judge A: 1 CRITICAL + 6 MAJOR + 7 MINOR. Judge B: 6 MAJOR + 8 MINOR. Consolidado:
+
+**CONFIRMADOS ×2 jueces (severos — corrigen en ronda acotada):**
+1. Bucle de GET sin fin: ensureLoaded re-dispara ante fallo y tras 412 (stale nunca se limpia del ok-branch) — medido 2772-8555 GETs/600ms con el módulo real.
+2. Tras CUALQUIER escritura exitosa la tarjeta contradice al servidor: el PUT no trae report (sólo el GET lo arma) y el PUT de estilo devuelve overrides:[] — la excepción se pinta como Hereda sin «Volver al del proyecto» y las excepciones vigentes desaparecen; sin re-GET.
+3. Superficie de lote INERT: sin handler de click en las filas batch y data-grip-pending se lee del contenedor — «Aplicar a N muebles» nunca se crea (aceptación 3 muerta en la UI).
+4. Undo hacia nil estilo = 400 «gripStyleId inválido» re-armado para siempre; undo hacia estilo no-ofrecido = 422 perpetuo.
+5. Rehacer sin ruta de usuario (sólo Deshacer en el dialog; grip.redo sin caller) y sin wrapper de operación SketchUp/Ctrl+Z del brief.
+6. Bloqueados con código OPENING_ visible («OPENING_STACKED_FRONTS_UNSUPPORTED: …») y sin badge «Bloqueado» — viola la aceptación «ningún texto visible contiene un código OPENING_».
+
+**CRITICAL de un solo juez (A), verificado por el writer de primera mano:** el boundary del token de extensión es deny-by-default y el diff NO agregó grants para los 4 endpoints grip (grep grip en middleware.go d2c18375 = 0; repro determinístico del juez compilando el allowlist; precedentes TestExtensionClientBoundary*). El primer GET responde 403 contra backend real — la feature no funciona fuera del laboratorio. El juez B no lo reportó (no lo probó), no lo contradice.
+
+**MINORs confirmados/informativos:** sin-projectId answers tragados sin limpiar inflight; teclado inerte en el radiogroup; oración cuenta FILAS como frentes (2 puertas lado a lado = «1 frente»); mapa GRIP_* cubre 7/15 códigos (FURNITURE_INSTANCE_UNKNOWN muestra el UUID); cobertura de regresión del bridge/HTTP/412 inexistente en rake unit (el bridge borrado llevaba 904 líneas); evidencia de host sobreafirmada (el TC usa RecordingService y no cubre «seleccionar y ver que hereda»); undo/redo dead-end tras una ronda; clic en fila en uso recongela; sesión fuera de la llave de estado; sin-estilo pinta Hereda con oración vacía.
+
 ## Pendiente (vivo owner)
 - Los 5 escenarios de aceptación en flujo COMPLETO con servidor y proyecto vinculados (elegir estilo viendo el dialog, heredar, excepción, aplicar a 3, deshacer con Ctrl+Z del host) — el TC de host cubre los mismos flujos a nivel bridge con servicio de grabación; el vivo del dialog queda para la verificación del owner junto con #1536 (representación).
 
