@@ -196,17 +196,28 @@ module Granete
             return bevel_box_segments(full, bevels.first, extents, basis)
           end
 
-          raise ArgumentError, 'sólo se materializa una muesca por tablero' if notches.size > 1
           raise ArgumentError, 'un tablero no combina muesca y bisel en v1' if !bevels.nil? && !bevels.empty?
 
-          band = notch_band_in_inches(notches.first, extents)
-          reduced = reduced_cross_section(band, extents)
+          # #1536: a multi-front column cuts one notch per between edge —
+          # the laterals carry SEVERAL bands (sorted by Z), all from the same
+          # profile so the reduced cross-section is identical. Bands may not
+          # overlap; the segments alternate full / reduced up the board.
+          bands = notches.map { |notch| notch_band_in_inches(notch, extents) }
+                         .sort_by { |band| band[:z0] }
+          bands.each_cons(2) do |lo, hi|
+            raise ArgumentError, 'las muescas del tablero se superponen' if hi[:z0] < lo[:z1] - 1.0e-6
+          end
 
+          reduced = reduced_cross_section(bands.first, extents)
           segments = []
-          segments << full.merge(z0: 0.0, z1: band[:z0]) if band[:z0].positive?
-          segments << full.merge(x0: reduced[:x0], x1: reduced[:x1], y0: reduced[:y0], y1: reduced[:y1],
-                                 z0: band[:z0], z1: band[:z1])
-          segments << full.merge(z0: band[:z1], z1: extents[2]) if band[:z1] < extents[2] - 1.0e-6
+          cursor = 0.0
+          bands.each do |band|
+            segments << full.merge(z0: cursor, z1: band[:z0]) if (band[:z0] - cursor) > 1.0e-6
+            segments << full.merge(x0: reduced[:x0], x1: reduced[:x1], y0: reduced[:y0], y1: reduced[:y1],
+                                   z0: band[:z0], z1: band[:z1])
+            cursor = band[:z1]
+          end
+          segments << full.merge(z0: cursor, z1: extents[2]) if cursor < extents[2] - 1.0e-6
           segments
         end
 
