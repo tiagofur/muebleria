@@ -83,6 +83,11 @@ module Granete
           return false unless layout.respond_to?(:boards)
 
           Array(layout.boards).any? do |board|
+            # #1536: the italian strips (top band and between fronts) ARE the
+            # profile's materialization — the placeholder box would cover
+            # them. Server-declared ids, never name inference from roles.
+            next true if board.respond_to?(:id) && board.id.to_s.start_with?('opening-strip-')
+
             markers = Array(board.respond_to?(:notches) ? board.notches : []) +
                       Array(board.respond_to?(:bevels) ? board.bevels : [])
             markers.any? { |marker| marker.is_a?(Hash) && marker['profileId'] == profile_id }

@@ -257,10 +257,14 @@ module Granete
         # carry a design context — when the authoring channel is unavailable
         # the fallback renders the no-opening baseline (the documented
         # offline degradation, never a local guess).
-        def resolved_native_layout(definition_id, parameters = {}, choices = {}, design_id = nil)
-          # super stays definition-scoped (3 args): the GET channel carries no
-          # design context — the documented offline degradation.
-          authoring_resolved_layout(definition_id, parameters, choices, design_id) ||
+        # (ParameterLists allowance: the resolve intent carries exactly these
+        # fields — definition, choices, design context, per-furniture pin.)
+        def resolved_native_layout(definition_id, parameters = {}, choices = {}, design_id = nil, # rubocop:disable Metrics/ParameterLists
+                                   furniture_instance_id = nil)
+          authoring_resolved_layout(definition_id, parameters, choices, design_id,
+                                    furniture_instance_id) ||
+            # super stays definition-scoped (3 args): the GET channel carries
+            # no design context — the documented offline degradation.
             super(definition_id, parameters, choices)
         end
 
@@ -269,16 +273,21 @@ module Granete
         # A CATALOG_REVISION_STALE rejection refetches the workshop catalog
         # once and retries against the fresh pin — the second stale answer
         # propagates, never an implicit latest.
-        def authoring_resolved_layout(definition_id, parameters = {}, choices = {}, design_id = nil)
+        # (ParameterLists allowance: same resolve intent — one method per
+        # lane, the fields travel together by contract.)
+        def authoring_resolved_layout(definition_id, parameters = {}, choices = {}, design_id = nil, # rubocop:disable Metrics/ParameterLists
+                                      furniture_instance_id = nil)
           return nil unless @transport&.configured? && @auth_provider&.configured?
 
           revision = catalog_revision
           return nil if revision.nil?
 
-          submit_minimal_authoring_resolve(definition_id, parameters, choices, revision, design_id)&.layout
+          submit_minimal_authoring_resolve(definition_id, parameters, choices, revision, design_id,
+                                           furniture_instance_id)&.layout
         end
 
-        def submit_minimal_authoring_resolve(definition_id, parameters, choices, revision, design_id = nil)
+        def submit_minimal_authoring_resolve(definition_id, parameters, choices, revision, design_id = nil,
+                                             furniture_instance_id = nil)
           furniture = {
             'furnitureDefinitionId' => definition_id,
             'catalogRevision' => revision,
@@ -286,6 +295,12 @@ module Granete
             'materialChoices' => choices || {}
           }
           furniture['designId'] = design_id if design_id && !design_id.to_s.strip.empty?
+          # #1536: the per-furniture grip override resolves ONLY with the
+          # instance id — the rebuild of ONE mueble pins its own grip.
+          if furniture_instance_id && !furniture_instance_id.to_s.strip.empty?
+            furniture['furnitureInstanceId'] =
+              furniture_instance_id
+          end
           request = AuthoringResolveRequest.build_request(
             message_id: "resolve-#{SecureRandom.hex(8)}",
             idempotency_key: "resolve-#{SecureRandom.hex(8)}",

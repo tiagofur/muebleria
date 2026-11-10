@@ -272,9 +272,10 @@ class DesignOpeningBridgeTest < Minitest::Test
       @definition
     end
 
-    def resolved_native_layout(definition_id, parameters, choices, design_id = nil)
+    def resolved_native_layout(definition_id, parameters, choices, design_id = nil, furniture_instance_id = nil)
       @layout_resolves << { definition_id: definition_id, parameters: parameters,
-                            choices: choices, design_id: design_id }
+                            choices: choices, design_id: design_id,
+                            furniture_instance_id: furniture_instance_id }
       @layout
     end
   end
@@ -367,7 +368,8 @@ class DesignOpeningBridgeTest < Minitest::Test
 
     result = command.resolve_intent({ message_id: 'm1', idempotency_key: 'k1' })
     assert_equal [{ definition_id: 'mod-1264', parameters: { 'widthMm' => 600 },
-                    choices: { 'FRENTE' => 'mat-1' }, design_id: DESIGN_A }],
+                    choices: { 'FRENTE' => 'mat-1' }, design_id: DESIGN_A,
+                    furniture_instance_id: 'fi-1264' }],
                  provider.layout_resolves
     command.apply_accepted_state(result, nil)
     assert_equal 1, builder.updates.length
