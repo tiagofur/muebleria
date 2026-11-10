@@ -507,6 +507,11 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 		return nil, nil, nil, nil
 	}
 	members := engine.ProjectGripMembers(recipe.TopProfile)
+	// #1536: the between profile's declared strips ride for the layout pass
+	// to place one board per between edge.
+	if members != nil {
+		members.BetweenComponentMembers = engine.ProjectGripBetweenStrips(recipe.BetweenProfile)
+	}
 	modifiers, modErr := engine.ResolveProjectGripModifiers(recipe)
 	if modErr != nil {
 		return nil, nil, nil, &designOpeningResolveFailure{code: modErr.Code, message: modErr.Message}

@@ -88,6 +88,11 @@ func pruneOpeningHandleHardware(board *layoutBoard, front OpeningResolvedFront) 
 // opening region constrains: the managed placements plus the FRENTE role
 // criterion the door-swing accessories already own.
 func boardIsOpeningFront(board *layoutBoard) bool {
+	// #1536: an opening STRIP is a real board but never a front of the A3
+	// stack — server-declared at emission, excluded however its role reads.
+	if board.openingStrip {
+		return false
+	}
 	return board.placement == string(domain.PlacementPuerta) ||
 		board.placement == string(domain.PlacementFrenteCajon) ||
 		isDoorBoard(board)
@@ -288,6 +293,10 @@ type OpeningMembers struct {
 	// as the vertical extent; members without declared dims place nothing
 	// (truthful absence, never an invented envelope).
 	ComponentMembers []OpeningComponentMember
+	// #1536: the strip members the BETWEEN profile declares — one board per
+	// between edge of the front stack (the top-strip rule mirrored at every
+	// horizontal joint). Empty = the recipe declares no between strips.
+	BetweenComponentMembers []OpeningComponentMember
 }
 
 // OpeningComponentMember is one component reference the profile places as a

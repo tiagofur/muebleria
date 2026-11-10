@@ -300,6 +300,11 @@ type layoutBoard struct {
 	name       string
 	placement  string
 	optionRole string
+	// openingStrip (#1536): the board is an opening STRIP (the italian gola
+	// band at the top or between fronts) — a real cut-list board that is
+	// NEVER a front of the A3 stack, however its material role reads.
+	// Server-declared at emission; the front vocabulary excludes it.
+	openingStrip bool
 	// constructiveRole (#1052 vocabulary, #1317): the DECLARED constructive
 	// role the opening body modifiers address — the depth-reduction pass
 	// selects its boards by it, never by name. Empty on legacy flat parts.
@@ -434,6 +439,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 				name:               strip.Key,
 				placement:          string(domain.PlacementSuperior),
 				optionRole:         "FRENTE",
+				openingStrip:       true,
 				x:                  0,
 				y:                  float64(dims.DepthMm) - strip.DepthMm,
 				z:                  float64(dims.HeightMm) - strip.HeightMm,
@@ -1121,6 +1127,65 @@ func boardPlacementLabel(comp domain.Component, inst domain.ComponentInstance) s
 
 // resolveLayoutBoards walks structure + module + agregado component instances
 // (mirrors TS resolveComposedModule) and returns the resolved boards.
+// appendOpeningBetweenStripBoards (#1536): one strip board per between edge
+// of the opening-constrained front stack. The strips hang from each upper
+// front's bottom edge — the top-strip rule (z = band top, hanging down its
+// declared height) mirrored at every horizontal joint — full furniture
+// width, the FRENTE material role: real boards in the cut list, never a
+// placeholder. Fail-closed: a declared component missing or inactive
+// rejects the resolve, like the top strip.
+func appendOpeningBetweenStripBoards(boards *[]layoutBoard, catalog domain.Catalog, dims LayoutDims,
+	strips []OpeningComponentMember, constrained map[int]bool) error {
+	if len(strips) == 0 {
+		return nil
+	}
+	fronts := make([]layoutBoard, 0, len(constrained))
+	for i := range *boards {
+		if constrained[i] {
+			fronts = append(fronts, (*boards)[i])
+		}
+	}
+	if len(fronts) < 2 {
+		return nil // one front has no between edges — nothing to place
+	}
+	// Topmost first: band k sits between fronts[k] and fronts[k+1].
+	for i := 0; i < len(fronts); i++ {
+		for j := i + 1; j < len(fronts); j++ {
+			if fronts[j].z > fronts[i].z {
+				fronts[i], fronts[j] = fronts[j], fronts[i]
+			}
+		}
+	}
+	for _, strip := range strips {
+		comp, found := findComponent(catalog, strip.ComponentID)
+		if !found || !comp.Active {
+			return fmt.Errorf(
+				"el componente %s del elemento %q de la apertura no existe o está inactivo",
+				strip.ComponentID, strip.Key)
+		}
+		for k := 0; k+1 < len(fronts); k++ {
+			upper := fronts[k]
+			*boards = append(*boards, layoutBoard{
+				id:                 "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k+1),
+				defID:              "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k+1),
+				name:               strip.Key,
+				placement:          string(domain.PlacementSuperior),
+				optionRole:         "FRENTE",
+				openingStrip:       true,
+				x:                  0,
+				y:                  float64(dims.DepthMm) - strip.DepthMm,
+				z:                  upper.z - strip.HeightMm,
+				rotY:               90,
+				widthMm:            strip.DepthMm,
+				thicknessMm:        strip.HeightMm,
+				lengthMm:           float64(dims.WidthMm),
+				catalogComponentID: strip.ComponentID,
+			})
+		}
+	}
+	return nil
+}
+
 func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims LayoutDims, optionChoices map[string]string, opts resolveOptions) ([]layoutBoard, error) {
 	if strings.TrimSpace(module.StructureID) == "" {
 		return legacyBoardStack(module, optionChoices, catalog.Materials, opts)
@@ -1203,6 +1268,17 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 		openingConstrained, passErr = applyOpeningFrontsToBoards(boards, opts.fronts, float64(dims.HeightMm))
 		if passErr != nil {
 			return nil, passErr
+		}
+		// #1536: the italian strip BETWEEN fronts — one board per between
+		// edge of the resolved stack, the top-strip rule mirrored (the
+		// strip's top edge hangs from the upper front's bottom edge, full
+		// furniture width, the FRENTE material role). Fail-closed on a
+		// missing or inactive catalog component, like the top strip.
+		if opts.openingMembers != nil && len(opts.openingMembers.BetweenComponentMembers) > 0 {
+			if err := appendOpeningBetweenStripBoards(&boards, catalog, dims,
+				opts.openingMembers.BetweenComponentMembers, openingConstrained); err != nil {
+				return nil, err
+			}
 		}
 		// #1274: a furniture the opening constrained materializes the
 		// selection's member hardware in furniture space (applied downstream).
