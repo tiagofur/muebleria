@@ -240,15 +240,19 @@ test('desactualizado: el 412 produce el banner con Recargar y re-lee el GET', ()
     requestId: null, status: 'error', projectId: PROJECT, httpStatus: 412,
     reason: 'la versión del agarre del proyecto cambió'
   });
-  // The stale record drops the cached grip: rendering the section fires a
-  // FRESH get (reload affordance re-reads the server truth).
+  // The stale banner waits for Recargar: rendering does NOT auto-fire a
+  // GET (r1 repro: unguarded re-fire = 2772 GETs/600ms), and the stale
+  // banner stays until the user presses Recargar.
   const before = bridgeCalls.length;
   grip.renderProjectSection();
-  assert.ok(bridgeCalls.length > before, 'reload re-reads the GET');
-  assert.strictEqual(bridgeCalls[bridgeCalls.length - 1].action, 'get_project_grip');
+  assert.strictEqual(bridgeCalls.length, before, 'stale does not auto-GET');
   const body = registry['design-grip-body'].innerHTML;
   assert.ok(body.includes('Alguien más cambió el agarre del proyecto'), 'stale banner copy');
   assert.ok(body.includes('Recargar'), 'reload affordance');
+  // Recargar resets the terminal state and re-reads the server truth.
+  grip.reload(PROJECT);
+  assert.ok(bridgeCalls.length > before, 'Recargar re-reads the GET');
+  assert.strictEqual(bridgeCalls[bridgeCalls.length - 1].action, 'get_project_grip');
 });
 
 test('respuestas tardías: otro proyecto o request viejo se descarta sin renderizar', () => {
@@ -263,14 +267,25 @@ test('respuestas tardías: otro proyecto o request viejo se descarta sin renderi
     requestId: null, status: 'ok', projectId: PROJECT_B,
     grip: foreign, styles: []
   });
-  // Stale request id for an apply: dropped (no toast, no state change).
+  // A late ok-apply answer with a matching projectId forces a re-read and
+  // NEVER paints the payload (it carries no report): the body goes to
+  // loading and the re-GET answer restores the server truth — the foreign
+  // style name from the payload is never rendered.
   answer(grip, 'onProjectGripApplied', {
-    requestId: 'never-issued', status: 'ok', projectId: PROJECT, grip: okGrip(STYLE_OTHER)
+    requestId: 'late-apply', status: 'ok', projectId: PROJECT, grip: okGrip(STYLE_OTHER)
+  });
+  grip.renderProjectSection();
+  assert.ok(registry['design-grip-body'].innerHTML.includes('skeleton-line'), 'the card goes to loading on the forced re-read');
+  // The re-GET answer (the server truth of THIS project).
+  const reGet = bridgeCalls.filter(function (c) { return c.action === 'get_project_grip'; })[1];
+  answer(grip, 'onProjectGrip', {
+    requestId: reGet.payload.requestId, status: 'ok', projectId: PROJECT,
+    grip: okGrip(STYLE_ID), styles: stylesList()
   });
   grip.renderProjectSection();
   const body = registry['design-grip-body'].innerHTML;
-  assert.ok(!body.includes('Estilo Ajeno'), 'the foreign style never rendered');
-  assert.ok(body.includes('Gola negra'), 'the bound project state stays');
+  assert.ok(!body.includes('Estilo Ajeno'), 'the late payload style never rendered');
+  assert.ok(body.includes('Gola negra'), 'the re-read restores the server truth');
 });
 
 test('intención de estilo: el PUT lleva If-Match implícito (versión del último GET) y el deshacer re-aplica la anterior', () => {

@@ -38,6 +38,9 @@ NO entregado pese a lo declarado (el re-juicio ×2 lo cazó con repros): el re-G
 ## Ronda 2 de corrección (final del presupuesto)
 Máquina de estados corregida: stale es TERMINAL hasta Recargar (cierra el bucle 412+error, 2115 GETs/600ms) y error terminal hasta Reintentar (reload resetea loadStatus); la mutación exitosa FUERZA el re-GET (grip=null + loading); Rehacer EN dialog.html; undo 422 no re-arma y el JS revoca Deshacer; badge «Bloqueado»; batch higiene (pending por render, sólo miembros con id, sin leak entre selección/proyecto); bridge responde TODOS los errores con projectId; teclado real (Enter/Espacio/flechas) en las filas; PR_BODY fuera del árbol; registro del artefacto veraz.
 
+## Evidencia ronda 2
+rake unit 1478/0, rubocop 0, rake verify verde (RBZ 0.1.110 firmado), humo de puente en host 5/20/0, harness 11/11 con la semántica nueva (stale terminal sin auto-GET; Recargar re-lee; mutación fuerza re-read con skeleton).
+
 ## Pendiente (vivo owner)
 - Los 5 escenarios de aceptación en flujo COMPLETO con servidor y proyecto vinculados (elegir estilo viendo el dialog, heredar, excepción, aplicar a 3, deshacer con Ctrl+Z del host) — el TC de host cubre los mismos flujos a nivel bridge con servicio de grabación; el vivo del dialog queda para la verificación del owner junto con #1536 (representación).
 
