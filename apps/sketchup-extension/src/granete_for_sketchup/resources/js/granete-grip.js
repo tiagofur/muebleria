@@ -251,6 +251,11 @@
         record.error = STALE_TEXT;
       } else {
         record.error = reasonText(payload.reasonCode, payload.reason);
+        // A refused undo (GRIP_STYLE_NOT_OFFERED, …) stops being offered:
+        // the bridge no longer re-arms it, so Deshacer goes away until a
+        // reload re-reads what the server can actually undo (r3: the r2
+        // fix never landed).
+        if (httpStatus === 422) record.canUndo = false;
       }
       deps.showToast('error', record.error);
     }
@@ -431,6 +436,7 @@
     }
     var picks = body.querySelectorAll('[data-grip-pick="furniture"]');
     for (var i = 0; i < picks.length; i++) {
+      bindRowKeyboard(picks[i], body);
       picks[i].addEventListener('click', function () {
         var styleId = this.getAttribute('data-grip-style');
         applyFurnitureOverrides(projectId, [{ furnitureInstanceId: instanceId, gripStyleId: styleId }]);
@@ -470,6 +476,7 @@
     bindCommonActions(container, projectId);
     var picks = container.querySelectorAll('[data-grip-pick="batch"]');
     for (var i = 0; i < picks.length; i++) {
+      bindRowKeyboard(picks[i], container);
       picks[i].addEventListener('click', function () {
         container.setAttribute('data-grip-pending', this.getAttribute('data-grip-style'));
         updateBatchGripFooter(projectId, members);
@@ -497,7 +504,7 @@
       footer.style.marginTop = 'var(--space-2)';
       container.appendChild(footer);
     }
-    footer.textContent = 'Aplicar a ' + members.length + ' muebles';
+    footer.textContent = 'Aplicar a ' + withId.length + ' muebles';
     footer.onclick = function () {
       var overrides = (members || []).filter(function (member) {
         return member && member.furnitureInstanceId && member.furnitureInstanceId !== '';

@@ -41,6 +41,10 @@ Máquina de estados corregida: stale es TERMINAL hasta Recargar (cierra el bucle
 ## Evidencia ronda 2
 rake unit 1478/0, rubocop 0, rake verify verde (RBZ 0.1.110 firmado), humo de puente en host 5/20/0, harness 11/11 con la semántica nueva (stale terminal sin auto-GET; Recargar re-lee; mutación fuerza re-read con skeleton).
 
+## Ronda 3 de entrega (fuera del presupuesto del juicio — decisión del owner)
+El juicio cerró ESCALATED (presupuesto agotado). Confirmado ×2 jueces: el fix 5 de la ronda 2 NUNCA entró (s.replace sin match + sin verificación — el mensaje de commit 4ee78f6b lo declaraba: falsedad corregida aquí). Aplicado y VERIFICADO por grep/re-read tras cada edición: re-arm del undo-422 eliminado (bridge:226) + JS revoca canUndo en 422; replay StandardError rescue y unbound refusal con projectId; footer del lote cuenta los miembros filtrados; teclado en furniture/batch rows (sólo project rows lo tenían). LA CARRERA del re-read window (Judge A MAJOR) queda en contradicción A/B para el review humano: B demuestra que las mutaciones sólo disparan desde ready+grip con ningún GET en vuelo (inflight se elimina en el ok-GET que habilita ready) — no se corrigió sobre una opinión de un solo juez.
+Veredicto del juicio: ESCALATED (presupuesto agotado; el ledger terminal queda en este artefacto y en el PR).
+
 ## Pendiente (vivo owner)
 - Los 5 escenarios de aceptación en flujo COMPLETO con servidor y proyecto vinculados (elegir estilo viendo el dialog, heredar, excepción, aplicar a 3, deshacer con Ctrl+Z del host) — el TC de host cubre los mismos flujos a nivel bridge con servicio de grabación; el vivo del dialog queda para la verificación del owner junto con #1536 (representación).
 

@@ -221,14 +221,15 @@ module Granete
                            'canRedo' => project_grip_can_redo?(stored)
                          })
         rescue ::Granete::SketchUpExtension::Connection::ProjectFurniture::Service::Error => e
-          # The replay re-arms the intention it could not apply so another
-          # attempt stays possible after a reload.
-          project_grip_push_intention(stored, direction, intention)
+          # A refused replay (422 GRIP_STYLE_NOT_OFFERED, …) is NOT re-armed:
+          # the JS revokes Deshacer on the 422, so the impossible action
+          # stops being offered in a loop (r3: the r2 fix never landed).
           execute_bridge(dialog, callback, project_grip_error_answer(e, request_id, stored))
         rescue StandardError => e
           @logger.error('project_grip_replay_failed', error: e)
           execute_bridge(dialog, callback,
-                         { 'requestId' => request_id, 'status' => 'error', 'reason' => e.message })
+                         { 'requestId' => request_id, 'status' => 'error', 'projectId' => stored,
+                           'reason' => e.message })
         end
 
         # The bound project is the ONLY project this dialog answers for.
