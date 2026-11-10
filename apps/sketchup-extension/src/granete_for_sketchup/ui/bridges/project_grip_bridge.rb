@@ -236,7 +236,12 @@ module Granete
         def project_grip_bound_context(payload)
           binding = Connection::ModelBinding::Store.new(active_model).read
           unless binding && binding.project_id.to_s != ''
-            return [nil, { 'status' => 'unbound', 'reason' => 'conectá este modelo a un proyecto primero' }]
+            # Echo the requested projectId: the JS accepts() requires it to
+            # process the answer (clear inflight/appliedInflight + show the
+            # error) — without it the write channel dead-locks on a rebind
+            # race (reviewer MINOR: third false delivery claim closed).
+            return [nil, { 'status' => 'unbound', 'reason' => 'conectá este modelo a un proyecto primero',
+                           'projectId' => payload['projectId'].to_s }]
           end
 
           bound_project = binding.project_id.to_s

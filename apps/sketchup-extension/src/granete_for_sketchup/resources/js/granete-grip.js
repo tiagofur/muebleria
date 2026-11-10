@@ -231,15 +231,19 @@
       // The mutation answer carries NO report and (for the style PUT) an
       // empty overrides list — replacing state with it would paint the card
       // against a server that says otherwise (r1 repros). Keep the
-      // version/canUndo and FORCE the re-read: dropping the cached grip
-      // bypasses ensureLoaded's ready-guard (r2 ×2: the round-1 re-GET was
-      // inert — 0 GETs after an accepted PUT).
+      // version/canUndo and FORCE the re-read: drop the cached grip AND the
+      // inflight marker so ensureLoaded issues a FRESH request — any older
+      // in-flight answer (the pre-mutation GET, the mutation's own re-GET)
+      // is then discarded by the requestId guard and the LAST issued GET
+      // paints the latest server truth (reviewer repro: without this, an
+      // undo during the re-read window painted the pre-undo style forever).
       record.canUndo = !!payload.canUndo;
       record.canRedo = !!payload.canRedo;
       record.stale = false;
       record.error = null;
       record.loadStatus = 'loading';
       record.grip = null;
+      delete inflight[projectId];
       ensureLoaded(projectId);
       deps.showToast('success', 'Agarre aplicado.');
     } else if (payload.status === 'noop') {
@@ -504,11 +508,15 @@
       footer.style.marginTop = 'var(--space-2)';
       container.appendChild(footer);
     }
+    // Same filter as the block sentence and the payload (r3 regressed this:
+    // withId is renderBatchBlock-scoped — the footer must filter locally or
+    // it throws a ReferenceError that kills «Aplicar a N muebles»).
+    var withId = (members || []).filter(function (member) {
+      return member && member.furnitureInstanceId && member.furnitureInstanceId !== '';
+    });
     footer.textContent = 'Aplicar a ' + withId.length + ' muebles';
     footer.onclick = function () {
-      var overrides = (members || []).filter(function (member) {
-        return member && member.furnitureInstanceId && member.furnitureInstanceId !== '';
-      }).map(function (member) {
+      var overrides = withId.map(function (member) {
         return { furnitureInstanceId: member.furnitureInstanceId, gripStyleId: pending };
       });
       applyFurnitureOverrides(projectId, overrides);
