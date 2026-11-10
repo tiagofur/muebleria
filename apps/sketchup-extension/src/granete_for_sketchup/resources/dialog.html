@@ -628,7 +628,10 @@
             <div class="card" id="design-grip-card" style="display: none; margin-bottom: var(--space-3);">
               <div class="card-header-row">
                 <div class="card-title">Agarre del proyecto</div>
-                <button id="grip-undo" type="button" class="btn btn-sm btn-ghost" style="display: none;">Deshacer</button>
+                <div style="display: flex; gap: var(--space-2);">
+                  <button id="grip-undo" type="button" class="btn btn-sm btn-ghost" style="display: none;">Deshacer</button>
+                  <button id="grip-redo" type="button" class="btn btn-sm btn-ghost" style="display: none;">Rehacer</button>
+                </div>
               </div>
               <div id="design-grip-body" style="margin-top: var(--space-2);"></div>
             </div>

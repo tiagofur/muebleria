@@ -114,7 +114,8 @@ module Granete
         rescue StandardError => e
           @logger.error('project_grip_get_failed', error: e)
           execute_bridge(dialog, 'onProjectGrip',
-                         { 'requestId' => request_id, 'status' => 'error', 'reason' => e.message })
+                         { 'requestId' => request_id, 'status' => 'error', 'projectId' => stored,
+                           'reason' => e.message })
         end
 
         # Payload {requestId, projectId, gripStyleId} → onProjectGripApplied.
@@ -150,7 +151,8 @@ module Granete
         rescue StandardError => e
           @logger.error('project_grip_style_failed', error: e)
           execute_bridge(dialog, 'onProjectGripApplied',
-                         { 'requestId' => request_id, 'status' => 'error', 'reason' => e.message })
+                         { 'requestId' => request_id, 'status' => 'error', 'projectId' => stored,
+                           'reason' => e.message })
         end
 
         # Payload {requestId, projectId, overrides:[{furnitureInstanceId,
@@ -176,7 +178,8 @@ module Granete
         rescue StandardError => e
           @logger.error('project_grip_furniture_failed', error: e)
           execute_bridge(dialog, 'onProjectGripApplied',
-                         { 'requestId' => request_id, 'status' => 'error', 'reason' => e.message })
+                         { 'requestId' => request_id, 'status' => 'error', 'projectId' => stored,
+                           'reason' => e.message })
         end
 
         # Undo = the previous session intention re-sent as a server write

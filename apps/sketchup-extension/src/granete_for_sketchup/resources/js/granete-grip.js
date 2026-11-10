@@ -141,12 +141,13 @@
   function ensureLoaded(projectId) {
     if (!projectId || inflight[projectId]) return;
     var record = stateFor(projectId);
-    // Guard the terminal states: a load in error or a stale banner stays
-    // until the user presses Reintentar/Recargar — the render hooks call
-    // this on EVERY repaint and an unguarded re-fire would loop GETs
-    // forever (r2 MAJOR: 2772 requests in 600 ms with the module real).
-    if (record.grip && !record.stale) return;
-    if (record.loadStatus === 'error' && !record.stale) return;
+    // Terminal states stay until the user acts: a stale banner waits for
+    // Recargar, an error waits for Reintentar — the render hooks call this
+    // on EVERY repaint and an unguarded re-fire loops GETs forever
+    // (r1 repros: 2772-8555 requests in 600 ms with the module real).
+    if (record.stale) return;
+    if (record.loadStatus === 'error') return;
+    if (record.grip && record.loadStatus === 'ready') return;
     inflight[projectId] = 'grip-get-' + projectId + '-' + String(Date.now());
     callRuby('get_project_grip', { requestId: inflight[projectId], projectId: projectId });
   }
@@ -185,9 +186,11 @@
 
   function reload(projectId) {
     if (!projectId) return;
-    state[projectId].stale = false;
-    state[projectId].error = null;
-    state[projectId].grip = null;
+    var record = stateFor(projectId);
+    record.stale = false;
+    record.error = null;
+    record.grip = null;
+    record.loadStatus = 'loading';
     ensureLoaded(projectId);
     notify();
   }
@@ -211,7 +214,6 @@
       record.styles = payload.styles || [];
       record.loadStatus = 'ready';
       record.error = null;
-      record.stale = false;
     } else {
       record.loadStatus = 'error';
       record.error = reasonText(payload.reasonCode, payload.reason);
@@ -228,14 +230,16 @@
     if (payload.status === 'ok') {
       // The mutation answer carries NO report and (for the style PUT) an
       // empty overrides list — replacing state with it would paint the card
-      // against a server that says otherwise. Keep the version/canUndo and
-      // re-GET the truth.
+      // against a server that says otherwise (r1 repros). Keep the
+      // version/canUndo and FORCE the re-read: dropping the cached grip
+      // bypasses ensureLoaded's ready-guard (r2 ×2: the round-1 re-GET was
+      // inert — 0 GETs after an accepted PUT).
       record.canUndo = !!payload.canUndo;
       record.canRedo = !!payload.canRedo;
       record.stale = false;
       record.error = null;
-      record.loadStatus = 'ready';
-      delete inflight[projectId];
+      record.loadStatus = 'loading';
+      record.grip = null;
       ensureLoaded(projectId);
       deps.showToast('success', 'Agarre aplicado.');
     } else if (payload.status === 'noop') {
@@ -363,9 +367,10 @@
     ensureLoaded(projectId);
     var item = reportItemFor(record, instanceId);
     var isOverride = !!(item && item.source === 'override');
+    var isBlocked = !!(item && item.layout && item.layout.state === 'blocked');
     if (badge) {
-      badge.textContent = isOverride ? 'Excepción' : 'Hereda';
-      badge.className = 'status-badge ' + (isOverride ? 'pending' : 'valid');
+      badge.textContent = isBlocked ? 'Bloqueado' : (isOverride ? 'Excepción' : 'Hereda');
+      badge.className = 'status-badge ' + (isBlocked ? 'error' : (isOverride ? 'pending' : 'valid'));
     }
     if (record.loadStatus === 'loading' && !item) {
       body.innerHTML = skeleton();
@@ -452,8 +457,14 @@
       container.innerHTML = skeleton();
       return;
     }
+    // The pending pick never survives a re-render or a selection change
+    // (r2 A-7/B-6: it leaked across both and even across projects).
+    container.removeAttribute('data-grip-pending');
+    var withId = (members || []).filter(function (member) {
+      return member && member.furnitureInstanceId && member.furnitureInstanceId !== '';
+    });
     var html = errorLine(record) + staleBanner(record) +
-      '<p class="subhead" style="font-size: var(--text-xs); margin: 0 0 var(--space-2);">La excepción se aplica a los ' + members.length + ' muebles del lote en una sola operación.</p>' +
+      '<p class="subhead" style="font-size: var(--text-xs); margin: 0 0 var(--space-2);">La excepción se aplica a los ' + withId.length + ' muebles del lote en una sola operación.</p>' +
       styleRows(record, null, 'batch');
     container.innerHTML = html;
     bindCommonActions(container, projectId);
@@ -488,7 +499,9 @@
     }
     footer.textContent = 'Aplicar a ' + members.length + ' muebles';
     footer.onclick = function () {
-      var overrides = (members || []).map(function (member) {
+      var overrides = (members || []).filter(function (member) {
+        return member && member.furnitureInstanceId && member.furnitureInstanceId !== '';
+      }).map(function (member) {
         return { furnitureInstanceId: member.furnitureInstanceId, gripStyleId: pending };
       });
       applyFurnitureOverrides(projectId, overrides);
@@ -498,6 +511,25 @@
   }
 
   // ————— acciones comunes (recargar / deshacer / elegir estilo) —————
+
+  /** Teclado del radiogroup (brief Accesibilidad; r2 A-9/B-10: la ronda 1
+   * lo declaró sin entregarlo). Enter/Espacio activan la fila enfocada;
+   * las flechas mueven el ancla y activan. */
+  function bindRowKeyboard(row, group) {
+    row.addEventListener('keydown', function (e) {
+      var rows = Array.prototype.slice.call(
+        group.querySelectorAll('[data-grip-pick]'));
+      var index = rows.indexOf(row);
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        row.click();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        var next = rows[(index + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length];
+        if (next) next.focus();
+      }
+    });
+  }
 
   function bindCommonActions(root, projectId) {
     var reloads = root.querySelectorAll('[data-grip-action="reload"]');
@@ -511,6 +543,7 @@
         var previous = record.grip && record.grip.gripStyleId ? record.grip.gripStyleId : '';
         applyStyleIfChanged(projectId, this.getAttribute('data-grip-style'), previous);
       });
+      bindRowKeyboard(picks[j], root);
     }
   }
 
