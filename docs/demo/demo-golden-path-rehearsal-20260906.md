@@ -2,7 +2,7 @@
 
 Fecha: 2026-09-06 (America/Mexico_City). Post-#502 (PR #569). Rehearsal + audit +
 evidence; sin implementación de features. Predecesores:
-`docs/demo-golden-path-readiness-20260905.md` (regresión 09-05) y
+la regresión 09-05 (retirada del árbol) y
 `docs/demo-mvp-plan-2026-09-05.md` (plan DEMO→MVP).
 
 ## Executive verdict

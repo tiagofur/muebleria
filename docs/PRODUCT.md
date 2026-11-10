@@ -283,5 +283,4 @@ requirements where the environment demands larger targets and reduced precision.
 | Agent navigation | `AGENTS.md` |
 | Routes | `apps/web/src/routes.ts` → `NAV_PATHS` |
 | RBAC executable truth | `packages/domain/src/rbac.ts` + backend enforcement |
-| Documentation/code reconciliation | `docs/documentation-sync-2026-08-21.md` |
 | Historical UI/UX evidence | `progress/explore_ui_*.md` |
