@@ -101,7 +101,7 @@ con una ruta aún no cualificada.
 | D3 | Ensayar host, web y continuidad operacional | Evidencia nueva sobre SHA exacto; fallos, stale, retry y regreso al estado válido incluidos. |
 | D4 | Aceptar alcance mostrado y declarar exclusiones | Sin pérdida silenciosa en rutas expuestas; no claim de máquina por exportar un archivo. |
 
-El [reporte anterior de readiness](demo-golden-path-readiness-20260905.md) describe un
+El reporte anterior de readiness (2026-09-05, retirado del árbol; recuperable en git) describe un
 **guion SketchUp-céntrico condicionado**, con mitigaciones y evidencia de su snapshot.
 Su “0 blockers” no certifica el alcance ampliado de esta DEMO, las superficies React
 pendientes, todos los exports ni un MVP productivo. Se conserva sin reescribir sus
@@ -109,7 +109,7 @@ resultados. Tampoco se reabre #398: su proof es un activo que esta aceptación a
 
 ## 4. Incorporación del review: prioridad por exposición y riesgo
 
-Fuente inmutable: [anexo de revisión del 5 de septiembre](Granete_review_plan_ejecucion_2026-09-05.md).
+Fuente: anexo de revisión del 5 de septiembre (retirado del árbol; sus hallazgos viven en issues).
 Sus hallazgos se fijan al SHA revisado; su lectura estática no es una ejecución física.
 Los defectos reproducidos por el reporte de readiness se atribuyen a ese reporte, no a
 esta actualización documental. Un nuevo contrato propuesto no significa código nuevo.

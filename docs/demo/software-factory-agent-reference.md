@@ -100,7 +100,6 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | UX operacional | `docs/operational-ux.md` |
 | Roadmap comercial | `docs/roadmap-comercial-v2.md` |
 | Reconciliación actual y DEMO → MVP | `docs/demo-mvp-plan-2026-09-05.md` |
-| Review de evolución (snapshot inmutable) | `docs/Granete_review_plan_ejecucion_2026-09-05.md` |
 | Convenciones | `docs/conventions.md` |
 | Verificación | `docs/verification.md` |
 | Pilot readiness multi-org | `docs/pilot-readiness.md` + #462 |

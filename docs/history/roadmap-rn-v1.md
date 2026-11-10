@@ -249,7 +249,7 @@ Para garantizar velocidad, estabilidad y foco en la experiencia móvil:
 
 ## 10. Referencias y Documentación Relacionada
 
-- [docs/mobile-architecture.md](file:///Users/tiagofur/dev/carpinteria/muebles/docs/mobile-architecture.md) — Arquitectura técnica, integración de monorepo, capas de datos y reutilización de código.
-- [docs/mobile-ui-ux.md](file:///Users/tiagofur/dev/carpinteria/muebles/docs/mobile-ui-ux.md) — Sistema de diseño móvil, ergonomía táctil y modo taller.
-- [docs/production-module.md](file:///Users/tiagofur/dev/carpinteria/muebles/docs/production-module.md) — Contrato del módulo de producción y estados de piso.
-- [packages/domain/src/pieceLabelQr.ts](file:///Users/tiagofur/dev/carpinteria/muebles/packages/domain/src/pieceLabelQr.ts) — Parser oficial del payload QR v2.
+- [docs/mobile-architecture.md](../mobile-architecture.md) — Arquitectura técnica, integración de monorepo, capas de datos y reutilización de código.
+- [docs/mobile-ui-ux.md](../mobile-ui-ux.md) — Sistema de diseño móvil, ergonomía táctil y modo taller.
+- [docs/production-module.md](production-module.md) — Contrato del módulo de producción y estados de piso.
+- [packages/domain/src/pieceLabelQr.ts](../../packages/domain/src/pieceLabelQr.ts) — Parser oficial del payload QR v2.

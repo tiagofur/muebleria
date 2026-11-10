@@ -1817,23 +1817,14 @@ test('hardware groups: no consumed groups means no card, and groups catalog abse
   assert.strictEqual(previewBtn.title, 'Catálogo sin grupos');
 });
 
-test('#1261: opening summary card surfaces design opening when bound, and configure button toggles inline editor', () => {
-  const toggleCalls = [];
+test('#1535: grip surfaces follow the lanes and async answers re-render only grip areas', () => {
+  const calls = [];
   const sandbox = buildModuleSandbox({
     GraneteUI: {
-      opening: {
-        getSummary: () => ({
-          system: 'gola',
-          systemLabel: 'Gola',
-          profileId: 'profile.gola-l.8006',
-          profileName: 'Gola L Cymisa 8006',
-          placementLabel: 'Superior',
-          resolvedText: '600 × 676 mm',
-          isGola: true
-        }),
-        ensureLoaded: () => {},
-        toggleInlineEditor: () => toggleCalls.push(1),
-        isInlineActive: () => toggleCalls.length % 2 === 1
+      grip: {
+        renderProjectSection: () => calls.push('project'),
+        renderFurnitureCard: (context) => calls.push(['furniture', context && context.furnitureInstanceId]),
+        renderBatchBlock: (members) => calls.push(['batch', members.length])
       }
     }
   });
@@ -1841,23 +1832,24 @@ test('#1261: opening summary card surfaces design opening when bound, and config
   initDeps(sandbox);
   const api = sandbox.window.GraneteUI.inspector;
 
-  // 1. Unbound: card remains hidden
-  api.onBindingStatus({ state: 'unbound', binding: null });
-  api.onSelectionChange(furnitureContext());
-  assert(!visible(el(sandbox, 'inspector-opening-summary-card')), 'unbound: card must be hidden');
+  // No selection: the project section renders (design lane).
+  api.refreshGripAreas();
+  assert.deepStrictEqual(calls[0], 'project');
 
-  // 2. Bound: card is visible with the summary
-  api.onBindingStatus({ state: 'connected', binding: { designId: 'd-1261', projectId: 'p-1' } });
-  api.onSelectionChange(furnitureContext());
-  assert(visible(el(sandbox, 'inspector-opening-summary-card')), 'bound: card must be visible');
-  const text = el(sandbox, 'inspector-opening-summary-text').textContent;
-  assert.ok(text.includes('Gola L Cymisa 8006 (Superior)'), 'must include profile and placement');
-  assert.ok(text.includes('600 × 676 mm'), 'must include resolved front size');
+  // One furniture: the Agarre card renders with the instance id.
+  const context = furnitureContext({ furnitureInstanceId: 'inst-1535' });
+  api.onSelectionChange(context);
+  assert.deepStrictEqual(calls[1], ['furniture', 'inst-1535']);
 
-  // 3. Click configure: toggles the inline editor
-  const configureBtn = el(sandbox, 'btn-configure-design-opening');
-  configureBtn.click();
-  assert.strictEqual(toggleCalls.length, 1, 'clicking configure must toggle inline opening editor');
+  // Batch: the block renders with the member count.
+  api.onSelectionChange({ kind: 'batch', furniture: [{ furnitureInstanceId: 'a' }, { furnitureInstanceId: 'b' }] });
+  assert.deepStrictEqual(calls[2], ['batch', 2]);
+
+  // A late grip answer lands through onStateChange → refreshGripAreas only
+  // (never a full inspector re-render from the grip module).
+  const contextSecond = furnitureContext({ furnitureInstanceId: 'inst-2' });
+  api.onSelectionChange(contextSecond);
+  assert.deepStrictEqual(calls[3], ['furniture', 'inst-2']);
 });
 
 console.log(JSON.stringify({ success: true, testsPassed: testsPassed, module: 'granete-inspector.js' }));

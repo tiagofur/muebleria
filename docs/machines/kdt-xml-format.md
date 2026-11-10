@@ -603,6 +603,6 @@ El adapter de Granete deberá:
 
 - KDT Machinery Co., Ltd.: [kdt-machinery.com](https://kdt-machinery.com)
 - Promob Software Solutions: [promob.com](https://promob.com)
-- Dossier de máquina: [`docs/machines/client-b/machine-c-kdt-flexdrill1200.md`](./machines/client-b/machine-c-kdt-flexdrill1200.md)
-- Muestras XML: [`docs/machines/client-b/samples/`](./machines/client-b/samples/)
-- Machine profiles & adapters: [`docs/architecture/machine-profiles-and-adapters.md`](./architecture/machine-profiles-and-adapters.md)
+- Dossier de máquina: [`docs/machines/client-b/machine-c-kdt-flexdrill1200.md`](./client-b/machine-c-kdt-flexdrill1200.md)
+- Muestras XML: [`docs/machines/client-b/samples/`](./client-b/samples/)
+- Machine profiles & adapters: [`docs/architecture/machine-profiles-and-adapters.md`](../architecture/machine-profiles-and-adapters.md)

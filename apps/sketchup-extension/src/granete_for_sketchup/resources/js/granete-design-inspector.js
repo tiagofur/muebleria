@@ -842,9 +842,6 @@
   function hide() {
     state.laneActive = false;
     // #1137: the opening card belongs to this lane — deactivate with it.
-    if (window.GraneteUI && window.GraneteUI.opening) {
-      window.GraneteUI.opening.hide();
-    }
     if (!elements()) return;
     view.style.display = "none";
   }
@@ -1045,9 +1042,6 @@
         // #1137: the «Apertura» card rides the same lane — one refresh per
         // authoritative design read; it renders and saves through its own
         // bridge commands and never touches this module's state.
-        if (window.GraneteUI && window.GraneteUI.opening) {
-          window.GraneteUI.opening.refresh(state.designId, state.workingVersion);
-        }
       } else if (payload.status === "error") {
         state.status = "error";
         render();

@@ -8,6 +8,20 @@ module Granete
   module SketchUpExtension
     module UserInterface
       module DesignOpeningGeometryBridge # rubocop:disable Metrics/ModuleLength
+        # Shared working-copy service accessors (#1535): the opening FACADE
+        # bridge died with the duplicated cards, but the sync, channel and
+        # project-furniture bridges still read through the same service.
+        def design_opening_placer
+          placer = @project_furniture_placer
+          raise 'servicio de working copy no disponible' unless placer
+
+          placer
+        end
+
+        def design_opening_binding_store
+          Connection::ModelBinding::Store.new(active_model)
+        end
+
         # Converges the design's placed furniture to the fresh opening truth
         # (server-born rebuild; pilot scope = the first module's units).
         def design_opening_converge_geometry(stored, state)

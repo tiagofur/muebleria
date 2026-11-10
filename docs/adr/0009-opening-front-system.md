@@ -1,6 +1,6 @@
 # ADR-0009 — Opening / Front System separated from Body Construction
 
-- Status: **Proposed** — [Amendment 1 (Grip styles, 2026-11-06)](#amendment-1--grip-styles-2026-11-06) proposed in [#1524](https://github.com/tiagofur/muebleria/issues/1524)
+- Status: **Accepted** (pilot implemented under #1129–#1393) — [Amendment 1 (Grip styles, 2026-11-06)](#amendment-1--grip-styles-2026-11-06) **Accepted** via PR #1538 (decided in [#1524](https://github.com/tiagofur/muebleria/issues/1524); implementation in progress under #1522)
 - Date: 2026-10-05 (amended 2026-11-06)
 - Decision owners: Granete architecture
 - Canonical detail: [`docs/architecture/opening-front-system.md`](../architecture/opening-front-system.md)
@@ -98,7 +98,7 @@ The concrete data contracts, compatibility matrix, profile schema, resolver rule
 
 ## Amendment 1 — Grip styles (2026-11-06)
 
-- Status: **Proposed**. The owner's answers are recorded in [#1524](https://github.com/tiagofur/muebleria/issues/1524), and the owner approves this amendment through the PR that adds it.
+- Status: **Accepted** (merged in PR #1538; implementation in progress under #1522). The owner's answers are recorded in [#1524](https://github.com/tiagofur/muebleria/issues/1524), and the owner approves this amendment through the PR that adds it.
 - Epic: [#1522](https://github.com/tiagofur/muebleria/issues/1522). Delivery: phases 1–5 (#1525–#1537).
 - Scope: this amendment replaces decision 7 for grip and front behaviour, and restates parts of decisions 5 and 9. Every other decision above still applies.
 - Canonical detail: [`opening-front-system.md` §14](../architecture/opening-front-system.md#14-amendment-1--grip-styles-target).

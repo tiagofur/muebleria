@@ -184,25 +184,26 @@ class ApplicationTest < Minitest::Test
     first_dialog = @application.open_dialog
 
     expected_callbacks = %w[
-      adopt_binding_base apply_design_defaults apply_design_opening authoring_mutation
+      adopt_binding_base apply_design_defaults apply_project_grip_furniture apply_project_grip_style authoring_mutation
       begin_catalog_placement_preview begin_placement_preview
       bootstrap_project_design cancel_placement_instance clear_selection
       close_all_doors close_dialog component_viewport_move
       confirm_placement_instance
       connect_model connect_with_code create_project_furniture delete_selected_furniture dialog_ready
       emit_initial_quote enroll
-      get_catalog get_commercial_projection get_design_defaults get_design_inheritance get_design_opening
+      get_catalog get_commercial_projection get_design_defaults get_design_inheritance
       get_hardware_groups
       get_model_binding
-      get_project_furniture insert_furniture
+      get_project_furniture get_project_grip insert_furniture
       list_binding_designs list_binding_projects list_bootstrap_customers list_hardware_assets logout
       manufacturing_inspection open_external_url open_hardware_selector open_material_selector
       place_furniture_instance poll_enrollment preflight_review prepare_hardware_mount publish_design_revision
+      redo_project_grip
       refresh_media_url refresh_model_binding
       remove_project_furniture
       rescan_duplicates restore_furniture_instance
       select_furniture select_project_furniture
-      synchronize_design toggle_door_motion update_furniture update_furniture_batch
+      synchronize_design toggle_door_motion undo_project_grip update_furniture update_furniture_batch
       validate_design_revision validate_managed_furniture_identity
     ]
     assert_equal expected_callbacks, first_dialog.callbacks.keys.sort
