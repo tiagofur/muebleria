@@ -248,6 +248,12 @@ export type AuthoringFurnitureIntentV1 = {
   readonly components?: readonly AuthoringComponentOccurrenceV1[];
   readonly relationships?: readonly PartRelationshipIntent[];
   readonly hardwarePlacements?: readonly AuthoringHardwarePlacementV1[];
+  /** #1264: the design context whose project grip governs the resolve.
+   * Absent = the design-less baseline (no opening). */
+  readonly designId?: string;
+  /** #1536: the furniture instance whose grip override applies — the
+   * rebuild of ONE mueble pins its own grip. Absent = the design grip. */
+  readonly furnitureInstanceId?: string;
 };
 
 export type AuthoringResolveRequestV1 = {
@@ -906,7 +912,7 @@ const UNIT_KEYS = new Set(['length', 'angle', 'precisionMm']);
 const COORDINATE_KEYS = new Set(['handedness', 'upAxis', 'projectFrameId']);
 const FURNITURE_KEYS = new Set([
   'furnitureDefinitionId', 'catalogRevision', 'parameters', 'materialChoices', 'components',
-  'relationships', 'hardwarePlacements',
+  'relationships', 'hardwarePlacements', 'designId', 'furnitureInstanceId',
 ]);
 const COMPONENT_KEYS = new Set([
   'componentInstanceId', 'componentDefinitionId', 'catalogComponentId', 'role', 'transform',

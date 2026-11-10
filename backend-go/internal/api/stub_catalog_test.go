@@ -376,6 +376,16 @@ func (s *stubStore) GetProjectGrip(_ context.Context, _ string) (*storage.Projec
 	return nil, nil
 }
 
+// GetFurnitureEffectiveGrip (#1536 golden): the seeded facade state IS the
+// effective grip for the seeded instance — the pin resolves the same
+// snapshot the design lane serves.
+func (s *stubStore) GetFurnitureEffectiveGrip(_ context.Context, _ string, instanceID string) (*domain.GripSnapshot, error) {
+	if s.designGripFacadeState != nil && s.designGripFacadeState.InstanceID == instanceID {
+		return s.designGripFacadeState.Snapshot, nil
+	}
+	return nil, domain.ErrDesignNotFound
+}
+
 func (s *stubStore) SetProjectGrip(_ context.Context, _, _ string, _ int64, _ storage.ProjectGripWriteMeta) (*storage.ProjectGrip, error) {
 	s.stubNotUsed("SetProjectGrip")
 	return nil, nil
@@ -405,7 +415,3 @@ func (s *stubStore) ApplyDesignOpeningFacade(_ context.Context, designID string,
 	return nil
 }
 
-func (s *stubStore) GetFurnitureEffectiveGrip(_ context.Context, _, _ string) (*domain.GripSnapshot, error) {
-	s.stubNotUsed("GetFurnitureEffectiveGrip")
-	return nil, nil
-}

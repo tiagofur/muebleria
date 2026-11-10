@@ -386,6 +386,14 @@ describe('#477 shared authoring resolve contract fixture', () => {
     expect(accepted.length).toBeGreaterThanOrEqual(7);
 
     for (const scenario of accepted) {
+      // #1536: the grip scenarios carry NO relationships — their derived
+      // hardware/strips are the SERVER's opening resolution (TS never
+      // recomputes opening geometry; the parity lives Go-side and in the
+      // host smoke TC). The #356 recomputation covers the RELATIONSHIP
+      // machining only.
+      const hasRelationships =
+        (scenario.request.furniture.relationships?.length ?? 0) > 0;
+      if (!hasRelationships) continue;
       const result = deriveRelationshipMachining(snapshotFromScenario(scenario), catalog);
 
       const machining = scenario.response.resolved!.machining;

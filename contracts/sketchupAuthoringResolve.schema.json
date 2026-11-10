@@ -341,9 +341,9 @@
             "OPERATION_ID_AMBIGUOUS",
             "MEMBER_HOST_PLACEMENT_MISSING",
             "MEMBER_HOST_HAND_MIRROR_REQUIRES_DIMENSIONS",
-        "MEMBER_HOST_PROFILE_REQUIRED",
+            "MEMBER_HOST_PROFILE_REQUIRED",
             "MEMBER_HOST_BASIS_UNSUPPORTED",
-        "MEMBER_HOST_HAND_MIRROR_UNSUPPORTED_KIND",
+            "MEMBER_HOST_HAND_MIRROR_UNSUPPORTED_KIND",
             "CONNECTION_FACE_INVALID",
             "FACTORY_POLICY_INVALID",
             "LIBRARY_RELEASE_UNAVAILABLE",
@@ -470,6 +470,18 @@
             "$ref": "#/$defs/hardwarePlacement"
           },
           "maxItems": 10000
+        },
+        "designId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "#1264: the design context whose project grip governs the resolve. Absent = the design-less baseline (no opening)."
+        },
+        "furnitureInstanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "#1536: the furniture instance whose grip override applies — the rebuild of ONE mueble pins its own grip. Absent = the design grip (the first furniture)."
         }
       },
       "required": [
@@ -798,8 +810,7 @@
         },
         "optionRole": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 256
+          "description": "The material binding role the board carries (e.g. FRENTE — the door-swing criterion vocabulary)."
         },
         "materialCode": {
           "type": "string",
@@ -812,7 +823,8 @@
           "maxLength": 256
         },
         "materialColorHex": {
-          "type": "string"
+          "type": "string",
+          "description": "The resolved material preview color hex."
         },
         "materialImageUrl": {
           "type": "string",
@@ -843,6 +855,100 @@
         },
         "materialGrain": {
           "type": "boolean"
+        },
+        "assemblyInstanceId": {
+          "type": "string",
+          "description": "#1464: the owning agregado assembly instance id when the board is born from one."
+        },
+        "catalogComponentId": {
+          "type": "string",
+          "description": "#1327: the catalog component reference for opening strips (the tira) — the cut-list identity."
+        },
+        "notches": {
+          "type": "array",
+          "description": "#1356: the opening profile notch cuts (lateral boards) — server-declared, never Ruby formulas.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "startMm",
+              "sizeMm",
+              "profileId"
+            ],
+            "properties": {
+              "startMm": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "sizeMm": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "profileId": {
+                "type": "string"
+              },
+              "boundary": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "bevels": {
+          "type": "array",
+          "description": "#1327: the declared 45° door bevel wedges (front boards) — server-declared.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "startMm",
+              "sizeMm",
+              "angleDeg",
+              "edge",
+              "profileId"
+            ],
+            "properties": {
+              "startMm": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "sizeMm": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "angleDeg": {
+                "type": "number"
+              },
+              "edge": {
+                "type": "string",
+                "enum": [
+                  "top_front",
+                  "bottom_front"
+                ]
+              },
+              "profileId": {
+                "type": "string"
+              },
+              "boundary": {
+                "type": "string"
+              }
+            }
+          }
         }
       },
       "required": [
@@ -1084,6 +1190,9 @@
             },
             {
               "$ref": "#/$defs/manualPlacementProvenance"
+            },
+            {
+              "$ref": "#/$defs/openingProfileProvenance"
             }
           ]
         },
@@ -1091,6 +1200,75 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/hole"
+          }
+        },
+        "routingCuts": {
+          "type": "array",
+          "description": "#1356: the notch routing cuts (position + size) the lateral band carries.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "startMm",
+              "sizeMm"
+            ],
+            "properties": {
+              "startMm": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "sizeMm": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              }
+            }
+          }
+        },
+        "bevel": {
+          "type": "object",
+          "description": "#1327: the bevel wedge the operation cuts (position + size + the 45° edge).",
+          "additionalProperties": false,
+          "required": [
+            "startMm",
+            "sizeMm",
+            "angleDeg",
+            "edge"
+          ],
+          "properties": {
+            "startMm": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "sizeMm": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "angleDeg": {
+              "type": "number"
+            },
+            "edge": {
+              "type": "string",
+              "enum": [
+                "top_front",
+                "bottom_front"
+              ]
+            }
           }
         }
       },
@@ -1786,6 +1964,31 @@
         "contactCount",
         "stationCount"
       ]
+    },
+    "openingProfileProvenance": {
+      "type": "object",
+      "description": "#1327/#1536: the machining the opening profile band derives (notches and door bevels) — provenance names the frozen profile and its boundary.",
+      "additionalProperties": false,
+      "required": [
+        "sourceKind",
+        "openingProfileId",
+        "boundary"
+      ],
+      "properties": {
+        "sourceKind": {
+          "const": "openingProfile"
+        },
+        "openingProfileId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "boundary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
     }
   }
 }
