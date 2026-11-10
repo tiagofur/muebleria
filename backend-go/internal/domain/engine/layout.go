@@ -565,6 +565,14 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 		// the same cabinet's real side thickness (material-resolved board),
 		// never a fixed constant.
 		appendOpeningMemberLayoutHardware(&layout, catalog, *opts.openingMembers, dims, openingFrontsBottomBoundary(opts.fronts), hostBoardID, sideThicknessMm)
+		// #1536: the BETWEEN profile's own hardware run (the C between
+		// fronts) — the top-run rule mirrored at every between edge of the
+		// resolved stack, the envelope from the frozen datasheet. Fail-soft
+		// like the top run: a catalog hardware absent or inactive places
+		// nothing (the quote's BOM still demands it).
+		if opts.openingMembers.BetweenProfileHardwareID != "" {
+			appendOpeningBetweenProfileHardware(&layout, catalog, *opts.openingMembers, dims)
+		}
 	}
 
 	if opts.manualPlacements != nil {

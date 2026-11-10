@@ -511,6 +511,8 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 	// to place one board per between edge.
 	if members != nil {
 		members.BetweenComponentMembers = engine.ProjectGripBetweenStrips(recipe.BetweenProfile)
+		members.BetweenProfileHardwareID, members.BetweenProfileHeightMm, members.BetweenProfileDepthMm =
+			engine.ProjectGripBetweenHardware(recipe.BetweenProfile)
 	}
 	modifiers, modErr := engine.ResolveProjectGripModifiers(recipe)
 	if modErr != nil {

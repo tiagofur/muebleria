@@ -101,6 +101,61 @@ func boardIsOpeningFront(board *layoutBoard) bool {
 // onto the layout's derived-hardware input (#1274). ONE projection feeds the
 // authoring resolve and the production release (#1305) — a copy here and a
 // copy there would drift. nil when the pin declares no members.
+// appendOpeningBetweenProfileHardware (#1536): the BETWEEN profile's
+// hardware run — one derived placement per between edge of the resolved
+// front stack, the top-run rule mirrored (the run's top edge hangs from the
+// upper front's bottom edge, full furniture width, the envelope from the
+// frozen datasheet). Fail-soft: a catalog hardware absent or inactive
+// places nothing — the quote's BOM still demands it (the model sketch is
+// the representation, never the demand).
+func appendOpeningBetweenProfileHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims) {
+	hw, ok := findHardware(catalog, members.BetweenProfileHardwareID)
+	if !ok || !hw.Active || members.BetweenProfileHeightMm <= 0 || members.BetweenProfileDepthMm <= 0 {
+		return
+	}
+	fronts := []layoutBoard{}
+	for i := range layout.Components {
+		comp := &layout.Components[i]
+		// The fronts of the stack are the managed placement vocabulary
+		// (frente_cajon/puerta) — the strips are server-declared identities
+		// (opening-strip-*): boards of the cut list, never fronts.
+		if comp.Kind == "board" &&
+			(comp.SlotID == "frente_cajon" || comp.SlotID == "puerta") &&
+			!strings.HasPrefix(comp.ComponentInstanceID, "opening-strip-") {
+			fronts = append(fronts, layoutBoard{
+				id: comp.ComponentInstanceID, z: comp.Transform.TranslationMm[2],
+				lengthMm: comp.LengthMm,
+			})
+		}
+	}
+	if len(fronts) < 2 {
+		return
+	}
+	for i := 0; i < len(fronts); i++ {
+		for j := i + 1; j < len(fronts); j++ {
+			if fronts[j].z > fronts[i].z {
+				fronts[i], fronts[j] = fronts[j], fronts[i]
+			}
+		}
+	}
+	for k := 0; k+1 < len(fronts); k++ {
+		upper := fronts[k]
+		layout.Hardware = append(layout.Hardware, buildDerivedHardware(
+			hw,
+			fmt.Sprintf("opening-profile-between-%s-%d", hw.ID, k+1),
+			[3]float64{0, float64(dims.DepthMm), upper.z - members.BetweenProfileHeightMm},
+			LayoutBasis{
+				X: [3]float64{1, 0, 0},
+				Y: [3]float64{0, 1, 0},
+				Z: [3]float64{0, 0, 1},
+			},
+			[3]float64{float64(dims.WidthMm), members.BetweenProfileDepthMm, members.BetweenProfileHeightMm},
+			upper.id,
+			"bottom",
+		))
+	}
+}
+
 func OpeningMembersFromFrozenPin(selection *domain.DesignOpeningSelection) *OpeningMembers {
 	if selection == nil || selection.ProfilePin == nil || selection.ProfilePin.BOM == nil {
 		return nil
@@ -297,6 +352,12 @@ type OpeningMembers struct {
 	// between edge of the front stack (the top-strip rule mirrored at every
 	// horizontal joint). Empty = the recipe declares no between strips.
 	BetweenComponentMembers []OpeningComponentMember
+	// #1536: the BETWEEN profile's own hardware run (the C profile between
+	// fronts) — id + declared datasheet envelope. Empty id = the recipe
+	// declares no between profile hardware (truthful absence).
+	BetweenProfileHardwareID string
+	BetweenProfileHeightMm   float64
+	BetweenProfileDepthMm    float64
 }
 
 // OpeningComponentMember is one component reference the profile places as a

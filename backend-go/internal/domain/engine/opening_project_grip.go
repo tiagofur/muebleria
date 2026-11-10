@@ -108,6 +108,23 @@ func ProjectGripBetweenStrips(between *domain.FrozenGripProfile) []OpeningCompon
 	return strips
 }
 
+// ProjectGripBetweenHardware projects the frozen BETWEEN profile's hardware
+// run onto the layout's derived-hardware input (#1536): the C profile
+// between fronts places its own run — ONE projection, from the frozen copy.
+// Empty id = the between profile declares no hardware (truthful absence).
+func ProjectGripBetweenHardware(between *domain.FrozenGripProfile) (string, float64, float64) {
+	if between == nil {
+		return "", 0, 0
+	}
+	height := derefFrozenFloat(between.ProfileHeightMm)
+	depth := derefFrozenFloat(between.ProfileDepthMm)
+	profile, ok := between.BOMMembers[domain.GolaRoleProfile]
+	if !ok || profile.HardwareID == "" || height <= 0 || depth <= 0 {
+		return "", 0, 0
+	}
+	return profile.HardwareID, height, depth
+}
+
 // ProjectGripMembers projects the frozen top profile's declared members onto
 // the layout's derived-hardware input — the same projection
 // OpeningMembersFromFrozenPin performs over a pin, from the frozen copy
