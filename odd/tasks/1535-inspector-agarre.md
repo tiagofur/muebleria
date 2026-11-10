@@ -31,6 +31,9 @@ Judge A: 1 CRITICAL + 6 MAJOR + 7 MINOR. Judge B: 6 MAJOR + 8 MINOR. Consolidado
 
 **MINORs confirmados/informativos:** sin-projectId answers tragados sin limpiar inflight; teclado inerte en el radiogroup; oración cuenta FILAS como frentes (2 puertas lado a lado = «1 frente»); mapa GRIP_* cubre 7/15 códigos (FURNITURE_INSTANCE_UNKNOWN muestra el UUID); cobertura de regresión del bridge/HTTP/412 inexistente en rake unit (el bridge borrado llevaba 904 líneas); evidencia de host sobreafirmada (el TC usa RecordingService y no cubre «seleccionar y ver que hereda»); undo/redo dead-end tras una ronda; clic en fila en uso recongela; sesión fuera de la llave de estado; sin-estilo pinta Hereda con oración vacía.
 
+## Ronda 1 de corrección (owner: ronda completa)
+Aplicado en un commit sobre el ledger: CRITICAL boundary (grants GET/PUT para los 4 endpoints grip + test de verbo/superficie — el scoping por proyecto es RLS), bucle de GET (guard de estados terminales + ok-GET limpia stale), tarjeta tras mutación (re-GET de la verdad; el PUT no arma estado), lote vivo (handler de filas + footer con data-grip-pending en el contenedor), Deshacer honesto (sin-estilo no apila intención), botón Rehacer ligado a redo_project_grip, códigos internos fuera de vista (separador CODE: mensaje limpio; mapa GRIP_* a los 15 + FURNITURE_INSTANCE_UNKNOWN sin UUID) y radiogroup por teclado. RBZ 0.1.110; humo de puente en host: 5 corridas / 20 aserciones / 0 fallos.
+
 ## Pendiente (vivo owner)
 - Los 5 escenarios de aceptación en flujo COMPLETO con servidor y proyecto vinculados (elegir estilo viendo el dialog, heredar, excepción, aplicar a 3, deshacer con Ctrl+Z del host) — el TC de host cubre los mismos flujos a nivel bridge con servicio de grabación; el vivo del dialog queda para la verificación del owner junto con #1536 (representación).
 
