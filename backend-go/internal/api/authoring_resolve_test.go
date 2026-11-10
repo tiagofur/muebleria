@@ -875,6 +875,106 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 		stub.resourceBlobsByHash = nil
 		stub.allComponentSideAssignments = nil
 	}()
+
+	// — #1536: the project grip drives the resolve (frentes con agarre, tiras
+	// entre cajones, corridas del C, rebase) — the stub serves the SEEDED
+	// design-opening facade state per scenario. —
+
+	gripStub := server.Store.(*stubStore)
+	gripModule, extendGripCatalog := betweenStripsColumnFixture()
+	extendGripCatalog(gripStub.catalogOverride)
+	gripStub.moduleReturnedByID = gripModule
+	// The hardware the L+C and italiana recipes freeze into their members.
+	gripStub.catalogOverride.Hardware = append(gripStub.catalogOverride.Hardware,
+		domain.Hardware{ID: "hw-8006-1536", Code: "8006", Name: "Perfil GOLA L 8006", Active: true},
+		domain.Hardware{ID: "hw-8007-1536", Code: "8007", Name: "Perfil GOLA C 8007", Active: true},
+	)
+	gripDesignID := "d1536000-0000-0000-0000-000000000001"
+	gripStub.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{
+		gripDesignID: openingDesignWC(gripDesignID, true),
+	}
+
+	// 40. Cajonera L arriba + C entre frentes (aceptación 1): the C materializes
+	// its hardware run between every front pair; the L rides the top band.
+	freshRevision := authoringCatalogRevision(t, server)
+	gripStub.designGripFacadeState = &storage.DesignOpeningFacadeState{
+		ProjectID: "proj-grip-1536", InstanceID: "73554444-4444-4444-8444-444444444441", FurnitureType: "inferior",
+		Snapshot: lcSnapshot(),
+	}
+	scenarios = append(scenarios, run("40-grip-cajonera-l-c", "", authoringFixtureRequest(freshRevision, authoringResolveFurniture{
+		FurnitureDefinitionID: "mod-cajonera-1536",
+		DesignID:              gripDesignID,
+		FurnitureInstanceID:   "73554444-4444-4444-8444-444444444441",
+		Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0},
+	}), http.StatusOK))
+
+	// 41. Cajonera italiana (aceptación 2): the strip rides BETWEEN fronts as
+	// real boards; the doors carry the between bevels; the lateral notches
+	// and the depth reduction (the techo) cut from the same definition.
+	gripStub.designGripFacadeState = &storage.DesignOpeningFacadeState{
+		ProjectID: "proj-grip-1536", InstanceID: "73554444-4444-4444-8444-444444444441", FurnitureType: "inferior",
+		Snapshot: italianaSnapshot(),
+	}
+	scenarios = append(scenarios, run("41-grip-italiana-strip-between", "", authoringFixtureRequest(freshRevision, authoringResolveFurniture{
+		FurnitureDefinitionID: "mod-cajonera-1536",
+		DesignID:              gripDesignID,
+		FurnitureInstanceID:   "73554444-4444-4444-8444-444444444441",
+		Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0},
+	}), http.StatusOK))
+
+	// 42. Alacena con rebase de 20 mm (aceptación 3): the door extends BELOW
+	// the body floor by the overhang — server arithmetic, never Ruby formulas.
+	// The alacena MODULE carries FurnitureType superior (the module's type
+	// wins over the facade state — ADR §10's per-module typing).
+	overhangRecipe := domain.GripSnapshotRecipe{Mode: "bottom_overhang", OverhangMm: authoringFloatPtr(20)}
+	door := domain.Component{
+		ID: "comp-puerta-1536", Code: "PUERTA", Name: "Puerta",
+		Placement: domain.PlacementPuerta, GeometryKind: "rectangular_board",
+		ThicknessMm: 18, OptionRoles: []string{"FRENTE"},
+		LengthFormula: "PH - 4", WidthFormula: "PW - 4", Active: true,
+	}
+	doorStructure := domain.Structure{
+		ID: "est-alacena-1536", Code: "EST-ALACENA-1536", Name: "Alacena", Active: true,
+	}
+	alacena := domain.Module{
+		ID: "mod-alacena-1536", Code: "ALACENA-1536", Name: "Alacena 1 puerta",
+		WidthMm: 600, HeightMm: 720, DepthMm: 320,
+		FurnitureType: "superior", StructureID: doorStructure.ID,
+		Components: []domain.ComponentInstance{{ComponentID: "comp-puerta-1536", Quantity: 1}},
+	}
+	gripStub.catalogOverride.Components = append(gripStub.catalogOverride.Components, door)
+	gripStub.catalogOverride.Structures = append(gripStub.catalogOverride.Structures, doorStructure)
+	gripStub.catalogOverride.Modules = append(gripStub.catalogOverride.Modules, alacena)
+	gripStub.modulesByID = map[string]*domain.Module{
+		"mod-cajonera-1536": gripModule,
+		"mod-alacena-1536":  &alacena,
+	}
+	gripStub.designGripFacadeState = &storage.DesignOpeningFacadeState{
+		ProjectID: "proj-grip-1536", InstanceID: "73554444-4444-4444-8444-444444444443",
+		FurnitureType: "superior",
+		Snapshot: &domain.GripSnapshot{
+			StyleID: "style-rebase", StyleName: "Rebase 20",
+			Recipes: map[string]domain.GripSnapshotRecipe{
+				"inferior": {Mode: "handle"}, "alto": {Mode: "handle"},
+				"superior": overhangRecipe,
+			},
+		},
+	}
+		// The catalog grew (the door + structure + module above): recompute the
+	// revision the request pins.
+	rev42 := authoringCatalogRevision(t, server)
+	scenarios = append(scenarios, run("42-grip-alacena-rebase-20", "", authoringFixtureRequest(rev42, authoringResolveFurniture{
+		FurnitureDefinitionID: "mod-alacena-1536",
+		DesignID:              gripDesignID,
+		FurnitureInstanceID:   "73554444-4444-4444-8444-444444444443",
+		Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 320.0},
+	}), http.StatusOK))
+
+	// Reset so the negative proofs below stay byte-identical.
+	gripStub.designGripFacadeState = nil
+	gripStub.designWorkingCopiesByID = nil
+	gripStub.moduleReturnedByID = nil
+
 	return scenarios
 }
 
@@ -1079,7 +1179,10 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 				}
 			}
 			for _, hw := range response.Resolved.Layout.Hardware {
-				if hw.PlacementKind != engine.HardwarePlacementKindManual {
+				// #1536: the grip members materialize as DERIVED placements —
+				// the opening's resolved hardware, explicit about its kind.
+				if hw.PlacementKind != engine.HardwarePlacementKindManual &&
+					hw.PlacementKind != engine.HardwarePlacementKindDerived {
 					t.Fatalf("scenario %s: placement kind must stay explicit", scenario.ID)
 				}
 			}

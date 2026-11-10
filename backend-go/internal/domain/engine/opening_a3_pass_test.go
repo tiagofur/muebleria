@@ -36,6 +36,17 @@ func drawerColumnCatalog() (domain.Module, domain.Catalog) {
 	catalog.Structures[0].Agregados = []domain.ModuleAgregadoInstance{{
 		ID: "agr-inst-1", AgregadoID: "agr-drawer", Quantity: 3, LayoutDirection: "vertical",
 	}}
+	// #1536: the column keeps its TECHO — the horizontal panel the italiana's
+	// depth reduction corrects (constructive role horizontal, placement
+	// superior, full depth).
+	techo := domain.Component{
+		ID: "comp-top-col", Code: "TECHO-COL", Name: "Techo columna",
+		Placement: domain.PlacementSuperior, GeometryKind: "rectangular_board",
+		ThicknessMm: 18, WidthFormula: "PD", LengthFormula: "PW - 2*T", OptionRoles: []string{"INTERIOR"}, Active: true,
+		Construction: &domain.ComponentConstruction{ConstructiveRole: "horizontal"},
+	}
+	catalog.Components = append(catalog.Components, techo)
+	module.Components = []domain.ComponentInstance{{ComponentID: "comp-top-col", Quantity: 1}}
 	return module, catalog
 }
 

@@ -29225,6 +29225,1657 @@
         },
         "issues": []
       }
+    },
+    {
+      "id": "40-grip-cajonera-l-c",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-30a4f58a09e1",
+          "designId": "d1536000-0000-0000-0000-000000000001",
+          "furnitureDefinitionId": "mod-cajonera-1536",
+          "furnitureInstanceId": "73554444-4444-4444-8444-444444444441",
+          "parameters": {
+            "depthMm": 560,
+            "heightMm": 720,
+            "widthMm": 600
+          }
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 200,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-30a4f58a09e1",
+        "status": "accepted",
+        "normalizedSnapshot": {
+          "parameters": {
+            "depthMm": 560,
+            "heightMm": 720,
+            "widthMm": 600
+          },
+          "materialChoices": {},
+          "components": [
+            {
+              "componentInstanceId": "mod-comp-techo-1536-copy-0",
+              "componentDefinitionId": "mod-comp-techo-1536",
+              "catalogComponentId": "comp-techo-1536",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "mod-comp-lateral-1536-copy-0",
+              "componentDefinitionId": "mod-comp-lateral-1536",
+              "catalogComponentId": "comp-lateral-1536",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "mod-comp-lateral-1536-r-copy-0",
+              "componentDefinitionId": "mod-comp-lateral-1536-r",
+              "catalogComponentId": "comp-lateral-1536-r",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "agr-agr-cajon-1536-u0-comp-dfront-1536-copy-0",
+              "componentDefinitionId": "agr-agr-cajon-1536-u0-comp-dfront-1536",
+              "catalogComponentId": "comp-dfront-1536",
+              "role": "FRENTE"
+            },
+            {
+              "componentInstanceId": "agr-agr-cajon-1536-u1-comp-dfront-1536-copy-0",
+              "componentDefinitionId": "agr-agr-cajon-1536-u1-comp-dfront-1536",
+              "catalogComponentId": "comp-dfront-1536",
+              "role": "FRENTE"
+            },
+            {
+              "componentInstanceId": "agr-agr-cajon-1536-u2-comp-dfront-1536-copy-0",
+              "componentDefinitionId": "agr-agr-cajon-1536-u2-comp-dfront-1536",
+              "catalogComponentId": "comp-dfront-1536",
+              "role": "FRENTE"
+            }
+          ],
+          "relationships": [],
+          "hardwarePlacements": []
+        },
+        "resolved": {
+          "layout": {
+            "furnitureDefinitionId": "mod-cajonera-1536",
+            "definitionName": "Cajonera 3 frentes",
+            "transformContract": "granete.local-basis.v1",
+            "dimensionsMm": [
+              600,
+              720,
+              560
+            ],
+            "components": [
+              {
+                "componentInstanceId": "mod-comp-techo-1536-copy-0",
+                "componentDefinitionId": "mod-comp-techo-1536",
+                "slotId": "superior",
+                "role": "INTERIOR",
+                "name": "Techo columna",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  560,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "mod-comp-lateral-1536-copy-0",
+                "componentDefinitionId": "mod-comp-lateral-1536",
+                "slotId": "lateral_izquierdo",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  720
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 720,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "mod-comp-lateral-1536-r-copy-0",
+                "componentDefinitionId": "mod-comp-lateral-1536-r",
+                "slotId": "lateral_derecho",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    582,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  720
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    582,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 720,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "agr-agr-cajon-1536-u0-comp-dfront-1536-copy-0",
+                "componentDefinitionId": "agr-agr-cajon-1536-u0-comp-dfront-1536",
+                "slotId": "frente_cajon",
+                "role": "FRENTE",
+                "name": "Frente Cajón",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  203
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 203,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "assemblyInstanceId": "asm-agr-inst-1536-u0",
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              },
+              {
+                "componentInstanceId": "agr-agr-cajon-1536-u1-comp-dfront-1536-copy-0",
+                "componentDefinitionId": "agr-agr-cajon-1536-u1-comp-dfront-1536",
+                "slotId": "frente_cajon",
+                "role": "FRENTE",
+                "name": "Frente Cajón",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    241
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  202.5
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    241
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 202.5,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "assemblyInstanceId": "asm-agr-inst-1536-u1",
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              },
+              {
+                "componentInstanceId": "agr-agr-cajon-1536-u2-comp-dfront-1536-copy-0",
+                "componentDefinitionId": "agr-agr-cajon-1536-u2-comp-dfront-1536",
+                "slotId": "frente_cajon",
+                "role": "FRENTE",
+                "name": "Frente Cajón",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    479.5
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  202.5
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    479.5
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 202.5,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "assemblyInstanceId": "asm-agr-inst-1536-u2",
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              }
+            ],
+            "hardware": [
+              {
+                "placementId": "opening-profile-hw-8006-1536",
+                "hardwareId": "hw-8006-1536",
+                "name": "Perfil GOLA L 8006",
+                "shape": "custom",
+                "projectionMm": 0,
+                "hostComponentInstanceId": "mod-comp-techo-1536-copy-0",
+                "anchorFace": "top",
+                "placementKind": "derived",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    720
+                  ]
+                },
+                "dimensionsMm": [
+                  600,
+                  27.2,
+                  56.5
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    720
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                }
+              },
+              {
+                "placementId": "opening-profile-between-hw-8007-1536-1",
+                "hardwareId": "hw-8007-1536",
+                "name": "Perfil GOLA C 8007",
+                "shape": "custom",
+                "projectionMm": 0,
+                "hostComponentInstanceId": "mod-comp-techo-1536-copy-0",
+                "anchorFace": "bottom",
+                "placementKind": "derived",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    466.5
+                  ]
+                },
+                "dimensionsMm": [
+                  600,
+                  19,
+                  13
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    466.5
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                }
+              },
+              {
+                "placementId": "opening-profile-between-hw-8007-1536-2",
+                "hardwareId": "hw-8007-1536",
+                "name": "Perfil GOLA C 8007",
+                "shape": "custom",
+                "projectionMm": 0,
+                "hostComponentInstanceId": "mod-comp-techo-1536-copy-0",
+                "anchorFace": "bottom",
+                "placementKind": "derived",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    228
+                  ]
+                },
+                "dimensionsMm": [
+                  600,
+                  19,
+                  13
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    228
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "machining": {
+            "operations": [],
+            "derivedHardwarePlacements": [],
+            "manufacturingFingerprint": "sha256-f29a1ea8abb316189a72a6c59dc9ae7618223be4402224a437517bb19580f5e5"
+          },
+          "preflight": {
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
+            "issues": [],
+            "preflightContract": "granete.manufacturing-preflight.v1"
+          }
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "41-grip-italiana-strip-between",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-30a4f58a09e1",
+          "designId": "d1536000-0000-0000-0000-000000000001",
+          "furnitureDefinitionId": "mod-cajonera-1536",
+          "furnitureInstanceId": "73554444-4444-4444-8444-444444444441",
+          "parameters": {
+            "depthMm": 560,
+            "heightMm": 720,
+            "widthMm": 600
+          }
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 200,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-30a4f58a09e1",
+        "status": "accepted",
+        "normalizedSnapshot": {
+          "parameters": {
+            "depthMm": 560,
+            "heightMm": 720,
+            "widthMm": 600
+          },
+          "materialChoices": {},
+          "components": [
+            {
+              "componentInstanceId": "mod-comp-techo-1536-copy-0",
+              "componentDefinitionId": "mod-comp-techo-1536",
+              "catalogComponentId": "comp-techo-1536",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "mod-comp-lateral-1536-copy-0",
+              "componentDefinitionId": "mod-comp-lateral-1536",
+              "catalogComponentId": "comp-lateral-1536",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "mod-comp-lateral-1536-r-copy-0",
+              "componentDefinitionId": "mod-comp-lateral-1536-r",
+              "catalogComponentId": "comp-lateral-1536-r",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "agr-agr-cajon-1536-u0-comp-dfront-1536-copy-0",
+              "componentDefinitionId": "agr-agr-cajon-1536-u0-comp-dfront-1536",
+              "catalogComponentId": "comp-dfront-1536",
+              "role": "FRENTE"
+            },
+            {
+              "componentInstanceId": "agr-agr-cajon-1536-u1-comp-dfront-1536-copy-0",
+              "componentDefinitionId": "agr-agr-cajon-1536-u1-comp-dfront-1536",
+              "catalogComponentId": "comp-dfront-1536",
+              "role": "FRENTE"
+            },
+            {
+              "componentInstanceId": "agr-agr-cajon-1536-u2-comp-dfront-1536-copy-0",
+              "componentDefinitionId": "agr-agr-cajon-1536-u2-comp-dfront-1536",
+              "catalogComponentId": "comp-dfront-1536",
+              "role": "FRENTE"
+            },
+            {
+              "componentInstanceId": "opening-strip-between-strip-1",
+              "componentDefinitionId": "opening-strip-between-strip-1",
+              "catalogComponentId": "comp-tira-1536",
+              "role": "FRENTE"
+            },
+            {
+              "componentInstanceId": "opening-strip-between-strip-2",
+              "componentDefinitionId": "opening-strip-between-strip-2",
+              "catalogComponentId": "comp-tira-1536",
+              "role": "FRENTE"
+            },
+            {
+              "componentInstanceId": "opening-strip-strip",
+              "componentDefinitionId": "opening-strip-strip",
+              "catalogComponentId": "comp-tira-1536",
+              "role": "FRENTE"
+            }
+          ],
+          "relationships": [],
+          "hardwarePlacements": []
+        },
+        "resolved": {
+          "layout": {
+            "furnitureDefinitionId": "mod-cajonera-1536",
+            "definitionName": "Cajonera 3 frentes",
+            "transformContract": "granete.local-basis.v1",
+            "dimensionsMm": [
+              600,
+              720,
+              560
+            ],
+            "components": [
+              {
+                "componentInstanceId": "mod-comp-techo-1536-copy-0",
+                "componentDefinitionId": "mod-comp-techo-1536",
+                "slotId": "superior",
+                "role": "INTERIOR",
+                "name": "Techo columna",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  544,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 544,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "mod-comp-lateral-1536-copy-0",
+                "componentDefinitionId": "mod-comp-lateral-1536",
+                "slotId": "lateral_izquierdo",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  720
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 720,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a",
+                "notches": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      650
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ],
+                    "profileId": "profile.italiana.70",
+                    "boundary": "top"
+                  },
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      412
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ],
+                    "profileId": "profile.italiana.70",
+                    "boundary": "between"
+                  },
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      172
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ],
+                    "profileId": "profile.italiana.70",
+                    "boundary": "between"
+                  }
+                ]
+              },
+              {
+                "componentInstanceId": "mod-comp-lateral-1536-r-copy-0",
+                "componentDefinitionId": "mod-comp-lateral-1536-r",
+                "slotId": "lateral_derecho",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    582,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  720
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    582,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 720,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a",
+                "notches": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      650
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ],
+                    "profileId": "profile.italiana.70",
+                    "boundary": "top"
+                  },
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      412
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ],
+                    "profileId": "profile.italiana.70",
+                    "boundary": "between"
+                  },
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      172
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ],
+                    "profileId": "profile.italiana.70",
+                    "boundary": "between"
+                  }
+                ]
+              },
+              {
+                "componentInstanceId": "agr-agr-cajon-1536-u0-comp-dfront-1536-copy-0",
+                "componentDefinitionId": "agr-agr-cajon-1536-u0-comp-dfront-1536",
+                "slotId": "frente_cajon",
+                "role": "FRENTE",
+                "name": "Frente Cajón",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  204
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 204,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "assemblyInstanceId": "asm-agr-inst-1536-u0",
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574",
+                "bevels": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      190
+                    ],
+                    "sizeMm": [
+                      596,
+                      14,
+                      14
+                    ],
+                    "angleDeg": 45,
+                    "edge": "top_front",
+                    "profileId": "profile.italiana.70",
+                    "boundary": "between"
+                  }
+                ]
+              },
+              {
+                "componentInstanceId": "agr-agr-cajon-1536-u1-comp-dfront-1536-copy-0",
+                "componentDefinitionId": "agr-agr-cajon-1536-u1-comp-dfront-1536",
+                "slotId": "frente_cajon",
+                "role": "FRENTE",
+                "name": "Frente Cajón",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    242
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  204
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    242
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 204,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "assemblyInstanceId": "asm-agr-inst-1536-u1",
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574",
+                "bevels": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      190
+                    ],
+                    "sizeMm": [
+                      596,
+                      14,
+                      14
+                    ],
+                    "angleDeg": 45,
+                    "edge": "top_front",
+                    "profileId": "profile.italiana.70",
+                    "boundary": "between"
+                  }
+                ]
+              },
+              {
+                "componentInstanceId": "agr-agr-cajon-1536-u2-comp-dfront-1536-copy-0",
+                "componentDefinitionId": "agr-agr-cajon-1536-u2-comp-dfront-1536",
+                "slotId": "frente_cajon",
+                "role": "FRENTE",
+                "name": "Frente Cajón",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    482
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  204
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    482
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 204,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "assemblyInstanceId": "asm-agr-inst-1536-u2",
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574",
+                "bevels": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      190
+                    ],
+                    "sizeMm": [
+                      596,
+                      14,
+                      14
+                    ],
+                    "angleDeg": 45,
+                    "edge": "top_front",
+                    "profileId": "profile.italiana.70",
+                    "boundary": "top"
+                  }
+                ]
+              },
+              {
+                "componentInstanceId": "opening-strip-between-strip-1",
+                "componentDefinitionId": "opening-strip-between-strip-1",
+                "slotId": "superior",
+                "role": "FRENTE",
+                "name": "strip",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    544,
+                    412
+                  ]
+                },
+                "dimensionsMm": [
+                  600,
+                  16,
+                  70
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    544,
+                    412
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 600,
+                "widthMm": 16,
+                "thicknessMm": 70,
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              },
+              {
+                "componentInstanceId": "opening-strip-between-strip-2",
+                "componentDefinitionId": "opening-strip-between-strip-2",
+                "slotId": "superior",
+                "role": "FRENTE",
+                "name": "strip",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    544,
+                    172
+                  ]
+                },
+                "dimensionsMm": [
+                  600,
+                  16,
+                  70
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    544,
+                    172
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 600,
+                "widthMm": 16,
+                "thicknessMm": 70,
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              },
+              {
+                "componentInstanceId": "opening-strip-strip",
+                "componentDefinitionId": "opening-strip-strip",
+                "slotId": "superior",
+                "role": "FRENTE",
+                "name": "strip",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    544,
+                    650
+                  ]
+                },
+                "dimensionsMm": [
+                  600,
+                  16,
+                  70
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    544,
+                    650
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 600,
+                "widthMm": 16,
+                "thicknessMm": 70,
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              }
+            ],
+            "hardware": []
+          },
+          "machining": {
+            "operations": [
+              {
+                "operationId": "mod-comp-lateral-1536-copy-0:notch-0",
+                "hostComponentInstanceId": "mod-comp-lateral-1536-copy-0",
+                "provenance": {
+                  "sourceKind": "openingProfile",
+                  "openingProfileId": "profile.italiana.70",
+                  "boundary": "top"
+                },
+                "holes": [],
+                "routingCuts": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      650
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ]
+                  }
+                ]
+              },
+              {
+                "operationId": "mod-comp-lateral-1536-copy-0:notch-1",
+                "hostComponentInstanceId": "mod-comp-lateral-1536-copy-0",
+                "provenance": {
+                  "sourceKind": "openingProfile",
+                  "openingProfileId": "profile.italiana.70",
+                  "boundary": "between"
+                },
+                "holes": [],
+                "routingCuts": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      412
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ]
+                  }
+                ]
+              },
+              {
+                "operationId": "mod-comp-lateral-1536-copy-0:notch-2",
+                "hostComponentInstanceId": "mod-comp-lateral-1536-copy-0",
+                "provenance": {
+                  "sourceKind": "openingProfile",
+                  "openingProfileId": "profile.italiana.70",
+                  "boundary": "between"
+                },
+                "holes": [],
+                "routingCuts": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      172
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ]
+                  }
+                ]
+              },
+              {
+                "operationId": "mod-comp-lateral-1536-r-copy-0:notch-0",
+                "hostComponentInstanceId": "mod-comp-lateral-1536-r-copy-0",
+                "provenance": {
+                  "sourceKind": "openingProfile",
+                  "openingProfileId": "profile.italiana.70",
+                  "boundary": "top"
+                },
+                "holes": [],
+                "routingCuts": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      650
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ]
+                  }
+                ]
+              },
+              {
+                "operationId": "mod-comp-lateral-1536-r-copy-0:notch-1",
+                "hostComponentInstanceId": "mod-comp-lateral-1536-r-copy-0",
+                "provenance": {
+                  "sourceKind": "openingProfile",
+                  "openingProfileId": "profile.italiana.70",
+                  "boundary": "between"
+                },
+                "holes": [],
+                "routingCuts": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      412
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ]
+                  }
+                ]
+              },
+              {
+                "operationId": "mod-comp-lateral-1536-r-copy-0:notch-2",
+                "hostComponentInstanceId": "mod-comp-lateral-1536-r-copy-0",
+                "provenance": {
+                  "sourceKind": "openingProfile",
+                  "openingProfileId": "profile.italiana.70",
+                  "boundary": "between"
+                },
+                "holes": [],
+                "routingCuts": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      172
+                    ],
+                    "sizeMm": [
+                      16,
+                      18,
+                      70
+                    ]
+                  }
+                ]
+              },
+              {
+                "operationId": "agr-agr-cajon-1536-u0-comp-dfront-1536-copy-0:bevel-0",
+                "hostComponentInstanceId": "agr-agr-cajon-1536-u0-comp-dfront-1536-copy-0",
+                "provenance": {
+                  "sourceKind": "openingProfile",
+                  "openingProfileId": "profile.italiana.70",
+                  "boundary": "between"
+                },
+                "holes": [],
+                "bevel": {
+                  "startMm": [
+                    0,
+                    0,
+                    190
+                  ],
+                  "sizeMm": [
+                    596,
+                    14,
+                    14
+                  ],
+                  "angleDeg": 45,
+                  "edge": "top_front"
+                }
+              },
+              {
+                "operationId": "agr-agr-cajon-1536-u1-comp-dfront-1536-copy-0:bevel-0",
+                "hostComponentInstanceId": "agr-agr-cajon-1536-u1-comp-dfront-1536-copy-0",
+                "provenance": {
+                  "sourceKind": "openingProfile",
+                  "openingProfileId": "profile.italiana.70",
+                  "boundary": "between"
+                },
+                "holes": [],
+                "bevel": {
+                  "startMm": [
+                    0,
+                    0,
+                    190
+                  ],
+                  "sizeMm": [
+                    596,
+                    14,
+                    14
+                  ],
+                  "angleDeg": 45,
+                  "edge": "top_front"
+                }
+              },
+              {
+                "operationId": "agr-agr-cajon-1536-u2-comp-dfront-1536-copy-0:bevel-0",
+                "hostComponentInstanceId": "agr-agr-cajon-1536-u2-comp-dfront-1536-copy-0",
+                "provenance": {
+                  "sourceKind": "openingProfile",
+                  "openingProfileId": "profile.italiana.70",
+                  "boundary": "top"
+                },
+                "holes": [],
+                "bevel": {
+                  "startMm": [
+                    0,
+                    0,
+                    190
+                  ],
+                  "sizeMm": [
+                    596,
+                    14,
+                    14
+                  ],
+                  "angleDeg": 45,
+                  "edge": "top_front"
+                }
+              }
+            ],
+            "derivedHardwarePlacements": [],
+            "manufacturingFingerprint": "sha256-095eaf85ecebb6368e6684a94e09646712920df5104e43b5231c459d9b2f0c05"
+          },
+          "preflight": {
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
+            "issues": [],
+            "preflightContract": "granete.manufacturing-preflight.v1"
+          }
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "42-grip-alacena-rebase-20",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-056e7012e17c",
+          "designId": "d1536000-0000-0000-0000-000000000001",
+          "furnitureDefinitionId": "mod-alacena-1536",
+          "furnitureInstanceId": "73554444-4444-4444-8444-444444444443",
+          "parameters": {
+            "depthMm": 320,
+            "heightMm": 720,
+            "widthMm": 600
+          }
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 200,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-056e7012e17c",
+        "status": "accepted",
+        "normalizedSnapshot": {
+          "parameters": {
+            "depthMm": 320,
+            "heightMm": 720,
+            "widthMm": 600
+          },
+          "materialChoices": {},
+          "components": [
+            {
+              "componentInstanceId": "mod-comp-puerta-1536-copy-0",
+              "componentDefinitionId": "mod-comp-puerta-1536",
+              "catalogComponentId": "comp-puerta-1536",
+              "role": "FRENTE"
+            }
+          ],
+          "relationships": [],
+          "hardwarePlacements": []
+        },
+        "resolved": {
+          "layout": {
+            "furnitureDefinitionId": "mod-alacena-1536",
+            "definitionName": "Alacena 1 puerta",
+            "transformContract": "granete.local-basis.v1",
+            "dimensionsMm": [
+              600,
+              720,
+              320
+            ],
+            "components": [
+              {
+                "componentInstanceId": "mod-comp-puerta-1536-copy-0",
+                "componentDefinitionId": "mod-comp-puerta-1536",
+                "slotId": "puerta",
+                "role": "FRENTE",
+                "name": "Puerta",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    320,
+                    -20
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  738
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    320,
+                    -20
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 738,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              }
+            ],
+            "hardware": []
+          },
+          "machining": {
+            "operations": [],
+            "derivedHardwarePlacements": [],
+            "manufacturingFingerprint": "sha256-85e1a17e2482eda579e7548c8f83e06639ee236327a103293a711c68ab6ac424"
+          },
+          "preflight": {
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
+            "issues": [],
+            "preflightContract": "granete.manufacturing-preflight.v1"
+          }
+        },
+        "issues": []
+      }
     }
   ]
 }

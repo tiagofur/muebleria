@@ -300,6 +300,11 @@ type layoutBoard struct {
 	name       string
 	placement  string
 	optionRole string
+	// openingStrip (#1536): the board is an opening STRIP (the italian gola
+	// band at the top or between fronts) — a real cut-list board that is
+	// NEVER a front of the A3 stack, however its material role reads.
+	// Server-declared at emission; the front vocabulary excludes it.
+	openingStrip bool
 	// constructiveRole (#1052 vocabulary, #1317): the DECLARED constructive
 	// role the opening body modifiers address — the depth-reduction pass
 	// selects its boards by it, never by name. Empty on legacy flat parts.
@@ -434,6 +439,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 				name:               strip.Key,
 				placement:          string(domain.PlacementSuperior),
 				optionRole:         "FRENTE",
+				openingStrip:       true,
 				x:                  0,
 				y:                  float64(dims.DepthMm) - strip.DepthMm,
 				z:                  float64(dims.HeightMm) - strip.HeightMm,
@@ -559,6 +565,14 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 		// the same cabinet's real side thickness (material-resolved board),
 		// never a fixed constant.
 		appendOpeningMemberLayoutHardware(&layout, catalog, *opts.openingMembers, dims, openingFrontsBottomBoundary(opts.fronts), hostBoardID, sideThicknessMm)
+		// #1536: the BETWEEN profile's own hardware run (the C between
+		// fronts) — the top-run rule mirrored at every between edge of the
+		// resolved stack, the envelope from the frozen datasheet. Fail-soft
+		// like the top run: a catalog hardware absent or inactive places
+		// nothing (the quote's BOM still demands it).
+		if opts.openingMembers.BetweenProfileHardwareID != "" {
+			appendOpeningBetweenProfileHardware(&layout, catalog, *opts.openingMembers, dims)
+		}
 	}
 
 	if opts.manualPlacements != nil {
@@ -1121,6 +1135,59 @@ func boardPlacementLabel(comp domain.Component, inst domain.ComponentInstance) s
 
 // resolveLayoutBoards walks structure + module + agregado component instances
 // (mirrors TS resolveComposedModule) and returns the resolved boards.
+// appendOpeningBetweenStripBoards (#1536 r2): one strip board per BETWEEN
+// EDGE of the resolved A3 stack — the edges are the ROW boundaries
+// (openingFrontRows: fronts whose vertical extents overlap share ONE row),
+// never front-board pairs: two side-by-side doors are one row with ZERO
+// between edges and fabricate no strip. Strip k hangs below row k−1's
+// bottom edge — the top-strip rule mirrored — full furniture width, the
+// FRENTE material role: real boards in the cut list, never a placeholder.
+// Fail-closed: a declared component missing or inactive rejects the
+// resolve, like the top strip.
+func appendOpeningBetweenStripBoards(boards *[]layoutBoard, catalog domain.Catalog, dims LayoutDims,
+	strips []OpeningComponentMember) error {
+	if len(strips) == 0 {
+		return nil
+	}
+	rows, err := openingFrontRows(*boards)
+	if err != nil {
+		return err
+	}
+	if len(rows) < 2 {
+		return nil // fewer than two rows: no between edges
+	}
+	for _, strip := range strips {
+		comp, found := findComponent(catalog, strip.ComponentID)
+		if !found || !comp.Active {
+			return fmt.Errorf(
+				"el componente %s del elemento %q de la apertura no existe o está inactivo",
+				strip.ComponentID, strip.Key)
+		}
+		for k := 1; k < len(rows); k++ {
+			// Strip k hangs below row k−1 (the upper row of the pair): its
+			// top edge = the upper row's bottom edge.
+			z := rows[k-1].bottomMm - strip.HeightMm
+			*boards = append(*boards, layoutBoard{
+				id:                 "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k),
+				defID:              "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k),
+				name:               strip.Key,
+				placement:          string(domain.PlacementSuperior),
+				optionRole:         "FRENTE",
+				openingStrip:       true,
+				x:                  0,
+				y:                  float64(dims.DepthMm) - strip.DepthMm,
+				z:                  z,
+				rotY:               90,
+				widthMm:            strip.DepthMm,
+				thicknessMm:        strip.HeightMm,
+				lengthMm:           float64(dims.WidthMm),
+				catalogComponentID: strip.ComponentID,
+			})
+		}
+	}
+	return nil
+}
+
 func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims LayoutDims, optionChoices map[string]string, opts resolveOptions) ([]layoutBoard, error) {
 	if strings.TrimSpace(module.StructureID) == "" {
 		return legacyBoardStack(module, optionChoices, catalog.Materials, opts)
@@ -1203,6 +1270,17 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 		openingConstrained, passErr = applyOpeningFrontsToBoards(boards, opts.fronts, float64(dims.HeightMm))
 		if passErr != nil {
 			return nil, passErr
+		}
+		// #1536: the italian strip BETWEEN fronts — one board per between
+		// edge of the resolved stack, the top-strip rule mirrored (the
+		// strip's top edge hangs from the upper front's bottom edge, full
+		// furniture width, the FRENTE material role). Fail-closed on a
+		// missing or inactive catalog component, like the top strip.
+		if opts.openingMembers != nil && len(opts.openingMembers.BetweenComponentMembers) > 0 {
+			if err := appendOpeningBetweenStripBoards(&boards, catalog, dims,
+				opts.openingMembers.BetweenComponentMembers); err != nil {
+				return nil, err
+			}
 		}
 		// #1274: a furniture the opening constrained materializes the
 		// selection's member hardware in furniture space (applied downstream).

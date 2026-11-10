@@ -127,18 +127,19 @@ module Granete
             name: 'update_furniture',
             operation_name: "Aplicar Apertura · #{definition['name']}",
             semantic_target: target,
-            resolve: design_opening_rebuild_resolve(definition, intent, design_id),
+            resolve: design_opening_rebuild_resolve(definition, intent, design_id, server_id),
             context_valid: context_guard,
             apply: design_opening_rebuild_apply(root, definition, intent, channel_spec, channel_results)
           )
         end
 
-        def design_opening_rebuild_resolve(definition, intent, design_id)
+        def design_opening_rebuild_resolve(definition, intent, design_id, furniture_instance_id = nil)
           parameters = intent['parameters'] || {}
           choices = intent['materialChoices'] || {}
           lambda { |ctx|
             layout = @catalog_provider.resolved_native_layout(
-              definition['furniture_definition_id'], parameters, choices, design_id
+              definition['furniture_definition_id'], parameters, choices, design_id,
+              furniture_instance_id
             )
             # Fail-closed: never rebuild to a generic preview.
             if layout.nil?

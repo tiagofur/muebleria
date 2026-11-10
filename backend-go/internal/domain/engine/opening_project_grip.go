@@ -83,6 +83,57 @@ func ProjectGripEdgeGrips(recipe *domain.GripSnapshotRecipe) (OpeningEdgeGrips, 
 	return *fronts[0].EdgeGrips, nil
 }
 
+// ProjectGripBetweenStrips projects the frozen BETWEEN profile's declared
+// component members (the italian strip between fronts, #1536): the same
+// component projection ProjectGripMembers runs over the top profile, from
+// the between copy. nil profile or members without declared dims place
+// nothing (truthful absence).
+func ProjectGripBetweenStrips(between *domain.FrozenGripProfile) []OpeningComponentMember {
+	if between == nil || between.BOMMembers == nil {
+		return nil
+	}
+	strips := []OpeningComponentMember{}
+	for key, member := range between.BOMMembers {
+		if member.ComponentID == "" {
+			continue
+		}
+		// v2 strip contract (#1530/#1536): height_mm with no dimensions_mm
+		// derives the depth from the profile's own band (the #1534 editor
+		// authors exactly this shape) — never an invented number.
+		depth, height := 0.0, 0.0
+		if member.DimensionsMm != nil {
+			depth, height = (*member.DimensionsMm)[1], (*member.DimensionsMm)[2]
+		} else if member.HeightMm != nil && *member.HeightMm > 0 && between.ProfileDepthMm != nil && *between.ProfileDepthMm > 0 {
+			height = *member.HeightMm
+			depth = *between.ProfileDepthMm
+		}
+		if depth <= 0 || height <= 0 {
+			continue
+		}
+		strips = append(strips, OpeningComponentMember{
+			Key: key, ComponentID: member.ComponentID, DepthMm: depth, HeightMm: height,
+		})
+	}
+	return strips
+}
+
+// ProjectGripBetweenHardware projects the frozen BETWEEN profile's hardware
+// run onto the layout's derived-hardware input (#1536): the C profile
+// between fronts places its own run — ONE projection, from the frozen copy.
+// Empty id = the between profile declares no hardware (truthful absence).
+func ProjectGripBetweenHardware(between *domain.FrozenGripProfile) (string, float64, float64) {
+	if between == nil {
+		return "", 0, 0
+	}
+	height := derefFrozenFloat(between.ProfileHeightMm)
+	depth := derefFrozenFloat(between.ProfileDepthMm)
+	profile, ok := between.BOMMembers[domain.GolaRoleProfile]
+	if !ok || profile.HardwareID == "" || height <= 0 || depth <= 0 {
+		return "", 0, 0
+	}
+	return profile.HardwareID, height, depth
+}
+
 // ProjectGripMembers projects the frozen top profile's declared members onto
 // the layout's derived-hardware input — the same projection
 // OpeningMembersFromFrozenPin performs over a pin, from the frozen copy
@@ -119,12 +170,21 @@ func ProjectGripMembers(top *domain.FrozenGripProfile) *OpeningMembers {
 	}
 	// Component members (panels — the italian gola strip) place as boards:
 	// declared dims [along-run, depth, height]; without declared dims the
-	// member places nothing (truthful absence, never an invented envelope).
+	// member places nothing — EXCEPT the v2 strip contract (#1530/#1536):
+	// a strip with height_mm and no dimensions_mm derives its depth from
+	// the profile's own band (profile_depth_mm — the #1534 editor authors
+	// exactly this shape), never an invented number.
 	for key, member := range top.BOMMembers {
-		if member.ComponentID == "" || member.DimensionsMm == nil {
+		if member.ComponentID == "" {
 			continue
 		}
-		depth, height := (*member.DimensionsMm)[1], (*member.DimensionsMm)[2]
+		depth, height := 0.0, 0.0
+		if member.DimensionsMm != nil {
+			depth, height = (*member.DimensionsMm)[1], (*member.DimensionsMm)[2]
+		} else if member.HeightMm != nil && *member.HeightMm > 0 && top.ProfileDepthMm != nil && *top.ProfileDepthMm > 0 {
+			height = *member.HeightMm
+			depth = *top.ProfileDepthMm
+		}
 		if depth <= 0 || height <= 0 {
 			continue
 		}
