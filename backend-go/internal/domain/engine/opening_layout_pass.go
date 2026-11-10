@@ -2,6 +2,8 @@ package engine
 
 import (
 	"fmt"
+	"math"
+	"sort"
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -98,64 +100,106 @@ func boardIsOpeningFront(board *layoutBoard) bool {
 		isDoorBoard(board)
 }
 
-// onto the layout's derived-hardware input (#1274). ONE projection feeds the
-// authoring resolve and the production release (#1305) — a copy here and a
-// copy there would drift. nil when the pin declares no members.
-// appendOpeningBetweenProfileHardware (#1536): the BETWEEN profile's
-// hardware run — one derived placement per between edge of the resolved
-// front stack, the top-run rule mirrored (the run's top edge hangs from the
-// upper front's bottom edge, full furniture width, the envelope from the
-// frozen datasheet). Fail-soft: a catalog hardware absent or inactive
-// places nothing — the quote's BOM still demands it (the model sketch is
-// the representation, never the demand).
+// appendOpeningBetweenProfileHardware (#1536 r2): the BETWEEN profile's
+// hardware run — one derived placement per BETWEEN EDGE of the resolved A3
+// stack. The edges are the ROW boundaries (componentFrontRows: fronts whose
+// vertical extents overlap share ONE row), never front-board pairs — two
+// side-by-side doors are one row with ZERO between edges. The run hangs
+// below row k−1's bottom edge, full furniture width, the envelope from the
+// frozen datasheet, and is HOSTED ON THE CARCASS board (#1300: hosting on
+// the front made the whole grip swing with the drawer/door motion — the
+// truthful host is the carcass board, exactly like the top run).
+// Fail-soft: a catalog hardware absent or inactive places nothing — the
+// quote's BOM still demands it (the model sketch is the representation,
+// never the demand).
 func appendOpeningBetweenProfileHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims) {
 	hw, ok := findHardware(catalog, members.BetweenProfileHardwareID)
 	if !ok || !hw.Active || members.BetweenProfileHeightMm <= 0 || members.BetweenProfileDepthMm <= 0 {
 		return
 	}
-	fronts := []layoutBoard{}
-	for i := range layout.Components {
-		comp := &layout.Components[i]
-		// The fronts of the stack are the managed placement vocabulary
-		// (frente_cajon/puerta) — the strips are server-declared identities
-		// (opening-strip-*): boards of the cut list, never fronts.
-		if comp.Kind == "board" &&
-			(comp.SlotID == "frente_cajon" || comp.SlotID == "puerta") &&
-			!strings.HasPrefix(comp.ComponentInstanceID, "opening-strip-") {
-			fronts = append(fronts, layoutBoard{
-				id: comp.ComponentInstanceID, z: comp.Transform.TranslationMm[2],
-				lengthMm: comp.LengthMm,
-			})
-		}
-	}
-	if len(fronts) < 2 {
+	rows := componentFrontRows(layout.Components)
+	if len(rows) < 2 {
 		return
 	}
-	for i := 0; i < len(fronts); i++ {
-		for j := i + 1; j < len(fronts); j++ {
-			if fronts[j].z > fronts[i].z {
-				fronts[i], fronts[j] = fronts[j], fronts[i]
-			}
+	// Carcass host (#1300): the first board that is NOT a stack front and
+	// NOT a strip — the same truthful-host rule the top run applies.
+	host := ""
+	for i := range layout.Components {
+		comp := &layout.Components[i]
+		if comp.Kind != "board" ||
+			comp.SlotID == "frente_cajon" || comp.SlotID == "puerta" ||
+			strings.HasPrefix(comp.ComponentInstanceID, "opening-strip-") {
+			continue
 		}
+		host = comp.ComponentInstanceID
+		break
 	}
-	for k := 0; k+1 < len(fronts); k++ {
-		upper := fronts[k]
+	if host == "" {
+		return
+	}
+	for k := 1; k < len(rows); k++ {
+		// Run k hangs below row k−1 (the upper row of the pair): its top
+		// edge = the upper row's bottom edge.
+		z := rows[k-1][0] - members.BetweenProfileHeightMm
 		layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 			hw,
-			fmt.Sprintf("opening-profile-between-%s-%d", hw.ID, k+1),
-			[3]float64{0, float64(dims.DepthMm), upper.z - members.BetweenProfileHeightMm},
+			fmt.Sprintf("opening-profile-between-%s-%d", hw.ID, k),
+			[3]float64{0, float64(dims.DepthMm), z},
 			LayoutBasis{
 				X: [3]float64{1, 0, 0},
 				Y: [3]float64{0, 1, 0},
 				Z: [3]float64{0, 0, 1},
 			},
 			[3]float64{float64(dims.WidthMm), members.BetweenProfileDepthMm, members.BetweenProfileHeightMm},
-			upper.id,
+			host,
 			"bottom",
 		))
 	}
 }
 
+// componentFrontRows mirrors openingFrontRows over the PUBLISHED components:
+// the front-slot boards (frente_cajon/puerta, never the strips) grouped into
+// rows by vertical overlap ({bottom, top} pairs, top → bottom).
+func componentFrontRows(components []LayoutComponent) [][2]float64 {
+	type rowSpan struct{ bottom, top float64 }
+	var rows []rowSpan
+	for i := range components {
+		comp := &components[i]
+		if comp.Kind != "board" ||
+			(comp.SlotID != "frente_cajon" && comp.SlotID != "puerta") ||
+			strings.HasPrefix(comp.ComponentInstanceID, "opening-strip-") {
+			continue
+		}
+		bottom, top := comp.Transform.TranslationMm[2], comp.Transform.TranslationMm[2]+comp.LengthMm
+		placed := false
+		for r := range rows {
+			overlap := math.Min(top, rows[r].top) - math.Max(bottom, rows[r].bottom)
+			if overlap <= openingStackToleranceMm {
+				continue
+			}
+			if math.Abs(bottom-rows[r].bottom) > openingRowAlignToleranceMm ||
+				math.Abs(top-rows[r].top) > openingRowAlignToleranceMm {
+				return nil // mixed side-by-side + stacked: not a single column
+			}
+			placed = true
+			break
+		}
+		if !placed {
+			rows = append(rows, rowSpan{bottom: bottom, top: top})
+		}
+	}
+	sort.SliceStable(rows, func(a, b int) bool { return rows[a].bottom > rows[b].bottom })
+	pairs := make([][2]float64, 0, len(rows))
+	for _, row := range rows {
+		pairs = append(pairs, [2]float64{row.bottom, row.top})
+	}
+	return pairs
+}
+
+// OpeningMembersFromFrozenPin projects the pin's declared members onto the
+// layout's derived-hardware input (#1274). ONE projection feeds the authoring
+// resolve and the production release — a copy here and a copy there would
+// drift. nil when the pin declares no members.
 func OpeningMembersFromFrozenPin(selection *domain.DesignOpeningSelection) *OpeningMembers {
 	if selection == nil || selection.ProfilePin == nil || selection.ProfilePin.BOM == nil {
 		return nil

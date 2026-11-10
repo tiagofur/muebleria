@@ -301,6 +301,7 @@ func resolveBomCommon(
 	// applies to them (the annotation keys on the module's own parts).
 	var stripParts []domain.BoardPart
 	if openingMembers != nil {
+		// Top band strip (#1327).
 		for _, strip := range openingMembers.ComponentMembers {
 			stripParts = append(stripParts, domain.BoardPart{
 				ID:                 "opening-strip-" + strip.Key,
@@ -312,6 +313,38 @@ func resolveBomCommon(
 				Placement:          string(domain.PlacementSuperior),
 				CatalogComponentID: strip.ComponentID,
 			})
+		}
+		// #1536 r2: the BETWEEN strips join the cut list too — one board per
+		// between edge of the stack (rows − 1), the SAME count the layout
+		// places, read from the same stack report the release lane uses
+		// (ONE projection). Fail-closed on an unreadable stack: the layout
+		// already placed the boards, an unreadable count would drift.
+		if len(openingFronts) > 0 && openingFronts[0].EdgeGrips != nil &&
+			strings.TrimSpace(module.StructureID) != "" && moduleDims.H > 0 {
+			stack, stackErr := OpeningFrontStackReport(module, catalog, LayoutDims{
+				WidthMm: moduleDims.W, HeightMm: moduleDims.H, DepthMm: moduleDims.D,
+			}, optionChoices, *openingFronts[0].EdgeGrips)
+			if stackErr != nil {
+				return domain.ResolvedBom{}, fmt.Errorf(
+					"la pila de frentes del mueble %s no se puede leer para las tiras entre frentes: %s",
+					module.Code, stackErr.Error())
+			}
+			if stack != nil && len(stack.Rows) > 1 {
+				for _, strip := range openingMembers.BetweenComponentMembers {
+					for k := 1; k < len(stack.Rows); k++ {
+						stripParts = append(stripParts, domain.BoardPart{
+							ID:                 "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k),
+							Description:        "Tira entre frentes " + strip.Key + " (" + strconv.Itoa(k) + ")",
+							Quantity:           1,
+							LengthMm:           float64(widthMm),
+							WidthMm:            int(math.Round(strip.DepthMm)),
+							OptionRole:         "FRENTE",
+							Placement:          string(domain.PlacementSuperior),
+							CatalogComponentID: strip.ComponentID,
+						})
+					}
+				}
+			}
 		}
 	}
 	partsForResolve := append(append([]domain.BoardPart{}, treatedParts...), stripParts...)

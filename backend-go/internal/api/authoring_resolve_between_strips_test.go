@@ -202,9 +202,10 @@ func TestAuthoringResolveDesignOpeningBetweenStrips(t *testing.T) {
 					} `json:"transform"`
 				} `json:"components"`
 				Hardware []struct {
-					HardwareID    string `json:"hardwareId"`
-					PlacementKind string `json:"placementKind"`
-					Transform     struct {
+					HardwareID              string `json:"hardwareId"`
+					PlacementKind           string `json:"placementKind"`
+					HostComponentInstanceID string `json:"hostComponentInstanceId"`
+					Transform               struct {
 						TranslationMm [3]float64 `json:"translationMm"`
 					} `json:"transform"`
 				} `json:"hardware"`
@@ -304,9 +305,10 @@ func TestAuthoringResolveDesignOpeningBetweenProfileHardware(t *testing.T) {
 					} `json:"transform"`
 				} `json:"components"`
 				Hardware []struct {
-					HardwareID    string `json:"hardwareId"`
-					PlacementKind string `json:"placementKind"`
-					Transform     struct {
+					HardwareID              string `json:"hardwareId"`
+					PlacementKind           string `json:"placementKind"`
+					HostComponentInstanceID string `json:"hostComponentInstanceId"`
+					Transform               struct {
 						TranslationMm [3]float64 `json:"translationMm"`
 					} `json:"transform"`
 				} `json:"hardware"`
@@ -338,6 +340,8 @@ func TestAuthoringResolveDesignOpeningBetweenProfileHardware(t *testing.T) {
 		t.Fatalf("3 frentes → 2 corridas del C entre frentes, got %d", len(runs))
 	}
 	for _, runZ := range runs {
+		// r2: the run hangs below the upper ROW's bottom edge (#1300 the
+		// host is the carcass) — the row bottoms are the doors' min z.
 		found := false
 		for _, z := range doors {
 			if fmt.Sprintf("%.4f", z) == fmt.Sprintf("%.4f", runZ+13) {
@@ -346,7 +350,15 @@ func TestAuthoringResolveDesignOpeningBetweenProfileHardware(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Fatalf("corrida C (%.2f): ningún frente con su borde inferior en %.2f", runZ, runZ+13)
+			t.Fatalf("corrida C (%.2f): ningún borde de fila superior en %.2f", runZ, runZ+13)
+		}
+	}
+	// #1300: the runs are HOSTED ON THE CARCASS — never on a drawer front.
+	for _, hw := range full.Resolved.Layout.Hardware {
+		if hw.HardwareID == "hw-8007-1536" && hw.PlacementKind == "derived" {
+			if strings.Contains(hw.HostComponentInstanceID, "comp-dfront-1536") {
+				t.Fatalf("la corrida del C se aloja en un frente (defecto #1300): %s", hw.HostComponentInstanceID)
+			}
 		}
 	}
 	// La cajonera L+C NO lleva tiras: la tira es de la italiana.

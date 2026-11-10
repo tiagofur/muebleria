@@ -498,9 +498,23 @@ func (s *PostgresStore) resolveReleaseOpenings(ctx context.Context, gripCtx *rel
 			}
 			lines = resolvedLines
 		}
+		// #1536 r2: the between projections ride the SAME members (ONE
+		// projection feeds authoring, despiece and release) — and are built
+		// even when the top profile declares no parts.
+		betweenStrips := engine.ProjectGripBetweenStrips(recipe.BetweenProfile)
+		betweenHWID, betweenHWHeight, betweenHWDepth := engine.ProjectGripBetweenHardware(recipe.BetweenProfile)
+		members := engine.ProjectGripMembers(recipe.TopProfile)
+		if members == nil && (len(betweenStrips) > 0 || betweenHWID != "") {
+			members = &engine.OpeningMembers{}
+		}
+		if members != nil {
+			members.BetweenComponentMembers = betweenStrips
+			members.BetweenProfileHardwareID, members.BetweenProfileHeightMm, members.BetweenProfileDepthMm =
+				betweenHWID, betweenHWHeight, betweenHWDepth
+		}
 		openings[item.FurnitureInstanceID] = engine.ReleaseUnitOpening{
 			Fronts:    fronts,
-			Members:   engine.ProjectGripMembers(recipe.TopProfile),
+			Members:   members,
 			Modifiers: modifiers,
 			BOMLines:  lines,
 		}

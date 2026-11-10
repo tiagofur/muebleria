@@ -1135,34 +1135,26 @@ func boardPlacementLabel(comp domain.Component, inst domain.ComponentInstance) s
 
 // resolveLayoutBoards walks structure + module + agregado component instances
 // (mirrors TS resolveComposedModule) and returns the resolved boards.
-// appendOpeningBetweenStripBoards (#1536): one strip board per between edge
-// of the opening-constrained front stack. The strips hang from each upper
-// front's bottom edge — the top-strip rule (z = band top, hanging down its
-// declared height) mirrored at every horizontal joint — full furniture
-// width, the FRENTE material role: real boards in the cut list, never a
-// placeholder. Fail-closed: a declared component missing or inactive
-// rejects the resolve, like the top strip.
+// appendOpeningBetweenStripBoards (#1536 r2): one strip board per BETWEEN
+// EDGE of the resolved A3 stack — the edges are the ROW boundaries
+// (openingFrontRows: fronts whose vertical extents overlap share ONE row),
+// never front-board pairs: two side-by-side doors are one row with ZERO
+// between edges and fabricate no strip. Strip k hangs below row k−1's
+// bottom edge — the top-strip rule mirrored — full furniture width, the
+// FRENTE material role: real boards in the cut list, never a placeholder.
+// Fail-closed: a declared component missing or inactive rejects the
+// resolve, like the top strip.
 func appendOpeningBetweenStripBoards(boards *[]layoutBoard, catalog domain.Catalog, dims LayoutDims,
-	strips []OpeningComponentMember, constrained map[int]bool) error {
+	strips []OpeningComponentMember) error {
 	if len(strips) == 0 {
 		return nil
 	}
-	fronts := make([]layoutBoard, 0, len(constrained))
-	for i := range *boards {
-		if constrained[i] {
-			fronts = append(fronts, (*boards)[i])
-		}
+	rows, err := openingFrontRows(*boards)
+	if err != nil {
+		return err
 	}
-	if len(fronts) < 2 {
-		return nil // one front has no between edges — nothing to place
-	}
-	// Topmost first: band k sits between fronts[k] and fronts[k+1].
-	for i := 0; i < len(fronts); i++ {
-		for j := i + 1; j < len(fronts); j++ {
-			if fronts[j].z > fronts[i].z {
-				fronts[i], fronts[j] = fronts[j], fronts[i]
-			}
-		}
+	if len(rows) < 2 {
+		return nil // fewer than two rows: no between edges
 	}
 	for _, strip := range strips {
 		comp, found := findComponent(catalog, strip.ComponentID)
@@ -1171,18 +1163,20 @@ func appendOpeningBetweenStripBoards(boards *[]layoutBoard, catalog domain.Catal
 				"el componente %s del elemento %q de la apertura no existe o está inactivo",
 				strip.ComponentID, strip.Key)
 		}
-		for k := 0; k+1 < len(fronts); k++ {
-			upper := fronts[k]
+		for k := 1; k < len(rows); k++ {
+			// Strip k hangs below row k−1 (the upper row of the pair): its
+			// top edge = the upper row's bottom edge.
+			z := rows[k-1].bottomMm - strip.HeightMm
 			*boards = append(*boards, layoutBoard{
-				id:                 "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k+1),
-				defID:              "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k+1),
+				id:                 "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k),
+				defID:              "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k),
 				name:               strip.Key,
 				placement:          string(domain.PlacementSuperior),
 				optionRole:         "FRENTE",
 				openingStrip:       true,
 				x:                  0,
 				y:                  float64(dims.DepthMm) - strip.DepthMm,
-				z:                  upper.z - strip.HeightMm,
+				z:                  z,
 				rotY:               90,
 				widthMm:            strip.DepthMm,
 				thicknessMm:        strip.HeightMm,
@@ -1284,7 +1278,7 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 		// missing or inactive catalog component, like the top strip.
 		if opts.openingMembers != nil && len(opts.openingMembers.BetweenComponentMembers) > 0 {
 			if err := appendOpeningBetweenStripBoards(&boards, catalog, dims,
-				opts.openingMembers.BetweenComponentMembers, openingConstrained); err != nil {
+				opts.openingMembers.BetweenComponentMembers); err != nil {
 				return nil, err
 			}
 		}

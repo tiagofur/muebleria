@@ -29684,7 +29684,7 @@
                 "name": "Perfil GOLA C 8007",
                 "shape": "custom",
                 "projectionMm": 0,
-                "hostComponentInstanceId": "agr-agr-cajon-1536-u2-comp-dfront-1536-copy-0",
+                "hostComponentInstanceId": "mod-comp-techo-1536-copy-0",
                 "anchorFace": "bottom",
                 "placementKind": "derived",
                 "transform": {
@@ -29730,7 +29730,7 @@
                 "name": "Perfil GOLA C 8007",
                 "shape": "custom",
                 "projectionMm": 0,
-                "hostComponentInstanceId": "agr-agr-cajon-1536-u1-comp-dfront-1536-copy-0",
+                "hostComponentInstanceId": "mod-comp-techo-1536-copy-0",
                 "anchorFace": "bottom",
                 "placementKind": "derived",
                 "transform": {

@@ -83,10 +83,14 @@ module Granete
           return false unless layout.respond_to?(:boards)
 
           Array(layout.boards).any? do |board|
-            # #1536: the italian strips (top band and between fronts) ARE the
-            # profile's materialization — the placeholder box would cover
-            # them. Server-declared ids, never name inference from roles.
-            next true if board.respond_to?(:id) && board.id.to_s.start_with?('opening-strip-')
+            # #1536 r2: the italian strips (top band and between fronts) ARE
+            # the profile's materialization — the placeholder box would cover
+            # them. Server-declared ids on the parsed board's
+            # component_instance_id accessor (r2 judge: the old :id probe was
+            # dead code — LayoutBoardTransform never exposes :id), never name
+            # inference from roles.
+            cid = board.respond_to?(:component_instance_id) ? board.component_instance_id.to_s : ''
+            next true if cid.start_with?('opening-strip-')
 
             markers = Array(board.respond_to?(:notches) ? board.notches : []) +
                       Array(board.respond_to?(:bevels) ? board.bevels : [])

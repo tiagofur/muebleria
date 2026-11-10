@@ -17,6 +17,27 @@ Sin prerrequisito de brief (sin ux:shape); prerrequisitos #1529 y #1532 mergeado
 - **Host real (SketchUp 2026, RBZ 0.1.109 instalado)**: TC_OpeningRepresentationSmoke **5 corridas / 19 aserciones / 0 fallos** — cajonera L+C con las 2 corridas del C entre frentes, italiana con las 2 tiras ENTRE colgando del borde inferior del frente superior (regla espejada), alacena con el frente extendido 20 mm por debajo del piso, doble reconstrucción sin duplicados (ids de identidad + conteos + definiciones estables), fallo preserva la geometría. Nota: `Sketchup.file_new` cambia de modelo en forma diferida — el TC limpia los restos en el MISMO modelo en vez de confiar en el switch.
 - Hallazgo del host run corregido: `LocalGeometry` v1 reventaba con múltiples muescas por lateral.
 
+## Ledger parcial del juicio dual (Judge A; Judge B en curso)
+Judge A sobre 19cd7981: 5 MAJOR + 3 MINOR.
+- MAJOR: aristas ENTRE contadas por PAR DE TABLEROS en vez de por FILA A3 — frentes lado a lado (una fila, cero aristas) fabrican tira y corrida del C fantasma (probe: 2 puertas → tira z=-68 bajo el piso).
+- MAJOR: las tiras ENTRE nunca llegan al despiece ni al release (resolve.go sólo enhebra ComponentMembers; production_releases arma Members sin la proyección between) — drift modelo↔despiece contra §14.6.
+- MAJOR: la multi-muesca computa UNA sola sección reducida (bands.first) y la aplica a todas las bandas — profundidades distintas entre perfiles se materializan con la profundidad de la primera, sin fail-closed (el código previo fallaba ruidoso; el nuevo es silencioso).
+- MAJOR: el TC de fallo es tautológico (no intenta rebuild fallido entre snapshot y aserción) y las medidas del modelo jamás se comparan contra la resolución en host.
+- MINOR: C-runs alojadas en el frente superior (el host binding del drawer las mueve con la apertura — invariant #1300: el host truthful es el tablero de carcasa); fixture sin techo suelta members between cuando el top no declara partes; guard del placeholder muerto (board.id no existe — el accesor es component_instance_id); multi-muesca usa bands.first para TODAS las bandas; FURNITURE_KEYS sin validación de tipo/largo; comentario doc desplazado.
+
+## Ronda 1 de corrección (owner: ronda completa)
+Aplicado sobre el ledger del juicio (Judge A 5 MAJOR + 3 MINOR; Judge B confirmó ×2 los mismos):
+- **Filas A3, no pares de tableros** (×2 MAJOR): las tiras y las corridas del C se emiten por los límites de FILA de la pila resuelta (openingFrontRows / componentFrontRows) — dos puertas lado a lado (una fila, cero aristas) ya no fabrican geometría fantasma; sin duplicados cuando una fila tiene dos frentes. C-run z = rows[k−1].bottom − alto (corregido de por-pair a por-fila; el fixture queda idéntico en filas de un solo frente).
+- **Carcasa #1300** (Judge B MAJOR): las corridas del C se alojan en el tablero de carcasa (el techo), nunca en el frente — el golden 40 regenerado lo pinza y el TC lo aserta.
+- **Tiras al despiece y release** (×2): resolve.go enhebra las tiras ENTRE (una por arista del stack report) y production_releases arma los members con las proyecciones between — ONE projection restaurado (autoría = despiece = release).
+- **v2 height_mm** (Judge B MAJOR): las proyecciones top+between leen el contrato v2 de la tira (height_mm + banda del perfil = depth) — los perfiles del editor #1534 proyectan sus tiras; sin banda declarada: ausencia honesta.
+- **Between members sin partes top** (×2 MINOR): el handler arma members aunque el top no declare partes.
+- **Multi-muesca por banda** (A MAJOR/B MINOR): reduced_cross_section POR banda con validación de borde por banda — §13.3 sin silencio.
+- **Channel guard** (MINOR): component_instance_id (el :id viejo era código muerto).
+- **TS validator** (Judge B MAJOR): los escenarios del golden pasan el validador runtime (component keys + provenance openingProfile + routing/bevel) y FURNITURE_KEYS valida tipo/largo de los pins; doc comment restaurado.
+- **TC honesto** (×2 MAJOR): fallo de resolve REAL vía el coordinator (nunca commitea, geometría intacta), medidas del modelo vs resolución (min.z + extent Z de cada tablero contra el wire — bounds.depth es el eje Z), host carcasa asertado, sin duplicados; 5 corridas / 61 aserciones / 0 fallos en SketchUp 2026 con RBZ 0.1.111.
+- **Regression tests** de los probes de los jueces: puertas lado a lado → cero tiras; v2 height-only → depth de la banda.
+
 ## Pendiente (vivo owner)
 - La verificación visual del propietario sobre los tres modelos (las medidas ya quedaron asertadas contra la resolución del servidor por el TC de host).
 

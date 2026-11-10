@@ -545,6 +545,14 @@ export function validateAuthoringResolveRequest(
   if (!isEnvelopeString(furniture.furnitureDefinitionId) || !isEnvelopeString(furniture.catalogRevision)) {
     push('REQUEST_INVALID', 'furnitureDefinitionId and catalogRevision cannot exceed 128 characters', 'furniture');
   }
+  // #1536: the design/per-furniture pin fields are bounded strings when
+  // present — same envelope rule the Go gateway and the schema enforce.
+  if (furniture.designId !== undefined && !isEnvelopeString(furniture.designId)) {
+    push('REQUEST_INVALID', 'furniture.designId must be a 1-128 character string', 'furniture.designId');
+  }
+  if (furniture.furnitureInstanceId !== undefined && !isEnvelopeString(furniture.furnitureInstanceId)) {
+    push('REQUEST_INVALID', 'furniture.furnitureInstanceId must be a 1-128 character string', 'furniture.furnitureInstanceId');
+  }
 
   const parameters = furniture.parameters ?? {};
   if (Object.keys(parameters).length > AUTHORING_RESOLVE_LIMITS.parameterCount) {
@@ -932,6 +940,10 @@ const RESOLVED_LAYOUT_COMPONENT_KEYS = new Set([
   'localTransform', 'optionRole', 'materialCode', 'materialName', 'materialColorHex',
   'materialImageUrl', 'materialTextureUrl', 'materialTextureTileWidthMm', 'materialTextureTileLengthMm',
   'materialRoughness', 'materialMetalness', 'materialClearcoat', 'materialGrain',
+  // #1536: the opening-published fields — the agregado fronts carry the
+  // assembly link, the gola strips the catalog component reference, and the
+  // constrained boards the server-declared notch/bevel cuts.
+  'assemblyInstanceId', 'catalogComponentId', 'notches', 'bevels',
 ]);
 const AUTHORING_CAPABILITY_KEYS = new Set(['movable', 'axis']);
 const AUTHORING_CAPABILITY_AXES = new Set(['x', 'y', 'z']);
@@ -1301,7 +1313,11 @@ function validateResolvedMachining(
     }
     const routingCuts = (routing ?? []) as unknown[];
     if (asRecord(operation.provenance)?.sourceKind === 'openingProfile') {
-      if (operation.holes.length !== 0 || routingCuts.length === 0) {
+      // #1536: the opening profile materializes as a notch ROUTING (the
+      // lateral band) or a door BEVEL — exactly one of the two payloads.
+      const bevel = operation.bevel;
+      const bevelOk = bevel !== undefined && asRecord(bevel) !== null;
+      if (operation.holes.length !== 0 || (routingCuts.length === 0 && !bevelOk)) {
         problems.push(`${path} carries a routing payload mismatch`); continue;
       }
     }
@@ -1356,6 +1372,12 @@ function isValidProvenance(value: unknown): boolean {
   // #1429 slice A: rigid members declaring an external host (hostPlacement)
   // drill that module board with their hardware's catalog machining profile —
   // the provenance names the assembly instance and recipe member.
+  // #1536: the opening profile band's machining provenance — the frozen
+  // profile id and the boundary it addresses (notch routing / door bevel).
+  if (provenance.sourceKind === 'openingProfile') {
+    return isBoundedString(provenance.openingProfileId) && isBoundedString(provenance.boundary) &&
+      provenance.relationshipId === undefined && provenance.hardwarePlacementId === undefined;
+  }
   if (provenance.sourceKind === 'assemblyMemberHost') {
     return isBoundedString(provenance.assemblyInstanceId) && isBoundedString(provenance.memberId) &&
       provenance.relationshipId === undefined && provenance.hardwarePlacementId === undefined &&

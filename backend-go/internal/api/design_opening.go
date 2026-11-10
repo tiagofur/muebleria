@@ -506,13 +506,21 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 	if len(fronts) == 0 {
 		return nil, nil, nil, nil
 	}
+	// #1536 r2: the between profile's declared strips/hardware attach even
+	// when the TOP profile declares no parts (the suggested 8006 L has an
+	// empty BOMMembers — usability does not require top parts, and dropping
+	// the between content here silently lost its strips while its modifiers
+	// still applied).
+	betweenStrips := engine.ProjectGripBetweenStrips(recipe.BetweenProfile)
+	betweenHWID, betweenHWHeight, betweenHWDepth := engine.ProjectGripBetweenHardware(recipe.BetweenProfile)
 	members := engine.ProjectGripMembers(recipe.TopProfile)
-	// #1536: the between profile's declared strips ride for the layout pass
-	// to place one board per between edge.
+	if members == nil && (len(betweenStrips) > 0 || betweenHWID != "") {
+		members = &engine.OpeningMembers{}
+	}
 	if members != nil {
-		members.BetweenComponentMembers = engine.ProjectGripBetweenStrips(recipe.BetweenProfile)
+		members.BetweenComponentMembers = betweenStrips
 		members.BetweenProfileHardwareID, members.BetweenProfileHeightMm, members.BetweenProfileDepthMm =
-			engine.ProjectGripBetweenHardware(recipe.BetweenProfile)
+			betweenHWID, betweenHWHeight, betweenHWDepth
 	}
 	modifiers, modErr := engine.ResolveProjectGripModifiers(recipe)
 	if modErr != nil {

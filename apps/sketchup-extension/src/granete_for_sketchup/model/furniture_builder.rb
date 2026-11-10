@@ -208,10 +208,15 @@ module Granete
             raise ArgumentError, 'las muescas del tablero se superponen' if hi[:z0] < lo[:z1] - 1.0e-6
           end
 
-          reduced = reduced_cross_section(bands.first, extents)
+          # #1536 r2: PER-BAND reduced cross-section — each band validates
+          # its own edge touch and carries its own depth (§13.3: never
+          # assume all gola profiles notch alike; the r1 code applied
+          # bands.first's section to every band, silently rendering wrong
+          # depths for mixed top/between profiles).
           segments = []
           cursor = 0.0
           bands.each do |band|
+            reduced = reduced_cross_section(band, extents)
             segments << full.merge(z0: cursor, z1: band[:z0]) if (band[:z0] - cursor) > 1.0e-6
             segments << full.merge(x0: reduced[:x0], x1: reduced[:x1], y0: reduced[:y0], y1: reduced[:y1],
                                    z0: band[:z0], z1: band[:z1])
