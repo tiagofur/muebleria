@@ -37,18 +37,39 @@
   var GRIP_REASON_TEXT = {
     GRIP_SNAPSHOT_INVALID: 'La copia congelada del agarre no es válida: actualizá el agarre del proyecto y volvé a aplicar.',
     GRIP_PROFILE_UNUSABLE: 'Un perfil del estilo no se puede usar (le falta la ficha): completala en Granete Web › Catálogo › Perfiles de apertura.',
+    GRIP_PROFILE_UNKNOWN: 'El perfil que nombra el estilo ya no existe: revisá el estilo en Granete Web › Ajustes › Agarres.',
+    GRIP_PROFILE_MISSING: 'Al estilo le falta el perfil de la posición que necesita: completalo en Granete Web › Ajustes › Agarres.',
+    GRIP_PROFILE_INVALID: 'El perfil del estilo no tiene su identidad congelada: volvé a aplicar el agarre del proyecto.',
     GRIP_TYPE_UNCOVERED: 'El estilo no cubre un tipo de mueble del proyecto: revisá el estilo en Granete Web › Ajustes › Agarres.',
+    GRIP_TYPE_UNKNOWN: 'El estilo nombra un tipo de mueble que no existe: revisalo en Granete Web › Ajustes › Agarres.',
     GRIP_STYLE_UNKNOWN: 'El estilo del agarre ya no existe: elegí otro estilo.',
+    GRIP_STYLE_INVALID: 'El estilo tiene datos inválidos: revisalo en Granete Web › Ajustes › Agarres.',
     GRIP_STYLE_NOT_OFFERED: 'El taller dejó de ofrecer ese estilo: elegí otro en Granete Web › Ajustes › Agarres.',
+    GRIP_STYLE_NONE: 'El proyecto no tiene estilo de agarre: elegilo en la sección Agarre del proyecto.',
+    GRIP_MODE_UNKNOWN: 'El estilo declara un tipo de agarre desconocido: revisalo en Granete Web › Ajustes › Agarres.',
+    GRIP_OVERHANG_INVALID: 'El rebase necesita milímetros mayores a 0: corregilo en Granete Web › Ajustes › Agarres.',
+    GRIP_RECIPE_CONFLICT: 'La receta del estilo tiene datos en conflicto: revisala en Granete Web › Ajustes › Agarres.',
     GRIP_OVERRIDES_EMPTY: 'No hay muebles para la excepción: seleccioná al menos un mueble.',
-    GRIP_RECIPE_CONFLICT: 'La receta del estilo tiene datos en conflicto: revisala en Granete Web › Ajustes › Agarres.'
+    FURNITURE_INSTANCE_UNKNOWN: 'El mueble ya no existe en este proyecto: recargá el inspector.'
   };
   var GENERIC_REASON_TEXT = 'No se pudo guardar el agarre. Revisá el estilo del proyecto en Granete Web › Ajustes › Agarres.';
   var STALE_TEXT = 'Alguien más cambió el agarre del proyecto. Recargá y volvé a aplicar.';
 
+  /** La razón del taller JAMÁS muestra un código interno: si el servidor
+   * manda «CODE: mensaje», el CODE se separa y el mensaje queda limpio
+   * (aceptación: ningún texto visible contiene un código OPENING_). */
+  function workshopReason(raw) {
+    var text = raw == null ? '' : String(raw);
+    var match = text.match(/^([A-Z][A-Z0-9_]+):\s*(.+)$/);
+    if (match) return match[2];
+    return text;
+  }
+
   function reasonText(reasonCode, fallback) {
     if (reasonCode && GRIP_REASON_TEXT[reasonCode]) return GRIP_REASON_TEXT[reasonCode];
-    return fallback || GENERIC_REASON_TEXT;
+    var cleaned = workshopReason(fallback);
+    if (cleaned && cleaned !== fallback) return cleaned;
+    return fallback ? cleaned || fallback : GENERIC_REASON_TEXT;
   }
 
   // ————— helpers de forma —————
@@ -76,7 +97,7 @@
     if (!item) return '';
     var layout = item.layout || {};
     if (layout.state === 'blocked') {
-      return 'Bloqueado: ' + reasonText(null, layout.reason || 'el agarre no se puede resolver');
+      return 'Bloqueado: ' + workshopReason(layout.reason || 'el agarre no se puede resolver');
     }
     if (layout.state === 'unknown_dims') {
       return 'Sin dimensiones conocidas: no se pueden resolver los frentes.';
@@ -120,7 +141,12 @@
   function ensureLoaded(projectId) {
     if (!projectId || inflight[projectId]) return;
     var record = stateFor(projectId);
+    // Guard the terminal states: a load in error or a stale banner stays
+    // until the user presses Reintentar/Recargar — the render hooks call
+    // this on EVERY repaint and an unguarded re-fire would loop GETs
+    // forever (r2 MAJOR: 2772 requests in 600 ms with the module real).
     if (record.grip && !record.stale) return;
+    if (record.loadStatus === 'error' && !record.stale) return;
     inflight[projectId] = 'grip-get-' + projectId + '-' + String(Date.now());
     callRuby('get_project_grip', { requestId: inflight[projectId], projectId: projectId });
   }
@@ -132,6 +158,13 @@
       requestId: appliedInflight[projectId], projectId: projectId,
       gripStyleId: styleId, previousStyleId: previousStyleId == null ? '' : previousStyleId
     });
+  }
+  /** r2 MAJOR: clicking the row already in use must NOT re-PUT — the server
+   * would re-freeze a new snapshot (§14.8 reserves that to the explicit
+   * «Actualizar») and the undo stack would arm a no-op. */
+  function applyStyleIfChanged(projectId, styleId, previousStyleId) {
+    if (styleId === previousStyleId) return;
+    applyStyle(projectId, styleId, previousStyleId);
   }
 
   function applyFurnitureOverrides(projectId, overrides) {
@@ -178,6 +211,7 @@
       record.styles = payload.styles || [];
       record.loadStatus = 'ready';
       record.error = null;
+      record.stale = false;
     } else {
       record.loadStatus = 'error';
       record.error = reasonText(payload.reasonCode, payload.reason);
@@ -192,11 +226,17 @@
     delete appliedInflight[projectId];
     var record = stateFor(projectId);
     if (payload.status === 'ok') {
-      record.grip = payload.grip || record.grip;
+      // The mutation answer carries NO report and (for the style PUT) an
+      // empty overrides list — replacing state with it would paint the card
+      // against a server that says otherwise. Keep the version/canUndo and
+      // re-GET the truth.
       record.canUndo = !!payload.canUndo;
       record.canRedo = !!payload.canRedo;
       record.stale = false;
       record.error = null;
+      record.loadStatus = 'ready';
+      delete inflight[projectId];
+      ensureLoaded(projectId);
       deps.showToast('success', 'Agarre aplicado.');
     } else if (payload.status === 'noop') {
       deps.showToast('info', 'Nada que deshacer o rehacer.');
@@ -270,6 +310,11 @@
     if (undoBtn) {
       undoBtn.style.display = record.canUndo ? 'inline-flex' : 'none';
       undoBtn.disabled = !record.canUndo;
+    }
+    var redoBtn = document.getElementById('grip-redo');
+    if (redoBtn) {
+      redoBtn.style.display = record.canRedo ? 'inline-flex' : 'none';
+      redoBtn.disabled = !record.canRedo;
     }
     if (record.loadStatus === 'loading' && !record.grip) {
       body.innerHTML = skeleton();
@@ -414,7 +459,10 @@
     bindCommonActions(container, projectId);
     var picks = container.querySelectorAll('[data-grip-pick="batch"]');
     for (var i = 0; i < picks.length; i++) {
-      picks[i].setAttribute('data-grip-pending', picks[i].getAttribute('data-grip-style'));
+      picks[i].addEventListener('click', function () {
+        container.setAttribute('data-grip-pending', this.getAttribute('data-grip-style'));
+        updateBatchGripFooter(projectId, members);
+      });
     }
     updateBatchGripFooter(projectId, members);
   }
@@ -461,15 +509,16 @@
       picks[j].addEventListener('click', function () {
         var record = stateFor(projectId);
         var previous = record.grip && record.grip.gripStyleId ? record.grip.gripStyleId : '';
-        applyStyle(projectId, this.getAttribute('data-grip-style'), previous);
+        applyStyleIfChanged(projectId, this.getAttribute('data-grip-style'), previous);
       });
     }
   }
 
   function bindUndoButton() {
     var undoBtn = document.getElementById('grip-undo');
-    if (!undoBtn) return;
-    undoBtn.addEventListener('click', function () { undo(boundProject()); });
+    if (undoBtn) undoBtn.addEventListener('click', function () { undo(boundProject()); });
+    var redoBtn = document.getElementById('grip-redo');
+    if (redoBtn) redoBtn.addEventListener('click', function () { redo(boundProject()); });
   }
 
   // ————— init / binding —————

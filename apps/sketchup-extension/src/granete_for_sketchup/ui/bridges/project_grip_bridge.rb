@@ -132,11 +132,14 @@ module Granete
           version = project_grip_version_for(stored)
           grip = project_grip_service.put_project_grip_style(stored, style_id, expected_version: version)
           project_grip_remember_version(stored, grip)
-          # Undo re-applies the style in force BEFORE this pick; redo
-          # re-applies the one it replaced (the revert travels with the
-          # intention).
-          project_grip_push_undo(stored, { 'kind' => 'style', 'styleId' => previous,
-                                           'revert' => { 'kind' => 'style', 'styleId' => style_id } })
+          # Undo re-applies the style in force BEFORE this pick — but a
+          # project WITHOUT a prior style has nothing to undo toward (the
+          # server rejects null styles with 400): no intention is armed, so
+          # Deshacer never offers an impossible action (r2 MAJOR).
+          unless previous.nil?
+            project_grip_push_undo(stored, { 'kind' => 'style', 'styleId' => previous,
+                                             'revert' => { 'kind' => 'style', 'styleId' => style_id } })
+          end
           execute_bridge(dialog, 'onProjectGripApplied', {
                            'requestId' => request_id, 'status' => 'ok',
                            'projectId' => stored, 'grip' => grip,

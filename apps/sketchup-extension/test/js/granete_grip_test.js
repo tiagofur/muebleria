@@ -254,10 +254,14 @@ test('desactualizado: el 412 produce el banner con Recargar y re-lee el GET', ()
 test('respuestas tardías: otro proyecto o request viejo se descarta sin renderizar', () => {
   const { grip, registry, bridgeCalls } = buildSandbox();
   grip.onBindingStatus({ state: 'connected', binding: { projectId: PROJECT, designId: 'd-1' } });
-  // Foreign project: dropped.
+  // The initial GET answers with the bound truth (Gola negra).
+  answerGet(grip, bridgeCalls, { status: 'ok', grip: okGrip(STYLE_ID), styles: stylesList() });
+  // Foreign project: dropped (its own distinct style name must never render).
+  const foreign = okGrip(STYLE_OTHER);
+  foreign.snapshot.styleName = 'Estilo Ajeno';
   answer(grip, 'onProjectGrip', {
     requestId: null, status: 'ok', projectId: PROJECT_B,
-    grip: okGrip(STYLE_OTHER), styles: []
+    grip: foreign, styles: []
   });
   // Stale request id for an apply: dropped (no toast, no state change).
   answer(grip, 'onProjectGripApplied', {
@@ -265,7 +269,7 @@ test('respuestas tardías: otro proyecto o request viejo se descarta sin renderi
   });
   grip.renderProjectSection();
   const body = registry['design-grip-body'].innerHTML;
-  assert.ok(!body.includes('Italiana 70'), 'the foreign style never rendered');
+  assert.ok(!body.includes('Estilo Ajeno'), 'the foreign style never rendered');
   assert.ok(body.includes('Gola negra'), 'the bound project state stays');
 });
 

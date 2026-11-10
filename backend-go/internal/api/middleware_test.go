@@ -1084,6 +1084,46 @@ func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
 	}
 }
 
+// TestExtensionClientBoundaryProjectGrip pins the #1535 AGARRE-4a grip
+// grants for the SketchUp extension credential: the Inspector reads the
+// connected project's grip state and the offered grip styles catalog, and
+// its ONLY writes are the project style pick and the per-furniture override
+// snapshots (server-authoritative freeze, If-Match on the grip version).
+// Everything around them — grip style CRUD, refresh, other projects' paths,
+// other verbs — stays DENIED.
+func TestExtensionClientBoundaryProjectGrip(t *testing.T) {
+	projectID := "52000000-0000-0000-0000-000000000001"
+	cases := []struct {
+		name string
+		verb string
+		path string
+		want bool
+	}{
+		// The section's two reads.
+		{"read project grip state", http.MethodGet, "/api/projects/" + projectID + "/grip", true},
+		{"read grip styles catalog", http.MethodGet, "/api/catalog/grip-styles", true},
+		// The two intents: project style pick + per-furniture overrides.
+		{"apply project grip style", http.MethodPut, "/api/projects/" + projectID + "/grip", true},
+		{"apply furniture grip overrides", http.MethodPut, "/api/projects/" + projectID + "/grip/furniture", true},
+		// Surrounding surface stays closed.
+		{"grip refresh stays denied", http.MethodPost, "/api/projects/" + projectID + "/grip:refresh", false},
+		{"grip style create stays denied", http.MethodPost, "/api/catalog/grip-styles", false},
+		{"grip style update stays denied", http.MethodPut, "/api/catalog/grip-styles/" + projectID, false},
+		{"grip style delete stays denied", http.MethodDelete, "/api/catalog/grip-styles/" + projectID, false},
+		// Cross-project scoping is RLS's job (the pattern grants the route for
+		// any project id, like furniture-instances) — the boundary denies
+		// VERBS and SURFACES, not tenant rows. Sub-path traversal stays closed.
+		{"grip sub-path traversal denied", http.MethodGet, "/api/projects/" + projectID + "/grip/extra", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := extensionClientMayAccess(tc.verb, tc.path); got != tc.want {
+				t.Fatalf("extensionClientMayAccess(%s %s) = %v, want %v", tc.verb, tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestExtensionClientBoundaryDesignOpening pins the #1137/#1261 opening lane
 // grants for the SketchUp extension credential: the card reads the connected
 // design's opening state+resolution plus the org's capabilities/profile
