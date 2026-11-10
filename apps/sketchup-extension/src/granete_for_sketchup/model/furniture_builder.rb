@@ -199,9 +199,11 @@ module Granete
           raise ArgumentError, 'un tablero no combina muesca y bisel en v1' if !bevels.nil? && !bevels.empty?
 
           # #1536: a multi-front column cuts one notch per between edge —
-          # the laterals carry SEVERAL bands (sorted by Z), all from the same
-          # profile so the reduced cross-section is identical. Bands may not
-          # overlap; the segments alternate full / reduced up the board.
+          # the laterals carry SEVERAL bands (sorted by Z), one per profile
+          # boundary: each band computes its OWN reduced cross-section and
+          # validates its own edge touch (§13.3 — the profiles may notch
+          # differently). Bands may not overlap; the segments alternate
+          # full / reduced up the board.
           bands = notches.map { |notch| notch_band_in_inches(notch, extents) }
                          .sort_by { |band| band[:z0] }
           bands.each_cons(2) do |lo, hi|

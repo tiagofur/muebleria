@@ -38,6 +38,9 @@ Aplicado sobre el ledger del juicio (Judge A 5 MAJOR + 3 MINOR; Judge B confirm�
 - **TC honesto** (×2 MAJOR): fallo de resolve REAL vía el coordinator (nunca commitea, geometría intacta), medidas del modelo vs resolución (min.z + extent Z de cada tablero contra el wire — bounds.depth es el eje Z), host carcasa asertado, sin duplicados; 5 corridas / 61 aserciones / 0 fallos en SketchUp 2026 con RBZ 0.1.111.
 - **Regression tests** de los probes de los jueces: puertas lado a lado → cero tiras; v2 height-only → depth de la banda.
 
+## Re-juicio escopado (ronda 1 del presupuesto) — APPROVED
+Judge A: **0 hallazgos** (los 10 fixes verificados, suites reproducidas). Judge B: los 10 fixes verificados + 1 MINOR de documentación (el comentario viejo del multi-muesca afirmaba «todos de un mismo perfil» contra el nuevo código por banda) — corregido en el mismo PR. Veredicto: **APPROVED**. Evidencia de host (5/61/0) y la verificación visual del owner quedan registradas como claims del artefacto.
+
 ## Pendiente (vivo owner)
 - La verificación visual del propietario sobre los tres modelos (las medidas ya quedaron asertadas contra la resolución del servidor por el TC de host).
 
