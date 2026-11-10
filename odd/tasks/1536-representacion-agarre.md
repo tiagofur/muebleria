@@ -20,5 +20,8 @@ Sin prerrequisito de brief (sin ux:shape); prerrequisitos #1529 y #1532 mergeado
 ## Pendiente (vivo owner)
 - La verificación visual del propietario sobre los tres modelos (las medidas ya quedaron asertadas contra la resolución del servidor por el TC de host).
 
+## Judgment-day dual
+Jueces A/B lanzados sobre el delta 8b621c85..19cd7981 con CI success (run 42856732513) y bundle scope_sha256=25494f6d07db. Ledger al cierre en el PR.
+
 ## Entrega
 Un PR contra main. Los 3 ítems de alcance + aceptación (TestUp en host real con los 3 modelos, doble reconstrucción sin duplicados, fallo preserva geometría) cubiertos.
