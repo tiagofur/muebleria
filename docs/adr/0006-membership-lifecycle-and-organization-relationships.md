@@ -1,6 +1,6 @@
 # ADR-0006 — Explicit membership lifecycle, relationship-based authorization and organization foundation gates
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-28
 - **Decision owners:** Product + Engineering
 - **Tracking:** #446, #447
