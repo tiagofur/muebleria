@@ -146,16 +146,7 @@
     libUserCustomizedRoles = {};
 
     bindLibraryParamForm();
-    // #784 R4: the explicit customization signal travels to the shared
-    // renderer — the lineage badge never falls back to value equality.
-    deps.renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, def, libMaterialChoices, function (role, id, scope) {
-      libMaterialChoices[role] = id;
-      libUserCustomizedRoles[role] = true;
-      clearCatalogIntentKey();
-      if (scope === "project" || scope === "project_default") {
-        deps.setProjectDefaultMaterial(role, id);
-      }
-    }, configuratorLineageContext(def));
+    renderLibraryMaterialSelectors(def);
     // #1144: herrajes por grupo — elijo el modelo ANTES de insertar.
     seedLibraryHardwareChoices(def);
     renderLibraryHardwareRoles(def);
@@ -166,6 +157,89 @@
     renderPresetChips();
 
     updateLibrarySummary();
+    requestFreshDesignDefaults();
+    updateLibraryInsertButton();
+  }
+
+  // #784 R4: the explicit customization signal travels to the shared
+  // renderer — the lineage badge never falls back to value equality.
+  function renderLibraryMaterialSelectors(def) {
+    deps.renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, def, libMaterialChoices, function (role, id, scope) {
+      libMaterialChoices[role] = id;
+      libUserCustomizedRoles[role] = true;
+      clearCatalogIntentKey();
+      if (scope === "project" || scope === "project_default") {
+        deps.setProjectDefaultMaterial(role, id);
+      }
+    }, configuratorLineageContext(def));
+  }
+
+  // ------------------------------------------------------------------
+  // #1581 — Fresh Design defaults on open. The seeds above come from the
+  // Design Inspector's CACHED defaults, which are only read on the
+  // no-selection lane: opened right after a default changed elsewhere (or
+  // before the first read), the rows would show one value while the server
+  // composes another for every untouched role. So opening the configurator
+  // on a connected model asks the owner of that read for a fresh one, holds
+  // Insert until it settles (bounded: a lost answer never strands the
+  // button) and then re-seeds ONLY what the user did not touch.
+  // ------------------------------------------------------------------
+  var DESIGN_DEFAULTS_WAIT_MS = 2000;
+  var designDefaultsPending = false;
+  var designDefaultsGeneration = 0;
+
+  function requestFreshDesignDefaults() {
+    designDefaultsGeneration += 1;
+    designDefaultsPending = false;
+    if (!deps.isModelConnected() || typeof deps.refreshDesignDefaults !== "function") return;
+    if (!deps.refreshDesignDefaults()) return;
+    designDefaultsPending = true;
+    var generation = designDefaultsGeneration;
+    setTimeout(function () {
+      if (generation !== designDefaultsGeneration || !designDefaultsPending) return;
+      designDefaultsPending = false;
+      updateLibraryInsertButton();
+    }, DESIGN_DEFAULTS_WAIT_MS);
+  }
+
+  // Re-seed the roles and groups the user did NOT touch with the same rules
+  // as the first seed; a touched one is an explicit choice and never moves.
+  function reseedUntouchedChoices(def) {
+    var before = JSON.stringify(libMaterialChoices);
+    var fresh = deps.defaultMaterialChoices(def) || {};
+    for (var role in fresh) {
+      if (Object.prototype.hasOwnProperty.call(fresh, role) && !libUserCustomizedRoles[role]) {
+        libMaterialChoices[role] = fresh[role];
+      }
+    }
+    hardwareRoles(def).concat(agregadoRoles(def)).forEach(function (group) {
+      if (libUserCustomizedRoles[group.code]) return;
+      var seeded = seededGroupChoice(group);
+      if (seeded) {
+        libMaterialChoices[group.code] = seeded;
+      } else {
+        delete libMaterialChoices[group.code];
+      }
+    });
+    // A re-seeded drawer system may orphan the accessory choice of the
+    // previous kit (#1555).
+    dropOrphanAccessoryChoices(def);
+    return JSON.stringify(libMaterialChoices) !== before;
+  }
+
+  function onDesignDefaultsSettled() {
+    designDefaultsGeneration += 1;
+    designDefaultsPending = false;
+    // Nothing configured, or the payload already left: the answer only
+    // refreshed the cache for the next open.
+    if (!activeLibDef || insertInFlight) return;
+    if (reseedUntouchedChoices(activeLibDef)) {
+      clearCatalogIntentKey();
+      renderLibraryMaterialSelectors(activeLibDef);
+      renderLibraryHardwareRoles(activeLibDef);
+      renderLibraryAgregadoRoles(activeLibDef);
+      updateLibrarySummary();
+    }
     updateLibraryInsertButton();
   }
 
@@ -746,6 +820,13 @@
       btnInsert.disabled = true;
       return;
     }
+    // #1581: the rows may still show cached Design defaults — Insert waits
+    // for the fresh read (bounded by DESIGN_DEFAULTS_WAIT_MS).
+    if (designDefaultsPending) {
+      btnInsert.disabled = true;
+      btnInsert.title = "Cargando los valores del diseño…";
+      return;
+    }
     // #1144 / #1482: un grupo requerido sin elección bloquea la inserción con el
     // motivo concreto (el resolve fallaría cerrado igual — nunca a ciegas).
     var missingHw = unchosenRequiredHardwareRoles(activeLibDef);
@@ -999,7 +1080,8 @@
   });
 
   btnInsert.addEventListener("click", function () {
-    if (!activeLibDef) return;
+    // #1581: never dispatch while the rows may still show cached defaults.
+    if (!activeLibDef || designDefaultsPending) return;
     btnInsert.disabled = true;
     insertInFlight = true;
     repeatPreviewActive = false; // a manual begin is never a repeat
@@ -1130,6 +1212,13 @@
       } else {
         showBrowserView();
       }
+    },
+
+    // #1581: the Design Inspector's defaults read settled (ready, error or
+    // unbound) — re-seed the untouched roles and release Insert.
+    onDesignDefaultsSettled: function () {
+      requireDeps();
+      onDesignDefaultsSettled();
     },
 
     // Model binding re-render hook (was the inline

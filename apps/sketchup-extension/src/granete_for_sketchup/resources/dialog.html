@@ -2003,6 +2003,12 @@
 
         window.GraneteUI.designInspector.init({
           icon: icon,
+          // #1581: a settled defaults read re-seeds the Biblioteca
+          // configurator's untouched roles (late-bound: both modules exist
+          // by the time any read can answer).
+          onDefaultsSettled: function () {
+            window.GraneteUI.configurator.onDesignDefaultsSettled();
+          },
           materialById: window.GraneteUI.materialRoles.materialById,
           updateMaterialSwatch: window.GraneteUI.materialRoles.updateMaterialSwatch,
           getMaterials: window.GraneteUI.materialRoles.getMaterials,
@@ -2184,7 +2190,10 @@
           getAgregadosCatalog: function () { return window.GraneteUI.inspector.getAgregadosCatalog(); },
           // Design-scoped authoring defaults: the hardware/agregado group
           // seeds follow them, same source the material roles already use.
-          getDesignDefaults: function () { return window.GraneteUI.designInspector.getDesignDefaults(); }
+          getDesignDefaults: function () { return window.GraneteUI.designInspector.getDesignDefaults(); },
+          // #1581: the Design Inspector owns the defaults read; the
+          // configurator only asks for a fresh one when it opens.
+          refreshDesignDefaults: function () { return window.GraneteUI.designInspector.refreshDefaults(); }
         });
 
         // #848 C4.5: the finish selector module owns the visual material

@@ -1000,6 +1000,93 @@ test('design defaults: only the group the user picked becomes an override', () =
   assert.strictEqual(sent.payload.materialChoices.BISAGRA, 'hw-eco');
 });
 
+// #1581: opening the configurator on a connected model asks for a FRESH
+// defaults read, holds Insert until it settles and re-seeds only what the
+// user did not touch.
+function freshDefaultsFixture(options) {
+  const live = { defaults: {}, refreshCalls: 0 };
+  const sandbox = runModule({
+    getDesignDefaults: () => live.defaults,
+    refreshDesignDefaults: () => {
+      live.refreshCalls += 1;
+      return options.refreshAccepted !== false;
+    }
+  });
+  sandbox.__state.hardwareCatalog = [
+    { id: 'hw-blum', code: 'B-CL', name: 'Bisagra Blum' },
+    { id: 'hw-eco', code: 'B-ECO', name: 'Bisagra económica' }
+  ];
+  sandbox.__state.agregadosCatalog = [
+    { id: 'agr-tele', code: 'CAJ-TELE', name: 'Cajón telescópico' },
+    { id: 'agr-mbox', code: 'CAJ-MBOX', name: 'Cajón MERIVOBOX' }
+  ];
+  sandbox.__state.connected = options.connected !== false;
+  sandbox.window.GraneteUI.configurator.open(definition({
+    hardwareRoles: [
+      { code: 'BISAGRA', name: 'Bisagras', required: true, optionIds: ['hw-blum', 'hw-eco'] }
+    ],
+    agregadoRoles: [
+      { code: 'SISTEMA_CAJON', name: 'Cajón', required: true, optionIds: ['agr-tele', 'agr-mbox'] }
+    ]
+  }));
+  return { sandbox, live };
+}
+
+test('#1581: stale cache on open — the fresh read re-seeds untouched groups and Insert waits for it', () => {
+  const { sandbox, live } = freshDefaultsFixture({});
+  assert.strictEqual(live.refreshCalls, 1, 'one fresh read asked on open');
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, true, 'Insert waits for the read');
+  assert(/valores del diseño/.test(el(sandbox, 'btn-insert').title), 'with an honest reason');
+  sandbox.__calls.bridge.length = 0;
+  el(sandbox, 'btn-insert').click();
+  assert.strictEqual(sandbox.__calls.bridge.length, 0, 'a click during the wait dispatches nothing');
+
+  live.defaults = { BISAGRA: 'hw-eco', SISTEMA_CAJON: 'agr-mbox' };
+  sandbox.window.GraneteUI.configurator.onDesignDefaultsSettled();
+
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, false, 'the settled read releases Insert');
+  const hwRow = el(sandbox, 'library-hardware-container').children[0].children[1];
+  assert.strictEqual(hwRow.children[1].children[0].textContent, 'Bisagra económica',
+    'the row now shows the fresh Design default');
+  const sent = sendInsert(sandbox);
+  assert.strictEqual(sent.payload.materialChoices.BISAGRA, 'hw-eco');
+  assert.strictEqual(sent.payload.materialChoices.SISTEMA_CAJON, 'agr-mbox');
+  assert.deepStrictEqual(sent.payload.materialOverrides, {}, 'still inherited, never an override');
+});
+
+test('#1581: a group the user touched before the read settles keeps its choice', () => {
+  const { sandbox, live } = freshDefaultsFixture({});
+  sandbox.window.GraneteUI.configurator.applyHardwareChoice('BISAGRA', 'hw-blum');
+
+  live.defaults = { BISAGRA: 'hw-eco', SISTEMA_CAJON: 'agr-mbox' };
+  sandbox.window.GraneteUI.configurator.onDesignDefaultsSettled();
+
+  const sent = sendInsert(sandbox);
+  assert.strictEqual(sent.payload.materialChoices.BISAGRA, 'hw-blum', 'the explicit pick never moves');
+  assert.strictEqual(sent.payload.materialChoices.SISTEMA_CAJON, 'agr-mbox', 'the untouched group follows');
+  assert.deepStrictEqual(sent.payload.materialOverrides, { BISAGRA: 'hw-blum' });
+});
+
+test('#1581: a lost answer never strands Insert — the bounded wait releases it', () => {
+  const { sandbox } = freshDefaultsFixture({});
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, true);
+  assert.strictEqual(sandbox.__timeouts.length, 1, 'one bounded wait armed');
+  sandbox.__timeouts[0]();
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, false, 'released with the cached seeds');
+});
+
+test('#1581: no read when the model is unbound or the owner refuses it', () => {
+  const unbound = freshDefaultsFixture({ connected: false });
+  assert.strictEqual(unbound.live.refreshCalls, 0, 'unbound model: no read at all');
+  assert.strictEqual(el(unbound.sandbox, 'btn-insert').disabled, false);
+  assert.strictEqual(unbound.sandbox.__timeouts.length, 0);
+
+  const refused = freshDefaultsFixture({ refreshAccepted: false });
+  assert.strictEqual(refused.live.refreshCalls, 1);
+  assert.strictEqual(el(refused.sandbox, 'btn-insert').disabled, false,
+    'a refused read (pending draft) keeps today\'s behavior');
+});
+
 // #1482: agregado option groups (cajones, puertas)
 test('agregado roles: definition with agregado groups renders card and defaults to first member', () => {
   const sandbox = runModule();
