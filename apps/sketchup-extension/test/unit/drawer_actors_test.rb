@@ -242,6 +242,56 @@ class DrawerActorsTest < Minitest::Test
     definition.add_instance(Geom::Transformation.new)
   end
 
+  # #1573 — un agregado de entrepaños (tablero suelto con assemblyInstanceId,
+  # sin frente y sin herraje) jamás es un cajón: el grupo inerte no emite
+  # actor y la tarjeta Apertura no ofrece deslizar contenido fijo del mueble.
+  def test_bare_board_group_emits_no_drawer_actor
+    furniture = build_furniture do |definition|
+      board_child(definition, 'cabinet-side')
+      drawer_box_child(definition, 'entrepano-1', assembly_id: 'agr-ent-1', pos_z: 200.0)
+      drawer_box_child(definition, 'entrepano-2', assembly_id: 'agr-ent-1', pos_z: 350.0)
+    end
+
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_empty scanned.doors
+    assert_empty scanned.drawers, 'el entrepaño suelto del agregado nunca es un Cajón'
+  end
+
+  # #1573 — el cajón real convive con el grupo inerte: sigue emitiendo su
+  # actor intacto y el entrepaño nunca viaja dentro del cajón.
+  def test_real_drawer_survives_alongside_inert_group
+    furniture = build_furniture do |definition|
+      drawer_front_child(definition, 'front-1', pos_z: 30.0)
+      drawer_box_child(definition, 'box-bottom', assembly_id: 'asm-1', pos_z: 30.0)
+      slide_rail_child(definition, 'slide-mov', assembly_id: 'asm-1', membership: 'actor:drawer')
+      drawer_box_child(definition, 'entrepano', assembly_id: 'agr-ent-1', pos_z: 350.0)
+    end
+
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_equal 1, scanned.drawers.length, 'el cajón real queda intacto junto al grupo inerte'
+    drawer = scanned.drawers.first
+    assert_equal 0, drawer.slot_index
+    names = drawer.components.map(&:name)
+    assert_includes names, 'front-1'
+    assert_includes names, 'box-bottom'
+    refute_includes names, 'entrepano', 'el entrepaño es contenido fijo, no parte del cajón'
+  end
+
+  # #1573 — una caja sin frente pero con rieles móviles SÍ abre: el herraje
+  # del grupo (routed por actor membership) es evidencia de apertura.
+  def test_frontless_box_with_moving_rails_still_opens
+    furniture = build_furniture do |definition|
+      drawer_box_child(definition, 'box-bottom', assembly_id: 'asm-1', pos_z: 30.0)
+      slide_rail_child(definition, 'slide-mov', assembly_id: 'asm-1', membership: 'actor:drawer')
+    end
+
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_equal 1, scanned.drawers.length, 'caja sin frente con rieles móviles sigue siendo un cajón'
+  end
+
   def door_child(definition, id, placement:, role:)
     child = new_child(definition, id)
     @store.write(child, child_metadata(id, { 'entityClass' => 'part', 'placement' => placement, 'role' => role },

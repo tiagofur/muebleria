@@ -197,9 +197,24 @@ module Granete
           count = [sorted_fronts.size, sorted_groups.size].max
           return [] if count.zero?
 
+          # #1573: only pairs that can actually OPEN emit an actor — a
+          # drawer front, or drawer-group hardware (routed here by actor
+          # membership: rails). A group of bare boards with no front and no
+          # hardware is cabinet content (entrepaño agregados), never a
+          # drawer; emitting it produced the ghost «Cajón» whose Abrir slid
+          # fixed shelves across the workshop.
           Array.new(count) do |i|
-            build_single_drawer(i, count, sorted_fronts[i], sorted_groups[i], hardware_by_host)
-          end
+            front_info = sorted_fronts[i]
+            group_info = sorted_groups[i]
+            next if front_info.nil? && group_info.nil?
+            next if front_info.nil? && inert_group?(group_info)
+
+            build_single_drawer(i, count, front_info, group_info, hardware_by_host)
+          end.compact
+        end
+
+        def inert_group?(group_info)
+          group_info.nil? || group_info[:hardware].empty?
         end
 
         def build_single_drawer(idx, total, front_info, group_info, hardware_by_host)
