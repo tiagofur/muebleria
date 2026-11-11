@@ -74,8 +74,11 @@ type LayoutBasis struct {
 //	furniture_point = translationMm + basis · local_point
 //
 // with the local box spanning [0,widthMm]×[0,thicknessMm]×[0,lengthMm] on
-// local X/Y/Z. It is rigid (det=+1): Ruby applies it generically — never a
-// mirror, never role/slot/AABB orientation inference. Local axes follow the
+// local X/Y/Z. It is rigid (det=+1): Ruby applies it generically — never
+// role/slot/AABB orientation inference. Since #1575 the SketchUp host
+// instantiates this placement REFLECTED across the furniture's mid-width
+// plane (web-parity view; the reflection folds into a proper basis on the
+// host side — this wire contract stays rigid det=+1). Local axes follow the
 // engine convention (X=width, Y=thickness, Z=length); the frame decision
 // behind the basis is documented on boardLocalPose.
 type LayoutLocalTransform struct {

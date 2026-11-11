@@ -102,6 +102,130 @@ module Granete
           )
         end
 
+        # #1575: reflection of one placement across the furniture's own
+        # mid-width plane. The web (the authoring surface the workshop reads)
+        # presents the resolved frame mirrored relative to a true front view
+        # — its workshop→scene map swaps two axes (determinant −1). No rigid
+        # motion can reproduce that view, so the host BAKES the reflection
+        # into placement NUMBERS: the SketchUp viewer facing the front sees
+        # exactly what the web shows. This deliberately revises the historic
+        # "never a mirror" clause for the placement layer: the reflection
+        # lives here, once, and every consumer downstream (metadata, CNC,
+        # machining) keeps the engine's numbers as truth.
+        #
+        # local_x_extent_mm folds the reflection into a PROPER basis: the
+        # local box spans [0, extent] on local X, so shifting by the extent
+        # before reflecting keeps det(basis') = +1 (SketchUp mirrored
+        # instances stay impossible for boards). Pass 0 for point frames
+        # (hardware, assembly placements, mount frames).
+        #
+        #   t'.x = W − (t.x + extent·bx.x);  t'.y/z = t.y/z + extent·bx.y/z
+        #   B'.x = ( bx.x, −bx.y, −bx.z)
+        #   B'.y = (−by.x,  by.y,  by.z)
+        #   B'.z = (−bz.x,  bz.y,  bz.z)
+        #
+        # det(basis') = −det(basis): a right-handed board basis stays proper;
+        # a mirrored hardware basis (det=−1, #1280) stays mirrored-legal.
+        def mirror_placement(translation_mm, basis, local_x_extent_mm, furniture_width_mm)
+          bx = basis_column(basis, 'x')
+          by = basis_column(basis, 'y')
+          bz = basis_column(basis, 'z')
+          shifted = [translation_mm[0] + (local_x_extent_mm * bx[0]),
+                     translation_mm[1] + (local_x_extent_mm * bx[1]),
+                     translation_mm[2] + (local_x_extent_mm * bx[2])]
+          mirrored_translation = [furniture_width_mm - shifted[0], shifted[1], shifted[2]]
+          mirrored_basis = {
+            'x' => [bx[0], -bx[1], -bx[2]],
+            'y' => [-by[0], by[1], by[2]],
+            'z' => [-bz[0], bz[1], bz[2]]
+          }
+          [mirrored_translation, mirrored_basis]
+        end
+
+        def basis_column(basis, axis)
+          column = basis.is_a?(Hash) ? basis[axis] : nil
+          return column if column.is_a?(Array) && column.length == 3
+
+          [0.0, 0.0, 0.0]
+        end
+
+        # Numeric composition of two placements (outer ∘ inner: inner
+        # applies first). Keeps the chain in ENGINE numbers so the caller
+        # can reflect the composed result as one unit (#1575).
+        def compose_placement(t_outer, b_outer, t_inner, b_inner)
+          composed_basis = %w[x y z].to_h do |axis|
+            [axis, rotate_vector_by_basis(basis_column(b_inner, axis), b_outer)]
+          end
+          [translate_vector(t_outer, rotate_vector_by_basis(t_inner, b_outer)), composed_basis]
+        end
+
+        # vector expressed in the outer frame's coordinates: B_outer · vector.
+        def rotate_vector_by_basis(vector, basis)
+          [dot_component(basis_column(basis, 'x'), vector),
+           dot_component(basis_column(basis, 'y'), vector),
+           dot_component(basis_column(basis, 'z'), vector)]
+        end
+
+        def dot_component(axis, vector)
+          (axis[0] * vector[0]) + (axis[1] * vector[1]) + (axis[2] * vector[2])
+        end
+
+        def translate_vector(translation, offset)
+          [translation[0] + offset[0], translation[1] + offset[1], translation[2] + offset[2]]
+        end
+
+        # #1575: the reflection plane needs the furniture's own width. The
+        # resolved layout publishes it at the root (dimensionsMm); local-lane
+        # preview shapes without a root width mirror within their OWN
+        # placement envelope — the layout's true span, one shared plane for
+        # every board. Empty layouts (nothing to place) need no plane; any
+        # non-empty layout without width or envelope fails closed.
+        def furniture_mirror_width_mm(native_layout)
+          boards = native_layout.respond_to?(:boards) ? native_layout.boards : []
+          hardware = native_layout.respond_to?(:hardware) ? native_layout.hardware : []
+          assemblies = native_layout.respond_to?(:assemblies) ? native_layout.assemblies : []
+          return nil if boards.empty? && hardware.empty? && assemblies.empty?
+
+          dims = native_layout.respond_to?(:dimensions_mm) ? native_layout.dimensions_mm : nil
+          width = dims.is_a?(Array) ? dims[0].to_f : 0.0
+          return width if width.positive?
+
+          min_x, max_x = layout_envelope_x(boards)
+          return max_x - min_x if min_x && (max_x - min_x).positive?
+
+          raise ArgumentError,
+                'El layout resuelto no publica dimensionsMm[0] ni trae tableros con extensión; ' \
+                'el espejo #1575 exige el ancho real del mueble y nunca lo adivina'
+        end
+
+        # X-span covered by the layout's boards: min/max furniture-x over
+        # every board's local box mapped by its basis.
+        def layout_envelope_x(boards)
+          return [nil, nil] unless boards.is_a?(Array) && !boards.empty?
+
+          min_x = nil
+          max_x = nil
+          boards.each do |board|
+            basis = board.respond_to?(:basis) ? board.basis : nil
+            next if basis.nil?
+
+            t = board.translation
+            extents = [[board.width_mm, basis_column(basis, 'x')[0]],
+                       [board.thickness_mm, basis_column(basis, 'y')[0]],
+                       [board.length_mm, basis_column(basis, 'z')[0]]]
+            low = t[0]
+            high = t[0]
+            extents.each do |extent, column_x|
+              span = extent.to_f * column_x
+              low += [span, 0.0].min
+              high += [span, 0.0].max
+            end
+            min_x = low if min_x.nil? || low < min_x
+            max_x = high if max_x.nil? || high > max_x
+          end
+          [min_x, max_x]
+        end
+
         # Builds the LOCAL solid box at the definition origin: the local box
         # spans [0,width]×[0,thickness]×[0,length] on X/Y/Z (engine
         # convention the #414 basis maps onto the furniture frame). World/AABB
@@ -515,10 +639,15 @@ module Granete
           thickness_mm = DEFAULT_THICKNESS_MM
           count = 2
 
+          # #1575: the generic composition mirrors across the furniture's
+          # mid-width like the resolved layout — 'Lateral Izquierdo' must sit
+          # where the web (and its label) put it for a front viewer.
           create_generic_component(model, furniture_definition, instance_id, 'left_side', 'Lateral Izquierdo',
-                                   [0, 0, 0], [thickness_mm, depth_mm, height_mm])
+                                   [0, 0, 0], [thickness_mm, depth_mm, height_mm],
+                                   mirror_width_mm: width_mm)
           create_generic_component(model, furniture_definition, instance_id, 'right_side', 'Lateral Derecho',
-                                   [width_mm - thickness_mm, 0, 0], [thickness_mm, depth_mm, height_mm])
+                                   [width_mm - thickness_mm, 0, 0], [thickness_mm, depth_mm, height_mm],
+                                   mirror_width_mm: width_mm)
 
           count += render_generic_shelves(model, furniture_definition, instance_id, parameters,
                                           width_mm, height_mm, depth_mm, thickness_mm)
@@ -538,7 +667,8 @@ module Granete
           (1..shelf_count).each do |i|
             create_generic_component(model, furniture_definition, instance_id, "shelf_#{i}", "Entrepaño #{i}",
                                      [thickness_mm, 0, spacing * i],
-                                     [width_mm - (2 * thickness_mm), depth_mm, thickness_mm])
+                                     [width_mm - (2 * thickness_mm), depth_mm, thickness_mm],
+                                     mirror_width_mm: width_mm)
           end
           shelf_count
         end
@@ -549,19 +679,30 @@ module Granete
           return 0 if door_count <= 0
 
           create_generic_component(model, furniture_definition, instance_id, 'door_1', 'Puerta',
-                                   [0, depth_mm, 0], [width_mm, thickness_mm, height_mm])
+                                   [0, depth_mm, 0], [width_mm, thickness_mm, height_mm],
+                                   mirror_width_mm: width_mm)
           1
         end
 
-        def create_generic_component(model, parent_definition, furniture_instance_id, slot_id, name, pos_mm, dims_mm)
+        def create_generic_component(model, parent_definition, furniture_instance_id, slot_id, name, pos_mm,
+                                     dims_mm, mirror_width_mm: nil)
           comp_id = "comp-#{furniture_instance_id}-#{slot_id}"
           component_definition = model.definitions.add("#{PART_DEFINITION_PREFIX}#{name} · #{comp_id}")
           LocalGeometry.build_local_box(component_definition, dims_mm[0], dims_mm[1], dims_mm[2])
+          # #1575: reflection across the furniture's mid-width plane. Every
+          # generic part is a min-corner box ([0, dims] local), so the AABB
+          # maps exactly like the resolved-layout boards do.
+          placed = if mirror_width_mm
+                     [mirror_width_mm - pos_mm[0] - dims_mm[0], pos_mm[1], pos_mm[2]]
+                   else
+                     pos_mm
+                   end
           instance = parent_definition.entities.add_instance(component_definition,
-                                                             LocalGeometry.translation_only(pos_mm))
+                                                             LocalGeometry.translation_only(placed))
           instance.name = name
           ChildMetadataWriter.write_part(@metadata_store, instance, comp_id, slot_id,
-                                         furniture_ref: furniture_instance_id)
+                                         furniture_ref: furniture_instance_id,
+                                         assembly_translation_mm: pos_mm)
           instance
         end
       end
@@ -870,18 +1011,31 @@ module Granete
         end
 
         def render_native_hardware(model, parent_definition, furniture_instance_id, placement,
-                                   placement_transform: nil)
+                                   placement_transform: nil, mirror_width_mm: nil)
           name = placement.name || 'Herraje'
-          pos = placement_transform || placement.local_translation || placement.translation || [0.0, 0.0, 0.0]
+          # #1575: geometry uses the MIRRORED frame (pos + basis + mountFrame);
+          # the metadata below keeps the ORIGINAL placement (anchor_face,
+          # offset_mm — engine truth). Mirrored hardware bases stay legal by
+          # contract (#1280: det=±1), so prepared assets mirror cleanly.
+          geometry_placement = if mirror_width_mm
+                                 placement.with_mirrored_frame(
+                                   LocalGeometry.method(:mirror_placement), mirror_width_mm
+                                 )
+                               else
+                                 placement
+                               end
+          pos = placement_transform ||
+                geometry_placement.local_translation ||
+                geometry_placement.translation || [0.0, 0.0, 0.0]
 
-          instance = try_load_hardware_asset(model, parent_definition, placement, pos)
+          instance = try_load_hardware_asset(model, parent_definition, geometry_placement, pos)
           if instance
-            scale_linear_hardware(instance, placement)
+            scale_linear_hardware(instance, geometry_placement)
             return attach_hardware_metadata(instance, placement, name, furniture_instance_id, exact: true)
           end
           return nil if invalid_hardware_preparation?(placement.placement_id)
 
-          fallback = build_fallback_hardware(model, parent_definition, name, placement, pos)
+          fallback = build_fallback_hardware(model, parent_definition, name, geometry_placement, pos)
           attach_hardware_metadata(fallback, placement, name, furniture_instance_id, exact: false)
         end
 
@@ -994,18 +1148,23 @@ module Granete
       # Extracted from FurnitureBuilder to keep the class within its length budget.
       module NativeLayoutRenderer # rubocop:disable Metrics/ModuleLength
         def render_native_layout(model, furniture_definition, instance_id, native_layout)
+          # #1575: the visual reflection plane is the furniture's own width.
+          mirror_width_mm = LocalGeometry.furniture_mirror_width_mm(native_layout)
           native_layout.boards.each do |board|
             render_native_board(model, furniture_definition, instance_id, board,
                                 # #1468: agregado-expanded boards carry the
                                 # assembly link the engine seals on them (#1465);
                                 # the fabricated-component path below keeps its
                                 # own explicit assembly kwargs.
-                                assembly_instance_id: board.assembly_instance_id)
+                                assembly_instance_id: board.assembly_instance_id,
+                                mirror_width_mm: mirror_width_mm)
           end
           native_layout.hardware.each do |placement|
-            render_native_hardware(model, furniture_definition, instance_id, placement)
+            render_native_hardware(model, furniture_definition, instance_id, placement,
+                                   mirror_width_mm: mirror_width_mm)
           end
-          assembly_counts = render_native_assemblies(model, furniture_definition, instance_id, native_layout)
+          assembly_counts = render_native_assemblies(model, furniture_definition, instance_id, native_layout,
+                                                     mirror_width_mm)
           total_boards = native_layout.boards.length + assembly_counts['boards']
           total_hardware = native_layout.hardware.length + assembly_counts['hardware']
           {
@@ -1016,13 +1175,13 @@ module Granete
           }
         end
 
-        def render_native_assemblies(model, furniture_definition, instance_id, native_layout)
+        def render_native_assemblies(model, furniture_definition, instance_id, native_layout, mirror_width_mm)
           boards_count = 0
           hardware_count = 0
           assemblies_count = 0
           if native_layout.respond_to?(:assemblies) && native_layout.assemblies
             native_layout.assemblies.each do |assembly|
-              counts = render_native_assembly(model, furniture_definition, instance_id, assembly)
+              counts = render_native_assembly(model, furniture_definition, instance_id, assembly, mirror_width_mm)
               boards_count += counts['boards']
               hardware_count += counts['hardware']
               assemblies_count += 1
@@ -1031,23 +1190,44 @@ module Granete
           { 'boards' => boards_count, 'hardware' => hardware_count, 'assemblies' => assemblies_count }
         end
 
-        def render_native_assembly(model, furniture_definition, instance_id, assembly)
+        def render_native_assembly(model, furniture_definition, instance_id, assembly, mirror_width_mm)
+          # #1575: assembly chains render in ENGINE coordinates (outer ∘
+          # member verbatim) and the COMPOSED placement is what gets
+          # reflected — mirroring only the outer frame loses the reflection
+          # for members with their own translation: (S·M·T_a)∘T_m applied to
+          # a point is NOT S·M·(T_a∘T_m) unless the inner frame carries the
+          # reflection too. One reflection per chain, applied to the composed
+          # placement, exactly like a standalone board.
           t_assembly = LocalGeometry.axes_transform(assembly.translation, assembly.basis)
           boards = render_assembly_fabricated_components(model, furniture_definition, instance_id,
-                                                         assembly, t_assembly)
+                                                         assembly, t_assembly, mirror_width_mm)
           hardware = render_assembly_rigid_members(model, furniture_definition, instance_id,
-                                                   assembly, t_assembly)
+                                                   assembly, t_assembly, mirror_width_mm)
           { 'boards' => boards, 'hardware' => hardware }
         end
 
-        def render_assembly_fabricated_components(model, furniture_definition, instance_id, assembly, t_assembly)
+        def render_assembly_fabricated_components(model, furniture_definition, instance_id, assembly,
+                                                  t_assembly, mirror_width_mm)
           count = 0
           assembly.fabricated_components.each do |comp|
-            t_comp = LocalGeometry.axes_transform(comp.translation, comp.basis)
-            t_furniture = t_assembly * t_comp
+            # The composed board placement mirrors like a standalone board
+            # (min-corner box ⇒ extent = the piece's local width). Assembly
+            # pieces are plain boxes today — the notch/bevel is a body-board
+            # effect only the standalone layout carries (#1287).
+            transform = if mirror_width_mm
+                          LocalGeometry.axes_transform(
+                            *LocalGeometry.mirror_placement(
+                              *LocalGeometry.compose_placement(assembly.translation, assembly.basis,
+                                                               comp.translation, comp.basis),
+                              comp.width_mm, mirror_width_mm
+                            )
+                          )
+                        else
+                          t_assembly * LocalGeometry.axes_transform(comp.translation, comp.basis)
+                        end
             render_native_board(
               model, furniture_definition, instance_id, comp,
-              placement_transform: t_furniture,
+              placement_transform: transform,
               assembly_instance_id: assembly.assembly_instance_id,
               agregado_id: assembly.agregado_id,
               component_id: comp.component_id,
@@ -1060,25 +1240,45 @@ module Granete
           count
         end
 
-        def render_assembly_rigid_members(model, furniture_definition, instance_id, assembly, t_assembly)
+        def render_assembly_rigid_members(model, furniture_definition, instance_id, assembly,
+                                          t_assembly, mirror_width_mm)
           count = 0
           assembly.rigid_members.each do |member|
-            t_member = LocalGeometry.axes_transform(member.translation, member.basis)
-            t_furniture = t_assembly * t_member
+            transform = if mirror_width_mm
+                          LocalGeometry.axes_transform(
+                            *LocalGeometry.mirror_placement(
+                              *LocalGeometry.compose_placement(assembly.translation, assembly.basis,
+                                                               member.translation, member.basis),
+                              0, mirror_width_mm
+                            )
+                          )
+                        else
+                          t_assembly * LocalGeometry.axes_transform(member.translation, member.basis)
+                        end
             render_native_hardware(
               model, furniture_definition, instance_id, member,
-              placement_transform: t_furniture
+              placement_transform: transform
             )
             count += 1
           end
           count
         end
 
+        # #1575: the placement pair the board renders with — engine numbers
+        # verbatim, or reflected across the furniture's mid-width plane.
+        def board_placement_pair(board, mirror_width_mm)
+          placement_basis = board.respond_to?(:basis) ? board.basis : nil
+          return [board.translation, placement_basis] unless mirror_width_mm
+
+          LocalGeometry.mirror_placement(board.translation, placement_basis, board.width_mm, mirror_width_mm)
+        end
+
         # rubocop:disable-next Metrics/ParameterLists
         def render_native_board(model, parent_definition, furniture_instance_id, board,
                                 placement_transform: nil, assembly_instance_id: nil,
                                 agregado_id: nil, component_id: nil,
-                                recipe_revision: nil, snapshot_id: nil, is_historical: false)
+                                recipe_revision: nil, snapshot_id: nil, is_historical: false,
+                                mirror_width_mm: nil)
           name = board.name || board.slot_id || board.component_instance_id
           board_definition = model.definitions.add(
             "#{FurnitureBuilder::PART_DEFINITION_PREFIX}#{name} · #{board.component_instance_id}"
@@ -1091,15 +1291,21 @@ module Granete
           # published basis decides WHERE the cut lands and WHICH way the
           # prism spans — never a guess from the band's own coordinates.
           bevels = board.respond_to?(:bevels) ? board.bevels : []
+          # #1575: the reflection consumes the MIRRORED basis so notch/bevel
+          # cuts land on the mirrored corner — the local geometry itself
+          # (dims, notches, bevels) stays the engine's untouched truth.
+          build_translation, build_basis = board_placement_pair(board, mirror_width_mm)
           LocalGeometry.build_local_box(board_definition, board.width_mm, board.thickness_mm,
                                         board.length_mm, notches: notches, bevels: bevels,
-                                                         basis: board.respond_to?(:basis) ? board.basis : nil)
+                                                         basis: build_basis)
 
-          transform = placement_transform || LocalGeometry.axes_transform(board.translation, board.basis)
+          transform = placement_transform || LocalGeometry.axes_transform(build_translation, build_basis)
           instance = parent_definition.entities.add_instance(board_definition, transform)
           instance.name = name
 
           paint_board(model, instance, board)
+          # Metadata keeps the ENGINE's translation (#1575 truth separation):
+          # only the instantiated geometry above is reflected.
           ChildMetadataWriter.write_part(
             @metadata_store, instance, board.component_instance_id, board.slot_id,
             component_definition_id: board.component_definition_id,

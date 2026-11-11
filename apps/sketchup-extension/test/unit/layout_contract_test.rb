@@ -506,3 +506,48 @@ class LayoutContractTest < Minitest::Test
     end
   end
 end
+
+# #1575: the mirror clone flips the GEOMETRY frame (localTransform +
+# mountFrame) and nothing else — identity/provenance stay engine truth.
+def test_hardware_with_mirrored_frame_flips_geometry_and_keeps_truth
+  mirror = ->(t, b, _ext, w) { [[w - t[0], t[1], t[2]], b] }
+  mount = Granete::SketchUpExtension::Assets::MountFrame::MountFrameData.new(
+    origin_mm: [590.0, 560.0, 10.0],
+    basis: Granete::SketchUpExtension::Assets::MountFrame::BasisData.new(
+      x: [1.0, 0.0, 0.0], y: [0.0, 1.0, 0.0], z: [0.0, 0.0, 1.0]
+    )
+  )
+  placement = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+    placement_id: 'pl-1', anchor_face: 'back', offset_mm: [289.5, 90],
+    local_transform: { 'translation' => [590.0, 560.0, 10.0],
+                       'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] } },
+    mount_frame: mount
+  )
+
+  mirrored = placement.with_mirrored_frame(mirror, 600.0)
+
+  assert_in_delta 10.0, mirrored.local_translation[0], 1e-9, 'el frame geométrico se refleja (600−590)'
+  assert_equal 'back', mirrored.anchor_face, 'anchorFace es verdad del engine: nunca se espeja'
+  assert_equal [289.5, 90], mirrored.offset_mm, 'offsetMm es verdad del engine: nunca se espeja'
+  assert_equal 'pl-1', mirrored.placement_id
+  assert_in_delta 10.0, mirrored.mount_frame.origin_mm[0], 1e-9, 'el mount frame acompaña la reflexión'
+  assert_equal placement.basis, mirrored.basis, 'basis identidad es su propio espejo propio'
+end
+
+def test_hardware_legacy_aabb_translation_mirrors_without_local_transform
+  mirror = ->(t, _b, _ext, w) { [[w - t[0], t[1], t[2]], nil] }
+  placement = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+    placement_id: 'pl-legacy', translation: [580.0, 560.0, 10.0]
+  )
+
+  mirrored = placement.with_mirrored_frame(mirror, 600.0)
+
+  assert_nil mirrored.local_transform
+  assert_equal [20.0, 560.0, 10.0], mirrored.translation, 'el punto AABB legacy se refleja'
+end
+
+def test_hardware_mirror_clone_is_identity_without_any_frame
+  placement = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(placement_id: 'pl-0')
+
+  assert_same placement, placement.with_mirrored_frame(->(*_args) { raise 'no debe llamarse' }, 600.0)
+end

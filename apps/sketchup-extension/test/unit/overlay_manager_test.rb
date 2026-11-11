@@ -66,9 +66,12 @@ class OverlayManagerTest < Minitest::Test
     # Every marker lands ON its host board (furniture-frame Y within the
     # side panel's depth span, X within its thickness band) — projected
     # through the canonical local-basis transform, not assumed at origin.
+    # #1575: the panel renders mirrored, so the thickness band sits at
+    # x∈[582,600] (engine [0,18] reflected across the 600-wide plane) and
+    # the band-edge markers land at 582.
     mm = 1.0 / 25.4
     markers.each do |marker|
-      assert_in_delta 18.0, marker.center.x / mm, 1e-3
+      assert_in_delta 582.0, marker.center.x / mm, 1e-3
       assert((marker.center.y / mm).between?(0.0, 560.0),
              'hole must project inside the side panel depth span')
     end

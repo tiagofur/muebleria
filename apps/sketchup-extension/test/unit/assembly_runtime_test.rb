@@ -149,16 +149,18 @@ class AssemblyRuntimeTest < Minitest::Test
     refute_nil side_left
 
     # The mount origin in asset space [25, -10, 8] mm must map to expected furniture coordinates
-    # T_placement = T_assembly * T_member
-    # assembly translation = [0, 100, 50], member translation = [10, 0, 10] => [10, 100, 60] mm
+    # T_placement = T_assembly * T_member, reflected (#1575)
+    # assembly translation = [0, 100, 50], member translation = [10, 0, 10] => engine [10, 100, 60]
+    # => mirrored x = 600 − 10 = 590 mm (mount normalization lands the mount
+    # origin ON the placement point, so the assertion reads the placement).
     mount_origin_inches = Geom::Point3d.new(25.0 * MM, -10.0 * MM, 8.0 * MM)
     placed_point = mount_origin_inches.transform(side_left.transformation)
 
-    assert_in_delta 10.0 * MM, placed_point.x, 1e-4
+    assert_in_delta 590.0 * MM, placed_point.x, 1e-4
     assert_in_delta 100.0 * MM, placed_point.y, 1e-4
     assert_in_delta 60.0 * MM, placed_point.z, 1e-4
 
-    # Negative test: applying normalization a second time would shift the point away from [10, 100, 60]
+    # Negative test: applying normalization a second time would shift the point away from [590, 100, 60]
     norm = MountFrame.derive_normalization(
       MountFrameData.new(
         origin_mm: [25.0, -10.0, 8.0],
@@ -234,15 +236,16 @@ class AssemblyRuntimeTest < Minitest::Test
     bottom_rebuilt = find_entity_by_name(furniture, 'Fondo Cajón')
 
     # Left side: position unchanged
-    assert_in_delta orig_l_pos_x, side_l_rebuilt.transformation.origin.x, 1e-4
+    # #1575: the mirrored world inverts the visual left/right roles — the
+    # engine 'derecho' member (world x = W − 560) stays put on rebuild and
+    # the engine 'izquierdo' (world x = W − 10) translates exactly +200 mm.
+    assert_in_delta 0.0, side_r_rebuilt.transformation.origin.x - orig_r_pos_x, 1e-4
+    delta_l_inches = side_l_rebuilt.transformation.origin.x - orig_l_pos_x
+    assert_in_delta 200.0 * MM, delta_l_inches, 1e-4
 
-    # Right side: translated exactly +200 mm
-    delta_r_inches = side_r_rebuilt.transformation.origin.x - orig_r_pos_x
-    assert_in_delta 200.0 * MM, delta_r_inches, 1e-4
-
-    # Right runner: translated exactly +200 mm
+    # Right runner: translated exactly +200 mm (mirrored: stays fixed)
     delta_runner_inches = runner_r_rebuilt.transformation.origin.x - orig_runner_r_pos_x
-    assert_in_delta 200.0 * MM, delta_runner_inches, 1e-4
+    assert_in_delta 0.0, delta_runner_inches, 1e-4
 
     # Bottom fabricated panel: new definition regenerated with width 765 mm
     refute_equal orig_bottom_def_name, bottom_rebuilt.definition.name
@@ -405,15 +408,16 @@ class AssemblyRuntimeTest < Minitest::Test
     # Furniture = [1000, 500, 200]
     # Assembly  = [50, 100, 30]
     # Member    = [10, 20, 5]
-    # Total expected world coordinate of the mount origin:
-    # X = 1000 + 50 + 10 = 1060 mm
+    # Engine composed x = 60; reflected (#1575) across the 600-wide plane:
+    # X = 1000 + (600 − 60) = 1540 mm (mount normalization lands the mount
+    # origin ON the placement point)
     # Y = 500 + 100 + 20 = 620 mm
     # Z = 200 + 30 + 5   = 235 mm
     mount_origin_inches = Geom::Point3d.new(5.0 * MM, -2.0 * MM, 3.0 * MM)
     t_world = furniture.transformation * side_left.transformation
     placed_world_point = mount_origin_inches.transform(t_world)
 
-    assert_in_delta 1060.0 * MM, placed_world_point.x, 1e-4
+    assert_in_delta 1540.0 * MM, placed_world_point.x, 1e-4
     assert_in_delta 620.0 * MM, placed_world_point.y, 1e-4
     assert_in_delta 235.0 * MM, placed_world_point.z, 1e-4
   end
