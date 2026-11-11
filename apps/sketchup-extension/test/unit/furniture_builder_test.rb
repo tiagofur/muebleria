@@ -518,7 +518,8 @@ class FurnitureBuilderTest < Minitest::Test
 
     assert_equal 1, loaded.length
     assert_equal 'handle_profile_96', loaded.first[:asset_id]
-    assert_equal [100, 20, 700], loaded.first[:pos]
+    # #1575: the placement point mirrors across the 600-wide plane.
+    assert_equal [500, 20, 700], loaded.first[:pos]
     # The asset lands INSIDE the furniture's isolated definition, as a native
     # instance carrying Granete metadata.
     assert_equal furniture_instance.definition, loaded.first[:target]

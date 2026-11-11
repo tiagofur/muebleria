@@ -102,18 +102,26 @@ class NativeEntityRendererTest < Minitest::Test
     insert_from_golden
 
     layout = golden_native_layout
+    width_mm = layout.dimensions_mm[0].to_f
     layout.boards.each do |board|
       part = part_instances.find do |candidate|
         metadata_for(candidate)&.dig('identity', 'componentInstanceId') == board.component_instance_id
       end
       refute_nil part, "missing native instance for #{board.component_instance_id}"
 
+      # #1575: the instance maps 1:1 onto the #414 basis+translation
+      # REFLECTED across the furniture's mid-width plane (the web's view);
+      # the reflection folds into a proper basis, so the transform stays
+      # rigid.
+      mirrored_t, mirrored_b = Granete::SketchUpExtension::Model::LocalGeometry.mirror_placement(
+        board.translation, board.basis, board.width_mm, width_mm
+      )
       expected = Geom::Transformation.axes(
-        Geom::Point3d.new(board.translation[0] * MM, board.translation[1] * MM, board.translation[2] * MM),
-        vec3(board.basis['x']), vec3(board.basis['y']), vec3(board.basis['z'])
+        Geom::Point3d.new(mirrored_t[0] * MM, mirrored_t[1] * MM, mirrored_t[2] * MM),
+        vec3(mirrored_b['x']), vec3(mirrored_b['y']), vec3(mirrored_b['z'])
       )
       assert_equal expected, part.transformation,
-                   "#{board.slot_id} transform must map 1:1 onto the #414 basis+translation"
+                   "#{board.slot_id} transform must map 1:1 onto the #414 basis+translation reflected (#1575)"
       assert rigid?(part.transformation)
     end
   end
@@ -127,11 +135,13 @@ class NativeEntityRendererTest < Minitest::Test
       metadata_for(candidate)&.dig('identity', 'componentInstanceId') == lateral.component_instance_id
     end
 
-    # 90° placement: basis entries are exactly 0/±1 (see #414 contract).
-    assert_equal Geom::Vector3d.new(0, -1, 0), part.transformation.xaxis
-    assert_equal Geom::Vector3d.new(1, 0, 0), part.transformation.yaxis
+    # 90° placement reflected (#1575): the rotation sign flips about the
+    # mirror plane and stays exactly 0/±1 (basis entries remain grid-exact,
+    # det=+1); the panel lands at the mirrored end of the 600-wide cabinet.
+    assert_equal Geom::Vector3d.new(0, 1, 0), part.transformation.xaxis
+    assert_equal Geom::Vector3d.new(-1, 0, 0), part.transformation.yaxis
     assert_equal Geom::Vector3d.new(0, 0, 1), part.transformation.zaxis
-    assert_equal Geom::Point3d.new(0, 560 * MM, 0), part.transformation.origin
+    assert_equal Geom::Point3d.new(600 * MM, 0, 0), part.transformation.origin
   end
 
   def test_furniture_world_rotation_and_move_never_rewrite_child_geometry

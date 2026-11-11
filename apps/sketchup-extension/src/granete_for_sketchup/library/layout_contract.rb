@@ -243,6 +243,52 @@ module Granete
         def historical?
           @is_historical == true
         end
+
+        # #1575: placement clone whose GEOMETRY frame (localTransform) is
+        # reflected across the furniture's mid-width plane, for the host's
+        # web-parity view. Every identity/provenance field (offsetMm,
+        # anchorFace, ids, estados) stays the engine's untouched truth —
+        # only the frame numbers flip, with the same det class the contract
+        # allows for hardware (det=±1, #1280). The MOUNT FRAME passes
+        # through untouched: it lives in ASSET space ("relative to its
+        # internal raw coordinates") and AssetLoader composes
+        # T_placement ∘ inverse(T_mountFrame) — reflecting it would shift
+        # the normalization by the furniture width and throw prepared
+        # hardware out of the cabinet (review round 1, B1).
+        def with_mirrored_frame(mirror_fn, furniture_width_mm)
+          return self if local_transform.nil? && translation.nil?
+
+          LayoutHardwarePlacement.new(
+            placement_id: placement_id, hardware_id: hardware_id, asset_id: asset_id,
+            name: name, placement_kind: placement_kind,
+            host_component_instance_id: host_component_instance_id,
+            dimensions: dimensions, color_hex: color_hex,
+            anchor_face: anchor_face, offset_mm: offset_mm,
+            asset_revision_id: asset_revision_id, sha256: sha256, expected_bytes: expected_bytes,
+            representation: representation, validation_state: validation_state,
+            local_transform: mirrored_local_transform(mirror_fn, furniture_width_mm),
+            translation: mirrored_legacy_translation(furniture_width_mm),
+            preparation_state: preparation_state, mount_frame: mount_frame,
+            is_historical: is_historical, option_role: option_role,
+            actor_membership: actor_membership
+          )
+        end
+
+        private
+
+        def mirrored_local_transform(mirror_fn, furniture_width_mm)
+          return nil if local_transform.nil?
+
+          t, b = mirror_fn.call(local_translation, basis, 0, furniture_width_mm)
+          { 'translation' => t, 'basis' => b }
+        end
+
+        # Legacy AABB-only placement (#414 compat): the point mirrors as-is.
+        def mirrored_legacy_translation(furniture_width_mm)
+          return translation unless local_transform.nil? && translation.is_a?(Array)
+
+          [furniture_width_mm - translation[0].to_f, translation[1].to_f, translation[2].to_f]
+        end
       end
 
       # One resolved parametric assembly instance with rigid hardware members and fabricated components (#670-D).

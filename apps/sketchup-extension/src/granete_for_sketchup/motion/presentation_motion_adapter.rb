@@ -135,7 +135,8 @@ module Granete
           closed_t = canonical_closed_transform(door_instance)
           return unless closed_t
 
-          rel_t = compute_relative_transform(door_instance, closed_t, motion, progress, furniture_transform, side)
+          rel_t = compute_relative_transform(door_instance, comp_id, closed_t, motion, progress,
+                                             furniture_transform, side)
           return unless rel_t
 
           set_transform(door_instance, rel_t * closed_t)
@@ -161,10 +162,11 @@ module Granete
           end
         end
 
-        def compute_relative_transform(door_instance, closed_t, motion, progress, _furniture_transform, side)
+        def compute_relative_transform(door_instance, comp_id, closed_t, motion, progress,
+                                       _furniture_transform, side)
           case motion['kind']
           when 'rotate'
-            compute_relative_rotate_transform(door_instance, closed_t, motion, progress, side)
+            compute_relative_rotate_transform(door_instance, comp_id, closed_t, motion, progress, side)
           when 'translate'
             compute_relative_translate_transform(motion, progress)
           else
@@ -172,9 +174,15 @@ module Granete
           end
         end
 
-        def compute_relative_rotate_transform(door_instance, closed_t, motion, progress, side)
+        def compute_relative_rotate_transform(door_instance, comp_id, closed_t, motion, progress, side)
           angle_deg = (motion['openAngleDeg'] || 110.0).to_f * progress
-          pivot_side = (side || motion['pivotSide'] || motion['pivot'] || 'left').to_s.downcase
+          # #1575: the pivot edge is a WORLD fact — where the door's mounted
+          # hinges actually sit. The side string (card slot convention) only
+          # covers the no-hardware fallback; with hinges present the door
+          # swings on its hinge edge in the (mirrored) model space, whatever
+          # the labels say.
+          pivot_side = pivot_side_from_mounted_hardware(comp_id, door_instance) ||
+                       (side || motion['pivotSide'] || motion['pivot'] || 'left').to_s.downcase
 
           # Pivot axis is local vertical (Z) of the furniture frame
           axis_vec = if motion['axisLocal']
@@ -188,6 +196,32 @@ module Granete
           angle_rad = sign * angle_deg * (Math::PI / 180.0)
 
           ::Geom::Transformation.rotation(pivot_pt, axis_vec, angle_rad)
+        end
+
+        # #1575: 'left'/'right' resolved from the mounted hardware's WORLD
+        # position: hinges clustered past the door's mid-width ⇒ the max-X
+        # edge pivots (the adapter's existing 'left'), else the min-X edge
+        # ('right'). Purely geometric — never reads names, roles or labels.
+        # nil when the door has no bounds-bearing hardware (caller falls
+        # back to the side string).
+        def pivot_side_from_mounted_hardware(comp_id, door_instance)
+          hardware = Array(@hardware_by_host[comp_id])
+          centers = hardware.filter_map do |entity|
+            next unless entity.respond_to?(:bounds) && entity.bounds.respond_to?(:center)
+
+            entity.bounds.center.x
+          rescue StandardError
+            nil
+          end
+          return nil if centers.empty?
+          return nil unless door_instance.respond_to?(:bounds) &&
+                            door_instance.bounds.respond_to?(:min) && door_instance.bounds.respond_to?(:max)
+
+          mid_x = (door_instance.bounds.min.x + door_instance.bounds.max.x) / 2.0
+          avg_x = centers.sum / centers.length
+          avg_x > mid_x ? 'left' : 'right'
+        rescue StandardError
+          nil
         end
 
         # Hinge edge and rotation sign for one swing side, in furniture

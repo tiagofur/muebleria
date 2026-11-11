@@ -149,7 +149,8 @@ class MaterialRebuildTest < Minitest::Test
 
     handle = managed_parts(furniture).find { |part| part.name == 'Handle' }
     refute_nil handle
-    assert_equal Geom::Point3d.new(480 * MM, 578 * MM, 300 * MM), handle.transformation.origin
+    # #1575: the handle placement point mirrors across the 600-wide plane.
+    assert_equal Geom::Point3d.new(120 * MM, 578 * MM, 300 * MM), handle.transformation.origin
     assert_equal 'door', @store.read(handle).dig('intent', 'hostComponentInstanceId')
 
     rebuilt_meta = @store.read(furniture)
@@ -182,7 +183,10 @@ class MaterialRebuildTest < Minitest::Test
     assert_equal 5, by_role.fetch('BODY').length
     by_role.fetch('BODY').each { |part| assert_in_delta 18 * MM, local_thickness(part), 1e-9 }
     body_right = by_role.fetch('BODY').find { |part| part.name == 'Body Right' }
-    assert_in_delta 582 * MM, body_right.transformation.origin.x, 1e-9
+    # #1575: the synthetic 500-wide board at engine x=582 mirrors across the
+    # 600-wide plane to x' = 600 − (582 + 500) = −482 — the fixture's
+    # over-wide box is geometrically exact under the reflection.
+    assert_in_delta(-482 * MM, body_right.transformation.origin.x, 1e-9)
     by_role.fetch('FRONT').each { |part| assert_in_delta 18 * MM, local_thickness(part), 1e-9 }
     assert_in_delta 6 * MM, local_thickness(by_role.fetch('BACK').first), 1e-9
 
