@@ -1502,6 +1502,53 @@ function run() {
     assert.ok(rowIds.includes('design-inspector-row-INTERIOR') || rowIds.includes('design-inspector-row-INTERIORES'), 'interior row must exist');
     assert.ok(rowIds.includes('design-inspector-row-FONDO'), 'fondo row must exist');
   });
+
+  // --- #1581: explicit refresh for consumers outside the lane ------------
+  test('#1581: refreshDefaults issues one silent read and notifies when it settles', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    let settled = 0;
+    initModule(ctx.sandbox, { onDefaultsSettled: () => { settled += 1; } });
+
+    assert.strictEqual(mod.refreshDefaults(), false, 'unbound: no authority, no read');
+    assert.strictEqual(ctx.sketchupCalls.length, 0);
+
+    mod.onBindingStatus(CONNECTED_A);
+    assert.strictEqual(mod.refreshDefaults(), true, 'bound: a read was issued');
+    assert.strictEqual(ctx.sketchupCalls.length, 1);
+    assert.strictEqual(ctx.sketchupCalls[0][0], 'get_design_defaults');
+    assert.strictEqual(ctx.view().style.display === 'block', false,
+      'the read never opens the Design Inspector view (lane not claimed)');
+
+    // A foreign/late answer neither lands nor notifies.
+    mod.onDesignDefaults({ requestId: 'stale', designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { BISAGRA: 'hw-old' } } });
+    assert.strictEqual(settled, 0, 'a discarded answer is not a settle');
+
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[0][1].requestId, designId: 'd-a', status: 'ready',
+      workingVersion: 'v2', authoringDefaults: { materialChoices: { BISAGRA: 'hw-eco' } } });
+    assert.strictEqual(settled, 1, 'ready notifies once');
+    assert.strictEqual(mod.getDesignDefaults().BISAGRA, 'hw-eco', 'the cache holds the fresh defaults');
+
+    mod.refreshDefaults();
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[1][1].requestId, designId: 'd-a', status: 'error' });
+    assert.strictEqual(settled, 2, 'an error settles too — the consumer must not wait forever');
+  });
+
+  test('#1581: refreshDefaults is refused while a draft is pending (the pinned draft never drifts)', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[0][1].requestId, designId: 'd-a', status: 'ready',
+      workingVersion: 'v1', authoringDefaults: { materialChoices: { INTERIOR: 'mat-white' } } });
+    mod.applyMaterialPick('INTERIOR', 'mat-oak');
+
+    const before = ctx.sketchupCalls.length;
+    assert.strictEqual(mod.refreshDefaults(), false, 'pending draft suppresses the read');
+    assert.strictEqual(ctx.sketchupCalls.length, before, 'no bridge call was issued');
+  });
 }
 
 let failed = 0;

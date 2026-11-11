@@ -201,6 +201,14 @@
     }
   }
 
+  // #1581: consumers that seed from the cached defaults (the Biblioteca
+  // configurator) are told when a defaults read SETTLES — ready, error,
+  // unbound or a draft-pinned answer — so they re-seed what the user did
+  // not touch. Optional dependency: this module never knows its consumers.
+  function notifyDefaultsSettled() {
+    if (typeof deps.onDefaultsSettled === "function") deps.onDefaultsSettled();
+  }
+
   // #784 R3: correlated read of the inheritance projection. A fresh read
   // burns a new requestId so any stale answer of a previous generation is
   // discarded by the correlation guard in onDesignInheritance.
@@ -1027,6 +1035,7 @@
           // divergence honestly; the bridge refuses a stale token at Apply.
           state.draftStale = true;
           render();
+          notifyDefaultsSettled();
           return;
         }
         state.defaults = choices;
@@ -1039,12 +1048,14 @@
         // the server projection is the card's only source.
         requestHardwareGroups();
         render();
+        notifyDefaultsSettled();
         // #1137: the «Apertura» card rides the same lane — one refresh per
         // authoritative design read; it renders and saves through its own
         // bridge commands and never touches this module's state.
       } else if (payload.status === "error") {
         state.status = "error";
         render();
+        notifyDefaultsSettled();
       } else if (payload.status === "unbound" || payload.status === "stale_binding") {
         // The model is no longer bound to the requested design. FAIL CLOSED
         // immediately: the rendered values of the previous design can never
@@ -1063,7 +1074,21 @@
         state.status = "idle";
         hide();
         if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();
+        notifyDefaultsSettled();
       }
+    },
+
+    // #1581: an explicit, silent defaults read for consumers outside the
+    // no-selection lane (the Biblioteca configurator on open). Returns true
+    // only when a read was actually issued. It is REFUSED while a draft is
+    // pending (#784 R2: the working copy never drifts under a pinned draft)
+    // and while an Apply is in flight (a new requestId would orphan its
+    // answer) — the caller then keeps the cached values, exactly as today.
+    refreshDefaults: function () {
+      if (!state.connected || !state.designId) return false;
+      if (state.applyInFlight || pendingCount() > 0) return false;
+      requestDefaults(false);
+      return state.status !== "error";
     },
 
     // #784 R2: the apply answer. Correlated like the reads — a late or
@@ -1088,6 +1113,7 @@
         state.conflict = null;
         requestInheritance();
         render();
+        notifyDefaultsSettled();
       } else if (payload.status === "conflict" || payload.status === "error") {
         state.conflict = payload.reason || "No se pudo aplicar el cambio.";
         // #969-c: only a refusal (conflict) knows the fresh server state —
