@@ -528,7 +528,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			continue
 		}
 		for hi, hp := range board.hardware {
-			resolvedList := resolveHardwareOrKitToWorld(board, hp, catalog, sideThicknessMm, fmt.Sprintf("%s-hw-%d", board.id, hi))
+			resolvedList := resolveHardwareOrKitToWorld(board, hp, catalog, sideThicknessMm, float64(dims.WidthMm), fmt.Sprintf("%s-hw-%d", board.id, hi))
 			layout.Hardware = append(layout.Hardware, resolvedList...)
 		}
 	}
@@ -596,7 +596,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 				RelativePosition: domain.HardwareRelPosition{XMm: intent.OffsetMm[0], YMm: intent.OffsetMm[1]},
 				RotationDeg:      intent.RotationDeg,
 			}
-			resolvedList := resolveHardwareOrKitToWorld(host, hp, catalog, sideThicknessMm, intent.HardwarePlacementID)
+			resolvedList := resolveHardwareOrKitToWorld(host, hp, catalog, sideThicknessMm, float64(dims.WidthMm), intent.HardwarePlacementID)
 			layout.Hardware = append(layout.Hardware, resolvedList...)
 		}
 	}
@@ -2305,7 +2305,7 @@ func resolveKitPartActorMembership(child domain.Hardware, kitHw domain.Hardware,
 // finish color, and actorMembership ("body" vs "actor:door"). The primary entry keeps
 // placementID and hw.ID with placementKind="manual" so normalized authoring snapshots
 // and coherence checks remain 1:1, while additional kit parts are emitted as "derived".
-func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement, catalog domain.Catalog, sideThicknessMm float64, placementID string,
+func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement, catalog domain.Catalog, sideThicknessMm float64, furnitureWidthMm float64, placementID string,
 	placementKind ...string,
 ) []LayoutHardware {
 	hw, ok := findHardware(catalog, hp.HardwareID)
@@ -2351,9 +2351,9 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 			childHp := hp
 			childHp.HardwareID = item.hw.ID
 			if item.actor == "body" && board != nil && (board.placement == string(domain.PlacementPuerta) || isDoorBoard(board)) {
-				inwardShift := sideThicknessMm
-				if inwardShift <= 0 {
-					inwardShift = math.Max(board.thicknessMm, 0)
+				tSide := sideThicknessMm
+				if tSide <= 0 {
+					tSide = math.Max(board.thicknessMm, 0)
 				}
 				w := math.Max(board.widthMm, 0)
 				t := math.Max(board.thicknessMm, 0)
@@ -2371,11 +2371,20 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 						xMm = float64(v)
 					}
 				}
+				// #1592: the fixed plate mounts ON the hinge-side panel's
+				// inner face — furniture x = W − tSide when the placement
+				// sits on the door's furniture-max half, tSide on the min
+				// half (the existing w/2 branch already detects the side in
+				// the flipped local frame). The historic ±sideThickness
+				// local shift moved the plate AWAY from the panel (inward
+				// into the cabinet), leaving it floating off the face.
+				var targetFurnitureX float64
 				if xMm <= w/2 {
-					xMm += inwardShift
+					targetFurnitureX = furnitureWidthMm - tSide
 				} else {
-					xMm -= inwardShift
+					targetFurnitureX = tSide
 				}
+				xMm = board.x + w - targetFurnitureX
 				childHp.RelativePosition.XMm = xMm
 				childHp.RelativePosition.XFormula = ""
 			}
