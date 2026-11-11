@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.kitPlateFaceParity.v1",
+  "comment": "#1592 — paridad TS↔Go de la placa fija (kit child body) de una bisagra de puerta: la placa se monta sobre la cara interior del costado del lado de la bisagra (world x = W − tSide en la mitad world-max, tSide en la mitad world-min) y el panel-local para el marco volteado de la puerta (rotateY 180) es part.x + w − worldTarget. Go: resolveHardwareOrKitToWorld (emite el absolute X); TS: kitPlateWorldTargetX + kitPlatePanelLocalX (project3dPreview.ts).",
+  "cases": [
+    {
+      "id": "alacena-puerta-derecha",
+      "furnitureWidthMm": 800,
+      "sideThicknessMm": 15,
+      "board": { "x": 402, "widthMm": 397 },
+      "placementLocalXMm": 20.5,
+      "expectedWorldX": 785,
+      "expectedPanelLocalX": 14
+    },
+    {
+      "id": "alacena-puerta-izquierda",
+      "furnitureWidthMm": 800,
+      "sideThicknessMm": 15,
+      "board": { "x": 2, "widthMm": 397 },
+      "placementLocalXMm": 377,
+      "expectedWorldX": 15,
+      "expectedPanelLocalX": 384
+    }
+  ]
+}

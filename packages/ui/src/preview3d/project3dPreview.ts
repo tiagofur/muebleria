@@ -489,9 +489,39 @@ export function resolveModuleAssemblies(
  * looks the part up against the now-unique `partById` Map, so a placement
  * always links to its OWN board — never the wrong/collapsed one.
  */
+/**
+ * #1592: the fixed plate of a door hinge kit (kit child with body
+ * membership) mounts ON the hinge-side panel's inner face — world x =
+ * W − tSide when the placement sits on the world-max half, tSide on the
+ * world-min half. Pure, fixture-tested (kitPlateFaceParity.contract.json)
+ * with Go parity (resolveHardwareOrKitToWorld emits the same absolute X).
+ */
+export function kitPlateWorldTargetX(
+  xMm: number,
+  boardWidthMm: number,
+  furnitureWidthMm: number,
+  sideThicknessMm: number,
+): number {
+  return xMm <= boardWidthMm / 2
+    ? furnitureWidthMm - sideThicknessMm
+    : sideThicknessMm;
+}
+
+/** Panel-local x for a world target on a rotateY-180 (X-flipping) board. */
+export function kitPlatePanelLocalX(
+  boardXMm: number,
+  boardWidthMm: number,
+  worldTargetX: number,
+): number {
+  return boardXMm + boardWidthMm - worldTargetX;
+}
+
 export function resolveModuleHardwarePlacements(
   /** Pick: synthetic drafts (agregado/structure editor previews) pass only these fields. */
-  module: Pick<Module, 'structureId' | 'components' | 'agregados'>,
+  module: Pick<Module, 'structureId' | 'components' | 'agregados'> & {
+    /** #1592: the cabinet width — required for the kit-plate inner-face target. */
+    readonly widthMm?: number;
+  },
   boardParts: readonly ResolvedBoardPart[],
   hardwareCatalog: readonly Hardware[],
   /**
@@ -677,8 +707,21 @@ export function resolveModuleHardwarePlacements(
                     // keep fallback xMm
                   }
                 }
+                // #1592: with the cabinet width known, the plate lands on
+                // the hinge-side panel's inner face (world target converted
+                // to panel-local through the rotateY-180 flip). Isolated
+                // editor drafts (no furniture width) keep the historic
+                // in-context shift.
                 const shiftedX =
-                  xMm <= w / 2 ? xMm + sideThicknessMm : xMm - sideThicknessMm;
+                  typeof module.widthMm === 'number' && module.widthMm > 0
+                    ? kitPlatePanelLocalX(
+                        part.x ?? 0,
+                        w,
+                        kitPlateWorldTargetX(xMm, w, module.widthMm, sideThicknessMm),
+                      )
+                    : xMm <= w / 2
+                      ? xMm + sideThicknessMm
+                      : xMm - sideThicknessMm;
                 // #1453 F2 (review P2): the shift assumes corner-based
                 // offsets. A placement with explicit panel refs or a
                 // hwAnchor carries authored intent — preserve every field
