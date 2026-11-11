@@ -341,3 +341,76 @@ class PresentationMotionAdapterTest < Minitest::Test
     refute_equal front2_closed.to_a, front2.transformation.to_a
   end
 end
+
+# #1575: bounds-bearing fakes — real doors/hinges expose bounds, so the
+# adapter may resolve the pivot from the mounted hardware's world side.
+class BoundedDoor
+  attr_accessor :transformation, :persistent_id
+  attr_reader :bounds
+
+  def initialize(persistent_id, transformation, min_x, max_x)
+    @persistent_id = persistent_id
+    @transformation = transformation
+    @bounds = Geom::BoundingBox.new(max_x - min_x)
+    @bounds.min = Geom::Point3d.new(min_x, 1.0, 0.0)
+    @bounds.max = Geom::Point3d.new(max_x, 1.0, 10.0)
+    @definition_bounds = Geom::BoundingBox.new(max_x - min_x)
+  end
+
+  def definition
+    Struct.new(:bounds).new(@definition_bounds)
+  end
+end
+
+class BoundedHardware
+  attr_accessor :transformation, :persistent_id
+  attr_reader :bounds
+
+  def initialize(persistent_id, transformation, center_x)
+    @persistent_id = persistent_id
+    @transformation = transformation
+    @bounds = Struct.new(:center).new(Geom::Point3d.new(center_x, 0.0, 0.0))
+  end
+end
+
+# #1575: the pivot is a WORLD fact — with mounted hinges present the door
+# swings on ITS hinge edge regardless of the side string the card sent
+# (after the mirror the slot labels can't describe world edges).
+def test_pivot_follows_mounted_hinges_over_the_side_string
+  door = BoundedDoor.new('door-b', @door_closed, 10.0, 25.0)
+  hinge_hi = BoundedHardware.new('hinge-hi', @hinge_closed, 24.0)
+  a = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+    motions, { 'door-1' => door }, { 'door-1' => [hinge_hi] }
+  )
+
+  # The card says 'right' (slot convention); the hinges sit at the MAX-X
+  # edge, so the door MUST hinge there anyway.
+  a.apply_motion('slot-0', 1.0, nil, side: 'right')
+  assert_close point_at(15.0, 0.0, 0.0).transform(door.transformation), point_at(25.0, 1.0, 0.0),
+               'bisagras al borde MAX-X ⇒ pivota MAX-X aunque el side string diga right'
+  free = point_at(0.0, 0.0, 0.0).transform(door.transformation)
+  assert_operator free.y, :>, 1.0, 'borde libre sale hacia +Y'
+end
+
+def test_pivot_follows_hinges_clustered_at_min_x
+  door = BoundedDoor.new('door-b2', @door_closed, 10.0, 25.0)
+  hinge_lo = BoundedHardware.new('hinge-lo', @hinge_closed, 11.0)
+  a = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+    motions, { 'door-1' => door }, { 'door-1' => [hinge_lo] }
+  )
+
+  a.apply_motion('slot-0', 1.0, nil, side: 'left')
+  assert_close point_at(0.0, 0.0, 0.0).transform(door.transformation), point_at(10.0, 1.0, 0.0),
+               'bisagras al borde MIN-X ⇒ pivota MIN-X aunque el side string diga left'
+  free = point_at(15.0, 0.0, 0.0).transform(door.transformation)
+  assert_operator free.y, :>, 1.0, 'borre libre sale hacia +Y'
+end
+
+def test_without_bounds_bearing_hardware_the_side_string_still_governs
+  # The pre-#1575 fakes expose no #bounds: the fallback keeps the old
+  # convention (side 'left' pivots the MAX-X edge) — legacy payloads and
+  # stub environments never lose their motion.
+  adapter.apply_motion('slot-0', 1.0, nil, side: 'left')
+  assert_close point_at(15.0, 0.0, 0.0).transform(@door.transformation), point_at(25.0, 1.0, 0.0),
+               'sin bisagras legibles, la convención por side-string se mantiene'
+end
