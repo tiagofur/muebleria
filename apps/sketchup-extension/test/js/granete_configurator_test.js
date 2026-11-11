@@ -893,9 +893,8 @@ test('hardware roles: no consumed groups means no card and no gating', () => {
   assert.strictEqual(el(sandbox, 'btn-insert').disabled, false);
 });
 
-// #1153: connected inserts carry the hardware group choices as overrides —
-// the design has no hardware defaults, so without them the resolve loses
-// the choice ("grupo sin elección").
+// #1153: connected inserts carry the hardware group choice the user PICKED
+// as an override — without it the resolve loses the explicit choice.
 test('hardware roles: connected insert sends group choices inside materialOverrides', () => {
   const sandbox = runModule();
   sandbox.__state.hardwareCatalog = [
@@ -919,6 +918,86 @@ test('hardware roles: connected insert sends group choices inside materialOverri
     'the explicit hardware choice rides materialOverrides in connected mode');
   assert.strictEqual(sent.payload.materialChoices.BISAGRA, 'hw-eco',
     'and the same map for the local/disconnected resolve path');
+});
+
+// Design defaults for hardware/agregado groups: the seed follows the Design
+// default (same rule as the server composition) and an UNTOUCHED seed never
+// rides materialOverrides — otherwise every furniture is born pinned to the
+// first member and the Design default is never inherited.
+function designDefaultsFixture(designDefaults) {
+  const sandbox = runModule({ getDesignDefaults: () => designDefaults });
+  sandbox.__state.hardwareCatalog = [
+    { id: 'hw-blum', code: 'B-CL', name: 'Bisagra Blum' },
+    { id: 'hw-eco', code: 'B-ECO', name: 'Bisagra económica' }
+  ];
+  sandbox.__state.agregadosCatalog = [
+    { id: 'agr-tele', code: 'CAJ-TELE', name: 'Cajón telescópico' },
+    { id: 'agr-mbox', code: 'CAJ-MBOX', name: 'Cajón MERIVOBOX' }
+  ];
+  sandbox.__state.connected = true;
+  sandbox.window.GraneteUI.configurator.open(definition({
+    hardwareRoles: [
+      { code: 'BISAGRA', name: 'Bisagras', required: true, optionIds: ['hw-blum', 'hw-eco'] }
+    ],
+    agregadoRoles: [
+      { code: 'SISTEMA_CAJON', name: 'Cajón', required: true, optionIds: ['agr-tele', 'agr-mbox'] }
+    ]
+  }));
+  return sandbox;
+}
+
+function sendInsert(sandbox) {
+  sandbox.__calls.bridge.length = 0;
+  el(sandbox, 'btn-insert').click();
+  return sandbox.__calls.bridge.filter((c) => c.fn === 'begin_catalog_placement_preview').pop();
+}
+
+test('design defaults: hardware and agregado groups seed from the Design default, not the first member', () => {
+  const sandbox = designDefaultsFixture({ BISAGRA: 'hw-eco', SISTEMA_CAJON: 'agr-mbox' });
+
+  const hwRow = el(sandbox, 'library-hardware-container').children[0].children[1];
+  assert.strictEqual(hwRow.children[1].children[0].textContent, 'Bisagra económica',
+    'the hardware row shows the Design default');
+  const agrRow = el(sandbox, 'library-agregados-container').children[0].children[1];
+  assert.strictEqual(agrRow.children[1].children[0].textContent, 'Cajón MERIVOBOX',
+    'the agregado row shows the Design default');
+
+  const sent = sendInsert(sandbox);
+  assert(sent, 'preview dispatched');
+  assert.strictEqual(sent.payload.materialChoices.BISAGRA, 'hw-eco');
+  assert.strictEqual(sent.payload.materialChoices.SISTEMA_CAJON, 'agr-mbox');
+  assert.deepStrictEqual(sent.payload.materialOverrides, {},
+    'an untouched seed is inherited from the Design — never an override');
+});
+
+test('design defaults: a Design default outside the group members falls back to the first member', () => {
+  const sandbox = designDefaultsFixture({ BISAGRA: 'hw-retired', SISTEMA_CAJON: 'agr-gone' });
+
+  const sent = sendInsert(sandbox);
+  assert.strictEqual(sent.payload.materialChoices.BISAGRA, 'hw-blum',
+    'incompatible default ignored, as the server composition does');
+  assert.strictEqual(sent.payload.materialChoices.SISTEMA_CAJON, 'agr-tele');
+  assert.deepStrictEqual(sent.payload.materialOverrides, {});
+});
+
+test('design defaults: without Design defaults the untouched first member is not an override either', () => {
+  const sandbox = designDefaultsFixture({});
+
+  const sent = sendInsert(sandbox);
+  assert.strictEqual(sent.payload.materialChoices.BISAGRA, 'hw-blum');
+  assert.strictEqual(sent.payload.materialChoices.SISTEMA_CAJON, 'agr-tele');
+  assert.deepStrictEqual(sent.payload.materialOverrides, {},
+    'the server composes the same first member with mode=definition');
+});
+
+test('design defaults: only the group the user picked becomes an override', () => {
+  const sandbox = designDefaultsFixture({ BISAGRA: 'hw-eco', SISTEMA_CAJON: 'agr-mbox' });
+
+  sandbox.window.GraneteUI.configurator.applyHardwareChoice('SISTEMA_CAJON', 'agr-tele');
+  const sent = sendInsert(sandbox);
+  assert.deepStrictEqual(sent.payload.materialOverrides, { SISTEMA_CAJON: 'agr-tele' },
+    'the explicit pick is the ONLY exception; the untouched hinge group still inherits');
+  assert.strictEqual(sent.payload.materialChoices.BISAGRA, 'hw-eco');
 });
 
 // #1482: agregado option groups (cajones, puertas)
