@@ -194,7 +194,7 @@ export function resolveStructure3DPreview(
     // part-ids match the engine's expansion). VH-08: preview-only, never the
     // cut path.
     const resolvedHardwarePlacements = resolveModuleHardwarePlacements(
-      { structureId: tempStructure.id },
+      { structureId: tempStructure.id, widthMm: dims.width },
       resolvedBoardParts,
       catalogInput.hardware,
       {

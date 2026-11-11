@@ -343,7 +343,7 @@ func kitGuardDrawerCatalog(placement domain.HardwarePlacement) (domain.Module, d
 		CommercialKitHardwareID: strPtr("hw-mbox-kit"),
 		Components: []domain.ComponentInstance{{
 			ComponentID: "comp-fondo", Quantity: 1,
-			Overrides:     &domain.ComponentInstanceOverrides{HardwarePlacements: []domain.HardwarePlacement{placement}},
+			Overrides: &domain.ComponentInstanceOverrides{HardwarePlacements: []domain.HardwarePlacement{placement}},
 		}},
 		RigidMembers: []domain.AgregadoRigidMember{
 			{
@@ -1135,12 +1135,12 @@ func TestResolveFurnitureLayout_ExpandsKitHardwarePlacementsOnDoor(t *testing.T)
 						{
 							OptionRole:       "BISAGRA",
 							AnchorFace:       "back",
-							RelativePosition: domain.HardwareRelPosition{XMm: 20.5, YMm: 90},
+							RelativePosition: domain.HardwareRelPosition{XMm: 20.5, YMm: 90, XFormula: "PW-20.5"},
 						},
 						{
 							OptionRole:       "BISAGRA",
 							AnchorFace:       "back",
-							RelativePosition: domain.HardwareRelPosition{XMm: 20.5, YMm: 50, YFormula: "PH-90"},
+							RelativePosition: domain.HardwareRelPosition{XMm: 20.5, YMm: 50, XFormula: "PW-20.5", YFormula: "PH-90"},
 						},
 					},
 				},
@@ -1230,9 +1230,10 @@ func TestResolveFurnitureLayout_ExpandsKitHardwarePlacementsOnDoor(t *testing.T)
 	if hw1.AssetID != "8a0abb40-ce4e-4a40-9060-5f82d4765d4e" {
 		t.Errorf("hw1 missing skp assetId: %q", hw1.AssetID)
 	}
-	if math.Abs((hw0.LocalTransform.TranslationMm[0]-hw1.LocalTransform.TranslationMm[0])-18.0) > 1e-6 {
-		t.Errorf("expected body part hw1 to be shifted 18mm inward along X from door part hw0, got hw0.X=%v hw1.X=%v", hw0.LocalTransform.TranslationMm[0], hw1.LocalTransform.TranslationMm[0])
+	// #1592: the fixed plate (Copa) mounts ON the hinge-side panel's inner
+	// face — furniture x = tSide = 18 for this left-hinged module. The arm
+	// stays on the door's back face at the authored offset.
+	if math.Abs(hw1.LocalTransform.TranslationMm[0]-18.0) > 1e-6 {
+		t.Errorf("expected body part hw1 (Copa) on the side's inner face at x=18, got %v", hw1.LocalTransform.TranslationMm[0])
 	}
 }
-
-
