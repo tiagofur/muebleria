@@ -244,14 +244,19 @@ module Granete
           @is_historical == true
         end
 
-        # #1575: placement clone whose GEOMETRY frame (localTransform +
-        # mountFrame) is reflected across the furniture's mid-width plane,
-        # for the host's web-parity view. Every identity/provenance field
-        # (offsetMm, anchorFace, ids, estados) stays the engine's untouched
-        # truth — only the frame numbers flip, with the same det class the
-        # contract allows for hardware (det=±1, #1280).
+        # #1575: placement clone whose GEOMETRY frame (localTransform) is
+        # reflected across the furniture's mid-width plane, for the host's
+        # web-parity view. Every identity/provenance field (offsetMm,
+        # anchorFace, ids, estados) stays the engine's untouched truth —
+        # only the frame numbers flip, with the same det class the contract
+        # allows for hardware (det=±1, #1280). The MOUNT FRAME passes
+        # through untouched: it lives in ASSET space ("relative to its
+        # internal raw coordinates") and AssetLoader composes
+        # T_placement ∘ inverse(T_mountFrame) — reflecting it would shift
+        # the normalization by the furniture width and throw prepared
+        # hardware out of the cabinet (review round 1, B1).
         def with_mirrored_frame(mirror_fn, furniture_width_mm)
-          return self if local_transform.nil? && mount_frame.nil? && translation.nil?
+          return self if local_transform.nil? && translation.nil?
 
           LayoutHardwarePlacement.new(
             placement_id: placement_id, hardware_id: hardware_id, asset_id: asset_id,
@@ -263,7 +268,7 @@ module Granete
             representation: representation, validation_state: validation_state,
             local_transform: mirrored_local_transform(mirror_fn, furniture_width_mm),
             translation: mirrored_legacy_translation(furniture_width_mm),
-            preparation_state: preparation_state, mount_frame: mirrored_mount_frame(mirror_fn, furniture_width_mm),
+            preparation_state: preparation_state, mount_frame: mount_frame,
             is_historical: is_historical, option_role: option_role,
             actor_membership: actor_membership
           )
@@ -283,20 +288,6 @@ module Granete
           return translation unless local_transform.nil? && translation.is_a?(Array)
 
           [furniture_width_mm - translation[0].to_f, translation[1].to_f, translation[2].to_f]
-        end
-
-        def mirrored_mount_frame(mirror_fn, furniture_width_mm)
-          return nil if mount_frame.nil?
-
-          mt, mb = mirror_fn.call(mount_frame.origin_mm,
-                                  { 'x' => mount_frame.basis.x.to_a,
-                                    'y' => mount_frame.basis.y.to_a,
-                                    'z' => mount_frame.basis.z.to_a },
-                                  0, furniture_width_mm)
-          Assets::MountFrame::MountFrameData.new(
-            origin_mm: mt,
-            basis: Assets::MountFrame::BasisData.new(x: mb['x'], y: mb['y'], z: mb['z'])
-          )
         end
       end
 

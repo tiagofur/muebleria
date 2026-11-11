@@ -124,8 +124,11 @@ module Granete
         #   B'.y = (−by.x,  by.y,  by.z)
         #   B'.z = (−bz.x,  bz.y,  bz.z)
         #
-        # det(basis') = −det(basis): a right-handed board basis stays proper;
-        # a mirrored hardware basis (det=−1, #1280) stays mirrored-legal.
+        # det(basis') = det(basis): the extent shift folds the reflection so
+        # the determinant class is PRESERVED — a right-handed board basis
+        # stays proper (SketchUp mirrored instances stay impossible for
+        # boards), a mirrored hardware basis (det=−1, #1280) stays
+        # mirrored-legal.
         def mirror_placement(translation_mm, basis, local_x_extent_mm, furniture_width_mm)
           bx = basis_column(basis, 'x')
           by = basis_column(basis, 'y')

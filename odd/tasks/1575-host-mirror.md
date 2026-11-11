@@ -20,7 +20,7 @@ Reflexión sobre el plano x=W/2 del espacio del mueble, bakeada en NÚMEROS de p
 - Fórmula por frame (traslación t, basis B, extensión local en x = w_local):
   t̃.x = W − (t.x + w_local·bx.x); t̃.y = t.y + w_local·bx.y; t̃.z = t.z + w_local·bx.z
   B̃x = (bx.x, −bx.y, −bx.z); B̃y = (−by.x, by.y, by.z); B̃z = (−bz.x, bz.y, bz.z)
-  det(B̃) = −det(B): tablero det=+1 queda propio ✓; herraje det=−1 queda espejado (legal) ✓.
+  det(B̃) = det(B) (preservado): tablero det=+1 queda propio ✓; herraje det=−1 queda espejado (legal) ✓.
 - Espejar SÓLO la colocación externa de cada cadena: ensamble sí (T̃_a·T_m = S·M·(T_a·T_m)),
   miembros internos no. Board standalone sí. Herraje sí (punto: w_local=0) con mount_frame
   espejado igual. Path genérico (sin layout): pos.x' = W − pos.x − dims[0].
@@ -64,6 +64,23 @@ Reflexión sobre el plano x=W/2 del espacio del mueble, bakeada en NÚMEROS de p
   pasan sin tocarlos.
 - V2: SketchUp en vivo — NOT_RUN del lado del agente (host real); verificación del owner
   con su experimento 2P exigida por la aceptación de la issue antes del cierre.
+
+## Ronda de revisión independiente (1 consolidada)
+
+- **B1 corregido**: `with_mirrored_frame` espejaba el mount frame, que vive en espacio ASSET
+  (AssetLoader compone T_placement ∘ inverse(T_mountFrame)) — la normalización se corría el
+  ancho del mueble y los herrajes prepared del lane directo aterrizaban fuera. Ahora el mount
+  frame pasa intacto (la reflexión la carga el placement frame; asociatividad exacta, misma
+  semántica que d3/d10 probaron en ensambles) + test de regresión: origen de mount preparado
+  aterriza en el placement espejado (10mm, dentro del mueble).
+- Hallazgo propio durante la corrección: los 3 tests del contrato appendeados habían caído
+  FUERA de la clase (nivel top-level, minitest no los veía — 0 runs con filtro). Re-ubicados
+  dentro de LayoutContractTest y verificados con filtro de nombre.
+- Sugerencia 1 aplicada: comentario det(basis') corregido a "preservado" (el código y los
+  tests ya lo probaban; el texto decía −det). Sugerencia 3 anotada para la issue del pivote
+  por bisagras (#1574): filtrar bisagras vs cualquier herraje montado.
+- Re-verificación tras la ronda: rake unit 1490/0 (4 tests revividos + 1 regresión nueva),
+  rubocop 0 ofensas.
 
 ## Forecast / delivery
 
