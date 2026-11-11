@@ -2181,7 +2181,10 @@
           requestProjectFurniture: window.GraneteUI.projectFurniture.requestProjectFurniture,
           pfPlaceFailureMessage: window.GraneteUI.projectFurniture.pfPlaceFailureMessage,
           getHardwareCatalog: function () { return window.GraneteUI.inspector.getHardwareCatalog(); },
-          getAgregadosCatalog: function () { return window.GraneteUI.inspector.getAgregadosCatalog(); }
+          getAgregadosCatalog: function () { return window.GraneteUI.inspector.getAgregadosCatalog(); },
+          // Design-scoped authoring defaults: the hardware/agregado group
+          // seeds follow them, same source the material roles already use.
+          getDesignDefaults: function () { return window.GraneteUI.designInspector.getDesignDefaults(); }
         });
 
         // #848 C4.5: the finish selector module owns the visual material

@@ -189,10 +189,24 @@
     return (def && Array.isArray(def.hardwareRoles)) ? def.hardwareRoles : [];
   }
 
+  // The seed mirrors the server composition (ComposeEffectiveDefinitionMaterials):
+  // compatible Design default, else the first curated member. A Design
+  // default outside the group's members is ignored, exactly as the server
+  // ignores it — the row never shows a choice the resolve would not apply.
+  function seededGroupChoice(role) {
+    var ids = (role && Array.isArray(role.optionIds)) ? role.optionIds : [];
+    if (ids.length === 0) return null;
+    var designDefaults = typeof deps.getDesignDefaults === "function" ? (deps.getDesignDefaults() || {}) : {};
+    var designDefault = designDefaults[role.code];
+    if (designDefault && ids.indexOf(designDefault) !== -1) return designDefault;
+    return ids[0];
+  }
+
   function seedLibraryHardwareChoices(def) {
     hardwareRoles(def).forEach(function (role) {
-      if (role.optionIds && role.optionIds.length > 0) {
-        libMaterialChoices[role.code] = role.optionIds[0];
+      var seeded = seededGroupChoice(role);
+      if (seeded) {
+        libMaterialChoices[role.code] = seeded;
       } else {
         delete libMaterialChoices[role.code];
       }
@@ -385,8 +399,9 @@
 
   function seedLibraryAgregadoChoices(def) {
     agregadoRoles(def).forEach(function (role) {
-      if (role.optionIds && role.optionIds.length > 0) {
-        libMaterialChoices[role.code] = role.optionIds[0];
+      var seeded = seededGroupChoice(role);
+      if (seeded) {
+        libMaterialChoices[role.code] = seeded;
       } else {
         delete libMaterialChoices[role.code];
       }
@@ -1004,20 +1019,12 @@
           overrides[r] = libMaterialChoices[r];
         }
       }
-      // #1153: hardware group choices ALWAYS ride as overrides — they are
-      // explicit pre-insert selections and the design carries no hardware
-      // defaults yet; without them the connected resolve loses the choice.
-      hardwareRoles(activeLibDef).forEach(function (role) {
-        if (libMaterialChoices[role.code]) {
-          overrides[role.code] = libMaterialChoices[role.code];
-        }
-      });
-      // #1482: agregado group choices (cajones/puertas) also ride as overrides:
-      agregadoRoles(activeLibDef).forEach(function (role) {
-        if (libMaterialChoices[role.code]) {
-          overrides[role.code] = libMaterialChoices[role.code];
-        }
-      });
+      // Hardware and agregado group choices (#1153/#1482) ride as overrides
+      // ONLY when the user picked them (applyHardwareChoice marks the group
+      // in libUserCustomizedRoles, covered by the loop above). An untouched
+      // seed is not an exception: the server composes it from the Design
+      // default (#1198/#1252) or the first curated member, so the furniture
+      // inherits the Design instead of being pinned to the seed forever.
       // #1555: accessory group choices of the CHOSEN agregado ride as
       // overrides too — they only travel in materialChoices otherwise, and
       // the connected resolve loses the choice (same #1153 reasoning): the
