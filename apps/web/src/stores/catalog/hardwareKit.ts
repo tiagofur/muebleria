@@ -16,22 +16,28 @@ import type {
   HardwarePiece,
   HardwareKitCreateRequest,
   HardwareKitResult,
+  HardwareVisualAssetBinding,
 } from '@granete/domain';
 import {
+  HARDWARE_KIT_SYSTEM_HEIGHTS,
+  KIT_TEMPLATE_DRAWER_HANDS_ID,
   planHardwareKit,
   planHardwareKitSystem,
   type HardwareKitSystemCreateRequest,
+  type HardwareKitSystemEligibilityRequest,
   type HardwareKitTemplate,
   type OptionGroup,
 } from '@granete/domain';
 
-import type { CatalogStoreCtx } from './shared';
+import type { CatalogStoreCtx, AddSystemHeightRequest } from './shared';
 import type { Catalog } from '@granete/domain';
 
 export type HardwareKitSlice = {
   readonly createHardwareKit: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
   /** #1546 M4: sistema generador — kits por altura + accesorios del E + agregado con variantes. */
   readonly createHardwareKitSystem: (req: HardwareKitSystemCreateRequest) => Promise<HardwareKitResult>;
+  /** #1596 alcance 10: añadir una altura faltante a un sistema ya creado. */
+  readonly addSystemHeight: (req: AddSystemHeightRequest) => Promise<{ readonly kitCode: string; readonly agregadoCode: string }>;
 };
 
 const DESIGN_NOTES = (kitCode: string): string =>
@@ -578,6 +584,183 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         agregadoCode: agregado.code,
         agregadoId: agregado.id,
       };
+    },
+
+    /**
+     * #1596 alcance 10: añadir una altura FALTANTE a un sistema ya creado
+     * (decisión 8 — el escenario real: MERIVOBOX existe y el asistente se
+     * bloquea). Crea el kit de la altura (misma estructura drawer-hands que
+     * el sistema) y añade la variante al ensamble por la VÍA DE EDICIÓN
+     * existente (un saveAndToast; el PUT de receta valida con If-Match).
+     * Si el ensamble aún no está en ningún grupo kind:agregado, la
+     * elegibilidad viaja en el mismo request (#1596 decisión 9).
+     */
+    addSystemHeight: async (req) => {
+      const catalog = ctx.get().catalog;
+      if (!catalog) throw new Error('El catálogo no está cargado.');
+      const agregado = (catalog.agregados ?? []).find((a) => a.id === req.agregadoId);
+      if (!agregado) throw new Error('El ensamble del sistema ya no existe.');
+      const systemCode = agregado.code.replace(/-CAJON$/, '');
+      if (!systemCode || systemCode === agregado.code) {
+        throw new Error(`«${agregado.code}» no es un ensamble de sistema (-CAJON).`);
+      }
+      const height = HARDWARE_KIT_SYSTEM_HEIGHTS.find((h) => h.code === req.heightCode);
+      if (!height) throw new Error(`Altura «${req.heightCode}» fuera de la lista canónica.`);
+
+      const hardwareList = catalog.hardware ?? [];
+      const kitCode = `${systemCode}-${req.heightCode}`;
+      const existing = {
+        hardwareCodes: new Set(hardwareList.map((h) => h.code)),
+        agregadoCodes: new Set((catalog.agregados ?? []).map((a) => a.code)),
+      };
+      if (existing.hardwareCodes.has(kitCode)) {
+        throw new Error(`El juego «${kitCode}» ya existe en el catálogo.`);
+      }
+      const heightVs = (agregado.variantSets ?? []).find((vs) => vs.dimension === 'height');
+      if (heightVs?.variants.some((v) => v.nominalDimensionMm === height.khMinMm)) {
+        throw new Error(`El sistema ya tiene la altura ${req.heightCode} (${height.khMinMm} mm).`);
+      }
+
+      const systemName = agregado.name.replace(/^Cajón\s+/, '') || systemCode;
+      const subPlan = planHardwareKit(
+        {
+          code: kitCode,
+          name: `${systemName} ${req.heightCode}`,
+          kitCostPerUnit: req.kitCostPerUnit,
+          widthMm: req.widthMm,
+          heightMm: height.khMinMm,
+          depthMm: req.depthMm,
+          templateId: KIT_TEMPLATE_DRAWER_HANDS_ID,
+        },
+        existing,
+      );
+
+      const idByCode = new Map(hardwareList.map((h) => [h.code, h.id] as const));
+      const idFor = (code: string): string => {
+        const found = idByCode.get(code);
+        if (found) return found;
+        const fresh = ctx.newId();
+        idByCode.set(code, fresh);
+        return fresh;
+      };
+      const kitId = idFor(kitCode);
+
+      const newHardware: Hardware[] = [
+        {
+          id: kitId,
+          code: kitCode,
+          name: `${systemName} ${req.heightCode}`,
+          unit: 'set',
+          costPerUnit: req.kitCostPerUnit,
+          active: true,
+          notes: `Juego ${req.heightCode} añadido al sistema ${systemCode} (#1596).`,
+        },
+      ];
+      for (const design of subPlan.designs) {
+        if (!design.handsParts) continue;
+        const pieces = design.handsParts
+          .map((part) => {
+            const binding = req.designs?.[`${kitCode}:${part.hand}:${design.code}`];
+            return binding ? ({ anchor: part.hand, asset: binding } as HardwarePiece) : null;
+          })
+          .filter((pc): pc is HardwarePiece => pc !== null);
+        newHardware.push({
+          id: idFor(design.code),
+          code: design.code,
+          name: design.name,
+          unit: 'piece',
+          costPerUnit: 0,
+          active: true,
+          previewShape: 'slide',
+          notes: DESIGN_NOTES(kitCode),
+          kitHardwareId: kitId,
+          ...(pieces.length > 0 ? { pieces } : {}),
+        });
+      }
+
+      // La variante nueva entra en el variant set height EXISTENTE; la
+      // altura externa del ensamble sube al máximo de sus variantes.
+      const baseVs = heightVs ?? { id: ctx.newId(), dimension: 'height' as const, variants: [] };
+      const nextVariantSets = (agregado.variantSets ?? []).some((vs) => vs.dimension === 'height')
+        ? (agregado.variantSets ?? []).map((vs) =>
+            vs.dimension === 'height'
+              ? {
+                  ...vs,
+                  variants: [
+                    ...vs.variants,
+                    {
+                      nominalDimensionMm: height.khMinMm,
+                      hardwareId: kitId,
+                      commercialKitHardwareId: kitId,
+                    },
+                  ],
+                }
+              : vs,
+          )
+        : [
+            ...(agregado.variantSets ?? []),
+            {
+              ...baseVs,
+              variants: [
+                {
+                  nominalDimensionMm: height.khMinMm,
+                  hardwareId: kitId,
+                  commercialKitHardwareId: kitId,
+                },
+              ],
+            },
+          ];
+      const nextHeight = Math.max(
+        ...nextVariantSets
+          .find((vs) => vs.dimension === 'height')!
+          .variants.map((v) => v.nominalDimensionMm),
+      );
+      const nextAgregado: Agregado = {
+        ...agregado,
+        externalDims: {
+          width: agregado.externalDims?.width ?? 0,
+          height: nextHeight,
+          depth: agregado.externalDims?.depth ?? 0,
+        },
+        variantSets: nextVariantSets,
+      };
+
+      // Elegibilidad en la misma mutación (decisión 9).
+      const nextOptionGroups = [...(catalog.optionGroups ?? [])];
+      if (req.eligibilityGroup) {
+        if (req.eligibilityGroup.existingGroupId) {
+          const idx = nextOptionGroups.findIndex(
+            (g) => g.id === req.eligibilityGroup!.existingGroupId,
+          );
+          const target = idx === -1 ? undefined : nextOptionGroups[idx];
+          if (!target) {
+            throw new Error('El grupo de elegibilidad elegido ya no existe.');
+          }
+          if (!target.optionIds.includes(agregado.id)) {
+            nextOptionGroups[idx] = { ...target, optionIds: [...target.optionIds, agregado.id] };
+          }
+        } else {
+          nextOptionGroups.push({
+            id: req.eligibilityGroup.id ?? ctx.newId(),
+            code: req.eligibilityGroup.code ?? '',
+            name: req.eligibilityGroup.name ?? '',
+            kind: 'agregado',
+            required: false,
+            optionIds: [agregado.id],
+          });
+        }
+      }
+
+      await ctx.saveAndToast(
+        (c) => ({
+          ...c,
+          hardware: [...(c.hardware ?? []), ...newHardware],
+          agregados: (c.agregados ?? []).map((a) => (a.id === nextAgregado.id ? nextAgregado : a)),
+          optionGroups: req.eligibilityGroup ? nextOptionGroups : c.optionGroups,
+        }),
+        `✓ Altura ${req.heightCode} añadida a ${systemCode} (${kitCode})`,
+      );
+      return { kitCode, agregadoCode: agregado.code };
     },
   };
 }

@@ -28,6 +28,7 @@ import type {
   OptionGroup,
   Structure,
   RecipeChangeSimulationResponse,
+  HardwareVisualAssetBinding,
 } from '@granete/domain';
 import {
   type ComponentDraft,
@@ -149,8 +150,21 @@ export interface ApiCatalogDeps {
   }>;
 }
 
-export interface RecipeChangeActions {
-  readonly simulate: (req: RecipeSimRequest) => Promise<RecipeSimResult>;
+/** #1596 alcance 10: una altura nueva para un sistema EXISTENTE (decisión 8). */
+export interface AddSystemHeightRequest {
+  /** Ensamble del sistema (code *-CAJON con variant set height). */
+  readonly agregadoId: string;
+  readonly heightCode: 'N' | 'M' | 'K' | 'E';
+  readonly kitCostPerUnit: number;
+  readonly widthMm: number;
+  readonly depthMm: number;
+  /** Uploads: clave `${kitCode}:${hand}:${partCode}` → binding. */
+  readonly designs?: Record<string, HardwareVisualAssetBinding>;
+  /** #1596 decisión 9: por si el ensamble aún no está en ningún grupo. */
+  readonly eligibilityGroup?: import('@granete/domain').HardwareKitSystemEligibilityRequest;
+}
+
+export interface RecipeChangeActions {  readonly simulate: (req: RecipeSimRequest) => Promise<RecipeSimResult>;
   readonly apply: (req: {
     readonly id: string;
     readonly expectedVersion: number;
@@ -205,7 +219,17 @@ export interface CatalogState {
   readonly setEdgeActive: (id: string, active: boolean) => void;
 
   // --- Hardware ---
-  readonly createHardware: (draft: HardwareDraft) => Promise<void>;
+  /** #1596: resuelve con el id creado (el alta de inserto lo necesita). */
+  readonly createHardware: (draft: HardwareDraft) => Promise<string>;
+  /**
+   * #1596 alcance 3: alta de inserto para un juego existente en UNA
+   * mutación — herraje + selector del juego (creado si falta) + opción.
+   */
+  readonly createInsertoForKit: (
+    draft: HardwareDraft,
+    kitId: string,
+    selectorName?: string,
+  ) => Promise<string>;
   readonly updateHardware: (id: string, draft: HardwareDraft) => Promise<void>;
   readonly setHardwareActive: (id: string, active: boolean) => Promise<void>;
   // #1507: subgrupos de herrajes (mismo patrón que los tableros F142).
@@ -216,6 +240,8 @@ export interface CatalogState {
   readonly createHardwareKitSystem: (
     req: import('@granete/domain').HardwareKitSystemCreateRequest,
   ) => Promise<import('@granete/domain').HardwareKitResult>;
+  /** #1596 alcance 10: altura faltante para un sistema existente. */
+  readonly addSystemHeight: (req: AddSystemHeightRequest) => Promise<{ readonly kitCode: string; readonly agregadoCode: string }>;
 
   // --- Ambient materials (presentation-only: finishes & scene textures) ---
   /** K1 #1032: settle promises so screens can await the save. */

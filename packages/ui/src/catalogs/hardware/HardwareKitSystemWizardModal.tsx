@@ -27,6 +27,8 @@ export interface HardwareKitSystemWizardModalProps {
   readonly onSubmit: (req: import('@granete/domain').HardwareKitSystemCreateRequest) => Promise<import('@granete/domain').HardwareKitResult>;
   readonly existingHardwareCodes?: ReadonlySet<string>;
   readonly existingAgregadoCodes?: ReadonlySet<string>;
+  /** #1596 decisión 9: grupos kind:agregado para la elegibilidad del ensamble. */
+  readonly eligibilityGroups?: readonly { readonly id: string; readonly code: string; readonly name: string }[];
   /**
    * Sube un SKP y devuelve el binding exacto (identifiers). Opcional: sin
    * servicio de recursos en la sesión igual se puede crear el sistema, sólo
@@ -51,6 +53,7 @@ export function HardwareKitSystemWizardModal({
   uploadDesign,
   existingHardwareCodes,
   existingAgregadoCodes,
+  eligibilityGroups = [],
 }: HardwareKitSystemWizardModalProps): ReactNode {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -60,8 +63,16 @@ export function HardwareKitSystemWizardModal({
   const [heights, setHeights] = useState<Record<string, boolean>>(
     () => Object.fromEntries(HARDWARE_KIT_SYSTEM_HEIGHTS.map((h) => [h.code, h.include])),
   );
-  // Accesorios del E: nombre + anclas fijo L/R (el par D/I del lateral).
-  const [accessories, setAccessories] = useState<{ name: string }[]>([]);
+  // Insertos del E con la forma COMPLETA (#1596: nada a medias): nombre +
+  // «Al abrir» (default: viaja con el cajón) + offsets explícitos por lado.
+  const [accessories, setAccessories] = useState<
+    { name: string; actor: 'body' | 'actor:drawer' | 'actor:door'; offsets: { left: { x: string; y: string; z: string }; right: { x: string; y: string; z: string } } }[]
+  >([]);
+  // #1596 decisión 9: elegibilidad del ensamble — grupo existente, grupo
+  // nuevo (default SISTEMA_CAJON) u omisión confirmada.
+  const [eligibilityMode, setEligibilityMode] = useState<'new' | 'existing' | 'skip'>('new');
+  const [eligibilityGroupId, setEligibilityGroupId] = useState('');
+  const [skipEligibilityConfirmed, setSkipEligibilityConfirmed] = useState(false);
   const [files, setFiles] = useState<SystemFileBuckets>({});
   const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -75,6 +86,9 @@ export function HardwareKitSystemWizardModal({
     setDepthMm('530');
     setHeights(Object.fromEntries(HARDWARE_KIT_SYSTEM_HEIGHTS.map((h) => [h.code, h.include])));
     setAccessories([]);
+    setEligibilityMode('new');
+    setEligibilityGroupId('');
+    setSkipEligibilityConfirmed(false);
     setFiles({});
     for (const input of Object.values(fileInputsRef.current)) {
       if (input) input.value = '';
@@ -103,18 +117,29 @@ export function HardwareKitSystemWizardModal({
       })),
       accessoriesE: accessories
         .filter((a) => a.name.trim())
-        .map((a) => ({
-          suffix: a.name
-            .trim()
-            .toUpperCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^A-Z0-9]+/g, '-')
-            .replace(/^-|-$/g, '')
-            .slice(0, 24),
-          name: a.name.trim(),
-          anchors: ['left', 'right'] as const,
-        }))
+        .map((a) => {
+          const offsetOf = (side: 'left' | 'right') => ({
+            x: Number(a.offsets[side].x) || 0,
+            y: Number(a.offsets[side].y) || 0,
+            z: Number(a.offsets[side].z) || 0,
+          });
+          return {
+            suffix: a.name
+              .trim()
+              .toUpperCase()
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/[^A-Z0-9]+/g, '-')
+              .replace(/^-|-$/g, '')
+              .slice(0, 24),
+            name: a.name.trim(),
+            anchors: ['left', 'right'] as const,
+            // #1596: offsets explícitos y «Al abrir» declarado — nunca el
+            // default invisible del motor ni la inferencia por nombre.
+            pieceOffsets: { left: offsetOf('left'), right: offsetOf('right') },
+            actorMembership: a.actor,
+          };
+        })
         .filter((a) => a.suffix !== ''),
     };
   }, [code, name, price, widthMm, depthMm, heights, accessories]);
@@ -209,7 +234,19 @@ export function HardwareKitSystemWizardModal({
           ? await uploadKitWizardDesigns(tasks, uploadDesign, wizard.setProgress)
           : {};
       wizard.setProgress('Creando el sistema…');
-      const created = await onSubmit({ input: systemInput, designs });
+      // #1596 decisión 9: la elegibilidad viaja en el MISMO request
+      // transaccional; omitir exige confirmar el aviso.
+      const eligibilityGroup =
+        eligibilityMode === 'skip'
+          ? undefined
+          : eligibilityMode === 'existing' && eligibilityGroupId
+            ? { existingGroupId: eligibilityGroupId }
+            : { id: crypto.randomUUID(), code: 'SISTEMA_CAJON', name: 'Sistemas de cajón' };
+      const created = await onSubmit({
+        input: systemInput,
+        designs,
+        ...(eligibilityGroup ? { eligibilityGroup } : {}),
+      });
       wizard.complete(created);
     } catch (err) {
       wizard.fail(err, 'No se pudo crear el sistema.');
@@ -415,47 +452,160 @@ export function HardwareKitSystemWizardModal({
             )}
           </fieldset>
 
-<fieldset className="catalog-form__section">
-            <legend className="catalog-form__section-title">Accesorios del cajón E</legend>
+          <fieldset className="catalog-form__section">
+            <legend className="catalog-form__section-title">Insertos del cajón E</legend>
             <p className="catalog-form__hint">
-              Cada accesorio se genera como un herraje con par de piezas (izq/der) y
-              queda como opción del grupo del cajón E.
+              Cada inserto (galería, boxcap, boxcover…) nace como un par con su SKP por
+              lado, su posición y su «Al abrir»; queda como opción del selector del cajón E.
             </p>
             {accessories.map((acc, idx) => (
               <div
                 key={idx}
-                style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}
+                style={{ border: '1px solid var(--border-subtle, #ddd)', borderRadius: 6, padding: 8, marginBottom: 8 }}
                 data-testid={`hardware-system-accessory-${idx}`}
               >
-                <input
-                  value={acc.name}
-                  onChange={(e) =>
-                    setAccessories((prev) =>
-                      prev.map((a, i) => (i === idx ? { ...a, name: e.target.value } : a)),
-                    )
-                  }
-                  placeholder="Ej: Galería Gris Iridium"
-                  data-testid={`hardware-system-accessory-${idx}-name`}
-                />
-                <button
-                  type="button"
-                  className="btn btn--small btn--ghost"
-                  onClick={() => setAccessories((prev) => prev.filter((_, i) => i !== idx))}
-                  data-testid={`hardware-system-accessory-${idx}-remove`}
-                >
-                  Quitar
-                </button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                  <input
+                    value={acc.name}
+                    onChange={(e) =>
+                      setAccessories((prev) =>
+                        prev.map((a, i) => (i === idx ? { ...a, name: e.target.value } : a)),
+                      )
+                    }
+                    placeholder="Ej: Galería Gris Iridium"
+                    data-testid={`hardware-system-accessory-${idx}-name`}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn--small btn--ghost"
+                    onClick={() => setAccessories((prev) => prev.filter((_, i) => i !== idx))}
+                    data-testid={`hardware-system-accessory-${idx}-remove`}
+                  >
+                    Quitar
+                  </button>
+                </div>
+                <label className="catalog-form__field">
+                  <span>Al abrir</span>
+                  <select
+                    value={acc.actor}
+                    onChange={(e) =>
+                      setAccessories((prev) =>
+                        prev.map((a, i) =>
+                          i === idx ? { ...a, actor: e.target.value as typeof a.actor } : a,
+                        ),
+                      )
+                    }
+                    data-testid={`hardware-system-accessory-${idx}-actor`}
+                  >
+                    <option value="actor:drawer">Viaja con el cajón al abrir</option>
+                    <option value="body">Fija al mueble (no se mueve)</option>
+                    <option value="actor:door">Viaja con la puerta al abrir</option>
+                  </select>
+                </label>
+                {(['left', 'right'] as const).map((side) => (
+                  <div key={side} style={{ marginBottom: 4 }}>
+                    <span className="catalog-form__label">
+                      Offsets {side === 'left' ? 'izquierda' : 'derecha'} (mm)
+                    </span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {(['x', 'y', 'z'] as const).map((axis) => (
+                        <input
+                          key={axis}
+                          type="number"
+                          step="0.5"
+                          aria-label={`Offset ${axis.toUpperCase()} ${side === 'left' ? 'izq' : 'der'} del inserto ${idx + 1}`}
+                          placeholder={axis.toUpperCase()}
+                          value={acc.offsets[side][axis]}
+                          onChange={(e) =>
+                            setAccessories((prev) =>
+                              prev.map((a, i) =>
+                                i === idx
+                                  ? {
+                                      ...a,
+                                      offsets: {
+                                        ...a.offsets,
+                                        [side]: { ...a.offsets[side], [axis]: e.target.value },
+                                      },
+                                    }
+                                  : a,
+                              ),
+                            )
+                          }
+                          data-testid={`hardware-system-accessory-${idx}-${side}-${axis}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
             <button
               type="button"
               className="btn btn--ghost btn--small"
-              onClick={() => setAccessories((prev) => [...prev, { name: '' }])}
+              onClick={() =>
+                setAccessories((prev) => [
+                  ...prev,
+                  {
+                    name: '',
+                    actor: 'actor:drawer',
+                    offsets: {
+                      left: { x: '', y: '', z: '' },
+                      right: { x: '', y: '', z: '' },
+                    },
+                  },
+                ])
+              }
               data-testid="hardware-system-accessory-add"
             >
-              Añadir accesorio
+              Añadir inserto
             </button>
           </fieldset>
+
+          <fieldset className="catalog-form__section" data-testid="hardware-system-eligibility">
+            <legend className="catalog-form__section-title">Elegibilidad del sistema</legend>
+            <p className="catalog-form__hint">
+              Dónde queda elegible el ensamble del sistema: los módulos lo eligen por
+              ese grupo. Sin elegibilidad, el sistema existe pero ningún módulo puede
+              montarlo.
+            </p>
+            <label className="catalog-form__field">
+              <span>Grupo de sistemas de cajón</span>
+              <select
+                value={eligibilityMode === 'existing' ? eligibilityGroupId : ''}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setEligibilityMode('existing');
+                    setEligibilityGroupId(e.target.value);
+                  } else {
+                    setEligibilityMode('new');
+                    setEligibilityGroupId('');
+                  }
+                }}
+                data-testid="hardware-system-eligibility-select"
+              >
+                <option value="">Crear grupo nuevo «SISTEMA_CAJON»</option>
+                {eligibilityGroups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.code} — {g.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={skipEligibilityConfirmed}
+                onChange={(e) => {
+                  setSkipEligibilityConfirmed(e.target.checked);
+                  if (e.target.checked) setEligibilityMode('skip');
+                  else setEligibilityMode('new');
+                }}
+                data-testid="hardware-system-eligibility-skip"
+              />
+              <span>Sin elegibilidad ahora — ningún módulo podrá elegir este sistema</span>
+            </label>
+          </fieldset>
+
 
           {plan ? (
             <div className="catalog-hw-wizard__preview" data-testid="hardware-system-wizard-preview">
@@ -463,13 +613,19 @@ export function HardwareKitSystemWizardModal({
               <p>
                 {plan.kits.length} juego(s): {plan.kits.map((k) => k.code).join(', ')}
                 {plan.accessories.length > 0
-                  ? ` + ${plan.accessories.length} accesorio(s): ${plan.accessories
+                  ? ` + ${plan.accessories.length} inserto(s): ${plan.accessories
                       .map((a) => a.code)
                       .join(', ')}`
                   : ''}{' '}
                 + ensamble <strong>{plan.agregado.code}</strong> con variantes de altura (
                 {plan.agregado.variants.map((v) => v.heightCode).join('/')})
-                {plan.accessoryGroup ? ` + grupo ${plan.accessoryGroup.code}` : ''}.
+                {plan.accessoryGroup ? ` + selector ${plan.accessoryGroup.code}` : ''}
+                {eligibilityMode === 'skip'
+                  ? ' · sin elegibilidad (ningún módulo podrá elegirlo)'
+                  : eligibilityMode === 'existing' && eligibilityGroupId
+                    ? ` · elegible en el grupo elegido`
+                    : ' · elegible en el grupo nuevo SISTEMA_CAJON'}
+                .
               </p>
               {plan.blockedCode ? (
                 <p

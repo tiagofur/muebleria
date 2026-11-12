@@ -293,6 +293,22 @@ export interface ShellViewCtx {
   readonly createHardwareKitSystem: (
     req: import('@granete/domain').HardwareKitSystemCreateRequest,
   ) => Promise<HardwareKitResult>;
+  /** #1596 alcance 3: inserto nuevo para un juego — herraje + selector en una mutación. */
+  readonly createInsertoForKit: (
+    draft: HardwareDraft,
+    kitId: string,
+    selectorName?: string,
+  ) => Promise<string>;
+  /** #1596 alcance 10: altura faltante para un sistema existente. */
+  readonly addSystemHeight: (req: {
+    readonly agregadoId: string;
+    readonly heightCode: 'N' | 'M' | 'K' | 'E';
+    readonly kitCostPerUnit: number;
+    readonly widthMm: number;
+    readonly depthMm: number;
+    readonly designs?: Record<string, import('@granete/domain').HardwareVisualAssetBinding>;
+    readonly eligibilityGroup?: import('@granete/domain').HardwareKitSystemEligibilityRequest;
+  }) => Promise<{ readonly kitCode: string; readonly agregadoCode: string }>;
   readonly kitTemplates: readonly WorkshopKitTemplateRow[];
   readonly kitTemplatesLoading: boolean;
   readonly kitTemplatesError: string | null;
@@ -638,6 +654,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     createHardware,
     createHardwareKit,
     createHardwareKitSystem,
+    createInsertoForKit,
+    addSystemHeight,
     createMaterial,
     createMaterialCategory,
     createHardwareCategory,
@@ -2060,6 +2078,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onUpdateCategory={canMutateCatalog ? updateHardwareCategory : undefined}
           onDeleteCategory={canMutateCatalog ? deleteHardwareCategory : undefined}
           onCreateKitSystem={canMutateCatalog ? createHardwareKitSystem : undefined}
+          onCreateInserto={canMutateCatalog ? createInsertoForKit : undefined}
+          onAddSystemHeight={canMutateCatalog ? addSystemHeight : undefined}
           optionGroups={optionGroups}
           onCreateOptionGroup={
             canMutateCatalog
