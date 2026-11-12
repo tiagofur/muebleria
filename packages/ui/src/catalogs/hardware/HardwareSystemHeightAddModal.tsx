@@ -273,7 +273,9 @@ export function HardwareSystemHeightAddModal({
               <legend className="catalog-form__section-title">Diseños 3D (opcionales)</legend>
               <p className="catalog-form__hint">
                 Un archivo por mano del costado (.skp). Lo que queda sin diseño se ve con
-                la representación genérica y se sube después desde su ficha.
+                la representación genérica y se sube después desde su ficha. Los costados
+                nacen en su posición canónica Blum: 10 mm el fijo, 35 mm el móvil, medidos
+                del ancho del cajón.
               </p>
               {planned.designs.map((design) =>
                 (design.handsParts ?? []).map((part) => {

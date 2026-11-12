@@ -73,3 +73,15 @@ Re-verificación local: pendiente gate de navegador con los 7 specs afectados + 
 **Verificado:** vitest ui hardware (2 archivos, 7 tests con los 2 nuevos), domain hardwareKit+designParts 54/54, `pnpm typecheck` verde, `scripts/backend-test.sh ./internal/api` ok (36 s, Postgres desechable, E2E del endpoint incluidos), gofmt/vet limpios.
 
 **B2 (blocker ABIERTO, decisión del owner):** el paso de diseño por mano de las ALTURAS (asistente y «Añadir altura») pide sólo subida de SKP, sin elegir-existing ni offsets — diverge del brief normativo (§Juego paso 2, alcance 9). O se implementa en este PR o la deferral se aprueba por escrito en la issue.
+
+## Ronda de corrección 4 (juicio dual: A 1B/6S + B 3B/7S)
+
+- A-B1 (P1, brief Estados): código duplicado EN LÍNEA al escribirlo en la forma por tipo (validateUniqueCode en vivo junto al campo, role=alert + aria-invalid; el wizard de sistema ya lo hacía). Test actualizado al contrato en línea.
+- B-B1 (P1, regresión guest): guestOptionGroups ahora incluye accessoryGroupDraft — guest no pierde más el selector de insertos del E. + S5: código vacío en grupo de elegibilidad nuevo falla también en guest.
+- B-B2 (P1): identidad del inserto decidida UNA vez (insertoPendingId en el draft, minteada en el primer submit) → el reintento converge con lo persistido a mitad (GET 200 → PUT), sin 409 en bucle ni duplicado.
+- B-B3 (P1, brief): divergencia APROBADA por el owner en sesión — alturas sin campo de offsets; rótulo honesto en wizard y «Añadir altura» («los costados nacen en su posición canónica Blum: 10 mm fija / 35 mm móvil»); el ajuste fino por altura queda para issue aparte.
+- B-S2/S4: grupo SISTEMA_CAJON existente preseleccionado (evita 409 del 2º sistema); elegir grupo limpia la omisión confirmada.
+- B-S6: «Añadir altura» reutiliza diseños existentes en vez de recrearlos (409 fail-closed evitado).
+- B-S7 (parcial): el grupo de elegibilidad creado server-side se adopta en el estado local (antes stale hasta refetch).
+- A-S3/S4 y S1 ya aplicados en rondas previas. No aplicados con razón: B-S3 (test de 409 de elegibilidad — semántica cubierta por tests existentes de rollback), B-S7 actorValue vs setActor (edge de fila vaciada en Avanzado, defensible), B-S2 follow-up.
+- Verificación: tsc ×3 limpio, vitest ui 217/217, domain 2182/2182. CI en curso para el HEAD nuevo.
