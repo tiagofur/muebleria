@@ -16,22 +16,28 @@ import type {
   HardwarePiece,
   HardwareKitCreateRequest,
   HardwareKitResult,
+  HardwareVisualAssetBinding,
 } from '@granete/domain';
 import {
+  HARDWARE_KIT_SYSTEM_HEIGHTS,
+  KIT_TEMPLATE_DRAWER_HANDS_ID,
   planHardwareKit,
   planHardwareKitSystem,
   type HardwareKitSystemCreateRequest,
+  type HardwareKitSystemEligibilityRequest,
   type HardwareKitTemplate,
   type OptionGroup,
 } from '@granete/domain';
 
-import type { CatalogStoreCtx } from './shared';
+import type { CatalogStoreCtx, AddSystemHeightRequest } from './shared';
 import type { Catalog } from '@granete/domain';
 
 export type HardwareKitSlice = {
   readonly createHardwareKit: (req: HardwareKitCreateRequest) => Promise<HardwareKitResult>;
   /** #1546 M4: sistema generador — kits por altura + accesorios del E + agregado con variantes. */
   readonly createHardwareKitSystem: (req: HardwareKitSystemCreateRequest) => Promise<HardwareKitResult>;
+  /** #1596 alcance 10: añadir una altura faltante a un sistema ya creado. */
+  readonly addSystemHeight: (req: AddSystemHeightRequest) => Promise<{ readonly kitCode: string; readonly agregadoCode: string }>;
 };
 
 const DESIGN_NOTES = (kitCode: string): string =>
@@ -322,7 +328,12 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         }
       }
 
-      // 2. Herrajes accesorios del E con piezas por ancla (F1).
+      // 2. Herrajes accesorios del E con piezas por ancla (F1). #1596: el
+      // accesorio SIEMPRE declara sus piezas por ancla (con o sin SKP — el
+      // lado queda con diseño pendiente, nunca invisible) con offsets
+      // EXPLÍCITOS (decisión 2: dibuja en 0,0,0 y posiciona por offset) y la
+      // declaración de movimiento que el motor ya lee (decisión 4: «Al
+      // abrir» = actor:drawer por defecto, nunca inferido del nombre).
       const accessoryIds: string[] = [];
       for (const acc of plan.accessories) {
         const accId = idFor(acc.code);
@@ -331,12 +342,16 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           reusedCodes.push(acc.code);
           continue;
         }
-        const pieces = acc.anchors
-          .map((anchor) => {
-            const binding = req.designs?.[`${acc.code}:${anchor}`];
-            return binding ? ({ anchor, asset: binding } as HardwarePiece) : null;
-          })
-          .filter((pc): pc is HardwarePiece => pc !== null);
+        const pieces = acc.anchors.map((anchor) => {
+          const binding = req.designs?.[`${acc.code}:${anchor}`];
+          const offset = acc.pieceOffsets?.[anchor] ?? { x: 0, y: 0, z: 0 };
+          return {
+            anchor,
+            ...(binding ? { asset: binding } : {}),
+            offsetMm: { x: offset.x, y: offset.y, z: offset.z },
+          } as HardwarePiece;
+        });
+        const actorMembership = acc.actorMembership ?? 'actor:drawer';
         newHardware.push({
           id: accId,
           code: acc.code,
@@ -345,7 +360,10 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           costPerUnit: 0,
           active: true,
           notes: `Accesorio del cajón E del sistema ${req.input.code.trim()} (#1519): se elige por mueble y el motor lo monta por cajón.`,
-          ...(pieces.length > 0 ? { pieces } : {}),
+          pieces,
+          designParts: [
+            { componentName: acc.code, actorMembership, label: '', finishKey: '' },
+          ],
         });
         createdCodes.push(acc.code);
       }
@@ -422,7 +440,30 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
               asset: p.asset
                 ? { assetId: p.asset.assetId, assetRevisionId: p.asset.assetRevisionId }
                 : undefined,
+              // #1596: offsets explícitos — lo mostrado es lo que se guarda.
+              offsetMm: p.offsetMm
+                ? { x: p.offsetMm.x, y: p.offsetMm.y, z: p.offsetMm.z }
+                : undefined,
             })),
+            // #1596: la declaración de movimiento que el motor ya lee. El
+            // vocabulario está cerrado en el contrato — un valor fuera de él
+            // aborta el alta (fail-loud), nunca viaja ni se silencia.
+            design_parts: h.designParts?.length
+              ? h.designParts.map((dp) => {
+                  const actor = dp.actorMembership;
+                  if (actor !== 'body' && actor !== 'actor:drawer' && actor !== 'actor:door') {
+                    throw new Error(
+                      `«${h.code}» declara «Al abrir» inválido (${actor}): el alta usa Fija al mueble, viaja con el cajón o viaja con la puerta.`,
+                    );
+                  }
+                  return {
+                    component_name: dp.componentName,
+                    actor_membership: actor,
+                    label: dp.label || null,
+                    finish_key: dp.finishKey || null,
+                  };
+                })
+              : undefined,
           })),
           agregado: {
             id: agregado.id,
@@ -455,6 +496,17 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
                 kit_hardware_id: accessoryGroupDraft.kitHardwareId ?? '',
               }
             : null,
+          // #1596 decisión 9: la elegibilidad se aplica en la MISMA
+          // transacción del servidor.
+          eligibility_group: req.eligibilityGroup
+            ? req.eligibilityGroup.existingGroupId
+              ? { existing_group_id: req.eligibilityGroup.existingGroupId }
+              : {
+                  id: req.eligibilityGroup.id ?? '',
+                  code: req.eligibilityGroup.code ?? '',
+                  name: req.eligibilityGroup.name ?? '',
+                }
+            : null,
         });
 
         // El estado local adopta la verdad del servidor: códigos creados/
@@ -467,12 +519,31 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
             id: created.variant_set_ids[i] ?? vs.id,
           })),
         };
+        // Review S7: el grupo de elegibilidad creado server-side se adopta
+        // en el estado local (antes quedaba stale hasta el refetch).
+        const eligibilityDraft =
+          req.eligibilityGroup && !req.eligibilityGroup.existingGroupId
+            ? {
+                id: req.eligibilityGroup.id ?? ctx.newId(),
+                code: req.eligibilityGroup.code ?? '',
+                name: req.eligibilityGroup.name ?? '',
+                kind: 'agregado' as const,
+                required: false,
+                optionIds: [created.agregado_id],
+              }
+            : null;
         const merged: Catalog = {
           ...catalog,
           hardware: [...(catalog.hardware ?? []), ...newHardware],
           agregados: [...(catalog.agregados ?? []), serverAgregado],
-          ...(accessoryGroupDraft
-            ? { optionGroups: [...(catalog.optionGroups ?? []), accessoryGroupDraft] }
+          ...(accessoryGroupDraft || eligibilityDraft
+            ? {
+                optionGroups: [
+                  ...(catalog.optionGroups ?? []),
+                  ...(accessoryGroupDraft ? [accessoryGroupDraft] : []),
+                  ...(eligibilityDraft ? [eligibilityDraft] : []),
+                ],
+              }
             : {}),
         };
         ctx.set({ catalog: merged });
@@ -485,14 +556,53 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         };
       }
 
+      // Guest (sin backend): la elegibilidad se aplica en la MISMA mutación
+      // local — sin éxito aparente: un grupo inexistente aborta todo antes
+      // de escribir (#1596 decisión 9). El selector de insertos del E
+      // (accessoryGroupDraft, #1519) entra en la MISMA lista — review B1:
+      // sin esto, guest creaba el sistema y perdía el selector.
+      const guestOptionGroups = [...(catalog.optionGroups ?? [])];
+      if (accessoryGroupDraft) {
+        guestOptionGroups.push(accessoryGroupDraft);
+      }
+      if (req.eligibilityGroup) {
+        if (req.eligibilityGroup.existingGroupId) {
+          const target = guestOptionGroups.find(
+            (g) => g.id === req.eligibilityGroup!.existingGroupId,
+          );
+          if (!target) {
+            throw new Error('El grupo de elegibilidad elegido ya no existe. Volvé a abrir el asistente y elegilo de nuevo.');
+          }
+          if (!target.optionIds.includes(agregado.id)) {
+            const idx = guestOptionGroups.findIndex((g) => g.id === target.id);
+            guestOptionGroups[idx] = { ...target, optionIds: [...target.optionIds, agregado.id] };
+          }
+        } else {
+          const code = req.eligibilityGroup.code ?? '';
+          if (!code) {
+            // S5 (review B): el servidor exige code; el camino guest falla igual.
+            throw new Error('El grupo de elegibilidad nuevo necesita código.');
+          }
+          guestOptionGroups.push({
+            id: req.eligibilityGroup.id ?? ctx.newId(),
+            code,
+            name: req.eligibilityGroup.name ?? '',
+            kind: 'agregado',
+            required: false,
+            optionIds: [agregado.id],
+          });
+        }
+      }
+
       await ctx.saveAndToast(
         (c) => ({
           ...c,
           hardware: [...(c.hardware ?? []), ...newHardware],
           agregados: [...(c.agregados ?? []), agregado],
-          ...(accessoryGroupDraft
-            ? { optionGroups: [...(c.optionGroups ?? []), accessoryGroupDraft] }
-            : {}),
+          optionGroups:
+            accessoryGroupDraft || req.eligibilityGroup
+              ? guestOptionGroups
+              : c.optionGroups,
         }),
         `✓ Sistema «${req.input.code.trim()}» creado (${plan.kits.length} alturas)`,
       );
@@ -503,6 +613,188 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         agregadoCode: agregado.code,
         agregadoId: agregado.id,
       };
+    },
+
+    /**
+     * #1596 alcance 10: añadir una altura FALTANTE a un sistema ya creado
+     * (decisión 8 — el escenario real: MERIVOBOX existe y el asistente se
+     * bloquea). Crea el kit de la altura (misma estructura drawer-hands que
+     * el sistema) y añade la variante al ensamble por la VÍA DE EDICIÓN
+     * existente (un saveAndToast; el PUT de receta valida con If-Match).
+     * Si el ensamble aún no está en ningún grupo kind:agregado, la
+     * elegibilidad viaja en el mismo request (#1596 decisión 9).
+     */
+    addSystemHeight: async (req) => {
+      const catalog = ctx.get().catalog;
+      if (!catalog) throw new Error('El catálogo no está cargado.');
+      const agregado = (catalog.agregados ?? []).find((a) => a.id === req.agregadoId);
+      if (!agregado) throw new Error('El ensamble del sistema ya no existe.');
+      const systemCode = agregado.code.replace(/-CAJON$/, '');
+      if (!systemCode || systemCode === agregado.code) {
+        throw new Error(`«${agregado.code}» no es un ensamble de sistema (-CAJON).`);
+      }
+      const height = HARDWARE_KIT_SYSTEM_HEIGHTS.find((h) => h.code === req.heightCode);
+      if (!height) throw new Error(`Altura «${req.heightCode}» fuera de la lista canónica.`);
+
+      const hardwareList = catalog.hardware ?? [];
+      const kitCode = `${systemCode}-${req.heightCode}`;
+      const existing = {
+        hardwareCodes: new Set(hardwareList.map((h) => h.code)),
+        agregadoCodes: new Set((catalog.agregados ?? []).map((a) => a.code)),
+      };
+      if (existing.hardwareCodes.has(kitCode)) {
+        throw new Error(`El juego «${kitCode}» ya existe en el catálogo.`);
+      }
+      const heightVs = (agregado.variantSets ?? []).find((vs) => vs.dimension === 'height');
+      if (heightVs?.variants.some((v) => v.nominalDimensionMm === height.khMinMm)) {
+        throw new Error(`El sistema ya tiene la altura ${req.heightCode} (${height.khMinMm} mm).`);
+      }
+
+      const systemName = agregado.name.replace(/^Cajón\s+/, '') || systemCode;
+      const subPlan = planHardwareKit(
+        {
+          code: kitCode,
+          name: `${systemName} ${req.heightCode}`,
+          kitCostPerUnit: req.kitCostPerUnit,
+          widthMm: req.widthMm,
+          heightMm: height.khMinMm,
+          depthMm: req.depthMm,
+          templateId: KIT_TEMPLATE_DRAWER_HANDS_ID,
+        },
+        existing,
+      );
+
+      const idByCode = new Map(hardwareList.map((h) => [h.code, h.id] as const));
+      const idFor = (code: string): string => {
+        const found = idByCode.get(code);
+        if (found) return found;
+        const fresh = ctx.newId();
+        idByCode.set(code, fresh);
+        return fresh;
+      };
+      const kitId = idFor(kitCode);
+
+      const newHardware: Hardware[] = [
+        {
+          id: kitId,
+          code: kitCode,
+          name: `${systemName} ${req.heightCode}`,
+          unit: 'set',
+          costPerUnit: req.kitCostPerUnit,
+          active: true,
+          notes: `Juego ${req.heightCode} añadido al sistema ${systemCode} (#1596).`,
+        },
+      ];
+      for (const design of subPlan.designs) {
+        if (!design.handsParts) continue;
+        // Review S6: un diseño preexistente se reutiliza, no se recrea —
+        // recrearlo tiraría un 409 fail-closed sobre TODO el save.
+        if (design.exists) {
+          continue;
+        }
+        const pieces = design.handsParts
+          .map((part) => {
+            const binding = req.designs?.[`${kitCode}:${part.hand}:${design.code}`];
+            return binding ? ({ anchor: part.hand, asset: binding } as HardwarePiece) : null;
+          })
+          .filter((pc): pc is HardwarePiece => pc !== null);
+        newHardware.push({
+          id: idFor(design.code),
+          code: design.code,
+          name: design.name,
+          unit: 'piece',
+          costPerUnit: 0,
+          active: true,
+          previewShape: 'slide',
+          notes: DESIGN_NOTES(kitCode),
+          kitHardwareId: kitId,
+          ...(pieces.length > 0 ? { pieces } : {}),
+        });
+      }
+
+      // La variante nueva entra en el variant set height EXISTENTE; la
+      // altura externa del ensamble sube al máximo de sus variantes.
+      const baseVs = heightVs ?? { id: ctx.newId(), dimension: 'height' as const, variants: [] };
+      const nextVariantSets = (agregado.variantSets ?? []).some((vs) => vs.dimension === 'height')
+        ? (agregado.variantSets ?? []).map((vs) =>
+            vs.dimension === 'height'
+              ? {
+                  ...vs,
+                  variants: [
+                    ...vs.variants,
+                    {
+                      nominalDimensionMm: height.khMinMm,
+                      hardwareId: kitId,
+                      commercialKitHardwareId: kitId,
+                    },
+                  ],
+                }
+              : vs,
+          )
+        : [
+            ...(agregado.variantSets ?? []),
+            {
+              ...baseVs,
+              variants: [
+                {
+                  nominalDimensionMm: height.khMinMm,
+                  hardwareId: kitId,
+                  commercialKitHardwareId: kitId,
+                },
+              ],
+            },
+          ];
+      const nextHeight = Math.max(
+        ...nextVariantSets
+          .find((vs) => vs.dimension === 'height')!
+          .variants.map((v) => v.nominalDimensionMm),
+      );
+      const nextAgregado: Agregado = {
+        ...agregado,
+        externalDims: {
+          width: agregado.externalDims?.width ?? 0,
+          height: nextHeight,
+          depth: agregado.externalDims?.depth ?? 0,
+        },
+        variantSets: nextVariantSets,
+      };
+
+      // Elegibilidad en la misma mutación (decisión 9).
+      const nextOptionGroups = [...(catalog.optionGroups ?? [])];
+      if (req.eligibilityGroup) {
+        if (req.eligibilityGroup.existingGroupId) {
+          const idx = nextOptionGroups.findIndex(
+            (g) => g.id === req.eligibilityGroup!.existingGroupId,
+          );
+          const target = idx === -1 ? undefined : nextOptionGroups[idx];
+          if (!target) {
+            throw new Error('El grupo de elegibilidad elegido ya no existe.');
+          }
+          if (!target.optionIds.includes(agregado.id)) {
+            nextOptionGroups[idx] = { ...target, optionIds: [...target.optionIds, agregado.id] };
+          }
+        } else {
+          nextOptionGroups.push({
+            id: req.eligibilityGroup.id ?? ctx.newId(),
+            code: req.eligibilityGroup.code ?? '',
+            name: req.eligibilityGroup.name ?? '',
+            kind: 'agregado',
+            required: false,
+            optionIds: [agregado.id],
+          });
+        }
+      }
+
+      await ctx.saveAndToast(
+        (c) => ({
+          ...c,
+          hardware: [...(c.hardware ?? []), ...newHardware],
+          agregados: (c.agregados ?? []).map((a) => (a.id === nextAgregado.id ? nextAgregado : a)),
+          optionGroups: req.eligibilityGroup ? nextOptionGroups : c.optionGroups,
+        }),
+        `✓ Altura ${req.heightCode} añadida a ${systemCode} (${kitCode})`,
+      );
+      return { kitCode, agregadoCode: agregado.code };
     },
   };
 }

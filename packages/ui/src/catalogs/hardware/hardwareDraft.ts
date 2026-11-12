@@ -86,7 +86,27 @@ export type HardwareDraft = {
   categoryId?: string;
   /** #1507: marca/serie en texto libre ('' = sin marca). */
   brand?: string;
+  /**
+   * #1596: tipo de ítem del alta — sólo forma (qué secciones muestra el
+   * modal); los registros persistidos son los mismos que el motor consume.
+   * Al editar se infiere de los datos (pieces I/D → par; juego → kit).
+   */
+  itemType?: HardwareItemType;
+  /** #1596 alcance 3: juego al que el inserto queda añadido como opción. */
+  insertoKitId?: string;
+  /** #1596: nombre del selector si hay que crearlo (vacío = «Insertos de <kit>»). */
+  insertoSelectorName?: string;
+  /**
+   * #1596 (review B2): identidad del inserto decidida UNA vez y reutilizada
+   * en reintentos — si la persistencia a mitad dejó el herraje en el
+   * servidor, el reintento con el MISMO id converge (GET 200 → PUT) en vez
+   * de crear un duplicado con 409 en bucle.
+   */
+  insertoPendingId?: string;
 };
+
+/** #1596: los cuatro tipos de ítem del alta (decisión 1). */
+export type HardwareItemType = 'piece' | 'pair' | 'kit' | 'inserto';
 
 export const emptyPartFinishes = (): { body: string; base: string; grip: string } => ({
   body: '',
@@ -161,5 +181,20 @@ export function toDraft(item: Hardware): HardwareDraft {
     ...(item.pieces ? { pieces: item.pieces } : {}),
     categoryId: item.categoryId ?? '',
     brand: item.brand ?? '',
+    itemType: inferHardwareItemType(item),
   };
+}
+
+/**
+ * #1596: el tipo se INFiERE de los datos al editar — sin migración (un par
+ * creado con «Piezas de diseño» abre en el alta nueva como par). El alta de
+ * inserto edita como 'pair' (misma forma; el vínculo al selector ya vive en
+ * el grupo del juego y no en el herraje).
+ */
+export function inferHardwareItemType(
+  item: Pick<Hardware, 'unit' | 'pieces' | 'kitHardwareId'>,
+): HardwareItemType {
+  if (item.unit === 'set' || item.kitHardwareId) return 'kit';
+  if (item.pieces && item.pieces.length > 0) return 'pair';
+  return 'piece';
 }

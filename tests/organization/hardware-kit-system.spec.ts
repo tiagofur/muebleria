@@ -63,21 +63,11 @@ test.describe.serial('Herrajes — sistema generador (#1546 M4)', () => {
     expect([200, 201]).toContain(seed.status);
 
     await page.goto('/hardware');
-    try {
-      await page.getByTestId('hardware-system-wizard-open').waitFor({ state: 'visible', timeout: 20_000 });
-    } catch {
-      // #1519 debug: dump del estado del header para diagnosticar el botón ausente
-      const debug = await page.evaluate(`(() => ({
-        systemBtn: !!document.querySelector('[data-testid="hardware-system-wizard-open"]'),
-        kitBtn: !!document.querySelector('[data-testid="hardware-kit-wizard-open"]'),
-        hwCount: document.querySelectorAll('.catalog-table tbody tr, [data-testid*="hardware-kit"]').length,
-        bodyClasses: document.body.className,
-        url: location.href,
-      }))()`);
-      console.log('SYSTEM-BUTTON-DEBUG:', JSON.stringify(debug));
-      throw new Error(`system-wizard-open no visible: ${JSON.stringify(debug)}`);
-    }
-    await page.getByTestId('hardware-system-wizard-open').click();
+    // #1596: el asistente de sistema se abre por el picker (Juego → sistema).
+    await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit-system').evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-system-wizard-code').fill(SYS_CODE);
     await page.getByTestId('hardware-system-wizard-name').fill('Merivobox Sistema QA');
     await page.getByTestId('hardware-system-wizard-price').fill('420');
@@ -116,7 +106,9 @@ test.describe.serial('Herrajes — sistema generador (#1546 M4)', () => {
     }
     expect(rows.some((h) => h.code === `${SYS_CODE}-M-FIJ-I`)).toBe(false);
 
-    // Accesorio del E creado (sin SKPs → sin pieces, fail-honesto). El
+    // Accesorio del E creado. #1596: el inserto nace SIEMPRE con sus piezas
+    // por ancla — sin SKP el lado queda pendiente pero los offsets explícitos
+    // existen (mostrado = guardado; nunca el default invisible del motor). El
     // sufijo deriva del nombre completo («GALERIA-GRIS-IRIDIUM»).
     const galeria = rows.find((h) => h.code.startsWith(`${SYS_CODE}-E-GALERIA`));
     if (!galeria) {
@@ -124,7 +116,16 @@ test.describe.serial('Herrajes — sistema generador (#1546 M4)', () => {
       throw new Error(`accesorio galería creado — códigos en catálogo: ${codes}`);
     }
     expect(galeria).toBeTruthy();
-    expect(galeria!.pieces).toBeUndefined();
+    expect(galeria!.pieces).toEqual([
+      { anchor: 'left', offsetMm: { x: 0, y: 0, z: 0 } },
+      { anchor: 'right', offsetMm: { x: 0, y: 0, z: 0 } },
+    ]);
+    // «Al abrir» declarado (viaja con el cajón), nunca inferido del nombre.
+    // El readback del herraje regular viaja con los tags JSON del dominio
+    // (camelCase); label/finish_key van omitempty → ausentes.
+    expect(galeria!.design_parts).toEqual([
+      { componentName: galeria!.code, actorMembership: 'actor:drawer' },
+    ]);
 
     // ── Readback grupos: LATERAL_E vinculado al kit E con la galería como opción.
     const ogRes = await api(token, 'GET', '/catalog/option-groups');

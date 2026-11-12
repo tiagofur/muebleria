@@ -409,6 +409,82 @@ func TestAccessoryKitMonolithicAccessory_1502(t *testing.T) {
 	}
 }
 
+// #1596 aceptación de paridad: un inserto del ALTA NUEVA (herraje
+// monolítico con Pieces I/D — cada una con offsets explícitos — y
+// DesignParts[0].actorMembership = actor:drawer) resuelve en la bahía E
+// como DOS miembros (mano izquierda y derecha) con el movimiento
+// declarado, honrando los offsets guardados — nunca los defaults 10/35
+// de la inferencia legacy.
+func TestAccessoryKitInsertoPiecesTwoMembersDeclaredMotion_1596(t *testing.T) {
+	f := loadAccessoryKitFixture(t)
+	catalog, mod := buildAccessoryKitScenario(f, true, true)
+	monolithic := f.AccessoryGroup.Accessories[1].ID
+	mutated := false
+	for i := range catalog.Hardware {
+		if catalog.Hardware[i].ID != monolithic {
+			continue
+		}
+		mutated = true
+		catalog.Hardware[i].Pieces = []domain.HardwarePiece{
+			{Anchor: "left", OffsetMm: &domain.HardwarePieceOffset{X: 12.5, Y: 3, Z: 1}},
+			{Anchor: "right", OffsetMm: &domain.HardwarePieceOffset{X: -3, Y: 0, Z: 1}},
+		}
+		catalog.Hardware[i].DesignParts = []domain.HardwareDesignPart{{
+			ComponentName:   catalog.Hardware[i].Code,
+			ActorMembership: "actor:drawer",
+		}}
+	}
+	if !mutated {
+		t.Fatalf("accessory %s not found in catalog", monolithic)
+	}
+	choices := accessoryTestChoices(f, map[string]string{f.AccessoryGroup.Code: monolithic})
+
+	layout, err := engine.ResolveFurnitureLayout(mod, catalog, nil, choices)
+	if err != nil {
+		t.Fatalf("ResolveFurnitureLayout unexpected error: %v", err)
+	}
+	acc := accessoryAssembliesOf(layout)
+	if len(acc) != 1 {
+		t.Fatalf("expected 1 accessory assembly, got %+v", acc)
+	}
+	if len(acc[0].RigidMembers) != 2 {
+		t.Fatalf("inserto with pieces must resolve as 2 members (left+right), got %d: %+v", len(acc[0].RigidMembers), acc[0].RigidMembers)
+	}
+	byHand := map[string]domain.ResolvedRigidMember{}
+	for _, m := range acc[0].RigidMembers {
+		byHand[m.Hand] = m
+	}
+	left, hasLeft := byHand["left"]
+	right, hasRight := byHand["right"]
+	if !hasLeft || !hasRight {
+		t.Fatalf("members must carry hands left and right, got %+v", acc[0].RigidMembers)
+	}
+	for name, m := range map[string]domain.ResolvedRigidMember{"left": left, "right": right} {
+		if m.ActorMembership != "actor:drawer" {
+			t.Errorf("%s member actorMembership = %q, want actor:drawer (the declared «Al abrir»)", name, m.ActorMembership)
+		}
+		if m.HardwareID != monolithic {
+			t.Errorf("%s member hardwareId = %s, want %s", name, m.HardwareID, monolithic)
+		}
+	}
+	// Offsets explícitos verbatim (mostrado = guardado). La izquierda ancla
+	// a min: su traslación en espacio del ensamble es el offset tal cual
+	// [12.5, 3, 1] — no el default 10 de la inferencia legacy. La derecha
+	// ancla a max (x depende del ancho del ensamble); sus y/z son el offset
+	// verbatim [0, 1] y su x cae al lado izquierdo del ensamble.
+	lt := left.LocalTransform.TranslationMm
+	if lt[0] != 12.5 || lt[1] != 3 || lt[2] != 1 {
+		t.Errorf("left member translation = %v, want explicit offsets [12.5 3 1]", lt)
+	}
+	rt := right.LocalTransform.TranslationMm
+	if rt[1] != 0 || rt[2] != 1 {
+		t.Errorf("right member y/z = %v, want explicit offsets [0 1]", rt)
+	}
+	if rt[0] <= lt[0] {
+		t.Errorf("right member x (%v) must sit right of the left member (%v)", rt[0], lt[0])
+	}
+}
+
 // Elección inválida (no es miembro activo del grupo): rechazo visible
 // resolve_failed y cero accesorios dibujados o cotizados.
 func TestAccessoryKitInvalidChoice_1502(t *testing.T) {

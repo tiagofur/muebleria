@@ -10,6 +10,7 @@ import {
   validateHardwareDesignParts,
   type Agregado,
   type HardwareDesignPart,
+  type OptionGroup,
 } from '@granete/domain';
 import type { Hardware } from '@granete/domain';
 import type { HardwareDraft } from '@granete/ui';
@@ -101,6 +102,8 @@ function hardwarePreviewFields(
  * #1417: convierte las filas de form a partes de dominio. Una fila sin
  * componentName se descarta (fila vacía del form); cualquier invalidez real
  * lanza — el modal muestra el mensaje y nada persiste (fail-closed).
+ * #1596: en par/inserto la fila 0 lleva «Al abrir»; su componentName se
+ * normaliza al código del herraje (el placeholder del mount no viaja).
  */
 function hardwareDesignPartsField(draft: HardwareDraft): Pick<Hardware, 'designParts'> | {} {
   const rows = (draft.designParts ?? [])
@@ -111,6 +114,12 @@ function hardwareDesignPartsField(draft: HardwareDraft): Pick<Hardware, 'designP
       ...(p.label.trim() ? { label: p.label.trim() } : {}),
       ...(p.finishKey.trim() ? { finishKey: p.finishKey.trim() } : {}),
     }));
+  if ((draft.itemType === 'pair' || draft.itemType === 'inserto') && rows.length > 0) {
+    const code = draft.code.trim();
+    if (code && (rows[0]!.componentName === 'par' || !rows[0]!.componentName)) {
+      rows[0] = { ...rows[0]!, componentName: code };
+    }
+  }
   if (rows.length === 0) return {};
   const parts: HardwareDesignPart[] = rows;
   validateHardwareDesignParts(parts);
@@ -147,12 +156,27 @@ function hardwareDimensionsField(
 type HardwareSlice = Pick<
   CatalogState,
   | 'createHardware'
+  | 'createInsertoForKit'
   | 'updateHardware'
   | 'setHardwareActive'
   | 'createHardwareCategory'
   | 'updateHardwareCategory'
   | 'deleteHardwareCategory'
 >;
+
+/**
+ * Código de grupo UNIQUE por organización (#1519 review P2-1): prefijo del
+ * kit para que dos juegos con un selector homónimo no choquen.
+ */
+function insertoGroupCodeFromName(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+}
 
 /**
  * F127: machining footprint travels with the draft as structured data —
@@ -169,7 +193,7 @@ function hardwareMachiningField(
 
 export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
   return {
-    createHardware: (draft) => {
+    createHardware: async (draft) => {
       const code = draft.code.trim();
       const pkg = Number(draft.packageSize);
       const packageSize =
@@ -190,8 +214,12 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
         ...hardwareMachiningField(draft),
         ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
         ...(draft.pieces ? { pieces: draft.pieces } : {}),
+        // #1596: el alta nueva declara «Al abrir» en la creación (el inserto
+        // viaja con el cajón) — create no puede perder designParts como
+        // antes, porque kitPieceMember lee DesignParts[0] desde el primer día.
+        ...hardwareDesignPartsField(draft),
       };
-      return ctx.saveAndToast(
+      const saved = ctx.saveAndToast(
         (c) => {
           const nextHardware = [...c.hardware, item];
           const newKitId = item.kitHardwareId;
@@ -206,6 +234,90 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
         },
         `✓ "${code}" creado`,
       );
+      await saved;
+      // #1596: el flujo de inserto necesita el id creado para dejarlo como
+      // opción del selector del juego sin releer el catálogo.
+      return item.id;
+    },
+
+    /**
+     * #1596 alcance 3: alta de INSERTO para un juego existente en UNA
+     * mutación — el herraje se crea y queda como opción del selector del
+     * juego (grupo kind:hardware con kit_hardware_id). Si el juego todavía
+     * no tiene selector se crea con nombre «Insertos de <kit>»; si la
+     * creación del herraje o del vínculo falla, nada se escribe y el error
+     * sube al modal (sin éxito aparente: la UI muestra y permite reintentar).
+     */
+    createInsertoForKit: (draft, kitId, selectorName) => {
+      const code = draft.code.trim();
+      const pkg = Number(draft.packageSize);
+      const packageSize =
+        Number.isFinite(pkg) && pkg > 0 ? pkg : undefined;
+      const kit = ctx.get().catalog?.hardware.find((h) => h.id === kitId);
+      if (!kit) {
+        throw new Error('El juego elegido ya no existe en el catálogo.');
+      }
+      // #1596 (review B2): el id viaja en el draft y se REUTILIZA en
+      // reintentos — una persistencia a mitad (herraje escrito, vínculo al
+      // selector fallido) deja el herraje en el servidor; reintentar con un
+      // id nuevo crearía un duplicado y el 409 en bucle impediría cerrar el
+      // alta. Con el mismo id, el upsert converge (GET 200 → PUT).
+      const item: Hardware = {
+        id: draft.insertoPendingId ?? ctx.newId(),
+        code,
+        name: draft.name.trim(),
+        unit: 'piece',
+        costPerUnit: draft.costPerUnit,
+        ...(packageSize === undefined ? {} : { packageSize }),
+        imageUrl: draft.imageUrl?.trim() || undefined,
+        notes: optionalNotes(draft.notes),
+        active: true,
+        categoryId: draft.categoryId || undefined,
+        brand: draft.brand?.trim() || undefined,
+        ...hardwarePreviewFields(draft),
+        ...hardwareMachiningField(draft),
+        ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
+        ...(draft.pieces ? { pieces: draft.pieces } : {}),
+        ...hardwareDesignPartsField(draft),
+      };
+      const groupCode = insertoGroupCodeFromName(`${kit.code} ${selectorName || 'INSERTOS'}`);
+      if (!groupCode) {
+        throw new Error('El nombre del selector no genera un código válido.');
+      }
+      const saved = ctx.saveAndToast(
+        (c) => {
+          const nextHardware = [...c.hardware, item];
+          const groups = [...(c.optionGroups ?? [])];
+          const existing = groups.find(
+            (g) => g.kind === 'hardware' && g.kitHardwareId === kitId,
+          );
+          if (existing) {
+            const idx = groups.findIndex((g) => g.id === existing.id);
+            groups[idx] = {
+              ...existing,
+              optionIds: [...existing.optionIds, item.id],
+            };
+          } else {
+            const group: OptionGroup = {
+              id: ctx.newId(),
+              code: groupCode,
+              name: selectorName?.trim() || `Insertos de ${kit.name}`,
+              kind: 'hardware',
+              required: false,
+              optionIds: [item.id],
+              kitHardwareId: kitId,
+            };
+            groups.push(group);
+          }
+          return {
+            ...c,
+            hardware: nextHardware,
+            optionGroups: groups,
+          };
+        },
+        `✓ "${code}" creado y añadido al selector de ${kit.code}`,
+      );
+      return saved.then(() => item.id);
     },
 
     updateHardware: (id, draft) => {
@@ -254,6 +366,12 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               ...hardwareMachiningField(draft),
               ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
               ...(draft.pieces ? { pieces: draft.pieces } : {}),
+              // #1596 (fix de raíz): el update re-aplica las filas del form —
+              // sin esto, cambiar «Al abrir» en el alta nueva no persiste
+              // (el destructure de arriba elimina las designParts previas y
+              // el PUT las nulaba). Sin filas en el form = fila legacy
+              // intacta ({}).
+              ...hardwareDesignPartsField(draft),
             };
           });
           const affectedKitIds = new Set<string>();

@@ -57,7 +57,7 @@ describe('HardwareCatalog — create flow', () => {
       />,
     );
 
-    expect(screen.queryByRole('button', { name: /Nuevo herraje/i })).toBeNull();
+    expect(screen.queryByTestId('hardware-new-typed')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Editar /i })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Desactivar /i })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Reactivar /i })).toBeNull();
@@ -67,7 +67,8 @@ describe('HardwareCatalog — create flow', () => {
     const user = userEvent.setup();
     const { onCreate } = setup();
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByTestId('hardware-new-typed'));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     const modal = screen.getByTestId('hardware-form-modal');
     expect(modal).toBeTruthy();
 
@@ -85,13 +86,16 @@ describe('HardwareCatalog — create flow', () => {
     const user = userEvent.setup();
     const { onCreate } = setup();
 
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByTestId('hardware-new-typed'));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.type(screen.getByLabelText('Código'), sampleHardware.code);
     await user.type(screen.getByLabelText('Nombre'), 'Dup');
+    // #1596 brief (Estados): el duplicado se ve EN LÍNEA al escribirlo.
+    expect(screen.getByTestId('hardware-form-code-error')).toBeTruthy();
     fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
 
     expect(onCreate).not.toHaveBeenCalled();
-    expect(screen.getByText(/Ya existe un ítem con el código/)).toBeTruthy();
+    expect(screen.getAllByText(/Ya existe un ítem con el código/).length).toBeGreaterThan(0);
   });
 });
 
@@ -164,7 +168,8 @@ describe('HardwareCatalog — Maquinado CNC (F127)', () => {
   it('agregar una parte desde cero la incluye en el draft al guardar', async () => {
     const user = userEvent.setup();
     const { onCreate } = setup([sampleHardware]);
-    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByTestId('hardware-new-typed'));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.type(screen.getByLabelText('Código'), 'HER-NUEVA-2');
     await user.type(screen.getByLabelText('Nombre'), 'Otra pieza');
 

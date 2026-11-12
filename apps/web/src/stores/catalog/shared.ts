@@ -28,6 +28,7 @@ import type {
   OptionGroup,
   Structure,
   RecipeChangeSimulationResponse,
+  HardwareVisualAssetBinding,
 } from '@granete/domain';
 import {
   type ComponentDraft,
@@ -93,6 +94,15 @@ export interface ApiCatalogDeps {
       readonly pieces?: readonly {
         readonly anchor: 'left' | 'right' | 'center';
         readonly asset?: { readonly assetId: string; readonly assetRevisionId: string };
+        /** #1596: offsets explícitos (mostrado = guardado). */
+        readonly offsetMm?: { readonly x: number; readonly y: number; readonly z: number };
+      }[];
+      /** #1596: la declaración de movimiento que el motor ya lee (DesignParts). */
+      readonly design_parts?: readonly {
+        readonly component_name: string;
+        readonly actor_membership: 'body' | 'actor:drawer' | 'actor:door';
+        readonly label?: string | null;
+        readonly finish_key?: string | null;
       }[];
     }[];
     readonly agregado: {
@@ -124,6 +134,13 @@ export interface ApiCatalogDeps {
       readonly option_ids: readonly string[];
       readonly kit_hardware_id: string;
     } | null;
+    /** #1596 decisión 9: elegibilidad del ensamble en la misma transacción. */
+    readonly eligibility_group?: {
+      readonly existing_group_id?: string;
+      readonly id?: string;
+      readonly code?: string;
+      readonly name?: string;
+    } | null;
   }) => Promise<{
     readonly created_codes: readonly string[];
     readonly reused_codes: readonly string[];
@@ -131,6 +148,20 @@ export interface ApiCatalogDeps {
     readonly agregado_code: string;
     readonly variant_set_ids: readonly string[];
   }>;
+}
+
+/** #1596 alcance 10: una altura nueva para un sistema EXISTENTE (decisión 8). */
+export interface AddSystemHeightRequest {
+  /** Ensamble del sistema (code *-CAJON con variant set height). */
+  readonly agregadoId: string;
+  readonly heightCode: 'N' | 'M' | 'K' | 'E';
+  readonly kitCostPerUnit: number;
+  readonly widthMm: number;
+  readonly depthMm: number;
+  /** Uploads: clave `${kitCode}:${hand}:${partCode}` → binding. */
+  readonly designs?: Record<string, HardwareVisualAssetBinding>;
+  /** #1596 decisión 9: por si el ensamble aún no está en ningún grupo. */
+  readonly eligibilityGroup?: import('@granete/domain').HardwareKitSystemEligibilityRequest;
 }
 
 export interface RecipeChangeActions {
@@ -189,7 +220,17 @@ export interface CatalogState {
   readonly setEdgeActive: (id: string, active: boolean) => void;
 
   // --- Hardware ---
-  readonly createHardware: (draft: HardwareDraft) => Promise<void>;
+  /** #1596: resuelve con el id creado (el alta de inserto lo necesita). */
+  readonly createHardware: (draft: HardwareDraft) => Promise<string>;
+  /**
+   * #1596 alcance 3: alta de inserto para un juego existente en UNA
+   * mutación — herraje + selector del juego (creado si falta) + opción.
+   */
+  readonly createInsertoForKit: (
+    draft: HardwareDraft,
+    kitId: string,
+    selectorName?: string,
+  ) => Promise<string>;
   readonly updateHardware: (id: string, draft: HardwareDraft) => Promise<void>;
   readonly setHardwareActive: (id: string, active: boolean) => Promise<void>;
   // #1507: subgrupos de herrajes (mismo patrón que los tableros F142).
@@ -200,6 +241,8 @@ export interface CatalogState {
   readonly createHardwareKitSystem: (
     req: import('@granete/domain').HardwareKitSystemCreateRequest,
   ) => Promise<import('@granete/domain').HardwareKitResult>;
+  /** #1596 alcance 10: altura faltante para un sistema existente. */
+  readonly addSystemHeight: (req: AddSystemHeightRequest) => Promise<{ readonly kitCode: string; readonly agregadoCode: string }>;
 
   // --- Ambient materials (presentation-only: finishes & scene textures) ---
   /** K1 #1032: settle promises so screens can await the save. */

@@ -1,9 +1,10 @@
 /**
  * @vitest-environment jsdom
  *
- * #1518 F1: sección Piezas de diseño del editor de herrajes — filas por
- * ancla (izq/der/centro) con offsets x/y/z por lado y labels honestos del
- * fallback al asset global. El flujo del selector tiene su propio suite.
+ * #1518 F1 → rework #1596: sección de diseño del herraje — filas por ancla
+ * con offsets x/y/z por lado; en modo genérico conserva el flujo #1518
+ * (toggle, offsets sólo con pieza); «Quitar diseño» deja el lado con sus
+ * offsets (mostrado = guardado) y el copy nombra el lado pendiente.
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -48,7 +49,7 @@ function SeededHarness({
   );
 }
 
-describe('HardwarePiecesSection (#1518 F1)', () => {
+describe('HardwarePiecesSection (#1518 F1, rework #1596)', () => {
   it('sin piezas: fallback declarado, tres filas al abrir, nada que quitar', async () => {
     const user = userEvent.setup();
     render(<SeededHarness />);
@@ -58,12 +59,12 @@ describe('HardwarePiecesSection (#1518 F1)', () => {
     for (const anchor of ['left', 'right', 'center']) {
       expect(screen.getByTestId(`hardware-piece-${anchor}`)).toBeDefined();
     }
-    expect(screen.getAllByText(/Sin asset propio/)).toHaveLength(3);
+    expect(screen.getAllByText(/Sin diseño/)).toHaveLength(3);
     expect(screen.queryByTestId('hardware-piece-left-clear')).toBeNull();
     expect(screen.queryByTestId('hardware-piece-left-offset-x')).toBeNull();
   });
 
-  it('pieza sembrada: muestra revisión + offsets y quitar colapsa la fila', async () => {
+  it('pieza sembrada: muestra revisión + offsets; quitar diseño conserva los offsets (#1596: mostrado = guardado)', async () => {
     const user = userEvent.setup();
     render(
       <SeededHarness
@@ -79,7 +80,17 @@ describe('HardwarePiecesSection (#1518 F1)', () => {
     expect(screen.getByTestId('hardware-piece-left-clear')).toBeDefined();
     expect(screen.queryByTestId('hardware-piece-right-offset-x')).toBeNull();
 
+    // #1596: quitar el diseño NO borra la fila — el lado queda pendiente
+    // con sus offsets exactos (nada de defaults invisibles).
     await user.click(screen.getByTestId('hardware-piece-left-clear'));
-    expect(screen.getByTestId('pieces-out').textContent).toBe('null');
+    expect(screen.getAllByText(/Sin diseño \(queda pendiente\)/).length).toBeGreaterThan(0);
+    const offXAfter = screen.getByTestId('hardware-piece-left-offset-x') as HTMLInputElement;
+    expect(offXAfter.value).toBe('10');
+    const persisted = JSON.parse(screen.getByTestId('pieces-out').textContent ?? 'null') as
+      | { anchor: string; offsetMm?: { x: number } }[]
+      | null;
+    expect(persisted).toEqual([
+      { anchor: 'left', offsetMm: { x: 10, y: 0, z: 120 } },
+    ]);
   });
 });

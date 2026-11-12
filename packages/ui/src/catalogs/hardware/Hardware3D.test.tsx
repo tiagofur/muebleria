@@ -198,6 +198,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.type(screen.getByLabelText('Código'), 'HER-NEW-3D');
     await user.type(screen.getByLabelText('Nombre'), 'Nuevo con 3D');
 
@@ -248,6 +249,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.type(screen.getByLabelText('Código'), 'HER-UP');
     await user.type(screen.getByLabelText('Nombre'), 'Herraje con subida');
 
@@ -290,6 +292,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-selector-btn'));
@@ -389,6 +392,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-selector-btn'));
@@ -425,7 +429,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     expect(screen.getByText(sampleHardwareWithBinding.code)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Nuevo herraje/i })).toBeNull();
+    expect(screen.queryByTestId('hardware-new-typed')).toBeNull();
     expect(screen.queryByRole('button', { name: `Editar ${sampleHardwareWithBinding.code}` })).toBeNull();
     expect(screen.queryByRole('button', { name: `Desactivar ${sampleHardwareWithBinding.code}` })).toBeNull();
     expect(screen.queryByTestId('hardware-change-asset-btn')).toBeNull();
@@ -492,6 +496,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.type(screen.getByLabelText('Código'), 'HER-C2');
     await user.type(screen.getByLabelText('Nombre'), 'Herraje C2');
 
@@ -565,6 +570,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));
@@ -616,6 +622,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));
@@ -743,6 +750,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));
@@ -805,6 +813,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));
@@ -885,6 +894,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
 
     // Open new hardware modal
     await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));
@@ -950,6 +960,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Agregar herraje/i }));
+    await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.click(screen.getByTestId('hardware-3d-section-toggle'));
     await user.click(screen.getByTestId('hardware-3d-tab-file'));
     await user.click(screen.getByTestId('hardware-open-upload-btn'));

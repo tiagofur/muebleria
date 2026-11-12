@@ -21044,6 +21044,13 @@
               { "$ref": "#/components/schemas/HardwareKitSystemOptionGroupRow" },
               { "type": "null" }
             ]
+          },
+          "eligibility_group": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/HardwareKitSystemEligibilityGroupRow" },
+              { "type": "null" }
+            ],
+            "description": "#1596 decisión 9: grupo kind:agregado donde el ensamble queda elegible por los módulos. Se aplica en la MISMA transacción (existing_group_id = se añade como miembro; si no, se crea el grupo nuevo con el agregado como único miembro)."
           }
         }
       },
@@ -21076,10 +21083,51 @@
             "type": ["string", "null"],
             "description": "Debe referenciar el id de una fila kit (unit=set) del mismo payload."
           },
+          "design_parts": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/HardwareKitSystemDesignPartRow" },
+            "description": "#1596: declaración que el motor ya lee — DesignParts[0].actor_membership define «Al abrir» del herraje (kitPieceMember). Para insertos del cajón E = actor:drawer; nunca se infiere del nombre en el alta nueva."
+          },
           "pieces": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/HardwarePiece" }
           }
+        }
+      },
+      "HardwareKitSystemDesignPartRow": {
+        "type": "object",
+        "required": [
+          "component_name",
+          "actor_membership"
+        ],
+        "properties": {
+          "component_name": { "type": "string" },
+          "actor_membership": {
+            "type": "string",
+            "enum": ["body", "actor:drawer", "actor:door"],
+            "description": "Vocabulario cerrado que lee el motor (#1376)."
+          },
+          "label": { "type": ["string", "null"] },
+          "finish_key": { "type": ["string", "null"] }
+        }
+      },
+      "HardwareKitSystemEligibilityGroupRow": {
+        "type": "object",
+        "description": "#1596: exactamente un modo — existing_group_id (añadir el agregado a ese grupo) O id+code+name (crear grupo kind:agregado con el agregado como único miembro).",
+        "properties": {
+          "existing_group_id": {
+            "type": "string",
+            "description": "Grupo kind:agregado existente en la organización."
+          },
+          "id": {
+            "type": "string",
+            "description": "Identidad del cliente (#1398) para el grupo nuevo."
+          },
+          "code": {
+            "type": "string",
+            "description": "Código UNIQUE por organización del grupo nuevo (409 tipado si existe)."
+          },
+          "name": { "type": "string" }
         }
       },
       "HardwareKitSystemAgregadoRow": {

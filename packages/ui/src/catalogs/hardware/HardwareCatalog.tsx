@@ -21,6 +21,7 @@ import type {
 } from '@granete/domain';
 import {
   UNCATEGORIZED_FILTER,
+  HARDWARE_KIT_SYSTEM_HEIGHTS,
   ValidationError,
   countMachiningOperations,
   ensureAgregadoKitParts,
@@ -55,6 +56,8 @@ import {
   validateRequiredName,
   validateUniqueCode,
 } from '../catalogHelpers';
+import { HardwareTypePickerModal, type HardwareCreateType } from './HardwareTypePickerModal';
+import { HardwareSystemHeightAddModal } from './HardwareSystemHeightAddModal';
 import { ActiveBadge, CatalogTable, type CatalogColumn } from '../CatalogTable';
 import { HardwareFormModal } from './HardwareFormModal';
 import { HardwareKitWizardModal } from './HardwareKitWizardModal';
@@ -118,6 +121,22 @@ export interface HardwareCatalogProps {
   readonly onCreateKitSystem?: (
     req: import('@granete/domain').HardwareKitSystemCreateRequest,
   ) => Promise<import('@granete/domain').HardwareKitResult>;
+  /** #1596 alcance 3: alta de inserto para un juego — una mutación con el selector. */
+  readonly onCreateInserto?: (
+    draft: HardwareDraft,
+    kitId: string,
+    selectorName?: string,
+  ) => Promise<string>;
+  /** #1596 alcance 10: añadir altura faltante a un sistema existente. */
+  readonly onAddSystemHeight?: (req: {
+    readonly agregadoId: string;
+    readonly heightCode: 'N' | 'M' | 'K' | 'E';
+    readonly kitCostPerUnit: number;
+    readonly widthMm: number;
+    readonly depthMm: number;
+    readonly designs?: Record<string, import('@granete/domain').HardwareVisualAssetBinding>;
+    readonly eligibilityGroup?: import('@granete/domain').HardwareKitSystemEligibilityRequest;
+  }) => Promise<unknown>;
 }
 
 // K4 #1032: same workshop-facing labels as the form's shape select — the
@@ -164,6 +183,8 @@ export function HardwareCatalog({
   onUpdateOptionGroup,
   onDeleteOptionGroup,
   onCreateKitSystem,
+  onCreateInserto,
+  onAddSystemHeight,
 }: HardwareCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -190,11 +211,42 @@ export function HardwareCatalog({
   const editingHardware = editingId
     ? (hardware.find((h) => h.id === editingId) ?? null)
     : null;
+  // #1596 alcance 10: el sistema (ensamble -CAJON con variantes) al que
+  // pertenece el kit en edición, si lo hay.
+  const editingKitSystem = useMemo(() => {
+    if (!editingHardware) return null;
+    for (const a of agregados) {
+      if (!a.code.endsWith('-CAJON')) continue;
+      for (const vs of a.variantSets ?? []) {
+        const variant = vs.variants.find(
+          (v) =>
+            v.hardwareId === editingHardware.id ||
+            v.commercialKitHardwareId === editingHardware.id,
+        );
+        if (!variant) continue;
+        const heights = vs.variants.flatMap((v) => {
+          const code = HARDWARE_KIT_SYSTEM_HEIGHTS.find(
+            (hh) => hh.khMinMm === v.nominalDimensionMm,
+          )?.code;
+          return code ? [code] : [];
+        });
+        const own = HARDWARE_KIT_SYSTEM_HEIGHTS.find(
+          (hh) => hh.khMinMm === variant.nominalDimensionMm,
+        );
+        return { agregado: a, heights, ownHeight: own?.code ?? '' };
+      }
+    }
+    return null;
+  }, [editingHardware, agregados]);
   const [readbackError, setReadbackError] = useState<string | null>(null);
   // #1416: kit wizard («Juego de herraje»).
   const [kitWizardOpen, setKitWizardOpen] = useState(false);
-  // #1546 M4: asistente del sistema generador.
+  // #1546 M4: asistente del sistema generador (absorbido por el picker #1596).
   const [systemWizardOpen, setSystemWizardOpen] = useState(false);
+  // #1596 alcance 1: el alta empieza por el tipo — un solo «Nuevo».
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
+  // #1596 alcance 10: sistema al que se le añade una altura.
+  const [systemHeightFor, setSystemHeightFor] = useState<Agregado | null>(null);
   // #1422 slice 2: editor de plantillas del taller (desde el asistente).
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WorkshopKitTemplateRow | null>(null);
@@ -300,6 +352,47 @@ export function HardwareCatalog({
   const startCreate = () => {
     setEditingId(null);
     setDraft(emptyDraft());
+    setError(null);
+    setTypePickerOpen(true);
+  };
+
+  /**
+   * #1596 alcance 1: el picker por tipo abre la forma correspondiente. El
+   * tipo «Juego» se abre en sus dos variantes internas (asistentes absorbidos
+   * — decisión 6/7); par/inserto prefiguran el draft (unidad pieza fija).
+   */
+  const startCreateOfType = (
+    type: HardwareCreateType,
+    opts?: { readonly insertoKitId?: string; readonly variant?: 'system' | 'simple' },
+  ) => {
+    setTypePickerOpen(false);
+    if (type === 'kit') {
+      setError(null);
+      if (opts?.variant === 'system') {
+        setSystemWizardOpen(true);
+      } else {
+        onReloadKitTemplates?.();
+        setKitWizardOpen(true);
+      }
+      return;
+    }
+    const next = emptyDraft();
+    next.itemType = type;
+    if (type === 'pair' || type === 'inserto') {
+      next.unit = 'piece';
+      if (type === 'inserto' && opts?.insertoKitId) {
+        next.insertoKitId = opts.insertoKitId;
+        const kit = hardware.find((h) => h.id === opts.insertoKitId);
+        if (kit) {
+          const group = (optionGroups ?? []).find(
+            (og) => og.kind === 'hardware' && og.kitHardwareId === kit.id,
+          );
+          if (!group) next.insertoSelectorName = `Insertos de ${kit.name}`;
+        }
+      }
+    }
+    setEditingId(null);
+    setDraft(next);
     setError(null);
     setModalOpen(true);
   };
@@ -456,6 +549,30 @@ export function HardwareCatalog({
     return null;
   };
 
+  /**
+   * #1596: el payload del alta lleva el componentName de la fila 0 de
+   * designParts normalizado al código (el placeholder del mount no viaja).
+   * El store re-normaliza al persistir — acá es para que lo que el caller
+   * recibe ya sea el registro final.
+   */
+  const normalizeTypedDraft = (d: HardwareDraft): HardwareDraft => {
+    if (
+      (d.itemType === 'pair' || d.itemType === 'inserto') &&
+      d.designParts &&
+      d.designParts.length > 0
+    ) {
+      const code = d.code.trim();
+      const first = d.designParts[0]!;
+      if (code && (first.componentName === 'par' || first.componentName.trim() === '')) {
+        return {
+          ...d,
+          designParts: [{ ...first, componentName: code }, ...d.designParts.slice(1)],
+        };
+      }
+    }
+    return d;
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (saving) return;
@@ -467,11 +584,25 @@ export function HardwareCatalog({
     setError(null);
     setSaving(true);
     setReadbackError(null);
+    const payload = normalizeTypedDraft(draft);
     try {
       if (editingId) {
-        await onUpdate(editingId, draft);
+        await onUpdate(editingId, payload);
+      } else if (payload.itemType === 'inserto' && payload.insertoKitId) {
+        // #1596 alcance 3: herraje + selector del juego en UNA mutación —
+        // si el vínculo falla, nada queda a medias y el error es visible.
+        if (!onCreateInserto) {
+          throw new Error('No podés modificar el catálogo en esta sesión.');
+        }
+        // Review B2: identidad del inserto decidida UNA vez — reintentos
+        // reutilizan el id (convergen con lo ya persistido a mitad).
+        if (!payload.insertoPendingId) {
+          payload.insertoPendingId = crypto.randomUUID();
+          setDraft(payload);
+        }
+        await onCreateInserto(payload, payload.insertoKitId, payload.insertoSelectorName || undefined);
       } else {
-        await onCreate(draft);
+        await onCreate(payload);
       }
       closeModal();
     } catch (err: unknown) {
@@ -573,51 +704,19 @@ export function HardwareCatalog({
         title="Herrajes"
         subtitle="Bisagras, correderas y demás del catálogo"
         icon={<Settings2 size={16} strokeWidth={1.5} />}
-        secondaryActions={
-          // #1416: kit wizard as a visible secondary action (K5: «Nuevo
-          // herraje» remains the single primary CTA). #1546 M4: «Nuevo
-          // sistema» convive — generan superficies distintas (kit vs sistema).
-          canMutate && !isTrulyEmpty ? (
-            <>
-              {onCreateKit ? (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    onReloadKitTemplates?.();
-                    setKitWizardOpen(true);
-                  }}
-                  data-testid="hardware-kit-wizard-open"
-                >
-                  <PackagePlus size={16} strokeWidth={1.5} aria-hidden />
-                  Juego de herraje
-                </button>
-              ) : null}
-              {onCreateKitSystem ? (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setSystemWizardOpen(true)}
-                  data-testid="hardware-system-wizard-open"
-                >
-                  <PackagePlus size={16} strokeWidth={1.5} aria-hidden />
-                  Nuevo sistema
-                </button>
-              ) : null}
-            </>
-          ) : undefined
-        }
         primaryAction={
-          // K5 #1032: ONE creation CTA per state — on the truly-empty state
-          // the EmptyState owns the action (same contract as Perfiles).
+          // #1596 alcance 1: UN «Nuevo» que pregunta el tipo de ítem — los
+          // botones «Juego de herraje» y «Nuevo sistema» quedan absorbidos
+          // (decisión 6: sin capa encima, se retira lo reemplazado).
           canMutate && !isTrulyEmpty ? (
             <button
               type="button"
               className="btn btn--primary"
               onClick={startCreate}
+              data-testid="hardware-new-typed"
             >
               <Plus size={16} strokeWidth={1.5} aria-hidden />
-              Nuevo herraje
+              Nuevo
             </button>
           ) : undefined
         }
@@ -721,10 +820,11 @@ export function HardwareCatalog({
             title="No hay herrajes"
             description="Agregá el primer herraje del catálogo o cargá la semilla del workspace."
             actionLabel="Agregar herraje"
-            onAction={startCreate}
-            secondaryActionLabel={onCreateKit && canMutate ? 'Juego de herraje' : undefined}
-            onSecondaryAction={onCreateKit && canMutate ? () => setKitWizardOpen(true) : undefined}
-            secondaryActionTestId="hardware-kit-wizard-open"
+            // #1596: sin permiso de mutación el alta no se ofrece (el
+            // testid compartido con el header hace visible el bug latente:
+            // el CTA ignoraba canMutate).
+            onAction={canMutate ? startCreate : undefined}
+            actionTestId="hardware-new-typed"
           />
         ) : isFilterEmpty ? (
           <EmptyState
@@ -1067,7 +1167,55 @@ export function HardwareCatalog({
             : undefined
         }
         onUpdateKitPartConfig={canMutate ? updateKitPartConfig : undefined}
+        onAddInserto={
+          canMutate && editingHardware
+            ? () => startCreateOfType('inserto', { insertoKitId: editingHardware.id })
+            : undefined
+        }
+        systemMembership={
+          editingKitSystem
+            ? {
+                agregadoCode: editingKitSystem.agregado.code,
+                heights: editingKitSystem.heights.length > 0 ? editingKitSystem.heights : [editingKitSystem.ownHeight],
+              }
+            : undefined
+        }
+        onAddSystemHeight={
+          editingKitSystem && onAddSystemHeight
+            ? () => setSystemHeightFor(editingKitSystem.agregado)
+            : undefined
+        }
       />
+
+      {canMutate ? (
+        <HardwareTypePickerModal
+          open={typePickerOpen}
+          onClose={() => setTypePickerOpen(false)}
+          hardware={hardware}
+          onStart={startCreateOfType}
+        />
+      ) : null}
+
+      {systemHeightFor && onAddSystemHeight ? (
+        <HardwareSystemHeightAddModal
+          open={systemHeightFor !== null}
+          onClose={() => setSystemHeightFor(null)}
+          agregado={systemHeightFor}
+          eligibilityGroups={(optionGroups ?? [])
+            .filter((og) => og.kind === 'agregado')
+            .map((og) => ({ id: og.id, code: og.code, name: og.name }))}
+          hasEligibilityGroup={(optionGroups ?? []).some(
+            (og) => og.kind === 'agregado' && og.optionIds.includes(systemHeightFor.id),
+          )}
+          uploadDesign={
+            assetService
+              ? (file, displayName) =>
+                  uploadHardwareAssetBinding(assetService, { file, displayName })
+              : undefined
+          }
+          onSubmit={onAddSystemHeight}
+        />
+      ) : null}
 
       {onCreateKitSystem ? (
         <HardwareKitSystemWizardModal
@@ -1075,6 +1223,9 @@ export function HardwareCatalog({
           onClose={() => setSystemWizardOpen(false)}
           existingHardwareCodes={new Set(hardware.map((h) => h.code))}
           existingAgregadoCodes={new Set(agregadoCodes)}
+          eligibilityGroups={(optionGroups ?? [])
+            .filter((og) => og.kind === 'agregado')
+            .map((og) => ({ id: og.id, code: og.code, name: og.name }))}
           uploadDesign={
             assetService
               ? (file, displayName) =>
