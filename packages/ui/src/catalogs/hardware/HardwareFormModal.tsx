@@ -15,7 +15,7 @@ import {
   type SetStateAction,
   useMemo,
 } from 'react';
-import { Trash2 } from 'lucide-react';
+import { ChevronRight, Trash2 } from 'lucide-react';
 import {
   childrenOf,
   formatKitPartPlacementLabel,
@@ -35,7 +35,8 @@ import { HardwareKitAccessoriesSection } from './HardwareKitAccessoriesSection';
 import { HardwarePiecesSection } from './HardwarePiecesSection';
 import { HardwareMachiningSection } from './HardwareMachiningSection';
 import { HardwareDesignPartsSection } from './HardwareDesignPartsSection';
-import { UNIT_LABELS, type HardwareDraft } from './hardwareDraft';
+import { UNIT_LABELS, type HardwareDraft, type HardwareItemType } from './hardwareDraft';
+import { validateUniqueCode } from '../catalogHelpers';
 
 const KIT_PART_ACTOR_OPTIONS = [
   { value: 'body', label: 'Fija al mueble (no se mueve)' },
@@ -88,6 +89,12 @@ export interface HardwareFormModalProps {
   readonly onCreateOptionGroup?: (draft: { code: string; name: string; required: boolean; kitHardwareId: string }) => void;
   readonly onUpdateOptionGroup?: (id: string, draft: { code: string; name: string; required: boolean; optionIds: string[]; kitHardwareId: string }) => void;
   readonly onDeleteOptionGroup?: (id: string) => void;
+  /** #1596 alcance 3: abre el alta de inserto para ESTE juego (callback cerrado). */
+  readonly onAddInserto?: () => void;
+  /** #1596 alcance 10: este juego pertenece a un sistema por variantes. */
+  readonly systemMembership?: { readonly agregadoCode: string; readonly heights: readonly string[] };
+  /** #1596 alcance 10: abre «Añadir altura» del sistema. */
+  readonly onAddSystemHeight?: () => void;
 }
 
 export function HardwareFormModal({
@@ -118,8 +125,16 @@ export function HardwareFormModal({
   onCreateOptionGroup,
   onUpdateOptionGroup,
   onDeleteOptionGroup,
+  onAddInserto,
+  systemMembership,
+  onAddSystemHeight,
 }: HardwareFormModalProps): ReactNode {
   const isKit = draft.unit === 'set' || Boolean(kitParts && kitParts.length > 0);
+  const itemType: HardwareItemType = draft.itemType ?? 'piece';
+  const isPairLike = itemType === 'pair' || itemType === 'inserto';
+  const insertoKit = itemType === 'inserto' && availableHardware
+    ? availableHardware.find((h) => h.id === draft.insertoKitId)
+    : undefined;
   const isKitChildPart = Boolean(draft.kitHardwareId);
   const childPartConfig = isKitChildPart
     ? resolveKitPartConfig(
@@ -165,6 +180,14 @@ export function HardwareFormModal({
     return opts;
   }, [hardwareCategories]);
 
+  // #1596 brief (Estados): el código duplicado se ve EN LÍNEA al escribirlo,
+  // no recién al enviar — mismo patrón que el wizard de sistema (blockedCode
+  // con role=alert). Sin cambios de contrato ni de store.
+  const liveCodeError = useMemo(() => {
+    if (!draft.code.trim()) return null;
+    return validateUniqueCode(draft.code, availableHardware ?? [], editingId ?? undefined);
+  }, [draft.code, availableHardware, editingId]);
+
   return (
     <Modal
       open={open}
@@ -172,7 +195,13 @@ export function HardwareFormModal({
       title={
         identity
           ? `Editar herraje — ${identity.code} · ${identity.name}`
-          : 'Nuevo herraje'
+          : itemType === 'pair'
+            ? 'Nuevo par izquierda/derecha'
+            : itemType === 'inserto'
+              ? 'Nuevo inserto para un juego'
+              : itemType === 'kit'
+                ? 'Nuevo juego'
+                : 'Nuevo herraje'
       }
       size="lg"
       dataTestId="hardware-form-modal"
@@ -209,7 +238,13 @@ export function HardwareFormModal({
               onChange={(e) => setDraft({ ...draft, code: e.target.value })}
               autoComplete="off"
               required
+              aria-invalid={liveCodeError ? true : undefined}
             />
+            {liveCodeError ? (
+              <p className="catalog-form__error" role="alert" data-testid="hardware-form-code-error">
+                {liveCodeError}
+              </p>
+            ) : null}
           </div>
           <div className="catalog-form__field">
             <label htmlFor="hw-name">Nombre</label>
@@ -249,6 +284,13 @@ export function HardwareFormModal({
               data-testid="hardware-form-brand"
             />
           </div>
+          {itemType === 'inserto' ? (
+            <p className="catalog-form__hint" data-testid="hardware-form-inserto-hint">
+              {insertoKit
+                ? `Al guardar queda como opción del selector de ${insertoKit.code} — ${insertoKit.name}.`
+                : 'Elegí el juego al que queda añadido este inserto.'}
+            </p>
+          ) : null}
           <div
             className="catalog-form__field"
             data-testid="hardware-image-field"
@@ -594,34 +636,58 @@ export function HardwareFormModal({
           data-testid="hardware-form-purchase"
         >
           <legend className="catalog-form__section-title">Compra</legend>
-          <div className="catalog-form__field">
-            <label htmlFor="hw-unit">Unidad</label>
-            <select
-              id="hw-unit"
-              value={draft.unit}
-              onChange={(e) =>
-                setDraft({ ...draft, unit: e.target.value as HardwareUnit })
-              }
-            >
-              <option value="piece">{UNIT_LABELS.piece}</option>
-              <option value="set">{UNIT_LABELS.set}</option>
-              <option value="meter">{UNIT_LABELS.meter}</option>
-            </select>
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="hw-cost">Costo unitario</label>
-            <input
-              id="hw-cost"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.costPerUnit}
-              onChange={(e) =>
-                setDraft({ ...draft, costPerUnit: Number(e.target.value) })
-              }
-              required
-            />
-          </div>
+          {isPairLike ? (
+            // #1596: el par se vende como un registro — unidad fija pieza,
+            // el precio es del PAR (los dos lados).
+            <>
+              <input type="hidden" value="piece" />
+              <div className="catalog-form__field">
+                <label htmlFor="hw-cost">Precio del par</label>
+                <input
+                  id="hw-cost"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={draft.costPerUnit}
+                  onChange={(e) =>
+                    setDraft({ ...draft, costPerUnit: Number(e.target.value) })
+                  }
+                  required
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="catalog-form__field">
+                <label htmlFor="hw-unit">Unidad</label>
+                <select
+                  id="hw-unit"
+                  value={draft.unit}
+                  onChange={(e) =>
+                    setDraft({ ...draft, unit: e.target.value as HardwareUnit })
+                  }
+                >
+                  <option value="piece">{UNIT_LABELS.piece}</option>
+                  <option value="set">{UNIT_LABELS.set}</option>
+                  <option value="meter">{UNIT_LABELS.meter}</option>
+                </select>
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="hw-cost">Costo unitario</label>
+                <input
+                  id="hw-cost"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={draft.costPerUnit}
+                  onChange={(e) =>
+                    setDraft({ ...draft, costPerUnit: Number(e.target.value) })
+                  }
+                  required
+                />
+              </div>
+            </>
+          )}
           <div className="catalog-form__field">
             <label htmlFor="hw-package">
               Empaque (misma unidad)
@@ -657,24 +723,49 @@ export function HardwareFormModal({
           </div>
         </fieldset>
 
-        {/* #667 M2: 3D model & mounting + generic procedural preview */}
-        <Hardware3DSection
-          draft={draft}
-          setDraft={setDraft}
-          canMutate={canMutate}
-          assetService={assetService}
-        />
+        {/* #667 M2: 3D model & mounting + generic procedural preview. #1596:
+            en par/inserto baja al avanzado — el diseño del par son sus
+            piezas por lado, no el modelo único del herraje. */}
+        {isPairLike ? null : (
+          <Hardware3DSection
+            draft={draft}
+            setDraft={setDraft}
+            canMutate={canMutate}
+            assetService={assetService}
+          />
+        )}
 
-        {/* #1518 F1 (was #1512 manos): piezas de diseño (izq/der/centro) —
-            un herraje multi-diseño dibuja un SKP por lado. Un kit (unit set)
-            no lleva piezas. */}
+        {/* #1518 F1 → rework #1596: piezas de diseño (izq/der) — la sección
+            de diseño del par/inserto, abierta y fija. Un kit no lleva piezas. */}
         {!isKit ? (
           <HardwarePiecesSection
             draft={draft}
             setDraft={setDraft}
             canMutate={canMutate}
             assetService={assetService}
+            itemType={isPairLike ? itemType : undefined}
           />
+        ) : null}
+
+        {/* #1596 alcance 10: el juego pertenece a un sistema por variantes. */}
+        {isKit && editingId && systemMembership && onAddSystemHeight ? (
+          <fieldset className="catalog-form__section" data-testid="hardware-form-system">
+            <legend className="catalog-form__section-title">Sistema de cajones</legend>
+            <p className="catalog-form__hint">
+              Este juego es la altura {systemMembership.heights.join('/')} del sistema{' '}
+              <strong>{systemMembership.agregadoCode}</strong>. Las otras alturas se
+              añaden desde cualquier juego del sistema; los módulos eligen la altura
+              por bahía.
+            </p>
+            <button
+              type="button"
+              className="btn btn--small"
+              onClick={onAddSystemHeight}
+              data-testid="hardware-form-add-system-height"
+            >
+              Añadir altura del sistema
+            </button>
+          </fieldset>
         ) : null}
 
         {/* #1519 F2: accesorios del juego (galería/boxcap/boxcover…) — SOLO
@@ -689,20 +780,42 @@ export function HardwareFormModal({
             onCreateGroup={onCreateOptionGroup}
             onUpdateGroup={onUpdateOptionGroup}
             onDeleteGroup={onDeleteOptionGroup}
+            onAddInserto={onAddInserto}
           />
         ) : null}
 
-        {/* F127: CNC machining footprint (parts + drilling operations). */}
-        <HardwareMachiningSection
-          modalOpen={open}
-          draft={draft}
-          setDraft={setDraft}
-        />
-
-        {/* #1417: internal design parts (by SKP component name) — only for standalone non-kit hardware. */}
-        {!isKit && !isKitChildPart ? (
-          <HardwareDesignPartsSection draft={draft} setDraft={setDraft} />
-        ) : null}
+        {/* #1596 alcance 6: un solo bloque avanzado cerrado — componentes
+            internos del SKP, acabado por parte, forma genérica y mecanizado.
+            Chevron affordance §4.2 (rota al abrir vía CSS). El <details> va
+            SIN la clase section (display:flex sobre details rompe el
+            ocultamiento del UA → layout thrash); el contenido vive en un
+            div interior. */}
+        <details className="catalog-form-advanced" data-testid="hardware-form-advanced">
+          <summary style={{ cursor: 'pointer' }}>
+            <ChevronRight size={14} strokeWidth={1.5} aria-hidden className="catalog-advanced-chevron" />
+            Avanzado
+          </summary>
+          <div className="catalog-form__section">
+          {isPairLike ? (
+            <Hardware3DSection
+              draft={draft}
+              setDraft={setDraft}
+              canMutate={canMutate}
+              assetService={assetService}
+            />
+          ) : null}
+          {/* F127: CNC machining footprint (parts + drilling operations). */}
+          <HardwareMachiningSection
+            modalOpen={open}
+            draft={draft}
+            setDraft={setDraft}
+          />
+          {/* #1417: internal design parts (by SKP component name) — only for standalone non-kit hardware. */}
+          {!isKit && !isKitChildPart ? (
+            <HardwareDesignPartsSection draft={draft} setDraft={setDraft} />
+          ) : null}
+          </div>
+        </details>
       </form>
     </Modal>
   );

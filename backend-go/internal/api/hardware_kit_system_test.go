@@ -407,6 +407,207 @@ func TestHardwareKitSystem_InvalidPlansFailClosedWithoutWrites_1553(t *testing.T
 	}
 }
 
+// kitSystemInsertoPayload_1596 builds a valid plan whose kit carries an
+// ACCESSORY row exactly like the new alta produces it (#1596): design_parts
+// declaring «Al abrir» (= actor:drawer), pieces with EXPLICIT offset_mm per
+// side and an eligibility group (decisión 9) so the ensamble lands in a
+// kind:agregado group in the same transaction.
+func kitSystemInsertoPayload_1596(code string, seed int) string {
+	kitID := kitSystemUUID(seed*10 + 1)
+	fijID := kitSystemUUID(seed*10 + 2)
+	accID := kitSystemUUID(seed*10 + 3)
+	agrID := kitSystemUUID(seed*10 + 4)
+	grpID := kitSystemUUID(seed*10 + 5)
+	asset := `"asset":{"assetId":"74000000-0000-0000-0000-000000000001","assetRevisionId":"75000000-0000-0000-0000-000000000001"}`
+	return fmt.Sprintf(`{
+		"expected_existing_codes": [],
+		"hardware": [
+			{"id":%q,"code":"%s","name":"Kit %s","unit":"set","cost_per_unit":420,"active":true},
+			{"id":%q,"code":"%s-FIJ","name":"Fija %s","unit":"piece","cost_per_unit":0,"active":true,"kit_hardware_id":%q},
+			{"id":%q,"code":"%s-E-GALERIA","name":"Par de galerías %s","unit":"piece","cost_per_unit":0,"active":true,
+			 "design_parts":[{"component_name":"Galeria I","actor_membership":"actor:drawer"}],
+			 "pieces":[
+				{"anchor":"left",%s,"offsetMm":{"x":12.5,"y":3,"z":1}},
+				{"anchor":"right",%s,"offsetMm":{"x":-3,"y":0,"z":1}}
+			 ]}
+		],
+		"agregado": {
+			"id":%q,"code":"%s-CAJON","name":"Cajón %s","active":true,
+			"width_mm":570,"height_mm":209,"depth_mm":530,
+			"commercial_kit_hardware_id":%q,
+			"variant_sets": [{
+				"id":"",
+				"dimension":"height",
+				"variants":[{"nominalDimensionMm":209,"hardwareId":%q,"commercialKitHardwareId":%q}]
+			}]
+		},
+		"eligibility_group": {"id":%q,"code":"SISTEMA_CAJON_%s","name":"Sistemas de cajón"}
+	}`,
+		kitID, code, code,
+		fijID, code, code, kitID,
+		accID, code, code,
+		asset, asset,
+		agrID, code, code, kitID,
+		kitID, kitID,
+		grpID, code)
+}
+
+// sqlReadJSON reads a single JSONB column for one code row under the tenant
+// GUCs — the #1596 readback for design_parts/pieces/option_ids.
+func (e *kitSysE2E) sqlReadJSON(t *testing.T, query string, code string) string {
+	t.Helper()
+	ctx := context.Background()
+	tx, err := e.pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("readback begin: %v", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `
+		SELECT set_config('app.organization_id', $1, true),
+		       set_config('app.user_id', $2, true),
+		       set_config('app.membership_id', $3, true),
+		       set_config('app.authorized_organization_ids', $1, true)`,
+		e.org, kitSysActor, kitSysMembership); err != nil {
+		t.Fatalf("readback tenant GUCs: %v", err)
+	}
+	var raw []byte
+	if err := tx.QueryRow(ctx, query, code).Scan(&raw); err != nil {
+		t.Fatalf("sql readback %s: %v", code, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("readback commit: %v", err)
+	}
+	return string(raw)
+}
+
+func TestHardwareKitSystem_InsertoDesignPartsOffsetsEligibility_1596(t *testing.T) {
+	e := kitSystemE2EStore(t)
+	rec := e.run(t, kitSystemInsertoPayload_1596("INS-A", 6))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("inserto plan = %d %s", rec.Code, rec.Body.String())
+	}
+	// design_parts persisted verbatim — the «Al abrir» the engine reads
+	// (kitPieceMember → DesignParts[0].ActorMembership). JSONB key order is
+	// the server's, so parse instead of substring-matching.
+	var designParts []domain.HardwareDesignPart
+	if err := json.Unmarshal([]byte(e.sqlReadJSON(t, `SELECT design_parts::text FROM hardwares WHERE code = $1`, "INS-A-E-GALERIA")), &designParts); err != nil {
+		t.Fatalf("design_parts not valid JSON: %v", err)
+	}
+	if len(designParts) != 1 || designParts[0].ComponentName != "Galeria I" || designParts[0].ActorMembership != "actor:drawer" {
+		t.Fatalf("design_parts readback = %+v", designParts)
+	}
+	// Explicit offsets persisted exactly as sent (mostrado = guardado).
+	pieces := e.sqlReadJSON(t, `SELECT pieces::text FROM hardwares WHERE code = $1`, "INS-A-E-GALERIA")
+	if !strings.Contains(pieces, `12.5`) || !strings.Contains(pieces, `-3`) {
+		t.Fatalf("pieces offsets readback = %s", pieces)
+	}
+	// Eligibility: new kind:agregado group with the ensamble as only member.
+	kind := e.sqlReadJSON(t, `SELECT to_jsonb(kind)::text FROM option_groups WHERE code = $1`, "SISTEMA_CAJON_INS-A")
+	if !strings.Contains(kind, "agregado") {
+		t.Fatalf("eligibility group kind readback = %s", kind)
+	}
+	members := e.sqlReadJSON(t, `
+		SELECT to_jsonb(m.entity_id)::text
+		FROM option_group_members m
+		JOIN option_groups g ON g.id = m.option_group_id
+		WHERE g.code = $1`, "SISTEMA_CAJON_INS-A")
+	if !strings.Contains(members, kitSystemUUID(64)) {
+		t.Fatalf("eligibility group must carry the agregado as member: %s", members)
+	}
+}
+
+func TestHardwareKitSystem_EligibilityExistingGroupAppendsMember_1596(t *testing.T) {
+	e := kitSystemE2EStore(t)
+	// Seed a kind:agregado group (the SISTEMA_CAJON the owner already has).
+	actor := storage.TenantActor{OrganizationID: e.org, UserID: kitSysActor}
+	ctx := storage.WithOrgCtx(context.Background(), e.org)
+	seededID := kitSystemUUID(71)
+	err := e.store.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+		g := &domain.OptionGroup{
+			ID: seededID, Code: "SISTEMA_CAJON_SEED", Name: "Sistemas de cajón",
+			Kind: "agregado", Required: false,
+		}
+		return e.store.CreateOptionGroup(txCtx, g)
+	})
+	if err != nil {
+		t.Fatalf("seed eligibility group: %v", err)
+	}
+	payload := strings.Replace(
+		kitSystemInsertoPayload_1596("INS-B", 7),
+		`"eligibility_group": {"id":"`+kitSystemUUID(75)+`","code":"SISTEMA_CAJON_INS-B","name":"Sistemas de cajón"}`,
+		`"eligibility_group": {"existing_group_id":"`+seededID+`"}`,
+		1,
+	)
+	rec := e.run(t, payload)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("existing-group plan = %d %s", rec.Code, rec.Body.String())
+	}
+	members := e.sqlReadJSON(t, `
+		SELECT to_jsonb(m.entity_id)::text
+		FROM option_group_members m
+		JOIN option_groups g ON g.id = m.option_group_id
+		WHERE g.code = $1`, "SISTEMA_CAJON_SEED")
+	if !strings.Contains(members, kitSystemUUID(74)) {
+		t.Fatalf("existing group must carry the new agregado as member: %s", members)
+	}
+}
+
+func TestHardwareKitSystem_EligibilityFailuresFailClosed_1596(t *testing.T) {
+	e := kitSystemE2EStore(t)
+	seededID := kitSystemUUID(81)
+	base := kitSystemInsertoPayload_1596("INS-C", 8)
+	cases := []struct {
+		name    string
+		mutate  func(string) string
+		wantSub string
+	}{
+		{
+			name: "elegibilidad en dos modos a la vez",
+			mutate: func(p string) string {
+				return strings.Replace(p,
+					`"eligibility_group": {"id":"`+kitSystemUUID(85)+`","code":"SISTEMA_CAJON_INS-C","name":"Sistemas de cajón"}`,
+					`"eligibility_group": {"existing_group_id":"`+seededID+`","id":"`+kitSystemUUID(85)+`","code":"X","name":"X"}`, 1)
+			},
+			wantSub: "excluyente",
+		},
+		{
+			name: "actor_membership fuera del vocabulario",
+			mutate: func(p string) string {
+				return strings.Replace(p, `"actor_membership":"actor:drawer"`, `"actor_membership":"actor:volador"`, 1)
+			},
+			wantSub: "vocabulario",
+		},
+		{
+			name: "grupo de elegibilidad inexistente",
+			mutate: func(p string) string {
+				return strings.Replace(p,
+					`"eligibility_group": {"id":"`+kitSystemUUID(85)+`","code":"SISTEMA_CAJON_INS-C","name":"Sistemas de cajón"}`,
+					`"eligibility_group": {"existing_group_id":"`+kitSystemUUID(99)+`"}`, 1)
+			},
+			wantSub: "REFERENCE_MISSING",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := e.run(t, tc.mutate(base))
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("invalid eligibility = %d (want 422): %s", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), tc.wantSub) {
+				t.Fatalf("422 body missing %q: %s", tc.wantSub, rec.Body.String())
+			}
+			// Fail-closed: NOTHING persisted (the missing-group probe runs
+			// BEFORE the first insert — a 4xx after writes would commit).
+			if got := e.sqlCount(t, "hardwares", []string{"INS-C", "INS-C-FIJ", "INS-C-E-GALERIA"}); got != 0 {
+				t.Fatalf("failed eligibility leaked %d hardware rows", got)
+			}
+			if got := e.sqlCount(t, "agregados", []string{"INS-C-CAJON"}); got != 0 {
+				t.Fatalf("failed eligibility leaked the agregado")
+			}
+		})
+	}
+}
+
 func TestHardwareKitSystem_TakenCodeNamesConflictingRows_1553(t *testing.T) {
 	e := kitSystemE2EStore(t)
 	// Seed a colliding code with the regular hardware endpoint's storage path.
@@ -424,7 +625,7 @@ func TestHardwareKitSystem_TakenCodeNamesConflictingRows_1553(t *testing.T) {
 		t.Fatalf("taken code = %d (want 409): %s", rec.Code, rec.Body.String())
 	}
 	var payload struct {
-		Code    string   `json:"code"`
+		Code    string `json:"code"`
 		Details struct {
 			Codes []string `json:"codes"`
 		} `json:"details"`

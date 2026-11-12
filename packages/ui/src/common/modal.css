@@ -163,6 +163,11 @@
   overflow-y: auto;
   padding: var(--density-modal-body);
   min-height: 0;
+  /* Issue 1596: gutter de scrollbar estable — un contenido que cruza el
+     límite del scrollport (bloque Avanzado, variantes del picker) no oscila
+     entre con/sin scrollbar (lazo de inestabilidad de layout visible también
+     para el usuario). */
+  scrollbar-gutter: stable;
 }
 
 .ui-modal__footer {

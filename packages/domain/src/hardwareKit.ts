@@ -1137,6 +1137,19 @@ export interface HardwareKitSystemAccessory {
   readonly name: string;
   /** Anclas de las piezas del accesorio (típicamente left+right). */
   readonly anchors: readonly ('left' | 'right' | 'center')[];
+  /**
+   * #1596: offsets EXPLÍCITOS por pieza (decisión 2: el taller dibuja en
+   * 0,0,0 y posiciona por offset). El motor honra el offset guardado; sin
+   * explicito aplicaría su default (10/35 mm) — el alta nueva nunca deja
+   * valores por defecto invisibles.
+   */
+  readonly pieceOffsets?: Readonly<Partial<Record<'left' | 'right' | 'center', { x: number; y: number; z: number }>>>;
+  /**
+   * #1596: «Al abrir» declarado (decisión 4): la declaración que el motor ya
+   * lee (kitPieceMember → DesignParts[0].ActorMembership). En insertos viene
+   * puesto en 'actor:drawer' (viaja con el cajón); nunca se infiere del nombre.
+   */
+  readonly actorMembership?: 'body' | 'actor:drawer' | 'actor:door';
 }
 
 export interface HardwareKitSystemInput {
@@ -1179,6 +1192,9 @@ export interface HardwareKitSystemPlan {
     readonly name: string;
     readonly exists: boolean;
     readonly anchors: readonly ('left' | 'right' | 'center')[];
+    /** #1596: offsets explícitos y «Al abrir» declarado (ver input). */
+    readonly pieceOffsets?: Readonly<Partial<Record<'left' | 'right' | 'center', { x: number; y: number; z: number }>>>;
+    readonly actorMembership?: 'body' | 'actor:drawer' | 'actor:door';
   }[];
   /** Grupo de accesorios vinculado al kit E (solo si E incluida y hay accesorios). */
   readonly accessoryGroup: {
@@ -1271,6 +1287,8 @@ export function planHardwareKitSystem(
     name: `${systemName} E — ${acc.name}`,
     exists: existing.hardwareCodes.has(`${systemCode}-E-${acc.suffix}`),
     anchors: acc.anchors,
+    ...(acc.pieceOffsets ? { pieceOffsets: acc.pieceOffsets } : {}),
+    ...(acc.actorMembership ? { actorMembership: acc.actorMembership } : {}),
   }));
 
   // Grupo de accesorios del kit E — los herrajes accesorios como opciones.
@@ -1305,9 +1323,79 @@ export function planHardwareKitSystem(
   };
 }
 
+/** #1596 decisión 9: dónde queda elegible el ensamble nuevo (grupo kind:agregado). */
+export interface HardwareKitSystemEligibilityRequest {
+  /** Grupo existente: el ensamble se añade como miembro (excluyente con el resto). */
+  readonly existingGroupId?: string;
+  /** Grupo nuevo: id+code+name del cliente (#1398), agregado como único miembro. */
+  readonly id?: string;
+  readonly code?: string;
+  readonly name?: string;
+}
+
 /** #1546 M4: request del asistente de sistema — uploads por slot de pieza. */
 export interface HardwareKitSystemCreateRequest {
   readonly input: HardwareKitSystemInput;
   /** Uploads de SKP: clave `${kitCode}:${pieceAnchor}:${partSuffix}` → binding. */
   readonly designs?: Record<string, HardwareVisualAssetBinding>;
+  /**
+   * #1596 decisión 9: elegibilidad del ensamble — se aplica en la MISMA
+   * transacción del servidor (o localmente en guest). Omisión explícita:
+   * la UI exige confirmar el aviso antes de enviar undefined.
+   */
+  readonly eligibilityGroup?: HardwareKitSystemEligibilityRequest;
+}
+
+/**
+ * #1596 (mostrado = guardado): el default de offsets que el motor aplica a
+ * una pieza de accesorio SIN offsetMm propio (kitPieceMember, rama de cajón):
+ * 10 mm fija / 35 mm si el código o nombre la declaran móvil, negado en el
+ * ancla derecha. El alta nueva SIEMPRE escribe offsets explícitos — esta
+ * función existe para materializar el valor que un herraje legacy está
+ * recibiendo en silencio al abrirlo en el alta nueva, de modo que lo
+ * mostrado sea lo que se guarda.
+ *
+ * Límite documentado (review #1602): en el motor la rama móvil-sólo-cajón
+ * exige actor == 'actor:drawer' tras resolver el agregado contenedor (un
+ * herraje móvil dentro de un ensamble de PUERTA cae a actor:door con 10 mm).
+ * Esta función no conoce el ensamble contenedor, así que replica la rama de
+ * cajón (35) — caso dominante del alta de herrajes; si algún día se edita
+ * un par móvil dentro de un kit de puerta, el valor materializado puede
+ * diferir del default real y quedaría corregido a mano antes de guardar.
+ */
+/**
+ * #1596 (review B1): whether the ENGINE's legacy name inference would treat
+ * this hardware as moving (kitPieceMember/kitPartMember regex: -MOV/-BRAZO in
+ * the code, móvil/movil/brazo in the name). The alta never RELIES on the
+ * inference — explicit offsets and «Al abrir» always win — but seeding the
+ * auto design-part row on open must reproduce it, or saving a legacy par
+ * whose motion was name-declared would silently pin it to the body.
+ */
+export function hardwareNameSuggestsMotion(hw: {
+  readonly code: string;
+  readonly name: string;
+}): boolean {
+  const upperCode = hw.code.toUpperCase();
+  const lowerName = hw.name.toLowerCase();
+  return (
+    upperCode.includes('-MOV') || upperCode.includes('-BRAZO') ||
+    lowerName.includes('móvil') || lowerName.includes('movil') || lowerName.includes('brazo')
+  );
+}
+
+export function defaultPieceOffsetMm(
+  hw: {
+    readonly code: string;
+    readonly name: string;
+  },
+  anchor: 'left' | 'right' | 'center',
+): { x: number; y: number; z: number } {
+  // MISMA regex que kitPieceMember/kitPartMember (el nombre sigue siendo la
+  // inferencia legacy del motor; el alta nueva la esquiva con offsets
+  // explícitos, no se retira del motor — no-objetivo de #1596).
+  const isMoving = hardwareNameSuggestsMotion(hw);
+  let x = isMoving ? 35 : 10;
+  // AnchorAxisRef: left→min, right→max (max niega el offset en el motor).
+  if (anchor === 'right') x = -x;
+  return { x, y: 0, z: 0 };
 }

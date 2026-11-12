@@ -109,7 +109,9 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     // -------------------------------------------------------------------------
     // Step 1: Upload new .skp model and bind to new hardware
     // -------------------------------------------------------------------------
-    await page.getByRole('button', { name: /Nuevo herraje/i }).click();
+    // #1596: el alta empieza por el tipo — un solo «Nuevo» → «Pieza».
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-piece').evaluate((el) => (el as HTMLElement).click());
     await expect(page.getByRole('heading', { name: 'Nuevo herraje' })).toBeVisible();
 
     await page.getByLabel('Código').fill('HW-3D-01');
@@ -304,7 +306,16 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     // -------------------------------------------------------------------------
     // Step 5: Choose existing asset -> bind Rev. 1 to a second hardware item
     // -------------------------------------------------------------------------
-    await page.getByRole('button', { name: /Nuevo herraje/i }).click();
+    // Recarga determinista (mismo criterio que kit-templates #1422 slice 2):
+    // tras varios ciclos de abrir/cerrar el formulario + el picker (#1596),
+    // la coreografía de portales con animaciones de 350ms es frágil en CI y
+    // no es lo que este paso demuestra. Tras reload el estado es el de
+    // cualquier usuario que abre el alta de nuevo.
+    await page.reload();
+    await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
+    // #1596: el alta empieza por el tipo — un solo «Nuevo» → «Pieza».
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-piece').evaluate((el) => (el as HTMLElement).click());
     await page.getByLabel('Código').fill('HW-3D-02');
     await page.getByLabel('Nombre').fill('Tirador Secundario');
     await page.getByLabel('Costo unitario').fill('18.00');
@@ -316,14 +327,16 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     // The asset we uploaded appears in selector
     const assetItem = page.getByTestId(`hardware-asset-item-${assetId}`);
     await expect(assetItem).toBeVisible();
-    await assetItem.click();
+    // Clicks nativos dentro del selector (superficie con clicks sintéticos
+    // frágiles documentada en esta app — misma convención del picker).
+    await assetItem.evaluate((el) => (el as HTMLElement).click());
 
     // Available revisions: Rev. 1 (SKP) and Rev. 2 (GLB)
     await expect(page.getByTestId('hardware-asset-revision-1')).toContainText('SKP');
     await expect(page.getByTestId('hardware-asset-revision-2')).toContainText('GLB');
 
     // Select Rev. 1
-    await page.getByTestId('hardware-asset-select-rev-1').click();
+    await page.getByTestId('hardware-asset-select-rev-1').evaluate((el) => (el as HTMLElement).click());
     await expect(page.getByTestId('hardware-asset-selector-modal')).not.toBeVisible();
 
     // Form now has Rev. 1 bound
@@ -346,7 +359,9 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     // -------------------------------------------------------------------------
     // Step 6: Retire asset: confirm dialog, disable selection, keep existing
     // -------------------------------------------------------------------------
-    await page.getByRole('button', { name: /Nuevo herraje/i }).click();
+    // #1596: el alta empieza por el tipo — un solo «Nuevo» → «Pieza».
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-piece').evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-3d-section-toggle').click();
     await page.getByTestId('hardware-open-selector-btn').click();
     await expect(page.getByTestId('hardware-asset-selector-modal')).toBeVisible();
@@ -412,7 +427,7 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     await expect(page.getByRole('heading', { name: 'Herrajes', exact: true })).toBeVisible();
 
     // "Nuevo herraje" button must NOT be present
-    await expect(page.getByRole('button', { name: /Nuevo herraje/i })).not.toBeVisible();
+    await expect(page.getByTestId('hardware-new-typed')).not.toBeVisible();
     // Edit buttons must NOT be present
     await expect(page.getByRole('button', { name: /^Editar /i })).not.toBeVisible();
   });

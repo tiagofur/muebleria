@@ -23,6 +23,8 @@ export type EmptyStateProps = {
   readonly secondaryActionLabel?: string;
   readonly onSecondaryAction?: () => void;
   readonly secondaryActionTestId?: string;
+  /** Testid de la acción primaria (misma entrada que el header, p. ej. #1596). */
+  readonly actionTestId?: string;
   /**
    * `empty` — no data in workspace (primary CTA with +).
    * `no-results` — data exists but filters/search match nothing (clear filters).
@@ -39,6 +41,7 @@ export function EmptyState({
   secondaryActionLabel,
   onSecondaryAction,
   secondaryActionTestId,
+  actionTestId,
   variant = 'empty',
 }: EmptyStateProps): ReactNode {
   const isNoResults = variant === 'no-results';
@@ -65,7 +68,7 @@ export function EmptyState({
       {hasPrimary || hasSecondary ? (
         <div className="ui-empty__actions">
           {hasPrimary ? (
-            <button type="button" className={buttonClass} onClick={onAction}>
+            <button type="button" className={buttonClass} onClick={onAction} data-testid={actionTestId}>
               {!isNoResults ? (
                 <Plus size={16} strokeWidth={1.5} aria-hidden />
               ) : null}

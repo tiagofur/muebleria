@@ -3448,23 +3448,39 @@ type HardwarePiece struct {
 }
 
 type HardwareKitSystemCreateRequest struct {
-	ExpectedExistingCodes []string                         `json:"expected_existing_codes"`
-	Hardware              []HardwareKitSystemHardwareRow   `json:"hardware"`
-	Agregado              HardwareKitSystemAgregadoRow     `json:"agregado"`
-	OptionGroup           *HardwareKitSystemOptionGroupRow `json:"option_group,omitempty"`
+	ExpectedExistingCodes []string                              `json:"expected_existing_codes"`
+	Hardware              []HardwareKitSystemHardwareRow        `json:"hardware"`
+	Agregado              HardwareKitSystemAgregadoRow          `json:"agregado"`
+	OptionGroup           *HardwareKitSystemOptionGroupRow      `json:"option_group,omitempty"`
+	EligibilityGroup      *HardwareKitSystemEligibilityGroupRow `json:"eligibility_group,omitempty"`
 }
 
 type HardwareKitSystemHardwareRow struct {
-	ID            string          `json:"id"`
-	Code          string          `json:"code"`
-	Name          string          `json:"name"`
-	Unit          string          `json:"unit"`
-	CostPerUnit   float64         `json:"cost_per_unit"`
-	Active        bool            `json:"active"`
-	PreviewShape  *string         `json:"preview_shape,omitempty"`
-	Notes         *string         `json:"notes,omitempty"`
-	KitHardwareID *string         `json:"kit_hardware_id,omitempty"`
-	Pieces        []HardwarePiece `json:"pieces,omitempty"`
+	ID            string                           `json:"id"`
+	Code          string                           `json:"code"`
+	Name          string                           `json:"name"`
+	Unit          string                           `json:"unit"`
+	CostPerUnit   float64                          `json:"cost_per_unit"`
+	Active        bool                             `json:"active"`
+	PreviewShape  *string                          `json:"preview_shape,omitempty"`
+	Notes         *string                          `json:"notes,omitempty"`
+	KitHardwareID *string                          `json:"kit_hardware_id,omitempty"`
+	DesignParts   []HardwareKitSystemDesignPartRow `json:"design_parts,omitempty"`
+	Pieces        []HardwarePiece                  `json:"pieces,omitempty"`
+}
+
+type HardwareKitSystemDesignPartRow struct {
+	ComponentName   string  `json:"component_name"`
+	ActorMembership string  `json:"actor_membership"`
+	Label           *string `json:"label,omitempty"`
+	FinishKey       *string `json:"finish_key,omitempty"`
+}
+
+type HardwareKitSystemEligibilityGroupRow struct {
+	ExistingGroupID *string `json:"existing_group_id,omitempty"`
+	ID              *string `json:"id,omitempty"`
+	Code            *string `json:"code,omitempty"`
+	Name            *string `json:"name,omitempty"`
 }
 
 type HardwareKitSystemAgregadoRow struct {

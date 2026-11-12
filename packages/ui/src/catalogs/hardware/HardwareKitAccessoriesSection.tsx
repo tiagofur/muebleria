@@ -29,6 +29,7 @@ export function HardwareKitAccessoriesSection({
   onCreateGroup,
   onUpdateGroup,
   onDeleteGroup,
+  onAddInserto,
 }: {
   readonly kitId: string;
   readonly kitCode: string;
@@ -38,6 +39,8 @@ export function HardwareKitAccessoriesSection({
   readonly onCreateGroup?: (draft: { code: string; name: string; required: boolean; kitHardwareId: string }) => void;
   readonly onUpdateGroup?: (id: string, draft: { code: string; name: string; required: boolean; optionIds: string[]; kitHardwareId: string }) => void;
   readonly onDeleteGroup?: (id: string) => void;
+  /** #1596 alcance 3: alta de inserto nuevo que cae en ESTE selector. */
+  readonly onAddInserto?: () => void;
 }): ReactNode {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -94,14 +97,35 @@ export function HardwareKitAccessoriesSection({
     });
   };
 
+  /** #1596 alcance 7: estado de cada opción — qué lados tienen diseño. */
+  const optionDesignState = (id: string): string => {
+    const hw = (hardware ?? []).find((h) => h.id === id);
+    if (!hw) return '';
+    const sides = ['left', 'right', 'center'] as const;
+    const label: Record<(typeof sides)[number], string> = { left: 'Izq', right: 'Der', center: 'Ctro' };
+    if (!hw.pieces || hw.pieces.length === 0) return 'sin piezas por lado';
+    return hw.pieces
+      .map((pc) => `${label[pc.anchor]} ${pc.asset?.assetId ? '✓' : 'pendiente'}`)
+      .join(' · ');
+  };
+
+  const optionMotionState = (id: string): string => {
+    const hw = (hardware ?? []).find((h) => h.id === id);
+    const actor = hw?.designParts?.[0]?.actorMembership;
+    if (actor === 'actor:drawer') return 'viaja con el cajón';
+    if (actor === 'actor:door') return 'viaja con la puerta';
+    if (actor === 'body') return 'fija al mueble';
+    return 'al abrir: sin declarar';
+  };
+
   return (
     <fieldset className="catalog-form__section" data-testid="hardware-form-accessories">
       <legend className="catalog-form__section-title">
-        Accesorios del juego{accessoryGroups.length > 0 ? ` · ${accessoryGroups.length}` : ''}
+        Insertos del juego{accessoryGroups.length > 0 ? ` · ${accessoryGroups.length}` : ''}
       </legend>
       <p className="catalog-form__hint">
-        Los accesorios (galería, boxcap, boxcover…) se eligen por mueble y el motor
-        los monta por cajón sobre este juego. Quien cotiza ve un selector con estas
+        Cada selector (galería, boxcap, boxcover…) ofrece opciones que se eligen por
+        cajón y el motor monta sobre este juego. Quien cotiza ve el selector con sus
         opciones.
       </p>
       {accessoryGroups.length > 0 ? (
@@ -146,16 +170,43 @@ export function HardwareKitAccessoriesSection({
                 ) : (
                   <span className="catalog-hw-part__meta">Sin opciones todavía.</span>
                 )}
+                {og.optionIds.length > 0 ? (
+                  <ul
+                    className="catalog-hw-part__meta"
+                    style={{ margin: '4px 0 0', paddingLeft: 16 }}
+                    data-testid={`hardware-accessory-${og.code}-states`}
+                  >
+                    {og.optionIds.map((id) => {
+                      const hw = (hardware ?? []).find((h) => h.id === id);
+                      return (
+                        <li key={id}>
+                          {hw?.code ?? id}: {optionDesignState(id)} · {optionMotionState(id)}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
               </div>
               {canMutate ? (
                 <div className="catalog-hw-part__actions">
+                  {onAddInserto ? (
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={onAddInserto}
+                      data-testid={`hardware-accessory-${og.code}-add-inserto`}
+                    >
+                      <PackagePlus size={13} strokeWidth={1.5} aria-hidden />
+                      Añadir inserto
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="btn btn--small"
                     onClick={() => setMemberPickFor(memberPickFor === og.id ? null : og.id)}
                     data-testid={`hardware-accessory-${og.code}-add`}
                   >
-                    Añadir opción
+                    Añadir existente
                   </button>
                   <button
                     type="button"
@@ -166,7 +217,7 @@ export function HardwareKitAccessoriesSection({
                     }}
                     data-testid={`hardware-accessory-${og.code}-delete`}
                   >
-                    Eliminar grupo
+                    Eliminar selector
                   </button>
                 </div>
               ) : null}
@@ -204,7 +255,7 @@ export function HardwareKitAccessoriesSection({
         creating ? (
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <label className="catalog-form__field">
-              <span className="catalog-form__label">Nombre del accesorio</span>
+              <span className="catalog-form__label">Nombre del selector</span>
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
@@ -229,7 +280,7 @@ export function HardwareKitAccessoriesSection({
                 disabled={!newName.trim() || !groupCodeFromName(kitCode + ' ' + newName)}
                 data-testid="hardware-accessory-new-create"
               >
-                Crear accesorio
+                Crear selector
               </button>
               <button
                 type="button"

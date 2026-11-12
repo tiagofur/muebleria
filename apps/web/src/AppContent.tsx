@@ -1161,6 +1161,9 @@ export function AppContent({
   const setEdgeActive = catalogActions.setEdgeActive;
   const createHardware = catalogActions.createHardware;
   const createHardwareKitSystem = catalogActions.createHardwareKitSystem;
+  // #1596: inserto para un juego + altura de sistema existente.
+  const createInsertoForKit = catalogActions.createInsertoForKit;
+  const addSystemHeight = catalogActions.addSystemHeight;
   const updateHardware = catalogActions.updateHardware;
   const setHardwareActive = catalogActions.setHardwareActive;
   const createAmbientMaterial = catalogActions.createAmbientMaterial;
@@ -2059,6 +2062,8 @@ export function AppContent({
     updateHardwareCategory,
     deleteHardwareCategory,
     createHardwareKitSystem,
+    createInsertoForKit,
+    addSystemHeight,
     setItemFloorStatus,
     setMaterialActive,
     setShowOnboardingTour,
