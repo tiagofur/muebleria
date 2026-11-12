@@ -98,6 +98,11 @@ func TestSketchupProfileReturnsOnlyCurrentSessionIdentity(t *testing.T) {
 	if scope, ok := body["session_scope"].(map[string]any); !ok || len(scope) != 1 || scope["organization_id"] != "org-1" {
 		t.Fatalf("profile scope must contain only current organization: %v", body["session_scope"])
 	}
+	// #1598: a capability projection, never the role list — a vendedor may
+	// not use the library dev mode.
+	if caps, ok := body["capabilities"].(map[string]any); !ok || len(caps) != 1 || caps["can_use_library_dev_mode"] != false {
+		t.Fatalf("vendedor capabilities must be exactly {can_use_library_dev_mode:false}: %v", body["capabilities"])
+	}
 	if cache := rec.Header().Get("Cache-Control"); cache != "no-store" {
 		t.Fatalf("private profile cache control = %q, want no-store", cache)
 	}
@@ -173,8 +178,45 @@ func TestSketchupProfileOrglessSessionReturnsIdentityWithoutOrganization(t *test
 	if body["session_scope"] != nil {
 		t.Fatalf("org-less profile must omit session_scope: %v", body["session_scope"])
 	}
+	// No organization means no membership to confirm a capability against:
+	// the projection is omitted, never guessed (#1598).
+	if body["capabilities"] != nil {
+		t.Fatalf("org-less profile must omit capabilities: %v", body["capabilities"])
+	}
 	if cache := rec.Header().Get("Cache-Control"); cache != "no-store" {
 		t.Fatalf("org-less profile cache control = %q, want no-store", cache)
+	}
+}
+
+// #1598: the admin of the second organization reads the dev-mode capability
+// the vendedor of the first one lacks — same endpoint, server-confirmed.
+func TestSketchupProfileCapabilitiesFollowTheActiveMembership(t *testing.T) {
+	server, _ := loginTestServer(t)
+	tc := auth.TokenContext{
+		Roles: []string{"admin"}, OrgID: "org-2", MembershipID: "u1:org-2",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
+	}
+	token, err := auth.GenerateLegacyExtensionToken("u1", "u@example.com", tc, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/sketchup/profile", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	RegisterRoutes(server).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("profile status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Capabilities struct {
+			CanUseLibraryDevMode bool `json:"can_use_library_dev_mode"`
+		} `json:"capabilities"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.Capabilities.CanUseLibraryDevMode {
+		t.Fatalf("admin must read can_use_library_dev_mode=true: %s", rec.Body.String())
 	}
 }
 

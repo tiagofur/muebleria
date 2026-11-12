@@ -151,6 +151,8 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   'CONNECTION_FACE_INVALID',
   'FACTORY_POLICY_INVALID',
   'LIBRARY_RELEASE_UNAVAILABLE',
+  // #1598: unpinned extension resolve (library dev mode) without the role.
+  'LIBRARY_DRAFT_FORBIDDEN',
   // Design-opening resolve failures (api/authoring_resolve.go via
   // designOpeningResolveFailure) — review #1501 B1.
   'DESIGN_UNKNOWN',

@@ -173,6 +173,22 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// #1598: the SketchUp extension drops its pin on purpose in library dev
+	// mode, so an unpinned extension resolve reads the DRAFT. That is an
+	// engineering tool: without the role it is rejected before any catalog
+	// is loaded — the menu in the plugin is presentation, this is the control.
+	if pinnedReleaseID == nil && claims.Client == auth.ExtensionClient {
+		draftIssue, draftErr := s.libraryDraftResolveIssue(r, claims)
+		if draftErr != nil {
+			respondWithInternalError(w, draftErr, "check published library release")
+			return
+		}
+		if draftIssue != nil {
+			s.writeAuthoringResolveEnvelope(w, http.StatusForbidden, req, authoringStatusRejected, []domain.ContractIssue{*draftIssue})
+			return
+		}
+	}
+
 	var snapshot authoringCatalogSnapshot
 	if pinnedReleaseID != nil {
 		frozenCatalog, frozenMaterialCategories, frozenErr := storage.FrozenCatalogForRelease(r.Context(), s.Store, *pinnedReleaseID)
@@ -967,4 +983,29 @@ func parseOptionalReleasePin(raw string) (*uuid.UUID, *domain.ContractIssue) {
 		}
 	}
 	return &parsed, nil
+}
+
+// libraryDraftResolveIssue (#1598) decides whether an UNPINNED resolve from
+// the SketchUp extension may read the library draft. Roles that own the draft
+// always may. Everyone else may only while the workshop has no published
+// release to pin (the live catalog is then the only catalog there is); once a
+// release exists the draft is refused by name, never served silently.
+func (s *Server) libraryDraftResolveIssue(r *http.Request, claims *auth.Claims) (*domain.ContractIssue, error) {
+	if domain.AnyRole(actorRoles(claims), domain.RoleCanUseLibraryDraft) {
+		return nil, nil
+	}
+	_, err := s.Store.GetCurrentPublishedRelease(r.Context(), uuid.MustParse(domain.GraneteStandardLibraryID))
+	if errors.Is(err, storage.ErrLibraryReleaseNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &domain.ContractIssue{
+		Code:        "LIBRARY_DRAFT_FORBIDDEN",
+		Message:     "resolver contra la biblioteca en borrador (modo dev) es sólo para administración e ingeniería",
+		Severity:    domain.IssueSeverityError,
+		Path:        "furniture.libraryReleaseId",
+		Remediation: "Apagá el modo dev de biblioteca (Extensiones → Granete: alternar modo dev de biblioteca) y sincronizá la biblioteca publicada.",
+	}, nil
 }
