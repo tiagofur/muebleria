@@ -277,7 +277,7 @@ sistema dibuja cada lado con su pieza.
 5. **Copiar al otro lado** copia los offsets del lado lleno al vacío —
    sólo al pulsarlo; nunca hay espejo automático.
 
-**Cómo saber que quedó bien:** la fila muestra la marca «2 piezas D/I» y,
+**Cómo saber que quedó bien:** la fila muestra la marca «N piezas D/I/C» y,
 al insertar el mueble, cada lado dibuja su pieza en su lado.
 
 ### 8c.3 Insertos de un juego y su selector
@@ -381,37 +381,44 @@ entregar el diseño al taller desde ahí.
 
 ### 8d.1 Insertar el diseño en SketchUp
 
-1. Instalá la extensión Granete (Extensions → Granete) e iniciá sesión con
-   tu cuenta.
+1. Instalá la extensión Granete (**Extensions → Abrir Granete**) e iniciá
+   sesión con tu cuenta.
 2. Abrí **Biblioteca** en el panel: trae los muebles de tu taller.
 3. Insertá el mueble: el motor dibuja tableros, herrajes y aperturas.
 
-**Cómo saber que quedó bien:** el footer del panel muestra la versión
-`Granete para SketchUp · v…` y coincide con la versión de tu servidor.
+**Cómo saber que quedó bien:** el footer del panel muestra la versión de la
+extensión (`Granete para SketchUp · v…`) y la fila de sesión muestra la
+versión **publicada** de la biblioteca (vN) a la que está anclado el panel.
 
 ### 8d.2 Aperturas (cajones y puertas que se abren)
 
 Los cajones y las puertas con bisagras traen su cinemática: la tarjeta
-**Apertura y presentación** del panel permite **Abrir** y **Cerrar** cada
-mueble (cajones que salen, puertas que giran con sus bisagras). Es la misma
-receta que cotiza — si el cajón abre en SketchUp, el despiece coincide.
+**Apertura** del panel permite **Abrir** y **Cerrar** cada mueble (cajones
+que salen, puertas que giran con sus bisagras). Es la misma receta que
+cotiza — si el cajón abre en SketchUp, el despiece coincide.
 
-### 8d.3 Publicar una release y sincronizar la biblioteca
+**Cómo saber que quedó bien:** al abrir y cerrar, el cajón sale entero (con
+su frente y su jaladera) y la puerta gira por sus bisagras — sin piezas
+sueltas ni restos.
+
+### 8d.3 Publicar una release y actualizar la biblioteca
 
 **Para qué sirve:** los cambios de catálogo (herrajes nuevos, recetas,
-grupos) no llegan solos a SketchUp: hay que **publicar** la versión y
-**sincronizar** el panel.
+grupos) no llegan solos a SketchUp: hay que **publicar** la versión, y el
+panel se actualiza solo a esa versión publicada.
 
 **Pasos:**
 
 1. En la web, en la sección de catálogos, publicá la nueva versión del
    borrador de biblioteca (el botón dice «Publicar vX.Y.Z»).
-2. En SketchUp: Biblioteca → **Sincronizar**. El panel queda anclado a esa
-   versión publicada — los diseños que insertes salen congelados con lo que
+2. En SketchUp, cerrá y volvé a abrir el panel de Granete (o reiniciá
+   SketchUp): al arrancar, el panel se actualiza **solo** a la última
+   versión publicada. Sin conexión, el panel sigue con la versión anterior
+   que tenía anclada — los diseños que insertes salen congelados con lo que
    esa versión contiene.
 
-**Cómo saber que quedó bien:** el número de versión del panel cambia al
-sincronizar y los herrajes nuevos aparecen al insertar.
+**Cómo saber que quedó bien:** la fila de sesión muestra la versión
+publicada nueva (vN) y los herrajes nuevos aparecen al insertar.
 
 > Cada cambio de catálogo exige publicar una versión nueva: SketchUp no ve
 > la base de datos viva, ve la versión publicada (excepto el modo
