@@ -106,7 +106,12 @@ class FurnitureBuilderMirrorTest < Minitest::Test
           { 'memberId' => 'm-riel', 'name' => 'riel',
             'localTransform' => { 'translationMm' => [10, 400, 5],
                                   'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] } },
-            'dimensionsMm' => [12, 450, 45], 'actorMembership' => 'actor:drawer' }
+            'dimensionsMm' => [12, 450, 45], 'actorMembership' => 'actor:drawer',
+            'hand' => 'left' },
+          { 'memberId' => 'm-sym', 'name' => 'riel simetrico',
+            'localTransform' => { 'translationMm' => [560, 400, 5],
+                                  'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] } },
+            'dimensionsMm' => [12, 450, 45] }
         ] }
     ]
   }.freeze
@@ -176,6 +181,47 @@ class FurnitureBuilderMirrorTest < Minitest::Test
     # W − (50 + 10) = 540. The member's own local transform composes
     # untouched (one reflection per chain, never two).
     assert_in_delta 540.0 * MM, rail.transformation.origin.x, 1e-6
+  end
+
+  # #1605: a HANDED kit member keeps its authored chirality while the
+  # position reflection moves it to the opposite wall — its cross-section
+  # would face away from the adjacent wall, reading as the opposite hand
+  # mounted backwards (the owner's Gray profiles). The host mirrors the
+  # instance's own X (det = −1, #1280 mirrored-legal) so the authored left
+  # piece presents the right-hand shape at its new side — the same frame
+  # the web's view presents. Hand-less members stay det = +1: rotated
+  # placements (door hinges, y:180) are data-tuned for the position-only
+  # reflection (#1591/#1592) and must not change.
+  def test_handed_member_reflects_geometry_while_handless_stays_proper
+    insert_mirror_layout
+
+    det = lambda do |instance|
+      m = instance.transformation.to_a
+      (m[0] * ((m[5] * m[10]) - (m[6] * m[9]))) -
+        (m[4] * ((m[1] * m[10]) - (m[2] * m[9]))) +
+        (m[8] * ((m[1] * m[6]) - (m[2] * m[5])))
+    end
+
+    rail = part_named('riel')
+    refute_nil rail
+    assert_in_delta(-1.0, det.call(rail), 1e-6,
+                    'el miembro con mano refleja su geometría (det=−1) bajo el espejo')
+
+    symmetric = part_named('riel simetrico')
+    refute_nil symmetric
+    # Position mirror still applies (W − (50 + 560) = −10): the instance
+    # lands outside the furniture but its geometry stays det = +1.
+    assert_in_delta(-10.0 * MM, symmetric.transformation.origin.x, 1e-6)
+    assert_in_delta 1.0, det.call(symmetric), 1e-6,
+                    'un miembro sin mano jamás se vuelve instancia espejada'
+  end
+
+  def test_contract_parses_member_hand_for_the_mirror_decision
+    layout = native_layout(MIRROR_LAYOUT_BODY)
+    member = layout.assemblies.flat_map(&:rigid_members).find { |m| m.member_id == 'm-riel' }
+    assert_equal 'left', member.hand
+    symmetric = layout.assemblies.flat_map(&:rigid_members).find { |m| m.member_id == 'm-sym' }
+    assert_nil symmetric.hand
   end
 
   def test_metadata_keeps_engine_numbers_not_mirrored_ones

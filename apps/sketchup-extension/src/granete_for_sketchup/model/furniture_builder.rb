@@ -1258,6 +1258,19 @@ module Granete
                         else
                           t_assembly * LocalGeometry.axes_transform(member.translation, member.basis)
                         end
+            # #1605: the #1575 position reflection moves a HANDED kit piece
+            # (left/right) to the opposite wall while its authored cross-section
+            # keeps facing the same absolute direction — the flange ends up
+            # toward the center and the piece reads as the opposite hand
+            # mounted backwards (the owner's Gray profiles, experiment in
+            # #1605). Reflecting the instance's own X (det = −1, #1280
+            # mirrored-legal) turns the authored left piece into the
+            # right-hand shape at its new side, which is exactly the frame
+            # the web's view presents. Scoped to hand-bearing members:
+            # rotated placements (door hinges, y:180) are data-tuned for the
+            # position-only reflection (#1591/#1592) and must not change.
+            hand = member.respond_to?(:hand) ? member.hand.to_s : ''
+            transform *= ::Geom::Transformation.scaling(-1, 1, 1) if mirror_width_mm && %w[left right].include?(hand)
             render_native_hardware(
               model, furniture_definition, instance_id, member,
               placement_transform: transform
