@@ -17,7 +17,7 @@ import {
   type SetStateAction,
 } from 'react';
 import type { HardwarePiece, HardwarePieceOffset } from '@granete/domain';
-import { defaultPieceOffsetMm } from '@granete/domain';
+import { defaultPieceOffsetMm, hardwareNameSuggestsMotion } from '@granete/domain';
 import { Copy, Layers } from 'lucide-react';
 import type { HardwareAssetService } from '@granete/storage';
 import type { HardwareVisualAssetBinding } from '@granete/domain';
@@ -76,7 +76,7 @@ export function HardwarePiecesSection({
   useEffect(() => {
     if (!isPairLike) return;
     setDraft((prev) => {
-      const legacy = { code: prev.code, name: prev.name, designParts: prev.designParts };
+      const legacy = { code: prev.code, name: prev.name };
       let changed = false;
       const pieces: HardwarePiece[] = [...(prev.pieces ?? [])];
       for (const anchor of BASE_ANCHORS) {
@@ -97,7 +97,18 @@ export function HardwarePiecesSection({
         ? [
             {
               componentName: prev.code.trim() || 'par',
-              actorMembership: prev.itemType === 'inserto' ? 'actor:drawer' : 'body',
+              // Review B1 (#1602): the seed must REPRODUCE the engine's
+              // legacy name inference — a legacy par whose motion was
+              // declared by name (-MOV/móvil) keeps actor:drawer on
+              // open+save instead of being silently pinned to the body
+              // (kitPieceMember lets a non-empty DesignParts[0] override
+              // the name). Same container limit as defaultPieceOffsetMm:
+              // a moving piece inside a door ensemble would infer
+              // actor:door — corrected by hand before saving.
+              actorMembership:
+                prev.itemType === 'inserto' || hardwareNameSuggestsMotion(prev)
+                  ? 'actor:drawer'
+                  : 'body',
               label: '',
               finishKey: '',
             },

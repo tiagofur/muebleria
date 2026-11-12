@@ -134,6 +134,61 @@ describe('#1596 alta por tipo — par izquierda/derecha', () => {
   });
 });
 
+describe('#1596 review B1 — par legacy con movimiento por nombre', () => {
+  // Un par legacy cuyo movimiento declara el NOMBRE (-MOV/móvil) no lleva
+  // designParts: el motor lo infiere. Al abrirlo en el alta nueva la fila se
+  // siembra y al guardar VIAJA — si se sembrara 'body', el herraje dejaría
+  // de viajar con el cajón sin que nadie lo pidiera.
+  const legacyMovingPar: Hardware = {
+    id: 'hw-gal-mov',
+    code: 'MBOX-E-GAL-MOV',
+    name: 'Galería móvil Iridium E',
+    unit: 'piece',
+    costPerUnit: 95,
+    active: true,
+    pieces: [{ anchor: 'left' }, { anchor: 'right' }],
+  };
+  const legacyFixedPar: Hardware = {
+    ...legacyMovingPar,
+    id: 'hw-gal-fija',
+    code: 'MBOX-E-GAL-FIJA',
+    name: 'Galería Iridium E',
+  };
+
+  async function roundTrip(item: Hardware, onUpdate: ReturnType<typeof vi.fn>) {
+    const user = userEvent.setup();
+    render(
+      <HardwareCatalog
+        hardware={[item]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        assetService={{ } as never}
+      />,
+    );
+    await user.click(screen.getByText(item.code));
+    await user.click(screen.getByRole('button', { name: `Editar ${item.code}` }));
+    fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+    return onUpdate.mock.calls[0]![1] as HardwareDraft;
+  }
+
+  it('abrir+guardar un par -MOV mantiene actor:drawer y materializa sus 35 mm', async () => {
+    const onUpdate = vi.fn();
+    const draft = await roundTrip(legacyMovingPar, onUpdate);
+    expect(draft.itemType).toBe('pair');
+    expect(draft.designParts?.[0]?.actorMembership).toBe('actor:drawer');
+    expect(draft.pieces?.find((p) => p.anchor === 'left')?.offsetMm).toEqual({ x: 35, y: 0, z: 0 });
+    expect(draft.pieces?.find((p) => p.anchor === 'right')?.offsetMm).toEqual({ x: -35, y: 0, z: 0 });
+  });
+
+  it('abrir+guardar un par sin nombre móvil sigue sembrando fija al cuerpo', async () => {
+    const draft = await roundTrip(legacyFixedPar, vi.fn());
+    expect(draft.designParts?.[0]?.actorMembership).toBe('body');
+  });
+});
+
 describe('#1596 alta por tipo — inserto para un juego', () => {
   it('se crea DESDE el juego en una mutación y un fallo del vínculo es visible y reintentable', async () => {
     const user = userEvent.setup();

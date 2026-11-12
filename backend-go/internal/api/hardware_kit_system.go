@@ -359,10 +359,14 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 			}(),
 			KitHardwareID: row.KitHardwareID,
 		}
-		if err := domain.ValidateHardwarePieces(convertPieces(row.Pieces)); err != nil {
+		pieces, piecesErr := convertPieces(row.Pieces)
+		if piecesErr != nil {
+			return nil, invalidPayload(fmt.Sprintf("piezas inválidas en «%s»: %v", row.Code, piecesErr), nil)
+		}
+		if err := domain.ValidateHardwarePieces(pieces); err != nil {
 			return nil, invalidPayload(fmt.Sprintf("piezas inválidas en «%s»: %v", row.Code, err), nil)
 		}
-		h.Pieces = convertPieces(row.Pieces)
+		h.Pieces = pieces
 		designParts, dpErr := convertSystemDesignParts(row.DesignParts)
 		if dpErr != nil {
 			return nil, invalidPayload(fmt.Sprintf("design_parts inválidas en «%s»: %v", row.Code, dpErr), nil)
@@ -497,9 +501,9 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 // convertPieces maps the wire pieces (asset identifiers as a generic map) to
 // domain pieces; the asset facts are resolved server-side later through the
 // SAME authority as the regular hardware write.
-func convertPieces(wire []openapi.HardwarePiece) []domain.HardwarePiece {
+func convertPieces(wire []openapi.HardwarePiece) ([]domain.HardwarePiece, error) {
 	if len(wire) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]domain.HardwarePiece, 0, len(wire))
 	for i := range wire {
@@ -507,25 +511,36 @@ func convertPieces(wire []openapi.HardwarePiece) []domain.HardwarePiece {
 		dp := domain.HardwarePiece{Anchor: p.Anchor}
 		if p.Asset != nil && len(p.Asset) > 0 {
 			raw, err := json.Marshal(p.Asset)
-			if err == nil {
-				var binding domain.HardwareVisualAssetBinding
-				if json.Unmarshal(raw, &binding) == nil && binding.AssetID != "" {
-					dp.Asset = &binding
-				}
+			if err != nil {
+				return nil, fmt.Errorf("piece %d: asset no serializable: %w", i, err)
 			}
+			var binding domain.HardwareVisualAssetBinding
+			if err := json.Unmarshal(raw, &binding); err != nil {
+				return nil, fmt.Errorf("piece %d: asset inválido: %w", i, err)
+			}
+			if binding.AssetID == "" {
+				return nil, fmt.Errorf("piece %d: asset sin assetId", i)
+			}
+			dp.Asset = &binding
 		}
 		if p.OffsetMm != nil && len(p.OffsetMm) > 0 {
 			raw, err := json.Marshal(p.OffsetMm)
-			if err == nil {
-				var offset domain.HardwarePieceOffset
-				if json.Unmarshal(raw, &offset) == nil {
-					dp.OffsetMm = &offset
-				}
+			if err != nil {
+				return nil, fmt.Errorf("piece %d: offsetMm no serializable: %w", i, err)
 			}
+			var offset domain.HardwarePieceOffset
+			if err := json.Unmarshal(raw, &offset); err != nil {
+				return nil, fmt.Errorf("piece %d: offsetMm inválido: %w", i, err)
+			}
+			// Fail loud before any write: a silently dropped offset would
+			// fall back to the engine's invisible 10/35 default — exactly
+			// what the new alta exists to eliminate (#1596 review A-S2).
+			// Explicit {0,0,0} is legitimate (diseño en el origen).
+			dp.OffsetMm = &offset
 		}
 		out = append(out, dp)
 	}
-	return out
+	return out, nil
 }
 
 // convertSystemDesignParts maps the wire design-part declarations to domain

@@ -1363,22 +1363,37 @@ export interface HardwareKitSystemCreateRequest {
  * un par móvil dentro de un kit de puerta, el valor materializado puede
  * diferir del default real y quedaría corregido a mano antes de guardar.
  */
+/**
+ * #1596 (review B1): whether the ENGINE's legacy name inference would treat
+ * this hardware as moving (kitPieceMember/kitPartMember regex: -MOV/-BRAZO in
+ * the code, móvil/movil/brazo in the name). The alta never RELIES on the
+ * inference — explicit offsets and «Al abrir» always win — but seeding the
+ * auto design-part row on open must reproduce it, or saving a legacy par
+ * whose motion was name-declared would silently pin it to the body.
+ */
+export function hardwareNameSuggestsMotion(hw: {
+  readonly code: string;
+  readonly name: string;
+}): boolean {
+  const upperCode = hw.code.toUpperCase();
+  const lowerName = hw.name.toLowerCase();
+  return (
+    upperCode.includes('-MOV') || upperCode.includes('-BRAZO') ||
+    lowerName.includes('móvil') || lowerName.includes('movil') || lowerName.includes('brazo')
+  );
+}
+
 export function defaultPieceOffsetMm(
   hw: {
     readonly code: string;
     readonly name: string;
-    readonly designParts?: readonly { readonly actorMembership?: string }[];
   },
   anchor: 'left' | 'right' | 'center',
 ): { x: number; y: number; z: number } {
-  const upperCode = hw.code.toUpperCase();
-  const lowerName = hw.name.toLowerCase();
   // MISMA regex que kitPieceMember/kitPartMember (el nombre sigue siendo la
   // inferencia legacy del motor; el alta nueva la esquiva con offsets
   // explícitos, no se retira del motor — no-objetivo de #1596).
-  const isMoving =
-    upperCode.includes('-MOV') || upperCode.includes('-BRAZO') ||
-    lowerName.includes('móvil') || lowerName.includes('movil') || lowerName.includes('brazo');
+  const isMoving = hardwareNameSuggestsMotion(hw);
   let x = isMoving ? 35 : 10;
   // AnchorAxisRef: left→min, right→max (max niega el offset en el motor).
   if (anchor === 'right') x = -x;
