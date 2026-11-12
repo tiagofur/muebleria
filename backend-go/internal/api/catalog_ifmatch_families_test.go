@@ -97,6 +97,7 @@ func TestCatalogSimpleFamilies_IfMatchGuardsWrites(t *testing.T) {
 		}{
 			{"material", "/api/catalog/materials/m1", func(s *Server, w http.ResponseWriter, r *http.Request) { s.HandleMaterialByID(w, r) }},
 			{"customer", "/api/customers/c1", func(s *Server, w http.ResponseWriter, r *http.Request) { s.HandleCustomerByID(w, r) }},
+			{"option-group", "/api/catalog/option-groups/og1", func(s *Server, w http.ResponseWriter, r *http.Request) { s.HandleOptionGroupByID(w, r) }},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
@@ -113,6 +114,36 @@ func TestCatalogSimpleFamilies_IfMatchGuardsWrites(t *testing.T) {
 					t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 				}
 			})
+		}
+	})
+
+	t.Run("DELETE option-group con If-Match válido borra y responde 200 (#1606)", func(t *testing.T) {
+		store := &stubStore{deleteOptionGroupArmed: true}
+		req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/option-groups/og1", nil), "admin", catalogPerm())
+		req.Header.Set("If-Match", `"v2"`)
+		req.SetPathValue("id", "og1")
+		rr := httptest.NewRecorder()
+		newModuleMutationServer(store).HandleOptionGroupByID(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		if store.deletedOptionGroupID != "og1" || store.deletedOptionGroupVersion != 2 {
+			t.Fatalf("unexpected delete params: id=%s version=%d", store.deletedOptionGroupID, store.deletedOptionGroupVersion)
+		}
+	})
+
+	t.Run("DELETE option-group con If-Match stale responde 412 VERSION_CONFLICT (#1606)", func(t *testing.T) {
+		store := &stubStore{deleteOptionGroupErr: storage.ErrVersionConflict}
+		req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/option-groups/og1", nil), "admin", catalogPerm())
+		req.Header.Set("If-Match", `"v1"`)
+		req.SetPathValue("id", "og1")
+		rr := httptest.NewRecorder()
+		newModuleMutationServer(store).HandleOptionGroupByID(rr, req)
+		if rr.Code != http.StatusPreconditionFailed {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), string(openapi.ApiErrorCodeVersionConflict)) {
+			t.Fatalf("body missing VERSION_CONFLICT: %s", rr.Body.String())
 		}
 	})
 

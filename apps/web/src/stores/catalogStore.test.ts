@@ -572,7 +572,7 @@ describe('catalogStore — hardware / optionGroups / components', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it('deleteOptionGroup (auth) calls backend DELETE with token', async () => {
+  it('deleteOptionGroup (auth) calls backend DELETE with If-Match token', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
       new Response('{}', { status: 200 }),
     );
@@ -583,8 +583,8 @@ describe('catalogStore — hardware / optionGroups / components', () => {
     });
     const store = createCatalogStore({ deps });
     const cat = seedCatalog();
-    store.getState().setCatalog(cat);
-    const first = cat.optionGroups[0]!;
+    const first = { ...cat.optionGroups[0]!, version: 1 };
+    store.getState().setCatalog({ ...cat, optionGroups: [first, ...cat.optionGroups.slice(1)] });
 
     await store.getState().deleteOptionGroup(first.id);
 
@@ -594,12 +594,82 @@ describe('catalogStore — hardware / optionGroups / components', () => {
         method: 'DELETE',
         headers: expect.objectContaining({
           Authorization: 'Bearer jwt-xyz',
+          'If-Match': '"v1"',
         }),
       }),
     );
     expect(
       store.getState().catalog!.optionGroups.some((g) => g.id === first.id),
     ).toBe(false);
+  });
+
+  it('deleteOptionGroup (auth) learns version via GET when not present, then DELETEs with If-Match', async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'og-unknown', version: 3 }), {
+          status: 200,
+          headers: { ETag: '"v3"', 'Content-Type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const { deps } = makeDeps({
+      getSession: () => 'auth',
+      getAuthToken: () => 'jwt-xyz',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const store = createCatalogStore({ deps });
+    const cat = seedCatalog();
+    const groupWithoutVersion = { ...cat.optionGroups[0]!, id: 'og-unknown', version: undefined };
+    store.getState().setCatalog({ ...cat, optionGroups: [groupWithoutVersion] });
+
+    await store.getState().deleteOptionGroup('og-unknown');
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      'http://test/api/catalog/option-groups/og-unknown',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer jwt-xyz' }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'http://test/api/catalog/option-groups/og-unknown',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer jwt-xyz',
+          'If-Match': '"v3"',
+        }),
+      }),
+    );
+    expect(
+      store.getState().catalog!.optionGroups.some((g) => g.id === 'og-unknown'),
+    ).toBe(false);
+  });
+
+  it('deleteOptionGroup (auth) failure does NOT remove optionGroup from local state (#1606)', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'server error' }), { status: 500 }),
+    );
+    const { deps, toasts } = makeDeps({
+      getSession: () => 'auth',
+      getAuthToken: () => 'jwt-xyz',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const store = createCatalogStore({ deps });
+    const cat = seedCatalog();
+    const target = { ...cat.optionGroups[0]!, version: 1 };
+    store.getState().setCatalog({ ...cat, optionGroups: [target] });
+
+    await store.getState().deleteOptionGroup(target.id);
+
+    // Group remains in state — never disappears "sólo en pantalla"
+    expect(
+      store.getState().catalog!.optionGroups.some((g) => g.id === target.id),
+    ).toBe(true);
+    expect(toasts.some((t) => t.type === 'error')).toBe(true);
   });
 
   it('toggleComponentActive flips active (silent, no toast)', () => {

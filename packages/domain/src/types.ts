@@ -499,6 +499,8 @@ export interface OptionGroup {
    * Ausente = grupo legacy (comportamiento byte-idéntico).
    */
   readonly kitHardwareId?: string;
+  /** Server-owned optimistic-concurrency token (strong ETag "v<N>", #443/#1091/#1606). */
+  readonly version?: number;
 }
 
 // --- Hierarchical categories (generic, max 3 levels) ---

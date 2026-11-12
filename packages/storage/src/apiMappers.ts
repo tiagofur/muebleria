@@ -725,6 +725,7 @@ export function optionGroupToApi(g: OptionGroup): Record<string, unknown> {
 export function optionGroupFromApi(raw: Record<string, unknown>): OptionGroup {
   const ids = raw.option_ids ?? raw.optionIds;
   const kitHardwareId = raw.kit_hardware_id ?? raw.kitHardwareId;
+  const version = typeof raw.version === 'number' && raw.version > 0 ? raw.version : undefined;
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -734,6 +735,7 @@ export function optionGroupFromApi(raw: Record<string, unknown>): OptionGroup {
     optionIds: Array.isArray(ids) ? ids.map(String) : [],
     // #1502: grupo vinculado a un kit accesorio; null/vacío = grupo legacy.
     ...(typeof kitHardwareId === 'string' && kitHardwareId ? { kitHardwareId } : {}),
+    ...(version !== undefined ? { version } : {}),
   };
 }
 

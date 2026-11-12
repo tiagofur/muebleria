@@ -116,7 +116,7 @@ export interface HardwareCatalogProps {
   readonly optionGroups?: readonly OptionGroup[];
   readonly onCreateOptionGroup?: (draft: { code: string; name: string; required: boolean; kitHardwareId: string }) => void;
   readonly onUpdateOptionGroup?: (id: string, draft: { code: string; name: string; required: boolean; optionIds: string[]; kitHardwareId: string }) => void;
-  readonly onDeleteOptionGroup?: (id: string) => void;
+  readonly onDeleteOptionGroup?: (id: string) => Promise<void> | void;
   /** #1546 M4: sistema generador — asistente + acción del store. */
   readonly onCreateKitSystem?: (
     req: import('@granete/domain').HardwareKitSystemCreateRequest,

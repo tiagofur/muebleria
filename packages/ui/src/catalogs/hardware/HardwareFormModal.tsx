@@ -88,7 +88,7 @@ export interface HardwareFormModalProps {
   readonly optionGroups?: readonly OptionGroup[];
   readonly onCreateOptionGroup?: (draft: { code: string; name: string; required: boolean; kitHardwareId: string }) => void;
   readonly onUpdateOptionGroup?: (id: string, draft: { code: string; name: string; required: boolean; optionIds: string[]; kitHardwareId: string }) => void;
-  readonly onDeleteOptionGroup?: (id: string) => void;
+  readonly onDeleteOptionGroup?: (id: string) => Promise<void> | void;
   /** #1596 alcance 3: abre el alta de inserto para ESTE juego (callback cerrado). */
   readonly onAddInserto?: () => void;
   /** #1596 alcance 10: este juego pertenece a un sistema por variantes. */
