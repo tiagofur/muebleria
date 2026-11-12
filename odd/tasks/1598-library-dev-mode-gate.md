@@ -25,6 +25,10 @@ Un usuario sin rol de administración o ingeniería no puede usar el modo dev de
 - V1 Ruby: `rake unit` 1497 runs / 0 failures (toggle gate ×2, revoke ×2, 403 estructurado ×2, capacidad en status, taxonomía 403) + `rake boundary` + `package:verify` (RBZ firmado). Nota: `application_test.rb` no corre aislado con `-n` por un `require` faltante de `ReleaseApiClient` PREEXISTENTE en main (la suite completa sí lo carga vía otro archivo); no se tocó.
 - V2 en vivo: owner — ingeniero enciende, edita sin publicar, ve el borrador en SketchUp; usuario sin permiso no puede encenderlo y un modo heredado se apaga solo.
 
+## Ronda de corrección (sugerencias de los dos jueces — veredicto dual APPROVED sin blockers)
+
+Aplicadas en el mismo PR: remediation del 403 sin asumir modo ON; comentario de alcance (Standard library) y carrera benigna en `libraryDraftResolveIssue`; cláusula «mientras el taller tenga una versión publicada» en la guía §11b; test Ruby de proyecciones malformadas (string/nil/hash no booleano → «No se cambió nada») y test del 403 con envelope válido sin issues → wording de licencia. No aplicadas: notify-on-failure del rescue amplio (el servidor sigue siendo el control), rescue de LayoutResolutionError en 403 patológico (fail-closed más ruidoso). Re-verificado: gate Go verde, `rake unit` 1499 runs 0 failures, rubocop limpio, gofmt limpio.
+
 ## Delivery
 
 PR `Closes #1598` / Delivery: complete (código+tests+docs+CI). El vivo del owner queda como condición de cierre, no bloquea el merge.

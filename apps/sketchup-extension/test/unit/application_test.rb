@@ -358,7 +358,8 @@ class ApplicationTest < Minitest::Test
      { 'capabilities' => nil }].each do |profile_overrides|
       with_library_dev_mode_application(capabilities: nil, profile_overrides: profile_overrides) do |application, store|
         application.start
-        assert_equal 'DENIED', dev_mode_menu_item.call
+        dev_mode_menu_item.call
+        assert_match(/No se cambió nada/, SketchupStub.messageboxes.last)
         refute store.dev_mode?
       end
     end
