@@ -306,6 +306,13 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     // -------------------------------------------------------------------------
     // Step 5: Choose existing asset -> bind Rev. 1 to a second hardware item
     // -------------------------------------------------------------------------
+    // Recarga determinista (mismo criterio que kit-templates #1422 slice 2):
+    // tras varios ciclos de abrir/cerrar el formulario + el picker (#1596),
+    // la coreografía de portales con animaciones de 350ms es frágil en CI y
+    // no es lo que este paso demuestra. Tras reload el estado es el de
+    // cualquier usuario que abre el alta de nuevo.
+    await page.reload();
+    await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
     // #1596: el alta empieza por el tipo — un solo «Nuevo» → «Pieza».
     await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-type-pick-piece').evaluate((el) => (el as HTMLElement).click());
@@ -320,14 +327,16 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     // The asset we uploaded appears in selector
     const assetItem = page.getByTestId(`hardware-asset-item-${assetId}`);
     await expect(assetItem).toBeVisible();
-    await assetItem.click();
+    // Clicks nativos dentro del selector (superficie con clicks sintéticos
+    // frágiles documentada en esta app — misma convención del picker).
+    await assetItem.evaluate((el) => (el as HTMLElement).click());
 
     // Available revisions: Rev. 1 (SKP) and Rev. 2 (GLB)
     await expect(page.getByTestId('hardware-asset-revision-1')).toContainText('SKP');
     await expect(page.getByTestId('hardware-asset-revision-2')).toContainText('GLB');
 
     // Select Rev. 1
-    await page.getByTestId('hardware-asset-select-rev-1').click();
+    await page.getByTestId('hardware-asset-select-rev-1').evaluate((el) => (el as HTMLElement).click());
     await expect(page.getByTestId('hardware-asset-selector-modal')).not.toBeVisible();
 
     // Form now has Rev. 1 bound
