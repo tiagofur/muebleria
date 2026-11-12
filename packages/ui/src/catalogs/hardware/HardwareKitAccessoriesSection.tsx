@@ -38,7 +38,7 @@ export function HardwareKitAccessoriesSection({
   readonly canMutate: boolean;
   readonly onCreateGroup?: (draft: { code: string; name: string; required: boolean; kitHardwareId: string }) => void;
   readonly onUpdateGroup?: (id: string, draft: { code: string; name: string; required: boolean; optionIds: string[]; kitHardwareId: string }) => void;
-  readonly onDeleteGroup?: (id: string) => void;
+  readonly onDeleteGroup?: (id: string) => Promise<void> | void;
   /** #1596 alcance 3: alta de inserto nuevo que cae en ESTE selector. */
   readonly onAddInserto?: () => void;
 }): ReactNode {
@@ -46,6 +46,7 @@ export function HardwareKitAccessoriesSection({
   const [newName, setNewName] = useState('');
   const [newRequired, setNewRequired] = useState(false);
   const [memberPickFor, setMemberPickFor] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Los accesorios de ESTE kit: grupos kind:hardware vinculados por kit.
   const accessoryGroups = useMemo(
@@ -211,13 +212,23 @@ export function HardwareKitAccessoriesSection({
                   <button
                     type="button"
                     className="btn btn--small btn--ghost"
-                    onClick={() => {
+                    disabled={deletingId === og.id}
+                    onClick={async () => {
                       setMemberPickFor(null);
-                      onDeleteGroup?.(og.id);
+                      if (onDeleteGroup) {
+                        setDeletingId(og.id);
+                        try {
+                          await onDeleteGroup(og.id);
+                        } catch {
+                          // Error handled by store/toast; button resets in finally to allow retry
+                        } finally {
+                          setDeletingId(null);
+                        }
+                      }
                     }}
                     data-testid={`hardware-accessory-${og.code}-delete`}
                   >
-                    Eliminar selector
+                    {deletingId === og.id ? 'Eliminando…' : 'Eliminar selector'}
                   </button>
                 </div>
               ) : null}

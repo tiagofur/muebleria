@@ -488,14 +488,18 @@ type stubStore struct {
 	updateModuleErr             error
 	createModuleArmed           bool
 	// #1436: option-group writes armed by the kit-part guard tests.
-	createOptionGroupArmed bool
-	updateOptionGroupArmed bool
-	createModuleReceived   *domain.Module
-	createModuleErr        error
-	deleteModuleCalled     bool
-	deleteModuleReceivedID string
-	approveDeviceReceived  *storage.ApproveDeviceEnrollmentCommand
-	resolveDeviceResult    *storage.DeviceTokenResult
+	createOptionGroupArmed    bool
+	updateOptionGroupArmed    bool
+	deleteOptionGroupArmed    bool
+	deleteOptionGroupErr      error
+	deletedOptionGroupID      string
+	deletedOptionGroupVersion int64
+	createModuleReceived      *domain.Module
+	createModuleErr           error
+	deleteModuleCalled        bool
+	deleteModuleReceivedID    string
+	approveDeviceReceived     *storage.ApproveDeviceEnrollmentCommand
+	resolveDeviceResult       *storage.DeviceTokenResult
 	// MFA / step-up (#460 SEC-7)
 	mfaEnabledFactors  int
 	mfaStepUpFreshness storage.MFAStepUpFreshness

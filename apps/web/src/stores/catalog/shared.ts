@@ -429,9 +429,15 @@ export interface CatalogStoreCtx {
    * Hard-delete on the API when authenticated. Guest mode only needs the
    * local catalog rewrite (saveCatalog is upsert-only and never DELETEs).
    *
+   * #1606: The backend requires `If-Match: "v<version>"` for catalog DELETE endpoints (#1091).
+   * When expectedVersion is omitted, probes GET to learn the current version.
+   *
    * @returns false when the server delete failed (caller should not claim success).
    */
-  hardDeleteOnAuth(path: string): Promise<boolean>;
+  hardDeleteOnAuth(
+    path: string,
+    options?: { expectedVersion?: number },
+  ): Promise<boolean>;
 
   /**
    * Resets confirmed base catalog and clears in-flight pending ops
@@ -647,25 +653,67 @@ export function makeCatalogStoreCtx(
     }
   }
 
-  async function hardDeleteOnAuth(path: string): Promise<boolean> {
+  async function hardDeleteOnAuth(
+    path: string,
+    options?: { expectedVersion?: number },
+  ): Promise<boolean> {
     if (getSession() !== 'auth') return true;
     const token = getAuthToken();
     if (!token) return true;
     try {
+      let ifMatch: string | null = null;
+      if (typeof options?.expectedVersion === 'number' && options.expectedVersion > 0) {
+        ifMatch = `"v${options.expectedVersion}"`;
+      } else {
+        // #1606: The backend requires `If-Match: "v<version>"` for catalog DELETE endpoints (#1091).
+        // Probe GET to learn the current ETag/version (or detect 404 if already deleted).
+        const getRes = await fetchImpl(`${baseUrl}${path}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (getRes.status === 404) {
+          // Already gone on server
+          return true;
+        }
+        if (getRes.ok) {
+          const etag = getRes.headers.get('ETag');
+          if (etag) {
+            ifMatch = etag;
+          } else {
+            const data = (await getRes.json().catch(() => null)) as { version?: unknown } | null;
+            if (data && typeof data.version === 'number' && data.version > 0) {
+              ifMatch = `"v${data.version}"`;
+            }
+          }
+        }
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      };
+      if (ifMatch) {
+        headers['If-Match'] = ifMatch;
+      }
+
       const res = await fetchImpl(`${baseUrl}${path}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
       });
+      if (res.status === 404) {
+        return true;
+      }
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         console.error(`Error deleting ${path}: ${res.status} ${text}`);
         toast({
           type: 'error',
           message:
-            'Error al eliminar en el servidor (puede reaparecer al recargar)',
+            res.status === 412
+              ? 'El elemento cambió en el servidor. Recargá la página antes de eliminarlo.'
+              : 'Error al eliminar en el servidor (puede reaparecer al recargar)',
         });
         return false;
       }

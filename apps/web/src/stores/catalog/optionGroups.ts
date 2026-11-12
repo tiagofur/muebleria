@@ -58,15 +58,18 @@ export function createOptionGroupsActions(ctx: CatalogStoreCtx): OptionGroupsSli
     },
 
     deleteOptionGroup: async (id) => {
-      const saved = await ctx.patchSaved((c) => ({
+      // #1606: hardDeleteOnAuth first under If-Match — if backend fails (e.g. 428/412/500/network),
+      // the group is NOT removed from local state (never disappears "sólo en pantalla").
+      const group = ctx.get().catalog?.optionGroups.find((g) => g.id === id);
+      const ok = await ctx.hardDeleteOnAuth(`/catalog/option-groups/${id}`, {
+        expectedVersion: group?.version,
+      });
+      if (!ok) return;
+      await ctx.patchSaved((c) => ({
         ...c,
         optionGroups: c.optionGroups.filter((g) => g.id !== id),
       }));
-      if (!saved) return;
-      const ok = await ctx.hardDeleteOnAuth(`/catalog/option-groups/${id}`);
-      if (ok) {
-        ctx.toast({ type: 'info', message: 'Grupo de opciones eliminado' });
-      }
+      ctx.toast({ type: 'info', message: 'Grupo de opciones eliminado' });
     },
   };
 }

@@ -39,7 +39,15 @@ func (s *stubStore) UpdateOptionGroup(_ context.Context, _ string, expectedVersi
 	return nil
 }
 
-func (s *stubStore) DeleteOptionGroup(_ context.Context, _ string, _ int64) error {
+func (s *stubStore) DeleteOptionGroup(_ context.Context, id string, expectedVersion int64) error {
+	if s.deleteOptionGroupErr != nil {
+		return s.deleteOptionGroupErr
+	}
+	if s.deleteOptionGroupArmed {
+		s.deletedOptionGroupID = id
+		s.deletedOptionGroupVersion = expectedVersion
+		return nil
+	}
 	s.stubNotUsed("DeleteOptionGroup")
 	return nil
 }
