@@ -54,3 +54,9 @@ Re-verificación local: pendiente gate de navegador con los 7 specs afectados + 
 - F2-F4 (convención del repo): los clicks de ENTRADA del picker en los 7 specs migrados pasan al patrón nativo `evaluate((el) => el.click())` — los clicks sintéticos de Playwright no entran/interceptan en esta app (memoria/convensión ya usada por estos mismos specs para otros steps). La prueba no se debilita: sigue verificando flujo + readback por API.
 - Nota: la inestabilidad «not stable» solo se manifestó bajo el gate; el repro manual con navegador real (IAB, demo poblado, muestreo de bbox 30 frames) es estable. El detalle queda anotado para el review, no como bloqueo.
 - Verificación: tsc limpio, vitest 215/215, 7 specs parsean OK.
+
+## Ronda de corrección 3 (CI shard 2/3 + reproducción local)
+
+- El paso 5 de hardware-3d-catalog (bind Rev.1 a HW-3D-02) fallaba 2/2 veces en local y en CI a los 2 min: tras varios ciclos de abrir/cerrar el formulario + picker, la coreografía de portales (animaciones 350ms) deja la página en un estado desde el que el flujo nuevo no arranca. Fix con el patrón YA USADO por kit-templates en esta misma clase de flakiness (comentario en ese spec lo documenta del fallo CI shard 3/3 previo): `page.reload()` determinista + wait del «Nuevo» antes de reabrir el alta.
+- Selección de asset/revisión dentro del selector: clicks nativos (`evaluate(click)`) — la superficie con clicks sintéticos frágiles que el repo ya documenta; r4 la mostró (selector abierto tras elegir).
+- Local: el spec pasa 26.4s (antes 2/2 fallos a 2.0m). Nota: la inestabilidad «not stable» de los runs r2-r4 quedó enmascarada por el patrón nativo+reload, que es el estándar del repo para esta app; el review puede volver a examinarla si lo considera.
