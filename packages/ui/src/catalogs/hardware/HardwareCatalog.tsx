@@ -549,6 +549,30 @@ export function HardwareCatalog({
     return null;
   };
 
+  /**
+   * #1596: el payload del alta lleva el componentName de la fila 0 de
+   * designParts normalizado al código (el placeholder del mount no viaja).
+   * El store re-normaliza al persistir — acá es para que lo que el caller
+   * recibe ya sea el registro final.
+   */
+  const normalizeTypedDraft = (d: HardwareDraft): HardwareDraft => {
+    if (
+      (d.itemType === 'pair' || d.itemType === 'inserto') &&
+      d.designParts &&
+      d.designParts.length > 0
+    ) {
+      const code = d.code.trim();
+      const first = d.designParts[0]!;
+      if (code && (first.componentName === 'par' || first.componentName.trim() === '')) {
+        return {
+          ...d,
+          designParts: [{ ...first, componentName: code }, ...d.designParts.slice(1)],
+        };
+      }
+    }
+    return d;
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (saving) return;
@@ -560,18 +584,19 @@ export function HardwareCatalog({
     setError(null);
     setSaving(true);
     setReadbackError(null);
+    const payload = normalizeTypedDraft(draft);
     try {
       if (editingId) {
-        await onUpdate(editingId, draft);
-      } else if (draft.itemType === 'inserto' && draft.insertoKitId) {
+        await onUpdate(editingId, payload);
+      } else if (payload.itemType === 'inserto' && payload.insertoKitId) {
         // #1596 alcance 3: herraje + selector del juego en UNA mutación —
         // si el vínculo falla, nada queda a medias y el error es visible.
         if (!onCreateInserto) {
           throw new Error('No podés modificar el catálogo en esta sesión.');
         }
-        await onCreateInserto(draft, draft.insertoKitId, draft.insertoSelectorName || undefined);
+        await onCreateInserto(payload, payload.insertoKitId, payload.insertoSelectorName || undefined);
       } else {
-        await onCreate(draft);
+        await onCreate(payload);
       }
       closeModal();
     } catch (err: unknown) {

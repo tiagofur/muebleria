@@ -102,6 +102,8 @@ function hardwarePreviewFields(
  * #1417: convierte las filas de form a partes de dominio. Una fila sin
  * componentName se descarta (fila vacía del form); cualquier invalidez real
  * lanza — el modal muestra el mensaje y nada persiste (fail-closed).
+ * #1596: en par/inserto la fila 0 lleva «Al abrir»; su componentName se
+ * normaliza al código del herraje (el placeholder del mount no viaja).
  */
 function hardwareDesignPartsField(draft: HardwareDraft): Pick<Hardware, 'designParts'> | {} {
   const rows = (draft.designParts ?? [])
@@ -112,6 +114,12 @@ function hardwareDesignPartsField(draft: HardwareDraft): Pick<Hardware, 'designP
       ...(p.label.trim() ? { label: p.label.trim() } : {}),
       ...(p.finishKey.trim() ? { finishKey: p.finishKey.trim() } : {}),
     }));
+  if ((draft.itemType === 'pair' || draft.itemType === 'inserto') && rows.length > 0) {
+    const code = draft.code.trim();
+    if (code && (rows[0]!.componentName === 'par' || !rows[0]!.componentName)) {
+      rows[0] = { ...rows[0]!, componentName: code };
+    }
+  }
   if (rows.length === 0) return {};
   const parts: HardwareDesignPart[] = rows;
   validateHardwareDesignParts(parts);
@@ -353,6 +361,12 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               ...hardwareMachiningField(draft),
               ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
               ...(draft.pieces ? { pieces: draft.pieces } : {}),
+              // #1596 (fix de raíz): el update re-aplica las filas del form —
+              // sin esto, cambiar «Al abrir» en el alta nueva no persiste
+              // (el destructure de arriba elimina las designParts previas y
+              // el PUT las nulaba). Sin filas en el form = fila legacy
+              // intacta ({}).
+              ...hardwareDesignPartsField(draft),
             };
           });
           const affectedKitIds = new Set<string>();

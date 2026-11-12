@@ -240,23 +240,28 @@ export function HardwarePiecesSection({
                   <span className="catalog-hw-part__meta">
                     {assetLabel(piece)} · {meta.hint}
                   </span>
-                  <div
-                    className="agregado-editor__item-fields agregado-editor__item-fields--grid"
-                    style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}
-                  >
-                    {(['x', 'y', 'z'] as const).map((axis) => (
-                      <label key={axis} className="catalog-form__field">
-                        <span className="catalog-form__label">Offset {axis.toUpperCase()} (mm)</span>
-                        <input
-                          type="number"
-                          step="0.5"
-                          value={piece?.offsetMm?.[axis] ?? 0}
-                          onChange={(e) => setOffset(anchor, axis, e.target.value)}
-                          data-testid={`hardware-piece-${anchor}-offset-${axis}`}
-                        />
-                      </label>
-                    ))}
-                  </div>
+                  {/* #1596: en par/inserto los offsets SIEMPRE están (el
+                      par nace con ambos lados); en edición genérica sólo
+                      cuando la pieza existe (comportamiento #1518 intacto). */}
+                  {isPairLike || piece ? (
+                    <div
+                      className="agregado-editor__item-fields agregado-editor__item-fields--grid"
+                      style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}
+                    >
+                      {(['x', 'y', 'z'] as const).map((axis) => (
+                        <label key={axis} className="catalog-form__field">
+                          <span className="catalog-form__label">Offset {axis.toUpperCase()} (mm)</span>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={piece?.offsetMm?.[axis] ?? 0}
+                            onChange={(e) => setOffset(anchor, axis, e.target.value)}
+                            data-testid={`hardware-piece-${anchor}-offset-${axis}`}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 {canMutate && assetService ? (
                   <div className="catalog-hw-part__actions" style={{ flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>

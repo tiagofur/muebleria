@@ -82,6 +82,8 @@ test.describe.serial('Herrajes — partes de diseño (#1417)', () => {
       .evaluate((el) => (el as HTMLElement).click());
     await expect(page.getByTestId('hardware-form-modal')).toBeVisible();
 
+    // #1596: la autoría por componente vive en el bloque Avanzado cerrado.
+    await page.getByTestId('hardware-form-advanced').locator('summary').click();
     // Autoría: 2 partes (fija + móvil).
     await page.getByTestId('hardware-design-parts-add').click();
     await page.getByTestId('hardware-design-part-0-name').fill('riel_fijo');
