@@ -411,9 +411,9 @@ panel se actualiza solo a esa versión publicada.
 
 1. En la web, en la sección de catálogos, publicá la nueva versión del
    borrador de biblioteca (el botón dice «Publicar vX.Y.Z»).
-2. En SketchUp, cerrá y volvé a abrir el panel de Granete (o reiniciá
-   SketchUp): al arrancar, el panel se actualiza **solo** a la última
-   versión publicada. Sin conexión, el panel sigue con la versión anterior
+2. En SketchUp, reiniciá SketchUp (cerrá y abrí de nuevo la aplicación): al
+   arrancar de nuevo, el panel se actualiza **solo** a la última versión
+   publicada. Sin conexión, el panel sigue con la versión anterior
    que tenía anclada — los diseños que insertes salen congelados con lo que
    esa versión contiene.
 
