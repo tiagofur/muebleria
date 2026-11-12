@@ -519,12 +519,31 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
             id: created.variant_set_ids[i] ?? vs.id,
           })),
         };
+        // Review S7: el grupo de elegibilidad creado server-side se adopta
+        // en el estado local (antes quedaba stale hasta el refetch).
+        const eligibilityDraft =
+          req.eligibilityGroup && !req.eligibilityGroup.existingGroupId
+            ? {
+                id: req.eligibilityGroup.id ?? ctx.newId(),
+                code: req.eligibilityGroup.code ?? '',
+                name: req.eligibilityGroup.name ?? '',
+                kind: 'agregado' as const,
+                required: false,
+                optionIds: [created.agregado_id],
+              }
+            : null;
         const merged: Catalog = {
           ...catalog,
           hardware: [...(catalog.hardware ?? []), ...newHardware],
           agregados: [...(catalog.agregados ?? []), serverAgregado],
-          ...(accessoryGroupDraft
-            ? { optionGroups: [...(catalog.optionGroups ?? []), accessoryGroupDraft] }
+          ...(accessoryGroupDraft || eligibilityDraft
+            ? {
+                optionGroups: [
+                  ...(catalog.optionGroups ?? []),
+                  ...(accessoryGroupDraft ? [accessoryGroupDraft] : []),
+                  ...(eligibilityDraft ? [eligibilityDraft] : []),
+                ],
+              }
             : {}),
         };
         ctx.set({ catalog: merged });
@@ -539,8 +558,13 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
 
       // Guest (sin backend): la elegibilidad se aplica en la MISMA mutación
       // local — sin éxito aparente: un grupo inexistente aborta todo antes
-      // de escribir (#1596 decisión 9).
+      // de escribir (#1596 decisión 9). El selector de insertos del E
+      // (accessoryGroupDraft, #1519) entra en la MISMA lista — review B1:
+      // sin esto, guest creaba el sistema y perdía el selector.
       const guestOptionGroups = [...(catalog.optionGroups ?? [])];
+      if (accessoryGroupDraft) {
+        guestOptionGroups.push(accessoryGroupDraft);
+      }
       if (req.eligibilityGroup) {
         if (req.eligibilityGroup.existingGroupId) {
           const target = guestOptionGroups.find(
@@ -554,9 +578,14 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
             guestOptionGroups[idx] = { ...target, optionIds: [...target.optionIds, agregado.id] };
           }
         } else {
+          const code = req.eligibilityGroup.code ?? '';
+          if (!code) {
+            // S5 (review B): el servidor exige code; el camino guest falla igual.
+            throw new Error('El grupo de elegibilidad nuevo necesita código.');
+          }
           guestOptionGroups.push({
             id: req.eligibilityGroup.id ?? ctx.newId(),
-            code: req.eligibilityGroup.code ?? '',
+            code,
             name: req.eligibilityGroup.name ?? '',
             kind: 'agregado',
             required: false,
@@ -658,6 +687,11 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       ];
       for (const design of subPlan.designs) {
         if (!design.handsParts) continue;
+        // Review S6: un diseño preexistente se reutiliza, no se recrea —
+        // recrearlo tiraría un 409 fail-closed sobre TODO el save.
+        if (design.exists) {
+          continue;
+        }
         const pieces = design.handsParts
           .map((part) => {
             const binding = req.designs?.[`${kitCode}:${part.hand}:${design.code}`];

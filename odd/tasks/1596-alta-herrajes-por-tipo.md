@@ -60,3 +60,16 @@ Re-verificación local: pendiente gate de navegador con los 7 specs afectados + 
 - El paso 5 de hardware-3d-catalog (bind Rev.1 a HW-3D-02) fallaba 2/2 veces en local y en CI a los 2 min: tras varios ciclos de abrir/cerrar el formulario + picker, la coreografía de portales (animaciones 350ms) deja la página en un estado desde el que el flujo nuevo no arranca. Fix con el patrón YA USADO por kit-templates en esta misma clase de flakiness (comentario en ese spec lo documenta del fallo CI shard 3/3 previo): `page.reload()` determinista + wait del «Nuevo» antes de reabrir el alta.
 - Selección de asset/revisión dentro del selector: clicks nativos (`evaluate(click)`) — la superficie con clicks sintéticos frágiles que el repo ya documenta; r4 la mostró (selector abierto tras elegir).
 - Local: el spec pasa 26.4s (antes 2/2 fallos a 2.0m). Nota: la inestabilidad «not stable» de los runs r2-r4 quedó enmascarada por el patrón nativo+reload, que es el estándar del repo para esta app; el review puede volver a examinarla si lo considera.
+
+## Ronda de corrección dual (11-12, veredicto sobre 7122564f: Juez A APPROVED en su ámbito / Juez B CHANGES 2 blockers)
+
+**Heredado de la ronda anterior (sesión previa, sin commitear):** reintento de inserto con id estable (`insertoPendingId`, el upsert converge en GET→PUT en vez de duplicar con 409 en bucle), adopción del grupo de elegibilidad creado server-side en el estado local, accessoryGroup del E en el camino guest, preselección del grupo canónico SISTEMA_CAJON si ya existe.
+
+**Esta ronda:**
+- **B1 (blocker, corregido):** la fila auto-sembrada de «Al abrir» usaba `body` — un par legacy cuyo movimiento declara el NOMBRE (-MOV/móvil) perdía el viaje con el cajón al abrir+guardar (DesignParts[0] no vacío pisa la inferencia del motor). Fix: `hardwareNameSuggestsMotion` (domain, la MISMA regex que kitPieceMember, ahora fuente única también para `defaultPieceOffsetMm`) siembra `actor:drawer` para movers; mismo límite documentado del contenedor-puerta. Test de ida y vuelta ×2 (par -MOV → actor:drawer + 35/-35 materializados; par sin nombre móvil → body).
+- **A-S2 (aplicada):** `convertPieces` fail-loud — offsetMm/asset malformado ahora 422 nombrando la pieza, nunca el default invisible 10/35; `{0,0,0}` explícito sigue siendo legítimo. Call-site único (validación y asignación comparten la conversión).
+- **Declinadas con razón:** tipar 409/412 del UpdateOptionGroup (rollback total hoy, S2 del artifact); duplicados de component_name en convertSystemDesignParts (el motor lee [0]); display 0 en offsets del wizard (S8 ya anotado).
+
+**Verificado:** vitest ui hardware (2 archivos, 7 tests con los 2 nuevos), domain hardwareKit+designParts 54/54, `pnpm typecheck` verde, `scripts/backend-test.sh ./internal/api` ok (36 s, Postgres desechable, E2E del endpoint incluidos), gofmt/vet limpios.
+
+**B2 (blocker ABIERTO, decisión del owner):** el paso de diseño por mano de las ALTURAS (asistente y «Añadir altura») pide sólo subida de SKP, sin elegir-existing ni offsets — diverge del brief normativo (§Juego paso 2, alcance 9). O se implementa en este PR o la deferral se aprueba por escrito en la issue.

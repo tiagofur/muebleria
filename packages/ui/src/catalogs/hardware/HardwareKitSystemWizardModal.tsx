@@ -7,7 +7,7 @@
  * lo re-deriva contra el catálogo real antes de persistir.
  */
 
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   HARDWARE_KIT_SYSTEM_HEIGHTS,
   planHardwareKitSystem,
@@ -73,6 +73,19 @@ export function HardwareKitSystemWizardModal({
   const [eligibilityMode, setEligibilityMode] = useState<'new' | 'existing' | 'skip'>('new');
   const [eligibilityGroupId, setEligibilityGroupId] = useState('');
   const [skipEligibilityConfirmed, setSkipEligibilityConfirmed] = useState(false);
+
+  // Review S2: si el grupo canónico ya existe, preseleccionarlo — crear otro
+  // con el mismo código daría 409 en el primer intento.
+  useEffect(() => {
+    if (!open || eligibilityMode !== 'new') return;
+    const canonical = eligibilityGroups.find((g) => g.code === 'SISTEMA_CAJON');
+    if (canonical) {
+      setEligibilityMode('existing');
+      setEligibilityGroupId(canonical.id);
+    }
+    // Sólo al abrir el asistente: la elección del usuario manda después.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   const [files, setFiles] = useState<SystemFileBuckets>({});
   const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -380,7 +393,9 @@ export function HardwareKitSystemWizardModal({
             <p className="catalog-form__hint">
               Un archivo por pieza (.skp). Las piezas sin diseño se ven con la
               representación genérica y podés subir el diseño después desde su
-              ficha.
+              ficha. Los costados de cada altura nacen en su posición
+              canónica Blum: 10 mm el fijo, 35 mm el móvil, medidos del ancho
+              del cajón.
             </p>
             {plan?.kits.map((kit) =>
               kit.designs.map((design) =>
@@ -573,6 +588,8 @@ export function HardwareKitSystemWizardModal({
               <select
                 value={eligibilityMode === 'existing' ? eligibilityGroupId : ''}
                 onChange={(e) => {
+                  // Review S4: elegir un grupo limpia la omisión confirmada.
+                  setSkipEligibilityConfirmed(false);
                   if (e.target.value) {
                     setEligibilityMode('existing');
                     setEligibilityGroupId(e.target.value);

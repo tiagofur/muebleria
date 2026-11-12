@@ -594,6 +594,12 @@ export function HardwareCatalog({
         if (!onCreateInserto) {
           throw new Error('No podés modificar el catálogo en esta sesión.');
         }
+        // Review B2: identidad del inserto decidida UNA vez — reintentos
+        // reutilizan el id (convergen con lo ya persistido a mitad).
+        if (!payload.insertoPendingId) {
+          payload.insertoPendingId = crypto.randomUUID();
+          setDraft(payload);
+        }
         await onCreateInserto(payload, payload.insertoKitId, payload.insertoSelectorName || undefined);
       } else {
         await onCreate(payload);

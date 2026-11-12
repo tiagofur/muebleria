@@ -96,6 +96,13 @@ export type HardwareDraft = {
   insertoKitId?: string;
   /** #1596: nombre del selector si hay que crearlo (vacío = «Insertos de <kit>»). */
   insertoSelectorName?: string;
+  /**
+   * #1596 (review B2): identidad del inserto decidida UNA vez y reutilizada
+   * en reintentos — si la persistencia a mitad dejó el herraje en el
+   * servidor, el reintento con el MISMO id converge (GET 200 → PUT) en vez
+   * de crear un duplicado con 409 en bucle.
+   */
+  insertoPendingId?: string;
 };
 
 /** #1596: los cuatro tipos de ítem del alta (decisión 1). */

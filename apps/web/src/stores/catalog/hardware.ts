@@ -257,8 +257,13 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
       if (!kit) {
         throw new Error('El juego elegido ya no existe en el catálogo.');
       }
+      // #1596 (review B2): el id viaja en el draft y se REUTILIZA en
+      // reintentos — una persistencia a mitad (herraje escrito, vínculo al
+      // selector fallido) deja el herraje en el servidor; reintentar con un
+      // id nuevo crearía un duplicado y el 409 en bucle impediría cerrar el
+      // alta. Con el mismo id, el upsert converge (GET 200 → PUT).
       const item: Hardware = {
-        id: ctx.newId(),
+        id: draft.insertoPendingId ?? ctx.newId(),
         code,
         name: draft.name.trim(),
         unit: 'piece',
