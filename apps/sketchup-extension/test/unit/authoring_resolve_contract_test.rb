@@ -655,6 +655,39 @@ class AuthoringResolveContractTest < Minitest::Test
     end
   end
 
+  # #1598: a 403 can be a structured rejection (the library draft refused
+  # by role) — the stable code must reach the caller; a 403 without a
+  # parseable envelope keeps the license wording.
+  def test_transport_surfaces_a_structured_403_rejection
+    request = scenario('07-orphan-anchor-rejection')['request']
+    body = deep_copy(scenario('07-orphan-anchor-rejection')['response'])
+    body['issues'] = [{
+      'code' => 'LIBRARY_DRAFT_FORBIDDEN',
+      'message' => 'resolver contra la biblioteca en borrador (modo dev) es sólo para administración e ingeniería',
+      'severity' => 'error', 'path' => 'furniture.libraryReleaseId'
+    }]
+
+    error = assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveError) do
+      provider({ 'status' => 403, 'body' => body }).resolve_authoring(request)
+    end
+
+    assert_equal 403, error.status
+    assert_equal ['LIBRARY_DRAFT_FORBIDDEN'], error.issues.map(&:code)
+    assert_match(/LIBRARY_DRAFT_FORBIDDEN/, error.message)
+    refute_match(/Licencia/, error.message)
+  end
+
+  def test_transport_keeps_the_license_wording_for_a_403_without_envelope
+    error = assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveError) do
+      provider({ 'status' => 403, 'body' => { 'error' => 'tu licencia no está activa' } })
+        .resolve_authoring(scenario('07-orphan-anchor-rejection')['request'])
+    end
+
+    assert_equal 403, error.status
+    assert_empty error.issues.to_a
+    assert_match(/Licencia requerida/, error.message)
+  end
+
   def test_provider_maps_session_and_license_failures
     [401, 403].each do |status|
       error = assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveError) do

@@ -1079,7 +1079,7 @@ module SketchupStub
 
   class << self
     attr_reader :loaded_files, :menus, :observers, :registered_extensions, :toolbars,
-                :send_actions
+                :send_actions, :messageboxes
     attr_accessor :preferences, :active_model
 
     def reset!
@@ -1091,6 +1091,7 @@ module SketchupStub
       @preferences = Hash.new { |hash, key| hash[key] = {} }
       @toolbars = []
       @send_actions = []
+      @messageboxes = []
       @entity_seq = 0
       @guid_seq = 0
       @undo_frames = []
@@ -1216,6 +1217,12 @@ end
 module UI
   def self.menu(name)
     SketchupStub.menus[name]
+  end
+
+  # Records the text instead of blocking: tests assert what the user was told.
+  def self.messagebox(message, *_args)
+    SketchupStub.messageboxes << message
+    1
   end
 
   class Command

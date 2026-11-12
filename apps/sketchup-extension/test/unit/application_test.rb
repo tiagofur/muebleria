@@ -285,6 +285,102 @@ class ApplicationTest < Minitest::Test
     end
   end
 
+  # #1598: dev mode is an engineering tool. The menu only turns it ON with
+  # the server-confirmed capability; turning it OFF is always allowed.
+  def test_library_dev_mode_toggle_requires_the_server_confirmed_capability
+    with_library_dev_mode_application(capabilities: { 'can_use_library_dev_mode' => false }) do |application, store|
+      application.start
+      toggle = dev_mode_menu_item
+
+      toggle.call
+      refute store.dev_mode?
+      message = SketchupStub.messageboxes.last
+      assert_match(/sólo para administración e ingeniería/, message)
+      assert_match(/No se cambió nada/, message)
+
+      # Someone with permission left it ON in this machine: OFF stays reachable.
+      store.set_dev_mode!(true)
+      toggle.call
+      refute store.dev_mode?
+      assert_match(/Modo dev de biblioteca: OFF/, SketchupStub.messageboxes.last)
+    end
+  end
+
+  def test_library_dev_mode_toggle_turns_on_with_the_capability
+    with_library_dev_mode_application(capabilities: { 'can_use_library_dev_mode' => true }) do |application, store|
+      application.start
+      dev_mode_menu_item.call
+
+      assert store.dev_mode?
+      assert_match(/Modo dev de biblioteca: ON/, SketchupStub.messageboxes.last)
+    end
+  end
+
+  # The flag lives in this machine, not in the account: a session without the
+  # capability gets it revoked (and told) as soon as its profile is confirmed.
+  def test_connection_status_revokes_dev_mode_left_on_for_a_session_without_permission
+    with_library_dev_mode_application(capabilities: { 'can_use_library_dev_mode' => false }) do |application, store|
+      store.set_dev_mode!(true)
+
+      dialog = application.open_dialog
+      dialog.callbacks.fetch('dialog_ready').call(nil)
+      status_script = dialog.executed_scripts.reverse.find { |s| s.include?('setStatus') }
+
+      refute store.dev_mode?
+      assert_includes status_script, '"devMode":false'
+      assert_equal 1, SketchupStub.messageboxes.length
+      assert_match(/Granete vuelve a la biblioteca publicada/, SketchupStub.messageboxes.first)
+
+      # Told exactly once: the next status finds nothing left to revoke.
+      dialog.callbacks.fetch('dialog_ready').call(nil)
+      assert_equal 1, SketchupStub.messageboxes.length
+    end
+  end
+
+  def test_connection_status_keeps_dev_mode_for_a_session_with_permission
+    with_library_dev_mode_application(capabilities: { 'can_use_library_dev_mode' => true }) do |application, store|
+      store.set_dev_mode!(true)
+
+      dialog = application.open_dialog
+      dialog.callbacks.fetch('dialog_ready').call(nil)
+      status_script = dialog.executed_scripts.reverse.find { |s| s.include?('setStatus') }
+
+      assert store.dev_mode?
+      assert_includes status_script, '"devMode":true'
+      assert_empty SketchupStub.messageboxes
+    end
+  end
+
+  def with_library_dev_mode_application(capabilities:)
+    logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
+    profile = {
+      'user' => { 'name' => 'Ana Carpintera', 'email' => 'ana@taller.local' },
+      'organization' => {
+        'id' => 'org-workshop-1', 'name' => 'Taller Muebles Sur',
+        'license' => { 'plan' => 'pro', 'status' => 'active' }
+      },
+      'capabilities' => capabilities
+    }
+    Dir.mktmpdir('granete-lib-devmode') do |root|
+      Granete::SketchUpExtension::GranetePaths.with_roots(root: root) do
+        session = AuthenticatedHermeticSession.new(
+          logger: logger, transport: RecordingSessionTransport.new({ 'status' => 200, 'body' => profile })
+        )
+        application = Granete::SketchUpExtension::Application.new(
+          transport: FakeCatalogTransport.new,
+          auth_provider: session,
+          logger: logger,
+          session_provider: session
+        )
+        yield application, Granete::SketchUpExtension::Library::LibraryStore.new
+      end
+    end
+  end
+
+  def dev_mode_menu_item
+    SketchupStub.menus['Extensions'].items.find { |label, _| label.include?('modo dev') }.last
+  end
+
   def test_connection_status_omits_library_payload_without_an_organization_pin
     logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
     session = AuthenticatedHermeticSession.new(logger: logger, transport: RecordingSessionTransport.new)

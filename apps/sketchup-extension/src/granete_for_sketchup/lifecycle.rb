@@ -62,10 +62,19 @@ module Granete
         return unless @toggle_library_dev_mode
 
         ::UI.menu('Extensions').add_item('Granete: alternar modo dev de biblioteca (borrador)') do
-          state = @toggle_library_dev_mode.call
-          ::UI.messagebox("Modo dev de biblioteca: #{state}. " \
-                          'Los resolves usan el ESTADO DE AUTORÍA (borrador) mientras esté en ON.')
+          ::UI.messagebox(library_dev_mode_message(@toggle_library_dev_mode.call))
         end
+      end
+
+      # #1598: the toggle answers 'DENIED' when the session lacks the
+      # server-confirmed capability; nothing changed and the user is told why.
+      def library_dev_mode_message(state)
+        if state == 'DENIED'
+          return 'El modo dev de biblioteca es sólo para administración e ingeniería. No se cambió nada.'
+        end
+
+        "Modo dev de biblioteca: #{state}. " \
+          'Los resolves usan el ESTADO DE AUTORÍA (borrador) mientras esté en ON.'
       end
 
       # A toolbar button keeps the panel one click away: the Extensions menu
