@@ -73,7 +73,7 @@ test.describe.serial('Herrajes — partes de diseño (#1417)', () => {
     expect(before.design_parts ?? []).toEqual([]);
 
     await page.goto('/hardware');
-    await page.getByTestId('hardware-kit-wizard-open').waitFor({ state: 'visible', timeout: 20_000 });
+    await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
     // Buscar la fila y abrir el editor.
     const search = page.getByLabel('Buscar herrajes');
     await search.fill(HW_CODE);

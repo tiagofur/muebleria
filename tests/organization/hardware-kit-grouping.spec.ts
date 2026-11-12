@@ -99,8 +99,11 @@ test.describe.serial('Herrajes — agrupación kit↔partes (#1422 slice 1)', ()
     // Re-ejecutar el asistente sobre los códigos existentes → reutiliza y
     // VINCULA (sin UI extra, misma mutación).
     await page.goto('/hardware');
-    await page.getByTestId('hardware-kit-wizard-open').waitFor({ state: 'visible', timeout: 20_000 });
-    await page.getByTestId('hardware-kit-wizard-open').click();
+    await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
+    // #1596: el asistente de juego se abre por el picker (Juego → juego simple).
+    await page.getByTestId('hardware-new-typed').click();
+    await page.getByTestId('hardware-type-pick-kit').click();
+    await page.getByTestId('hardware-type-pick-kit-simple').click();
     await page.getByTestId('hardware-kit-wizard-code').fill(KIT_CODE);
     await page.getByTestId('hardware-kit-wizard-name').fill('Corredera agrupada');
     await page.getByTestId('hardware-kit-wizard-price').fill('150');
