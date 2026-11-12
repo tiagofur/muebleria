@@ -51,6 +51,7 @@ prerequisites listed below.
 | Regresión E2E del hilo digital (DT-1…DT-14) | [Digital thread E2E gate](architecture/digital-thread-e2e-regression-gate.md) | [Project/design digital thread](architecture/project-design-digital-thread.md) |
 | Cotizaciones: continuación de autoridad comercial (plan fechado 2026-09-11) | [Quote authority continuation](demo/quote-authority-continuation-2026-09-11.md) | Issues #642/#643/#644; verificar estado actual en GitHub |
 | Herrajes, cajones MERIVOBOX, aperturas, golas: diagnóstico y huecos (foto fechada 2026-11-11) | [Dossier de herrajes](dossier-herrajes-cajones-aperturas-golas-2026-11-11.md) | Issues #1577–#1587; verificar estado actual en GitHub y en el código |
+| Manual de usuario (paso a paso por función: cotizar, herrajes, SketchUp, producción) | [Guía de uso](guia-de-uso.md) | — |
 | How to reorganize code/docs for agents | [Agent-first methodology](agent-first-methodology.md) | Applicable local `AGENTS.md` and exact change scope |
 
 ## Canonical vs. dated / historical documents

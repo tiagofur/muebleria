@@ -64,7 +64,8 @@ El orden recomendado — cada paso usa los anteriores:
 2. **Cantos**: espesor y costo por metro lineal.
 3. **Herrajes**: bisagras, correderas, jaladeras, patas, perfiles de zócalo…
    con unidad y costo. Los herrajes con forma de vista (jaladera, pata) se
-   ven en el 3D.
+   ven en el 3D. Para pares, juegos, sistemas de cajón e insertos ver la
+   **§8c**.
 4. **Grupos**: qué se puede elegir al cotizar (p. ej. FRENTE = melaminas de
    frentes) y qué miembros ofrece cada grupo. Un grupo puede ser obligatorio
    o opcional.
@@ -237,6 +238,185 @@ Cada fábrica tiene su propia política sobre la misma biblioteca Standard:
 la fábrica A puede definir 4 fijaciones por unión y la B 2, sin que Standard
 cambie y sin copiar muebles. Este caso está documentado paso a paso en
 `docs/manufacturing/factory-construction-ab-runbook.md` para soporte.
+
+## 8c. Herrajes: pares, juegos, sistemas de cajón e insertos
+
+Todo el alta de herrajes sale de un solo lugar: **Herrajes → «Nuevo»**. La
+app pregunta **qué querés dar de alta** y muestra sólo lo que ese tipo
+necesita — nada de secciones que no corresponden.
+
+### 8c.1 Pieza simple
+
+**Para qué sirve:** una bisagra, una corredera, un tirador, una pata — un
+herraje que compra por unidad y se ve en el 3D.
+
+**Pasos:** Herrajes → **Nuevo → Pieza**. Código, nombre, unidad (pieza,
+juego o metro), costo, y opcionalmente su modelo 3D (pestaña de modelo:
+subir un .skp o elegir uno existente). Guardar.
+
+**Cómo saber que quedó bien:** aparece en la lista y se puede elegir desde
+donde corresponda (zócalos, recetas, plantillas).
+
+### 8c.2 Par izquierda/derecha
+
+**Para qué sirve:** dos piezas que vienen espejadas — la galería, el
+BOXCOVER y el BOXCAP de un cajón Merivobox. Se da de alta UNA vez y el
+sistema dibuja cada lado con su pieza.
+
+**Pasos:** Herrajes → **Nuevo → Par izquierda/derecha**.
+
+1. Código y nombre; **precio del par** (el registro se vende completo).
+2. **Diseño — un SKP por lado:** para cada lado, *Subir diseño* (archivo
+   nuevo) o *Elegir existente*. Un lado sin diseño queda marcado como
+   «pendiente» y se ve con la representación genérica hasta que lo subas.
+3. **Offsets X/Y/Z:** dibujá la pieza en 0,0,0 en SketchUp y posicioná acá
+   con los offsets, medidos desde el borde de cada lado. **Lo que ves es lo
+   que se guarda.**
+4. **Al abrir:** fija al mueble, viaja con el cajón o viaja con la puerta —
+   es la declaración que el motor ya lee, no un efecto del nombre.
+5. **Copiar al otro lado** copia los offsets del lado lleno al vacío —
+   sólo al pulsarlo; nunca hay espejo automático.
+
+**Cómo saber que quedó bien:** la fila muestra la marca «2 piezas D/I» y,
+al insertar el mueble, cada lado dibuja su pieza en su lado.
+
+### 8c.3 Insertos de un juego y su selector
+
+**Para qué sirve:** los accesorios que se eligen por cajón dentro de un
+juego ya creado — por ejemplo, el lateral superior del cajón E (galería,
+BOXCOVER o BOXCAP). Cada uno es un par D/I que entra al **selector** del
+juego; al cotizar se elige uno.
+
+**Pasos (dos caminos):**
+
+- Desde el juego: abrir el juego → sección **Insertos del juego** →
+  **Añadir inserto**. Se crea ahí mismo y queda en el selector.
+- Desde el alta: **Nuevo → Inserto para un juego** → elegir el juego →
+  llenar el par como en 8c.2 → guardar.
+
+En la sección **Insertos del juego** también está **Añadir existente**
+(un herraje que ya está en el catálogo) y el **estado de cada opción**:
+qué lados tienen diseño y cuáles están pendientes, con acceso directo para
+corregirlos.
+
+**Cómo saber que quedó bien:** al agregar el mueble a una cotización
+aparece el selector con las opciones; el precio del inserto elegido sale
+en la cotización por cajón.
+
+### 8c.4 Juego simple y sus partes
+
+**Para qué sirve:** un herraje que se monta como conjunto — bisagras con su
+placa y brazo, correderas con su guía fija y móvil. Compra un juego, el
+despiece dibuja cada parte.
+
+**Pasos:** Herrajes → **Nuevo → Juego → Juego simple**.
+
+1. **Plantilla:** la app trae plantillas de ejemplo (bisagra, corredera,
+   cajón con manos) y podés guardar las tuyas con **Plantillas**.
+2. Código, nombre y costo del juego. La vista previa nombra las partes que
+   se van a crear.
+3. Crear: quedan el juego y sus **partes** vinculadas (cada parte es un
+   herraje del catálogo que no se compra por separado).
+
+**Las partes después:** abrir el juego → sección **Partes de este juego**.
+Cada parte tiene su propio «Al abrir» (fija al mueble, sale con el cajón,
+abre con la puerta), su **lado** y sus **offsets** — editable desde la
+misma tarjeta, sin salir del juego. **Crear parte nueva** y **Vincular
+herraje existente** suman partes; **Quitar** las desvincula sin borrarlas.
+
+**Cómo saber que quedó bien:** la lista agrupa las partes bajo el juego con
+la marca «N partes de diseño», y el mueble dibuja cada parte en su lugar.
+
+### 8c.5 Sistema de cajones por alturas
+
+**Para qué sirve:** dar de alta un sistema tipo Merivobox completo — un
+juego por altura Blum (N 85.5, M 108, K 146, E 209 mm) — de una vez, con
+sus insertos y con el ensamble que los módulos eligen por bahía.
+
+**Pasos:** Herrajes → **Nuevo → Juego → Sistema por alturas**.
+
+1. Identidad del sistema: código, nombre, costo por juego, ancho y fondo.
+2. **Alturas:** marcá las que querés incluir; cada altura pide el diseño
+   del costado (fijo y móvil, por mano — subir o elegir).
+3. **Insertos del cajón E** (opcional, podés añadirlos después): cada uno
+   nace con su SKP por lado, sus offsets y su «Al abrir» — nada queda a
+   medias.
+4. **Elegibilidad:** elegís en qué grupo queda disponible el sistema para
+   los módulos (el default es el grupo de sistemas de cajón). Si decidís
+   omitirlo, la app te avisa que ningún módulo podrá elegirlo y hay que
+   confirmar.
+5. **Revisión:** la lista exacta de lo que se va a crear y el botón Crear.
+   Si algo falla a mitad, no queda nada creado a medias: se corrige y se
+   reintenta.
+
+**Añadir una altura después** (el sistema ya existe): abrí cualquier juego
+del sistema → sección **Sistema de cajones** → **Añadir altura**. Sólo
+ofrece las alturas que faltan y agrega la variante al ensamble.
+
+**Cómo saber que quedó bien:** en la cotización, cada bahía resuelve su
+altura automáticamente (una bahía baja de 209 mm sale con el juego E; una
+de 108 mm, con el M) y la cotización trae un juego por bahía.
+
+### 8c.6 Agarres: estilos del taller y del proyecto
+
+**Para qué sirve:** definir cómo se agarran las puertas y frentes — el
+estilo (perfil, gola, jaladera) se define una vez y se aplica al proyecto.
+
+**Pasos:**
+
+- **Estilos del taller:** Ajustes → pestaña **Agarres**. Creás o editás
+  cada estilo con su editor y su preview antes de usarlo.
+- **En el proyecto:** el estilo elegido baja a las puertas del ambiente;
+  cada mueble puede tener su excepción sin tocar el resto. La ficha del
+  mueble muestra el **agarre efectivo y de dónde sale** (heredado del
+  proyecto, excepción del mueble o valores congelados de la receta).
+
+**Cómo saber que quedó bien:** la ficha del mueble nombra el estilo y su
+procedencia; el despiece y la cotización traen el agarre elegido.
+
+## 8d. SketchUp: llevar el diseño al modelo y publicar la biblioteca
+
+**Para qué sirve:** ver el mueble real en SketchUp, con herrajes, y
+entregar el diseño al taller desde ahí.
+
+### 8d.1 Insertar el diseño en SketchUp
+
+1. Instalá la extensión Granete (Extensions → Granete) e iniciá sesión con
+   tu cuenta.
+2. Abrí **Biblioteca** en el panel: trae los muebles de tu taller.
+3. Insertá el mueble: el motor dibuja tableros, herrajes y aperturas.
+
+**Cómo saber que quedó bien:** el footer del panel muestra la versión
+`Granete para SketchUp · v…` y coincide con la versión de tu servidor.
+
+### 8d.2 Aperturas (cajones y puertas que se abren)
+
+Los cajones y las puertas con bisagras traen su cinemática: la tarjeta
+**Apertura y presentación** del panel permite **Abrir** y **Cerrar** cada
+mueble (cajones que salen, puertas que giran con sus bisagras). Es la misma
+receta que cotiza — si el cajón abre en SketchUp, el despiece coincide.
+
+### 8d.3 Publicar una release y sincronizar la biblioteca
+
+**Para qué sirve:** los cambios de catálogo (herrajes nuevos, recetas,
+grupos) no llegan solos a SketchUp: hay que **publicar** la versión y
+**sincronizar** el panel.
+
+**Pasos:**
+
+1. En la web, en la sección de catálogos, publicá la nueva versión del
+   borrador de biblioteca (el botón dice «Publicar vX.Y.Z»).
+2. En SketchUp: Biblioteca → **Sincronizar**. El panel queda anclado a esa
+   versión publicada — los diseños que insertes salen congelados con lo que
+   esa versión contiene.
+
+**Cómo saber que quedó bien:** el número de versión del panel cambia al
+sincronizar y los herrajes nuevos aparecen al insertar.
+
+> Cada cambio de catálogo exige publicar una versión nueva: SketchUp no ve
+> la base de datos viva, ve la versión publicada (excepto el modo
+> desarrollo de biblioteca, que es de ingeniería — ver su propia entrada
+> cuando esté disponible).
 
 ## 9. Producción y Taller
 

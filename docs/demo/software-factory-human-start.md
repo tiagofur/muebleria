@@ -225,7 +225,9 @@ remains a historical watchdog, not the primary closure mechanism.
 Work-unit commits use Conventional Commits and keep behavior, tests, and docs
 together. Around 400 authored additions plus deletions is a review-planning
 heuristic, not a quality cap. Slice by coherent work unit or record the explicit
-human size decision; never code-golf or omit evidence.
+human size decision; never code-golf or omit evidence. A function the user sees
+or uses is not done without its entry in `docs/guia-de-uso.md` (#1600): para qué
+sirve, cuándo usarla, pasos y cómo saber que quedó bien.
 
 Before `PR_READY_FOR_HUMAN_MERGE`, read back remotely:
 
