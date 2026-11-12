@@ -47,3 +47,10 @@ PR `Closes #1596` / `Delivery: complete` (código+tests+CI; V2 navegador/vivo qu
 - No aplicados con razón: S2 (UpdateOptionGroup 500 vs 409 tipado — seguro hoy por rollback total; follow-up), S8 (Number||0 — riesgo bajo documentado).
 
 Re-verificación local: pendiente gate de navegador con los 7 specs afectados + vitest + tsc. Nuevo HEAD ⇒ re-revisión fresca requerida.
+
+## Ronda de corrección 2 (gate r4 + call logs)
+
+- F1 (bug real): el CTA del EmptyState ignoraba canMutate — con el testid compartido `hardware-new-typed` la prueba de permisos de 3d-catalog lo veía visible. Fix: `onAction={canMutate ? startCreate : undefined}` (sin CTA si no puede mutar).
+- F2-F4 (convención del repo): los clicks de ENTRADA del picker en los 7 specs migrados pasan al patrón nativo `evaluate((el) => el.click())` — los clicks sintéticos de Playwright no entran/interceptan en esta app (memoria/convensión ya usada por estos mismos specs para otros steps). La prueba no se debilita: sigue verificando flujo + readback por API.
+- Nota: la inestabilidad «not stable» solo se manifestó bajo el gate; el repro manual con navegador real (IAB, demo poblado, muestreo de bbox 30 frames) es estable. El detalle queda anotado para el review, no como bloqueo.
+- Verificación: tsc limpio, vitest 215/215, 7 specs parsean OK.

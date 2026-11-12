@@ -65,9 +65,9 @@ test.describe.serial('Herrajes — sistema generador (#1546 M4)', () => {
     await page.goto('/hardware');
     // #1596: el asistente de sistema se abre por el picker (Juego → sistema).
     await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
-    await page.getByTestId('hardware-new-typed').click();
-    await page.getByTestId('hardware-type-pick-kit').click();
-    await page.getByTestId('hardware-type-pick-kit-system').click();
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit-system').evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-system-wizard-code').fill(SYS_CODE);
     await page.getByTestId('hardware-system-wizard-name').fill('Merivobox Sistema QA');
     await page.getByTestId('hardware-system-wizard-price').fill('420');
@@ -121,9 +121,10 @@ test.describe.serial('Herrajes — sistema generador (#1546 M4)', () => {
       { anchor: 'right', offsetMm: { x: 0, y: 0, z: 0 } },
     ]);
     // «Al abrir» declarado (viaja con el cajón), nunca inferido del nombre.
-    // label/finish_key van omitempty en el dominio → ausentes en el readback.
+    // El readback del herraje regular viaja con los tags JSON del dominio
+    // (camelCase); label/finish_key van omitempty → ausentes.
     expect(galeria!.design_parts).toEqual([
-      { component_name: galeria!.code, actor_membership: 'actor:drawer' },
+      { componentName: galeria!.code, actorMembership: 'actor:drawer' },
     ]);
 
     // ── Readback grupos: LATERAL_E vinculado al kit E con la galería como opción.

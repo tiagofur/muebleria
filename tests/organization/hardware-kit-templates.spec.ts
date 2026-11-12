@@ -53,9 +53,9 @@ test.describe.serial('Herrajes — plantilla bisagra (#1422 slice 2)', () => {
     await page.goto('/hardware');
     await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
     // #1596: el asistente de juego se abre por el picker (Juego → juego simple).
-    await page.getByTestId('hardware-new-typed').click();
-    await page.getByTestId('hardware-type-pick-kit').click();
-    await page.getByTestId('hardware-type-pick-kit-simple').click();
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit-simple').evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-kit-wizard-template-select').selectOption('hinge');
     await page.getByTestId('hardware-kit-wizard-code').fill(KIT_CODE);
     await page.getByTestId('hardware-kit-wizard-name').fill('Bisagra Clip Top');
@@ -103,9 +103,9 @@ test.describe.serial('Herrajes — plantillas del taller editables (#1422 slice 
     await page.goto('/hardware');
     await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
     // #1596: el asistente de juego se abre por el picker (Juego → juego simple).
-    await page.getByTestId('hardware-new-typed').click();
-    await page.getByTestId('hardware-type-pick-kit').click();
-    await page.getByTestId('hardware-type-pick-kit-simple').click();
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit-simple').evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-kit-wizard-manage-templates').click();
 
     await page.getByTestId('kit-template-editor-code').fill(templateCode);
@@ -146,9 +146,9 @@ test.describe.serial('Herrajes — plantillas del taller editables (#1422 slice 
     await page.reload();
     await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
     // #1596: el asistente de juego se abre por el picker (Juego → juego simple).
-    await page.getByTestId('hardware-new-typed').click();
-    await page.getByTestId('hardware-type-pick-kit').click();
-    await page.getByTestId('hardware-type-pick-kit-simple').click();
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit-simple').evaluate((el) => (el as HTMLElement).click());
     const select = page.getByTestId('hardware-kit-wizard-template-select');
     await select.selectOption({ label: 'Levantadza del taller' });
     await page.getByTestId('hardware-kit-wizard-code').fill(kitCode);
@@ -184,9 +184,9 @@ test.describe.serial('Herrajes — plantillas del taller editables (#1422 slice 
     // Edición alcanzable desde el asistente (#1422 review C2): seleccionada
     // la plantilla del taller, «Editar» abre el editor precargado y el
     // rename persiste (PUT con If-Match) — readback por API.
-    await page.getByTestId('hardware-new-typed').click();
-    await page.getByTestId('hardware-type-pick-kit').click();
-    await page.getByTestId('hardware-type-pick-kit-simple').click();
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit-simple').evaluate((el) => (el as HTMLElement).click());
     await select.selectOption({ label: 'Levantadza del taller' });
     await page.getByTestId('hardware-kit-wizard-edit-template').click();
     await expect(page.getByTestId('kit-template-editor-code')).toHaveValue(templateCode);
@@ -206,9 +206,9 @@ test.describe.serial('Herrajes — plantillas del taller editables (#1422 slice 
     await page.goto('/hardware');
     await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
     // #1596: el asistente de juego se abre por el picker (Juego → juego simple).
-    await page.getByTestId('hardware-new-typed').click();
-    await page.getByTestId('hardware-type-pick-kit').click();
-    await page.getByTestId('hardware-type-pick-kit-simple').click();
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit-simple').evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-kit-wizard-manage-templates').click();
     await page.getByTestId('kit-template-editor-code').fill(`AUT-BAD-${run}`);
     await page.getByTestId('kit-template-editor-label').fill('Plantilla inválida');

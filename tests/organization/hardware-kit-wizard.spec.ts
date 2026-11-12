@@ -97,9 +97,9 @@ test.describe.serial('Herrajes — asistente Juego de herraje (#1416)', () => {
     await page.goto('/hardware');
     await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
     // #1596: el asistente de juego se abre por el picker (Juego → juego simple).
-    await page.getByTestId('hardware-new-typed').click();
-    await page.getByTestId('hardware-type-pick-kit').click();
-    await page.getByTestId('hardware-type-pick-kit-simple').click();
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit-simple').evaluate((el) => (el as HTMLElement).click());
     await expect(page.getByTestId('hardware-kit-wizard')).toBeVisible();
 
     await page.getByTestId('hardware-kit-wizard-code').fill(KIT_CODE);
@@ -160,9 +160,9 @@ test.describe.serial('Herrajes — asistente Juego de herraje (#1416)', () => {
 
     // --- Re-ejecución: reutiliza herrajes, fail-closed en el cajón ---
     await page.getByTestId('hardware-kit-wizard-close').click();
-    await page.getByTestId('hardware-new-typed').click();
-    await page.getByTestId('hardware-type-pick-kit').click();
-    await page.getByTestId('hardware-type-pick-kit-simple').click();
+    await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit').evaluate((el) => (el as HTMLElement).click());
+    await page.getByTestId('hardware-type-pick-kit-simple').evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-kit-wizard-code').fill(KIT_CODE);
     await page.getByTestId('hardware-kit-wizard-name').fill('Corredera telescopica wizard');
     await page.getByTestId('hardware-kit-wizard-price').fill('420');

@@ -814,7 +814,11 @@ export function HardwareCatalog({
             title="No hay herrajes"
             description="Agregá el primer herraje del catálogo o cargá la semilla del workspace."
             actionLabel="Agregar herraje"
-            onAction={startCreate}
+            // #1596: sin permiso de mutación el alta no se ofrece (el
+            // testid compartido con el header hace visible el bug latente:
+            // el CTA ignoraba canMutate).
+            onAction={canMutate ? startCreate : undefined}
+            actionTestId="hardware-new-typed"
           />
         ) : isFilterEmpty ? (
           <EmptyState
