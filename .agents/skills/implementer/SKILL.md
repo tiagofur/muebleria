@@ -37,7 +37,8 @@ independent review, or merge.
    behavior and avoid adjacent refactors. Use configured TDD when explicitly active;
    otherwise run ordinary focused checks while developing. On a `ux:shape` issue,
    honor the published UX brief; divergence is a scope change that goes back
-   through the issue, not a styling choice.
+   through the issue, not a styling choice. A function the user sees or uses ships
+   with its entry in `docs/guia-de-uso.md` (#1600) in the same PR.
 7. Freeze the candidate and prove applicable levels: V0 structural, V1 functional,
    and V2 operational. Unavailable required infrastructure is `NOT_RUN`/`BLOCKED`.
 8. Inspect the conservative plan with

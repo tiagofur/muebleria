@@ -31,6 +31,8 @@ invoked in the same context that authored the code, flag a protocol violation.
    - complete: `Closes/Fixes/Resolves #N`, `Delivery: complete`, base `main`, no
      acceptance or evidence pending;
    - partial: `Refs #N`, `Delivery: partial`, remaining scope explicit.
+   - A function the user sees or uses carries its `docs/guia-de-uso.md` entry
+     (#1600); missing on a user-facing delivery is at least a P2 finding.
 4. Inspect semantics, trust boundaries, errors, and positive/negative tests. Verify
    that V0 structural, V1 functional, and V2 operational evidence matches the claim.
 5. Read evidence for the exact pins before rerunning anything. Run a targeted check
