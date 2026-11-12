@@ -79,6 +79,12 @@ class HostRuntimeTest < Minitest::Test
     assert_equal 'network_unavailable', HOST::ErrorTaxonomy.category_for(
       Granete::SketchUpExtension::Library::AuthoringResolveError.new('x', status: 503)
     )
+    # #1598: a structured 403 (the draft refused by role) degrades the same
+    # way as the license block — its code rides on the error for the message.
+    draft_forbidden = Granete::SketchUpExtension::Library::AuthoringResolveError.new(
+      'x', status: 403, issues: [Struct.new(:code).new('LIBRARY_DRAFT_FORBIDDEN')]
+    )
+    assert_equal 'license_capability', HOST::ErrorTaxonomy.category_for(draft_forbidden)
   end
 
   def test_error_taxonomy_maps_structured_issue_codes

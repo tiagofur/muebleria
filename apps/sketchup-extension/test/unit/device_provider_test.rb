@@ -204,6 +204,26 @@ class DeviceProviderTest < Minitest::Test
     refute_includes on_disk, 'Taller Muebles Sur'
   end
 
+  # #1598: the status carries the server-confirmed capability projection
+  # (never roles); an absent block is nil, never an invented permission.
+  def test_status_projects_server_confirmed_capabilities
+    exchange_and_mint
+    @transport.respond_with('/auth/sketchup/profile', 200,
+                            'user' => { 'name' => 'Ana Carpintera', 'email' => 'ana@taller.local' },
+                            'organization' => {
+                              'id' => 'org-1', 'name' => 'Taller Muebles Sur',
+                              'license' => { 'plan' => 'pro', 'status' => 'active' }
+                            },
+                            'capabilities' => { 'can_use_library_dev_mode' => true })
+
+    assert_equal({ 'can_use_library_dev_mode' => true }, @provider.status['capabilities'])
+
+    @transport.respond_with('/auth/sketchup/profile', 200,
+                            'user' => { 'name' => 'Ana Carpintera', 'email' => 'ana@taller.local' })
+
+    assert_nil @provider.status['capabilities']
+  end
+
   def test_status_orgless_session_returns_user_without_organization
     exchange_and_mint
     @transport.respond_with('/auth/sketchup/profile', 200,

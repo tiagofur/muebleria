@@ -72,6 +72,22 @@ func TestRBAC_CatalogMutate(t *testing.T) {
 	}
 }
 
+// #1598: the library draft (the plugin's dev mode) is an engineering tool —
+// admin and ingeniero only, every other product role stays on the release.
+func TestRBAC_LibraryDraft(t *testing.T) {
+	t.Parallel()
+	for _, role := range []UserRole{RoleAdmin, RoleIngeniero} {
+		if !RoleCanUseLibraryDraft(role) {
+			t.Errorf("%s must use the library draft", role)
+		}
+	}
+	for _, role := range []UserRole{RoleUser, RoleVendedor, RoleGerenteVentas, RoleGerenteProduccion, RoleProduccion, RoleAlmacen} {
+		if RoleCanUseLibraryDraft(role) {
+			t.Errorf("%s must not use the library draft", role)
+		}
+	}
+}
+
 func TestRBAC_ProjectDelete(t *testing.T) {
 	t.Parallel()
 	if !RoleCanDeleteProject(RoleAdmin) || !RoleCanDeleteProject(RoleGerenteVentas) {

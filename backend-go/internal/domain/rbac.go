@@ -27,6 +27,13 @@ func RoleCanMutateModules(role UserRole) bool {
 	return role == RoleAdmin || role == RoleIngeniero
 }
 
+// RoleCanUseLibraryDraft — resolve SketchUp authoring against the library
+// DRAFT (catalog edits not yet published in a release): the plugin's dev mode
+// (#1598). An engineering tool; everyone else works on the published release.
+func RoleCanUseLibraryDraft(role UserRole) bool {
+	return role == RoleAdmin || role == RoleIngeniero
+}
+
 // RoleCanAccessCustomers — CRM list/detail (not producción / sin puesto).
 func RoleCanAccessCustomers(role UserRole) bool {
 	switch role {

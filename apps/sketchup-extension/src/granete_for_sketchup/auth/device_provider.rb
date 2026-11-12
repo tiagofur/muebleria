@@ -344,7 +344,9 @@ module Granete
             'server_url' => stored_server_url.to_s,
             'user' => profile && profile['user'],
             'license' => profile && organization && organization['license'],
-            'organization' => organization && { 'name' => organization['name'] }
+            'organization' => organization && { 'name' => organization['name'] },
+            # #1598: server-confirmed capability projection (never roles).
+            'capabilities' => profile && profile['capabilities']
           }
         end
 

@@ -452,6 +452,51 @@ Con la cotización **aceptada**:
 - **Usuarios** (solo admin): aprobar registros, asignar roles, desactivar.
 - **Ajustes:** margen/MO/moneda defaults, y si el vendedor ve costos.
 
+## 11b. Modo dev de biblioteca en SketchUp (sólo ingeniería)
+
+**Quién:** administración e ingeniería. **Dónde:** SketchUp → menú
+Extensiones → «Granete: alternar modo dev de biblioteca (borrador)» (en
+SketchUp 2026 puede quedar dentro del submenú Granete).
+
+**Para qué sirve.** Normalmente SketchUp trabaja con la **biblioteca
+publicada**: lo último que se publicó como versión (release). Cada cambio de
+catálogo — un herraje, una receta, un grupo — recién llega a SketchUp cuando
+se publica una versión nueva y se sincroniza. El modo dev saltea ese paso:
+con el modo encendido, SketchUp usa el **catálogo tal como está ahora**, con
+los cambios sin publicar. Es para probar mientras armás el catálogo, sin
+publicar una versión por cada ajuste.
+
+**Cómo se usa.**
+
+1. Elegí el ítem del menú. Un cartel confirma «Modo dev de biblioteca: ON».
+2. Hacé tus cambios en el catálogo web y volvé a insertar el mueble en
+   SketchUp: sale con lo que acabás de cambiar.
+3. Cuando el catálogo quedó bien, **publicá una versión** y apagá el modo
+   con el mismo ítem del menú («Modo dev de biblioteca: OFF»).
+
+**Cómo saber si está encendido.** En el panel de Granete, en la tarjeta de tu
+sesión, la fila Biblioteca dice **«Modo desarrollo»** en lugar del número de
+versión.
+
+**Quién puede.** Sólo usuarios con rol de administración o ingeniería. Si no
+tenés ese rol, el menú responde «El modo dev de biblioteca es sólo para
+administración e ingeniería. No se cambió nada.», y — mientras el taller
+tenga una versión publicada — el servidor también rechaza resolver contra
+el catálogo sin publicar.
+
+**Qué tener en cuenta.**
+
+- El modo queda guardado **en la computadora**, no en la cuenta. Si lo dejás
+  encendido y después entra alguien sin permiso, Granete lo apaga solo, avisa
+  y vuelve a la biblioteca publicada.
+- Lo que insertás con el modo encendido sale de un catálogo que **todavía
+  puede cambiar**. Usalo para pruebas, no para trabajos que van a producción.
+- Mientras está encendido no se sincroniza la biblioteca publicada. Al
+  apagarlo, SketchUp vuelve a la última versión que tenía sincronizada y se
+  pone al día la próxima vez que lo abrís.
+- La web no cambia: las vistas previas de la web siempre usan el catálogo
+  actual.
+
 ## 12. Tips rápidos
 
 - Duplicá cotizaciones y muebles en vez de arrancar de cero.

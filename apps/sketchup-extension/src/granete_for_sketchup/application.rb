@@ -203,8 +203,17 @@ module Granete
       # #1102 restante 2: the bibliotecario dev-mode toggle — resolves the
       # AUTHORING state (draft, unpublished edits included) and pauses the
       # boot sync. Persists in the LibraryStore dir; the menu reflects it.
+      # #1598: turning it ON needs the server-confirmed capability (admin and
+      # ingeniero); turning it OFF only returns to the published release, so
+      # it is always allowed. The server refuses the draft on its own — this
+      # is presentation, not the control.
       def toggle_library_dev_mode
         return nil unless @library_store
+
+        unless @library_store.dev_mode? || library_dev_mode_permitted?(current_session_status)
+          @logger&.info('library_dev_mode_denied')
+          return 'DENIED'
+        end
 
         @library_store.set_dev_mode!(!@library_store.dev_mode?)
         state = @library_store.dev_mode? ? 'ON' : 'OFF'
@@ -329,8 +338,9 @@ module Granete
       end
 
       def connection_status
-        session_status = @session.respond_to?(:status) ? @session.status : nil
+        session_status = current_session_status
         if session_status && session_status['state'] == 'logged_in'
+          revoke_library_dev_mode_without_permission(session_status)
           license = session_status['license'] || {}
           {
             'state' => 'logged_in',
@@ -357,6 +367,40 @@ module Granete
                          'la extensión funciona con el catálogo local de respaldo.'
           }
         end
+      end
+
+      def current_session_status
+        @session.respond_to?(:status) ? @session.status : nil
+      end
+
+      # Fail closed: only an explicit server-confirmed `true` grants it.
+      def library_dev_mode_permitted?(session_status)
+        capabilities = session_status.is_a?(Hash) ? session_status['capabilities'] : nil
+        capabilities.is_a?(Hash) && capabilities['can_use_library_dev_mode'] == true
+      end
+
+      # #1598: the dev-mode flag lives in this machine, not in the account. A
+      # session whose server-confirmed profile lacks the capability cannot
+      # keep a dev mode someone else left ON: the pin returns to the
+      # published release and the user is told. An unconfirmed profile
+      # (offline, expired) changes nothing here — the server refuses the
+      # draft resolve on its own.
+      def revoke_library_dev_mode_without_permission(session_status)
+        return unless @library_store&.dev_mode?
+        return if session_status['user'].nil? || session_status['organization'].nil?
+        return if library_dev_mode_permitted?(session_status)
+
+        @library_store.set_dev_mode!(false)
+        @logger&.info('library_dev_mode_revoked')
+        refresh_library_pin
+        notify_user('Modo dev de biblioteca apagado: es sólo para administración e ingeniería. ' \
+                    'Granete vuelve a la biblioteca publicada.')
+      rescue StandardError => e
+        @logger&.warn('library_dev_mode_revoke_failed', error: e)
+      end
+
+      def notify_user(message)
+        ::UI.messagebox(message) if defined?(::UI) && ::UI.respond_to?(:messagebox)
       end
 
       # #1160: projection of the consumer's local library pin for the session

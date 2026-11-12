@@ -776,9 +776,11 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleSketchupProfile is the extension's current-session identity read.
-// Unlike /auth/me it never lists the account's other organizations or roles.
-// Org-less device sessions (no active membership yet) still get their account
-// identity, with the organization block omitted.
+// Unlike /auth/me it never lists the account's other organizations or roles;
+// the server-confirmed capability projection (dev mode, #1598) is the only
+// authorization hint it carries. Org-less device sessions (no active
+// membership yet) still get their account identity, with the organization
+// block omitted.
 func (s *Server) HandleSketchupProfile(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
 	if !ok || claims == nil || claims.Client != auth.ExtensionClient ||
@@ -806,6 +808,11 @@ func (s *Server) HandleSketchupProfile(w http.ResponseWriter, r *http.Request) {
 			ID: claims.OrgID, Name: m.Organization.Name, License: toOpenAPIOrganization(m.Organization).License,
 		}
 		resp.SessionScope = &openapi.SketchupProfileScope{OrganizationID: claims.OrgID}
+		// #1598: capability, not role — the panel gates the dev-mode toggle on
+		// this server-confirmed value; the resolve endpoint enforces it anyway.
+		resp.Capabilities = &openapi.SketchupProfileCapabilities{
+			CanUseLibraryDevMode: domain.AnyRole(m.Roles, domain.RoleCanUseLibraryDraft),
+		}
 	}
 	respondWithJSON(w, http.StatusOK, resp)
 }

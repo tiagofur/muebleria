@@ -224,6 +224,11 @@ type SketchupProfileResponse struct {
 	User         SketchupProfileUser          `json:"user"`
 	Organization *SketchupProfileOrganization `json:"organization,omitempty"`
 	SessionScope *SketchupProfileScope        `json:"session_scope,omitempty"`
+	Capabilities *SketchupProfileCapabilities `json:"capabilities,omitempty"`
+}
+
+type SketchupProfileCapabilities struct {
+	CanUseLibraryDevMode bool `json:"can_use_library_dev_mode"`
 }
 
 type SketchupProfileUser struct {

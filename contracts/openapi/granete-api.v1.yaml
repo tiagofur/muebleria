@@ -189,7 +189,7 @@
     "/auth/sketchup/profile": {
       "get": {
         "operationId": "getSketchupProfile",
-        "description": "Current SketchUp bearer only. Returns no other memberships, roles, support context, or session credentials. Org-scoped sessions include organization and session_scope; org-less sessions (no active membership) omit them.",
+        "description": "Current SketchUp bearer only. Returns no other memberships, roles, support context, or session credentials. Org-scoped sessions include organization, session_scope and a capability projection (dev mode, #1598); org-less sessions (no active membership) omit them.",
         "responses": {
           "200": {
             "description": "Current SketchUp identity and organization license",
@@ -8354,6 +8354,22 @@
           },
           "session_scope": {
             "$ref": "#/components/schemas/SketchupProfileScope"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/SketchupProfileCapabilities"
+          }
+        }
+      },
+      "SketchupProfileCapabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "can_use_library_dev_mode"
+        ],
+        "properties": {
+          "can_use_library_dev_mode": {
+            "type": "boolean",
+            "description": "Whether this session may resolve the library DRAFT (the plugin's dev mode, #1598). Server-confirmed from the active membership; the resolve endpoint enforces it independently."
           }
         }
       },

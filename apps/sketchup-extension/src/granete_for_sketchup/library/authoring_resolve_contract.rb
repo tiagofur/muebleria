@@ -305,7 +305,7 @@ module Granete
           OPERATION_GEOMETRY_DUPLICATE OPERATION_ID_AMBIGUOUS MEMBER_HOST_PLACEMENT_MISSING
           MEMBER_HOST_PROFILE_REQUIRED MEMBER_HOST_BASIS_UNSUPPORTED CONNECTION_FACE_INVALID
           MEMBER_HOST_HAND_MIRROR_REQUIRES_DIMENSIONS MEMBER_HOST_HAND_MIRROR_UNSUPPORTED_KIND
-          FACTORY_POLICY_INVALID LIBRARY_RELEASE_UNAVAILABLE
+          FACTORY_POLICY_INVALID LIBRARY_RELEASE_UNAVAILABLE LIBRARY_DRAFT_FORBIDDEN
           DESIGN_UNKNOWN FURNITURE_INSTANCE_UNKNOWN GRIP_SNAPSHOT_INVALID OPENING_PROFILE_UNKNOWN
           OPENING_OVERHANG_RULE_UNAVAILABLE
           OPENING_BODY_MODIFIER_CONFLICT OPENING_BODY_MODIFIER_INVALID
@@ -1024,8 +1024,7 @@ module Granete
             logger&.info('authoring_resolve_session_invalid')
             raise AuthoringResolveError.new('Sesión inválida o expirada', status: 401)
           when 403
-            logger&.info('authoring_resolve_license_blocked')
-            raise AuthoringResolveError.new('Licencia requerida para resolver autoría', status: 403)
+            raise forbidden_error(response, expected_request, logger)
           else
             logger&.info('authoring_resolve_remote_unavailable', status: response['status'])
             raise AuthoringResolveError.new(
@@ -1033,6 +1032,31 @@ module Granete
               status: response['status']
             )
           end
+        end
+
+        # #1598: a 403 can be a structured rejection (the library draft
+        # refused by role) — its stable code and message must reach the user
+        # instead of a license wording that sends them the wrong way. A 403
+        # without a parseable envelope stays the license/capability block.
+        def forbidden_error(response, expected_request, logger)
+          issues = forbidden_issues(response, expected_request)
+          first = issues.first
+          unless first
+            logger&.info('authoring_resolve_license_blocked')
+            return AuthoringResolveError.new('Licencia requerida para resolver autoría', status: 403)
+          end
+
+          logger&.info('authoring_resolve_forbidden', code: first.code)
+          AuthoringResolveError.new(
+            "La autoría fue rechazada (#{first.code}): #{first.message}",
+            status: 403, issues: issues
+          )
+        end
+
+        def forbidden_issues(response, expected_request)
+          AuthoringResolveContract.parse!(response['body'], expected_request: expected_request).issues.to_a
+        rescue AuthoringResolveContract::ContractError
+          []
         end
       end
     end
