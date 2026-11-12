@@ -1588,7 +1588,7 @@
   vertical-align: middle;
   margin-right: 4px;
   color: var(--color-text-muted, #666);
-  transition: transform var(--transition-transform, 0.15s) ease;
+  transition: var(--transition-transform);
 }
 
 details[open] > summary > .catalog-advanced-chevron {
@@ -1599,4 +1599,22 @@ details[open] > summary > .catalog-advanced-chevron {
   .catalog-advanced-chevron {
     transition: none;
   }
+}
+
+/* #1596: bloque Avanzado del formulario de herrajes. El <details> conserva
+   el display del UA (el flex de .catalog-form__section rompe el
+   ocultamiento nativo); el chevron corregido al token real. */
+.catalog-form-advanced {
+  margin-top: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+}
+
+.catalog-form-advanced > summary {
+  list-style: none;
+  font-weight: 600;
+}
+
+.catalog-form-advanced > summary::-webkit-details-marker {
+  display: none;
 }

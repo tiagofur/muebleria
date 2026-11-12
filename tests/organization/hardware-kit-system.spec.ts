@@ -106,7 +106,9 @@ test.describe.serial('Herrajes — sistema generador (#1546 M4)', () => {
     }
     expect(rows.some((h) => h.code === `${SYS_CODE}-M-FIJ-I`)).toBe(false);
 
-    // Accesorio del E creado (sin SKPs → sin pieces, fail-honesto). El
+    // Accesorio del E creado. #1596: el inserto nace SIEMPRE con sus piezas
+    // por ancla — sin SKP el lado queda pendiente pero los offsets explícitos
+    // existen (mostrado = guardado; nunca el default invisible del motor). El
     // sufijo deriva del nombre completo («GALERIA-GRIS-IRIDIUM»).
     const galeria = rows.find((h) => h.code.startsWith(`${SYS_CODE}-E-GALERIA`));
     if (!galeria) {
@@ -114,7 +116,15 @@ test.describe.serial('Herrajes — sistema generador (#1546 M4)', () => {
       throw new Error(`accesorio galería creado — códigos en catálogo: ${codes}`);
     }
     expect(galeria).toBeTruthy();
-    expect(galeria!.pieces).toBeUndefined();
+    expect(galeria!.pieces).toEqual([
+      { anchor: 'left', offsetMm: { x: 0, y: 0, z: 0 } },
+      { anchor: 'right', offsetMm: { x: 0, y: 0, z: 0 } },
+    ]);
+    // «Al abrir» declarado (viaja con el cajón), nunca inferido del nombre.
+    // label/finish_key van omitempty en el dominio → ausentes en el readback.
+    expect(galeria!.design_parts).toEqual([
+      { component_name: galeria!.code, actor_membership: 'actor:drawer' },
+    ]);
 
     // ── Readback grupos: LATERAL_E vinculado al kit E con la galería como opción.
     const ogRes = await api(token, 'GET', '/catalog/option-groups');

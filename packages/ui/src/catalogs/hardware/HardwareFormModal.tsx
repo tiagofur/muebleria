@@ -771,12 +771,16 @@ export function HardwareFormModal({
 
         {/* #1596 alcance 6: un solo bloque avanzado cerrado — componentes
             internos del SKP, acabado por parte, forma genérica y mecanizado.
-            Chevron affordance §4.2 (rota al abrir vía CSS). */}
-        <details className="catalog-form__section" data-testid="hardware-form-advanced">
+            Chevron affordance §4.2 (rota al abrir vía CSS). El <details> va
+            SIN la clase section (display:flex sobre details rompe el
+            ocultamiento del UA → layout thrash); el contenido vive en un
+            div interior. */}
+        <details className="catalog-form-advanced" data-testid="hardware-form-advanced">
           <summary style={{ cursor: 'pointer' }}>
             <ChevronRight size={14} strokeWidth={1.5} aria-hidden className="catalog-advanced-chevron" />
             Avanzado
           </summary>
+          <div className="catalog-form__section">
           {isPairLike ? (
             <Hardware3DSection
               draft={draft}
@@ -795,6 +799,7 @@ export function HardwareFormModal({
           {!isKit && !isKitChildPart ? (
             <HardwareDesignPartsSection draft={draft} setDraft={setDraft} />
           ) : null}
+          </div>
         </details>
       </form>
     </Modal>
