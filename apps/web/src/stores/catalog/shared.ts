@@ -93,6 +93,15 @@ export interface ApiCatalogDeps {
       readonly pieces?: readonly {
         readonly anchor: 'left' | 'right' | 'center';
         readonly asset?: { readonly assetId: string; readonly assetRevisionId: string };
+        /** #1596: offsets explícitos (mostrado = guardado). */
+        readonly offsetMm?: { readonly x: number; readonly y: number; readonly z: number };
+      }[];
+      /** #1596: la declaración de movimiento que el motor ya lee (DesignParts). */
+      readonly design_parts?: readonly {
+        readonly component_name: string;
+        readonly actor_membership: 'body' | 'actor:drawer' | 'actor:door';
+        readonly label?: string | null;
+        readonly finish_key?: string | null;
       }[];
     }[];
     readonly agregado: {
@@ -123,6 +132,13 @@ export interface ApiCatalogDeps {
       readonly required: boolean;
       readonly option_ids: readonly string[];
       readonly kit_hardware_id: string;
+    } | null;
+    /** #1596 decisión 9: elegibilidad del ensamble en la misma transacción. */
+    readonly eligibility_group?: {
+      readonly existing_group_id?: string;
+      readonly id?: string;
+      readonly code?: string;
+      readonly name?: string;
     } | null;
   }) => Promise<{
     readonly created_codes: readonly string[];

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
@@ -78,6 +79,39 @@ func (s *Server) HandleHardwareKitSystemCreate(w http.ResponseWriter, r *http.Re
 	existingAgregadoCodes := make(map[string]bool, len(agrList))
 	for _, a := range agrList {
 		existingAgregadoCodes[a.Code] = true
+	}
+
+	// #1596: resolve the eligibility target BEFORE the first insert — a 4xx
+	// after sibling rows were written would COMMIT a half system (the
+	// middleware commits 4xx). The resolved group (id + version) rides in the
+	// plan; the member append happens later in the same transaction.
+	if plan.eligibility != nil && plan.eligibility.existingGroupID != "" {
+		groups, err := s.Store.ListOptionGroups(r.Context())
+		if err != nil {
+			respondWithInternalError(w, err, "kit system eligibility probe")
+			return
+		}
+		for i := range groups {
+			if groups[i].ID == plan.eligibility.existingGroupID {
+				plan.eligibility.eligibilityTarget = &groups[i]
+				break
+			}
+		}
+		if plan.eligibility.eligibilityTarget == nil {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "HARDWARE_KIT_SYSTEM_REFERENCE_MISSING",
+				"message": fmt.Sprintf("el grupo de elegibilidad «%s» no existe en la organización", plan.eligibility.existingGroupID),
+				"details": map[string]any{"codes": []string{plan.eligibility.existingGroupID}},
+			})
+			return
+		}
+		if plan.eligibility.eligibilityTarget.Kind != "agregado" {
+			respondWithJSON(w, http.StatusUnprocessableEntity, invalidPayload(
+				"el grupo de elegibilidad debe ser kind agregado (ahí viven los ensambles que los módulos eligen)",
+				map[string]any{"group_id": plan.eligibility.eligibilityTarget.ID, "kind": plan.eligibility.eligibilityTarget.Kind},
+			))
+			return
+		}
 	}
 
 	// Codes the plan marked reused MUST exist; codes marked new (hardware
@@ -170,6 +204,43 @@ func (s *Server) HandleHardwareKitSystemCreate(w http.ResponseWriter, r *http.Re
 		}
 	}
 
+	// #1596 decisión 9: elegibilidad del ensamble en la MISMA transacción.
+	if plan.eligibility != nil {
+		switch {
+		case plan.eligibility.existingGroupID != "":
+			target := plan.eligibility.eligibilityTarget
+			memberPresent := false
+			for _, id := range target.OptionIDs {
+				if id == agr.ID {
+					memberPresent = true
+					break
+				}
+			}
+			if !memberPresent {
+				target.OptionIDs = append(target.OptionIDs, agr.ID)
+				if err := s.Store.UpdateOptionGroup(r.Context(), target.ID, target.Version, target); err != nil {
+					respondWithInternalError(w, err, "kit system eligibility member add")
+					return
+				}
+			}
+		default:
+			g := plan.eligibility.newGroup
+			g.OptionIDs = []string{agr.ID}
+			if err := s.Store.CreateOptionGroup(r.Context(), g); err != nil {
+				if isDuplicateKey(err) {
+					respondWithJSON(w, http.StatusConflict, map[string]any{
+						"code":    "HARDWARE_KIT_SYSTEM_CODE_TAKEN",
+						"message": fmt.Sprintf("el grupo de elegibilidad «%s» ya existe en el catálogo", g.Code),
+						"details": map[string]any{"codes": []string{g.Code}},
+					})
+					return
+				}
+				respondWithInternalError(w, err, "kit system eligibility group create")
+				return
+			}
+		}
+	}
+
 	respondWithJSON(w, http.StatusCreated, openapi.HardwareKitSystemCreated{
 		CreatedCodes:  createdCodes,
 		ReusedCodes:   reusedCodes,
@@ -184,8 +255,45 @@ type kitSystemPlan struct {
 	hardware      []domain.Hardware
 	agregado      *domain.Agregado
 	optionGroup   *domain.OptionGroup
+	eligibility   *kitSystemEligibility
 	variantSetIDs []string
 	allCodes      []string
+}
+
+// kitSystemEligibility (#1596 decisión 9) is the plan-level intent for where
+// the new ensamble becomes eligible: an existing kind:agregado group (the
+// agregado is appended as a member) or a brand-new group created with the
+// agregado as its only member. Applied in the SAME transaction as the rest of
+// the system — an eligibility failure rolls the whole creation back.
+type kitSystemEligibility struct {
+	existingGroupID string
+	newGroup        *domain.OptionGroup
+	// eligibilityTarget is resolved in the probe phase (pre-insert): the
+	// exact group row (with its version) the member append will update.
+	eligibilityTarget *domain.OptionGroup
+}
+
+func kitSystemEligibilityFromRequest(row *openapi.HardwareKitSystemEligibilityGroupRow) (*kitSystemEligibility, error) {
+	if row == nil {
+		return nil, nil
+	}
+	if row.ExistingGroupID != nil && *row.ExistingGroupID != "" {
+		if (row.ID != nil && *row.ID != "") || (row.Code != nil && *row.Code != "") || (row.Name != nil && *row.Name != "") {
+			return nil, fmt.Errorf("eligibility_group: existing_group_id es excluyente con id/code/name del grupo nuevo")
+		}
+		return &kitSystemEligibility{existingGroupID: *row.ExistingGroupID}, nil
+	}
+	id, code, name := derefString(row.ID), derefString(row.Code), derefString(row.Name)
+	if id == "" || code == "" || name == "" {
+		return nil, fmt.Errorf("eligibility_group: necesitás existing_group_id (grupo existente) o id+code+name (grupo nuevo)")
+	}
+	return &kitSystemEligibility{newGroup: &domain.OptionGroup{
+		ID:       id,
+		Code:     code,
+		Name:     name,
+		Kind:     "agregado",
+		Required: false,
+	}}, nil
 }
 
 func invalidPayload(message string, details map[string]any) map[string]any {
@@ -255,6 +363,11 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 			return nil, invalidPayload(fmt.Sprintf("piezas inválidas en «%s»: %v", row.Code, err), nil)
 		}
 		h.Pieces = convertPieces(row.Pieces)
+		designParts, dpErr := convertSystemDesignParts(row.DesignParts)
+		if dpErr != nil {
+			return nil, invalidPayload(fmt.Sprintf("design_parts inválidas en «%s»: %v", row.Code, dpErr), nil)
+		}
+		h.DesignParts = designParts
 		hardware = append(hardware, h)
 	}
 
@@ -367,10 +480,15 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 	}
 
 	allCodes := append([]string{}, seenCodesSlice(seenCodes)...)
+	eligibility, egErr := kitSystemEligibilityFromRequest(req.EligibilityGroup)
+	if egErr != nil {
+		return nil, invalidPayload(egErr.Error(), nil)
+	}
 	return &kitSystemPlan{
 		hardware:      hardware,
 		agregado:      agr,
 		optionGroup:   optionGroup,
+		eligibility:   eligibility,
 		variantSetIDs: variantSetIDs,
 		allCodes:      allCodes,
 	}, nil
@@ -408,6 +526,40 @@ func convertPieces(wire []openapi.HardwarePiece) []domain.HardwarePiece {
 		out = append(out, dp)
 	}
 	return out
+}
+
+// convertSystemDesignParts maps the wire design-part declarations to domain
+// (#1596): the alta writes the «Al abrir» the engine already reads
+// (kitPieceMember → DesignParts[0].ActorMembership); the name/code regex is
+// legacy inference and the new alta never relies on it.
+func convertSystemDesignParts(wire []openapi.HardwareKitSystemDesignPartRow) ([]domain.HardwareDesignPart, error) {
+	if len(wire) == 0 {
+		return nil, nil
+	}
+	out := make([]domain.HardwareDesignPart, 0, len(wire))
+	for i := range wire {
+		w := wire[i]
+		if strings.TrimSpace(w.ComponentName) == "" {
+			return nil, fmt.Errorf("fila %d: component_name vacío", i)
+		}
+		switch w.ActorMembership {
+		case "body", "actor:drawer", "actor:door":
+		default:
+			return nil, fmt.Errorf("fila %d: actor_membership «%s» fuera del vocabulario (body|actor:drawer|actor:door)", i, w.ActorMembership)
+		}
+		dp := domain.HardwareDesignPart{
+			ComponentName:   strings.TrimSpace(w.ComponentName),
+			ActorMembership: w.ActorMembership,
+		}
+		if w.Label != nil {
+			dp.Label = *w.Label
+		}
+		if w.FinishKey != nil {
+			dp.FinishKey = *w.FinishKey
+		}
+		out = append(out, dp)
+	}
+	return out, nil
 }
 
 func derefString(v *string) string {

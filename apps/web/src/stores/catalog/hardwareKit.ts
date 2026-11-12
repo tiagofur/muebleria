@@ -322,7 +322,12 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         }
       }
 
-      // 2. Herrajes accesorios del E con piezas por ancla (F1).
+      // 2. Herrajes accesorios del E con piezas por ancla (F1). #1596: el
+      // accesorio SIEMPRE declara sus piezas por ancla (con o sin SKP — el
+      // lado queda con diseño pendiente, nunca invisible) con offsets
+      // EXPLÍCITOS (decisión 2: dibuja en 0,0,0 y posiciona por offset) y la
+      // declaración de movimiento que el motor ya lee (decisión 4: «Al
+      // abrir» = actor:drawer por defecto, nunca inferido del nombre).
       const accessoryIds: string[] = [];
       for (const acc of plan.accessories) {
         const accId = idFor(acc.code);
@@ -331,12 +336,16 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           reusedCodes.push(acc.code);
           continue;
         }
-        const pieces = acc.anchors
-          .map((anchor) => {
-            const binding = req.designs?.[`${acc.code}:${anchor}`];
-            return binding ? ({ anchor, asset: binding } as HardwarePiece) : null;
-          })
-          .filter((pc): pc is HardwarePiece => pc !== null);
+        const pieces = acc.anchors.map((anchor) => {
+          const binding = req.designs?.[`${acc.code}:${anchor}`];
+          const offset = acc.pieceOffsets?.[anchor] ?? { x: 0, y: 0, z: 0 };
+          return {
+            anchor,
+            ...(binding ? { asset: binding } : {}),
+            offsetMm: { x: offset.x, y: offset.y, z: offset.z },
+          } as HardwarePiece;
+        });
+        const actorMembership = acc.actorMembership ?? 'actor:drawer';
         newHardware.push({
           id: accId,
           code: acc.code,
@@ -345,7 +354,10 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           costPerUnit: 0,
           active: true,
           notes: `Accesorio del cajón E del sistema ${req.input.code.trim()} (#1519): se elige por mueble y el motor lo monta por cajón.`,
-          ...(pieces.length > 0 ? { pieces } : {}),
+          pieces,
+          designParts: [
+            { componentName: acc.code, actorMembership, label: '', finishKey: '' },
+          ],
         });
         createdCodes.push(acc.code);
       }
@@ -422,7 +434,30 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
               asset: p.asset
                 ? { assetId: p.asset.assetId, assetRevisionId: p.asset.assetRevisionId }
                 : undefined,
+              // #1596: offsets explícitos — lo mostrado es lo que se guarda.
+              offsetMm: p.offsetMm
+                ? { x: p.offsetMm.x, y: p.offsetMm.y, z: p.offsetMm.z }
+                : undefined,
             })),
+            // #1596: la declaración de movimiento que el motor ya lee. El
+            // vocabulario está cerrado en el contrato — un valor fuera de él
+            // aborta el alta (fail-loud), nunca viaja ni se silencia.
+            design_parts: h.designParts?.length
+              ? h.designParts.map((dp) => {
+                  const actor = dp.actorMembership;
+                  if (actor !== 'body' && actor !== 'actor:drawer' && actor !== 'actor:door') {
+                    throw new Error(
+                      `«${h.code}» declara «Al abrir» inválido (${actor}): el alta usa Fija al mueble, viaja con el cajón o viaja con la puerta.`,
+                    );
+                  }
+                  return {
+                    component_name: dp.componentName,
+                    actor_membership: actor,
+                    label: dp.label || null,
+                    finish_key: dp.finishKey || null,
+                  };
+                })
+              : undefined,
           })),
           agregado: {
             id: agregado.id,
@@ -455,6 +490,17 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
                 kit_hardware_id: accessoryGroupDraft.kitHardwareId ?? '',
               }
             : null,
+          // #1596 decisión 9: la elegibilidad se aplica en la MISMA
+          // transacción del servidor.
+          eligibility_group: req.eligibilityGroup
+            ? req.eligibilityGroup.existingGroupId
+              ? { existing_group_id: req.eligibilityGroup.existingGroupId }
+              : {
+                  id: req.eligibilityGroup.id ?? '',
+                  code: req.eligibilityGroup.code ?? '',
+                  name: req.eligibilityGroup.name ?? '',
+                }
+            : null,
         });
 
         // El estado local adopta la verdad del servidor: códigos creados/
@@ -485,14 +531,43 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         };
       }
 
+      // Guest (sin backend): la elegibilidad se aplica en la MISMA mutación
+      // local — sin éxito aparente: un grupo inexistente aborta todo antes
+      // de escribir (#1596 decisión 9).
+      const guestOptionGroups = [...(catalog.optionGroups ?? [])];
+      if (req.eligibilityGroup) {
+        if (req.eligibilityGroup.existingGroupId) {
+          const target = guestOptionGroups.find(
+            (g) => g.id === req.eligibilityGroup!.existingGroupId,
+          );
+          if (!target) {
+            throw new Error('El grupo de elegibilidad elegido ya no existe. Volvé a abrir el asistente y elegilo de nuevo.');
+          }
+          if (!target.optionIds.includes(agregado.id)) {
+            const idx = guestOptionGroups.findIndex((g) => g.id === target.id);
+            guestOptionGroups[idx] = { ...target, optionIds: [...target.optionIds, agregado.id] };
+          }
+        } else {
+          guestOptionGroups.push({
+            id: req.eligibilityGroup.id ?? ctx.newId(),
+            code: req.eligibilityGroup.code ?? '',
+            name: req.eligibilityGroup.name ?? '',
+            kind: 'agregado',
+            required: false,
+            optionIds: [agregado.id],
+          });
+        }
+      }
+
       await ctx.saveAndToast(
         (c) => ({
           ...c,
           hardware: [...(c.hardware ?? []), ...newHardware],
           agregados: [...(c.agregados ?? []), agregado],
-          ...(accessoryGroupDraft
-            ? { optionGroups: [...(c.optionGroups ?? []), accessoryGroupDraft] }
-            : {}),
+          optionGroups:
+            accessoryGroupDraft || req.eligibilityGroup
+              ? guestOptionGroups
+              : c.optionGroups,
         }),
         `✓ Sistema «${req.input.code.trim()}» creado (${plan.kits.length} alturas)`,
       );
