@@ -293,8 +293,9 @@ versión.
 
 **Quién puede.** Sólo usuarios con rol de administración o ingeniería. Si no
 tenés ese rol, el menú responde «El modo dev de biblioteca es sólo para
-administración e ingeniería. No se cambió nada.», y el servidor rechaza
-cualquier intento de resolver contra el catálogo sin publicar.
+administración e ingeniería. No se cambió nada.», y — mientras el taller
+tenga una versión publicada — el servidor también rechaza resolver contra
+el catálogo sin publicar.
 
 **Qué tener en cuenta.**
 

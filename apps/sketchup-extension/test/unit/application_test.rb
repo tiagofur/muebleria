@@ -351,7 +351,20 @@ class ApplicationTest < Minitest::Test
     end
   end
 
-  def with_library_dev_mode_application(capabilities:)
+  # A malformed capability projection grants nothing: only an explicit
+  # server-confirmed boolean true turns the mode on (#1598, review B-S2).
+  def test_library_dev_mode_ignores_malformed_capability_projections
+    [{}, { 'capabilities' => 'true' }, { 'capabilities' => { 'can_use_library_dev_mode' => 'true' } },
+     { 'capabilities' => nil }].each do |profile_overrides|
+      with_library_dev_mode_application(capabilities: nil, profile_overrides: profile_overrides) do |application, store|
+        application.start
+        assert_equal 'DENIED', dev_mode_menu_item.call
+        refute store.dev_mode?
+      end
+    end
+  end
+
+  def with_library_dev_mode_application(capabilities:, profile_overrides: {})
     logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
     profile = {
       'user' => { 'name' => 'Ana Carpintera', 'email' => 'ana@taller.local' },
@@ -360,7 +373,7 @@ class ApplicationTest < Minitest::Test
         'license' => { 'plan' => 'pro', 'status' => 'active' }
       },
       'capabilities' => capabilities
-    }
+    }.merge(profile_overrides)
     Dir.mktmpdir('granete-lib-devmode') do |root|
       Granete::SketchUpExtension::GranetePaths.with_roots(root: root) do
         session = AuthenticatedHermeticSession.new(

@@ -677,6 +677,23 @@ class AuthoringResolveContractTest < Minitest::Test
     refute_match(/Licencia/, error.message)
   end
 
+  # A well-formed envelope that carries no issues degrades to the license
+  # wording — never an empty-code rejection (#1598, review B-S3).
+  def test_transport_keeps_the_license_wording_for_a_403_without_issues
+    body = deep_copy(scenario('07-orphan-anchor-rejection')['response'])
+    body['status'] = 'rejected'
+    body['issues'] = []
+
+    error = assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveError) do
+      provider({ 'status' => 403, 'body' => body })
+        .resolve_authoring(scenario('07-orphan-anchor-rejection')['request'])
+    end
+
+    assert_equal 403, error.status
+    assert_empty error.issues.to_a
+    assert_match(/Licencia requerida/, error.message)
+  end
+
   def test_transport_keeps_the_license_wording_for_a_403_without_envelope
     error = assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveError) do
       provider({ 'status' => 403, 'body' => { 'error' => 'tu licencia no está activa' } })

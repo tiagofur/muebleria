@@ -994,6 +994,11 @@ func (s *Server) libraryDraftResolveIssue(r *http.Request, claims *auth.Claims) 
 	if domain.AnyRole(actorRoles(claims), domain.RoleCanUseLibraryDraft) {
 		return nil, nil
 	}
+	// The Standard library is the only pin source today (the same lookup
+	// the consumer sync uses); overlay releases gain published status later.
+	// The read is not transactional with the catalog load below — a publish
+	// racing inside that window lets exactly one refused-role resolve
+	// through; the next request sees the release and is refused by name.
 	_, err := s.Store.GetCurrentPublishedRelease(r.Context(), uuid.MustParse(domain.GraneteStandardLibraryID))
 	if errors.Is(err, storage.ErrLibraryReleaseNotFound) {
 		return nil, nil
@@ -1006,6 +1011,6 @@ func (s *Server) libraryDraftResolveIssue(r *http.Request, claims *auth.Claims) 
 		Message:     "resolver contra la biblioteca en borrador (modo dev) es sólo para administración e ingeniería",
 		Severity:    domain.IssueSeverityError,
 		Path:        "furniture.libraryReleaseId",
-		Remediation: "Apagá el modo dev de biblioteca (Extensiones → Granete: alternar modo dev de biblioteca) y sincronizá la biblioteca publicada.",
+		Remediation: "Apagá el modo dev de biblioteca (Extensiones → Granete: alternar modo dev de biblioteca) o sincronizá la biblioteca publicada vigente.",
 	}, nil
 }
