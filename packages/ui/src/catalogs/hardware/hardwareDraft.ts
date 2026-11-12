@@ -180,9 +180,9 @@ export function toDraft(item: Hardware): HardwareDraft {
 
 /**
  * #1596: el tipo se INFiERE de los datos al editar — sin migración (un par
- * creado con «Piezas de diseño» abre en el alta nueva como par). El tipo
- * inserto se detecta en la UI por pertenecer al selector de un juego
- * (optionGroups); acá piece/pair/kit basta con el herraje mismo.
+ * creado con «Piezas de diseño» abre en el alta nueva como par). El alta de
+ * inserto edita como 'pair' (misma forma; el vínculo al selector ya vive en
+ * el grupo del juego y no en el herraje).
  */
 export function inferHardwareItemType(
   item: Pick<Hardware, 'unit' | 'pieces' | 'kitHardwareId'>,

@@ -192,7 +192,7 @@ export function HardwareKitAccessoriesSection({
                   {onAddInserto ? (
                     <button
                       type="button"
-                      className="btn btn--small btn--primary"
+                      className="btn btn--small"
                       onClick={onAddInserto}
                       data-testid={`hardware-accessory-${og.code}-add-inserto`}
                     >

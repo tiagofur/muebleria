@@ -36,6 +36,7 @@ import { HardwarePiecesSection } from './HardwarePiecesSection';
 import { HardwareMachiningSection } from './HardwareMachiningSection';
 import { HardwareDesignPartsSection } from './HardwareDesignPartsSection';
 import { UNIT_LABELS, type HardwareDraft, type HardwareItemType } from './hardwareDraft';
+import { validateUniqueCode } from '../catalogHelpers';
 
 const KIT_PART_ACTOR_OPTIONS = [
   { value: 'body', label: 'Fija al mueble (no se mueve)' },
@@ -179,6 +180,14 @@ export function HardwareFormModal({
     return opts;
   }, [hardwareCategories]);
 
+  // #1596 brief (Estados): el código duplicado se ve EN LÍNEA al escribirlo,
+  // no recién al enviar — mismo patrón que el wizard de sistema (blockedCode
+  // con role=alert). Sin cambios de contrato ni de store.
+  const liveCodeError = useMemo(() => {
+    if (!draft.code.trim()) return null;
+    return validateUniqueCode(draft.code, availableHardware ?? [], editingId ?? undefined);
+  }, [draft.code, availableHardware, editingId]);
+
   return (
     <Modal
       open={open}
@@ -229,7 +238,13 @@ export function HardwareFormModal({
               onChange={(e) => setDraft({ ...draft, code: e.target.value })}
               autoComplete="off"
               required
+              aria-invalid={liveCodeError ? true : undefined}
             />
+            {liveCodeError ? (
+              <p className="catalog-form__error" role="alert" data-testid="hardware-form-code-error">
+                {liveCodeError}
+              </p>
+            ) : null}
           </div>
           <div className="catalog-form__field">
             <label htmlFor="hw-name">Nombre</label>

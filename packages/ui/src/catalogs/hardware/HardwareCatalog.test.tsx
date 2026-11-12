@@ -90,10 +90,12 @@ describe('HardwareCatalog — create flow', () => {
     await user.click(screen.getByTestId('hardware-type-pick-piece'));
     await user.type(screen.getByLabelText('Código'), sampleHardware.code);
     await user.type(screen.getByLabelText('Nombre'), 'Dup');
+    // #1596 brief (Estados): el duplicado se ve EN LÍNEA al escribirlo.
+    expect(screen.getByTestId('hardware-form-code-error')).toBeTruthy();
     fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
 
     expect(onCreate).not.toHaveBeenCalled();
-    expect(screen.getByText(/Ya existe un ítem con el código/)).toBeTruthy();
+    expect(screen.getAllByText(/Ya existe un ítem con el código/).length).toBeGreaterThan(0);
   });
 });
 
