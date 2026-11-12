@@ -1581,3 +1581,22 @@
 .gola-editor__uso-line {
   display: block;
 }
+
+/* #1596: affordance chevron del bloque Avanzado (§4.2) — rota al abrir. */
+.catalog-advanced-chevron {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+  color: var(--color-text-muted, #666);
+  transition: transform var(--transition-transform, 0.15s) ease;
+}
+
+details[open] > summary > .catalog-advanced-chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog-advanced-chevron {
+    transition: none;
+  }
+}

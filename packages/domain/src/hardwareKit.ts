@@ -1354,6 +1354,14 @@ export interface HardwareKitSystemCreateRequest {
  * función existe para materializar el valor que un herraje legacy está
  * recibiendo en silencio al abrirlo en el alta nueva, de modo que lo
  * mostrado sea lo que se guarda.
+ *
+ * Límite documentado (review #1602): en el motor la rama móvil-sólo-cajón
+ * exige actor == 'actor:drawer' tras resolver el agregado contenedor (un
+ * herraje móvil dentro de un ensamble de PUERTA cae a actor:door con 10 mm).
+ * Esta función no conoce el ensamble contenedor, así que replica la rama de
+ * cajón (35) — caso dominante del alta de herrajes; si algún día se edita
+ * un par móvil dentro de un kit de puerta, el valor materializado puede
+ * diferir del default real y quedaría corregido a mano antes de guardar.
  */
 export function defaultPieceOffsetMm(
   hw: {

@@ -47,8 +47,11 @@ test.describe.serial('Herrajes — plantilla drawer-hands (#1512 S2b)', () => {
     const token = await loginOwner(page);
 
     await page.goto('/hardware');
-    await page.getByTestId('hardware-kit-wizard-open').waitFor({ state: 'visible', timeout: 20_000 });
-    await page.getByTestId('hardware-kit-wizard-open').click();
+    await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
+    // #1596: el asistente de juego se abre por el picker (Juego → juego simple).
+    await page.getByTestId('hardware-new-typed').click();
+    await page.getByTestId('hardware-type-pick-kit').click();
+    await page.getByTestId('hardware-type-pick-kit-simple').click();
     await page.getByTestId('hardware-kit-wizard-template-select').selectOption('drawer-hands');
     await page.getByTestId('hardware-kit-wizard-code').fill(KIT_CODE);
     await page.getByTestId('hardware-kit-wizard-name').fill('MERIVOBOX M multi-diseño');

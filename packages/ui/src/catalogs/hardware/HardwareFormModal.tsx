@@ -15,7 +15,7 @@ import {
   type SetStateAction,
   useMemo,
 } from 'react';
-import { Trash2 } from 'lucide-react';
+import { ChevronRight, Trash2 } from 'lucide-react';
 import {
   childrenOf,
   formatKitPartPlacementLabel,
@@ -770,9 +770,13 @@ export function HardwareFormModal({
         ) : null}
 
         {/* #1596 alcance 6: un solo bloque avanzado cerrado — componentes
-            internos del SKP, acabado por parte, forma genérica y mecanizado. */}
+            internos del SKP, acabado por parte, forma genérica y mecanizado.
+            Chevron affordance §4.2 (rota al abrir vía CSS). */}
         <details className="catalog-form__section" data-testid="hardware-form-advanced">
-          <summary style={{ cursor: 'pointer' }}>Avanzado</summary>
+          <summary style={{ cursor: 'pointer' }}>
+            <ChevronRight size={14} strokeWidth={1.5} aria-hidden className="catalog-advanced-chevron" />
+            Avanzado
+          </summary>
           {isPairLike ? (
             <Hardware3DSection
               draft={draft}

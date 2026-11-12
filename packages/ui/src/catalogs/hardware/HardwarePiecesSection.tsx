@@ -268,7 +268,7 @@ export function HardwarePiecesSection({
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button
                         type="button"
-                        className="btn btn--small btn--primary"
+                        className="btn btn--small"
                         onClick={() => setUploadingAnchor(anchor)}
                         data-testid={`hardware-piece-${anchor}-upload`}
                       >

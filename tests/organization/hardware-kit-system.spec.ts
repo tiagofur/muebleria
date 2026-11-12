@@ -63,21 +63,11 @@ test.describe.serial('Herrajes — sistema generador (#1546 M4)', () => {
     expect([200, 201]).toContain(seed.status);
 
     await page.goto('/hardware');
-    try {
-      await page.getByTestId('hardware-system-wizard-open').waitFor({ state: 'visible', timeout: 20_000 });
-    } catch {
-      // #1519 debug: dump del estado del header para diagnosticar el botón ausente
-      const debug = await page.evaluate(`(() => ({
-        systemBtn: !!document.querySelector('[data-testid="hardware-system-wizard-open"]'),
-        kitBtn: !!document.querySelector('[data-testid="hardware-kit-wizard-open"]'),
-        hwCount: document.querySelectorAll('.catalog-table tbody tr, [data-testid*="hardware-kit"]').length,
-        bodyClasses: document.body.className,
-        url: location.href,
-      }))()`);
-      console.log('SYSTEM-BUTTON-DEBUG:', JSON.stringify(debug));
-      throw new Error(`system-wizard-open no visible: ${JSON.stringify(debug)}`);
-    }
-    await page.getByTestId('hardware-system-wizard-open').click();
+    // #1596: el asistente de sistema se abre por el picker (Juego → sistema).
+    await page.getByTestId('hardware-new-typed').waitFor({ state: 'visible', timeout: 20_000 });
+    await page.getByTestId('hardware-new-typed').click();
+    await page.getByTestId('hardware-type-pick-kit').click();
+    await page.getByTestId('hardware-type-pick-kit-system').click();
     await page.getByTestId('hardware-system-wizard-code').fill(SYS_CODE);
     await page.getByTestId('hardware-system-wizard-name').fill('Merivobox Sistema QA');
     await page.getByTestId('hardware-system-wizard-price').fill('420');

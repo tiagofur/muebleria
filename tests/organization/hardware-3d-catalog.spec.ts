@@ -109,7 +109,7 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     // -------------------------------------------------------------------------
     // Step 1: Upload new .skp model and bind to new hardware
     // -------------------------------------------------------------------------
-    #1596: el alta empieza por el tipo — un solo «Nuevo» → «Pieza».
+    // #1596: el alta empieza por el tipo — un solo «Nuevo» → «Pieza».
     await page.getByTestId('hardware-new-typed').click();
     await page.getByTestId('hardware-type-pick-piece').click();
     await expect(page.getByRole('heading', { name: 'Nuevo herraje' })).toBeVisible();
@@ -306,7 +306,7 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     // -------------------------------------------------------------------------
     // Step 5: Choose existing asset -> bind Rev. 1 to a second hardware item
     // -------------------------------------------------------------------------
-    #1596: el alta empieza por el tipo — un solo «Nuevo» → «Pieza».
+    // #1596: el alta empieza por el tipo — un solo «Nuevo» → «Pieza».
     await page.getByTestId('hardware-new-typed').click();
     await page.getByTestId('hardware-type-pick-piece').click();
     await page.getByLabel('Código').fill('HW-3D-02');
@@ -350,7 +350,7 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     // -------------------------------------------------------------------------
     // Step 6: Retire asset: confirm dialog, disable selection, keep existing
     // -------------------------------------------------------------------------
-    #1596: el alta empieza por el tipo — un solo «Nuevo» → «Pieza».
+    // #1596: el alta empieza por el tipo — un solo «Nuevo» → «Pieza».
     await page.getByTestId('hardware-new-typed').click();
     await page.getByTestId('hardware-type-pick-piece').click();
     await page.getByTestId('hardware-3d-section-toggle').click();

@@ -164,7 +164,8 @@ export interface AddSystemHeightRequest {
   readonly eligibilityGroup?: import('@granete/domain').HardwareKitSystemEligibilityRequest;
 }
 
-export interface RecipeChangeActions {  readonly simulate: (req: RecipeSimRequest) => Promise<RecipeSimResult>;
+export interface RecipeChangeActions {
+  readonly simulate: (req: RecipeSimRequest) => Promise<RecipeSimResult>;
   readonly apply: (req: {
     readonly id: string;
     readonly expectedVersion: number;

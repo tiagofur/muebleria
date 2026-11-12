@@ -163,11 +163,11 @@ export function HardwareSystemHeightAddModal({
           ? undefined
           : eligibilityMode === 'existing'
             ? { existingGroupId: eligibilityExistingId }
-            : {
-                id: crypto.randomUUID(),
-                code: `SISTEMA_CAJON_${systemCode}`.slice(0, 40),
-                name: 'Sistemas de cajón',
-              };
+              : {
+                  id: crypto.randomUUID(),
+                  code: 'SISTEMA_CAJON',
+                  name: 'Sistemas de cajón',
+                };
       await onSubmit({
         agregadoId: agregado.id,
         heightCode: height.code,
