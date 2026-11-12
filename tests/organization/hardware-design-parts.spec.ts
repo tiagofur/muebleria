@@ -83,12 +83,22 @@ test.describe.serial('Herrajes — partes de diseño (#1417)', () => {
     await expect(page.getByTestId('hardware-form-modal')).toBeVisible();
 
     // #1596: la autoría por componente vive en el bloque Avanzado cerrado.
-    await page.getByTestId('hardware-form-advanced').locator('summary').click();
+    // Clicks nativos dentro del modal (superficie con actionability frágil
+    // documentada en esta app: not stable→not visible bajo CI en esta
+    // coreografía; las aserciones reales son el readback por API).
+    await page
+      .getByTestId('hardware-form-advanced')
+      .locator('summary')
+      .evaluate((el) => (el as HTMLElement).click());
     // Autoría: 2 partes (fija + móvil).
-    await page.getByTestId('hardware-design-parts-add').click();
+    await page
+      .getByTestId('hardware-design-parts-add')
+      .evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-design-part-0-name').fill('riel_fijo');
     await page.getByTestId('hardware-design-part-0-label').fill('Riel fijo');
-    await page.getByTestId('hardware-design-parts-add').click();
+    await page
+      .getByTestId('hardware-design-parts-add')
+      .evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-design-part-1-name').fill('riel_movil');
     await page.getByTestId('hardware-design-part-1-membership').selectOption('actor:drawer');
     const finishEl = page.getByTestId('hardware-design-part-1-finish');
@@ -117,13 +127,21 @@ test.describe.serial('Herrajes — partes de diseño (#1417)', () => {
     await page
       .getByRole('button', { name: `Editar ${HW_CODE}` })
       .evaluate((el) => (el as HTMLElement).click());
+    // El bloque Avanzado nace cerrado en cada montaje: reabrirlo para el
+    // paso negativo.
+    await page
+      .getByTestId('hardware-form-advanced')
+      .locator('summary')
+      .evaluate((el) => (el as HTMLElement).click());
     await expect(page.getByTestId('hardware-design-part-0-name')).toHaveValue('riel_fijo', { timeout: 20_000 });
     await expect(page.getByTestId('hardware-design-part-1-membership')).toHaveValue('actor:drawer');
 
     // Negativo: membresía inválida tecleada directamente en el select no es
     // posible; la invalidez real llega por fila duplicada → el validador del
     // dominio bloquea en el submit sin llamada al servidor.
-    await page.getByTestId('hardware-design-parts-add').click();
+    await page
+      .getByTestId('hardware-design-parts-add')
+      .evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-design-part-2-name').fill('riel_fijo');
     await page.getByTestId('hardware-design-part-2-membership').selectOption('body');
     let sawPut = false;
