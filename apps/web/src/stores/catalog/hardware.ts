@@ -3,6 +3,7 @@
  */
 
 import {
+  accessoryKitMemberHardwareIds,
   agregadoDeclaresKitViaVariant,
   ensureAgregadoKitParts,
   normalizeHardwarePartFinishes,
@@ -32,8 +33,14 @@ function syncAgregadoForKit(
   agregado: Agregado,
   kitId: string,
   hardware: readonly Hardware[],
+  optionGroups: readonly OptionGroup[] | undefined,
 ): Agregado {
-  const kitParts = hardware.filter((h) => h.active && h.kitHardwareId === kitId);
+  // #1613: los miembros de grupos accesorios linkeados al kit son elecciones
+  // consumibles — el sync de guardado jamás los persiste como partes fijas.
+  const excluded = accessoryKitMemberHardwareIds(hardware, optionGroups, kitId);
+  const kitParts = hardware.filter(
+    (h) => h.active && h.kitHardwareId === kitId && !excluded.has(h.id),
+  );
   // Review #1494: si la receta TAMBIÉN declara kits por variante, el espejo
   // destructivo del kit a nivel agregado borraría en silencio las partes de
   // los otros kits (el motor da precedencia a la variante) — en esa
@@ -224,7 +231,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
           const nextHardware = [...c.hardware, item];
           const newKitId = item.kitHardwareId;
           const nextAgregados = newKitId
-            ? (c.agregados ?? []).map((a) => syncAgregadoForKit(a, newKitId, nextHardware))
+            ? (c.agregados ?? []).map((a) => syncAgregadoForKit(a, newKitId, nextHardware, c.optionGroups))
             : c.agregados;
           return {
             ...c,
@@ -386,13 +393,14 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               ? (c.agregados ?? []).map((a) => {
                   let next = a;
                   if (a.commercialKitHardwareId && affectedKitIds.has(a.commercialKitHardwareId)) {
-                    return syncAgregadoForKit(a, a.commercialKitHardwareId, nextHardware);
+                    return syncAgregadoForKit(a, a.commercialKitHardwareId, nextHardware, c.optionGroups);
                   }
                   for (const kitId of affectedKitIds) {
                     if (agregadoDeclaresKitViaVariant(next, kitId)) {
                       next = ensureAgregadoKitParts(
                         next,
                         nextHardware.filter((h) => h.active && h.kitHardwareId === kitId),
+                        accessoryKitMemberHardwareIds(nextHardware, c.optionGroups, kitId),
                       );
                     }
                   }

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
+  accessoryKitMemberHardwareIds,
   DEFAULT_FIXED_OFFSET_MM,
   DEFAULT_MOVING_OFFSET_MM,
   HARDWARE_KIT_SLOTS,
@@ -786,5 +787,64 @@ describe('planHardwareKitSystem (#1546 M4 — sistema generador)', () => {
       agregadoCodes: new Set(['MBOX-IRIDIUN-CAJON']),
     });
     expect(plan.blockedCode).toBe('MBOX-IRIDIUN-CAJON');
+  });
+});
+
+// #1613 — las piezas miembros de un grupo accesorio linkeado al kit
+// (Galería/Boxcap/Boxcover) son elecciones consumibles: el sync de guardado
+// web NUNCA las materializa como partes fijas (espejo del test Go
+// TestSyncExcludesAccessoryGroupMembers_1613 y del repro resolve-level
+// TestInsertoDupRepro_1613). Sin la exclusión, una edición de parte del kit
+// re-envenena la receta (patrón rev 12 del owner).
+describe('#1613 — exclusión de miembros de grupos accesorios en el sync', () => {
+  const kitE = 'kit-e-gray';
+  const galId = 'hw-gal-ig';
+  const fijId = 'hw-fij-e';
+  const movId = 'hw-mov-e';
+
+  const gal = { id: galId, code: 'MBOX-E-GAL-IG', name: 'Galería', active: true, kitHardwareId: kitE, pieces: [{ anchor: 'left' as const }, { anchor: 'right' as const }] };
+  const fij = { id: fijId, code: 'MBOX-GRAY-E-FIJ', name: 'Perfil fijo E', active: true, kitHardwareId: kitE, pieces: [{ anchor: 'left' as const }, { anchor: 'right' as const }] };
+  const mov = { id: movId, code: 'MBOX-GRAY-E-MOV', name: 'Perfil móvil E', active: true, kitHardwareId: kitE, pieces: [{ anchor: 'left' as const }, { anchor: 'right' as const }] };
+  const hardware = [gal, fij, mov];
+  const optionGroups = [
+    { kind: 'hardware', kitHardwareId: kitE, optionIds: [galId] },
+    { kind: 'hardware', kitHardwareId: 'otro-kit', optionIds: ['hw-otro'] },
+  ];
+
+  it('accessoryKitMemberHardwareIds indexa sólo miembros de grupos linkeados al kit', () => {
+    const ids = accessoryKitMemberHardwareIds(hardware, optionGroups, kitE);
+    expect(ids.has(galId)).toBe(true);
+    expect(ids.has(fijId)).toBe(false);
+    expect(ids.has(movId)).toBe(false);
+    // Kit sin grupos linkeados: vacío.
+    expect(accessoryKitMemberHardwareIds(hardware, optionGroups, 'kit-m-gray').size).toBe(0);
+    // La pieza inexistente en el catálogo no entra (guard de hardware).
+    expect(
+      accessoryKitMemberHardwareIds(hardware, [{ kind: 'hardware', kitHardwareId: kitE, optionIds: ['hw-fantasma'] }], kitE).has('hw-fantasma'),
+    ).toBe(false);
+  });
+
+  it('ensureAgregadoKitParts omite el miembro-exclusión (sólo FIJ/MOV × mano)', () => {
+    const got = ensureAgregadoKitParts({ id: 'agr-x', code: 'AGR-X', rigidMembers: [] }, hardware, accessoryKitMemberHardwareIds(hardware, optionGroups, kitE));
+    const hwIds = got.rigidMembers.map((m: { source?: { fixed?: { hardwareId?: string } } }) => m.source?.fixed?.hardwareId);
+    expect(hwIds.filter((id: string) => id === fijId).length).toBe(2);
+    expect(hwIds.filter((id: string) => id === movId).length).toBe(2);
+    expect(hwIds).not.toContain(galId);
+  });
+
+  it('syncAgregadoWithKitParts purga el miembro-exclusión ya persistido y no lo re-agrega', () => {
+    const poisoned = {
+      id: 'agr-x',
+      code: 'AGR-X',
+      commercialKitHardwareId: kitE,
+      rigidMembers: [
+        { memberId: 'gal-l', source: { kind: 'fixed', fixed: { hardwareId: galId } }, hand: 'left', placement: { x: { ref: 'min' }, y: { ref: 'min' }, z: { ref: 'min' } } },
+        { memberId: 'fij-l', source: { kind: 'fixed', fixed: { hardwareId: fijId } }, hand: 'left', placement: { x: { ref: 'min' }, y: { ref: 'min' }, z: { ref: 'min' } } },
+      ],
+    };
+    const got = syncAgregadoWithKitParts(poisoned, hardware, accessoryKitMemberHardwareIds(hardware, optionGroups, kitE));
+    const hwIds = got.rigidMembers.map((m: { source?: { fixed?: { hardwareId?: string } } }) => m.source?.fixed?.hardwareId);
+    expect(hwIds).not.toContain(galId);
+    expect(hwIds).toContain(fijId);
   });
 });

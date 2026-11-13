@@ -110,11 +110,11 @@ module Granete
           # their own assembly id emitted a phantom extra «Cajón» (hardware
           # without front is not inert by the #1573 gate) and shifted the
           # front↔box pairing by one.
-          if assembly_id.to_s.include?('-acc-')
+          # Anclado al sufijo del contrato (#1555: `-acc-<group_code_lower>`):
+          # un id de bahía legítimo nunca lo termina en '-acc-…'.
+          if assembly_id.to_s.match?(/-acc-[a-z0-9_-]+\z/)
             base_assembly = assembly_id.split('-acc-', 2).first
-            unless base_assembly.to_s.strip.empty?
-              assembly_id = base_assembly
-            end
+            assembly_id = base_assembly unless base_assembly.to_s.strip.empty?
           end
 
           # #1468: moving slide rails ride the drawer's assembly group. Legacy

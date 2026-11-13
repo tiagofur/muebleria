@@ -898,7 +898,10 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 				continue
 			}
 			// #1613: consumable accessory choices never materialize as fixed
-			// parts — they resolve through resolveAccessoryAssemblies.
+			// parts — they resolve through resolveAccessoryAssemblies. This
+			// check deliberately runs BEFORE the #1557 anchor repair: an
+			// excluded part can never re-enter via anchor repair (consumables
+			// have no authored anchors to repair).
 			if accessoryMemberHwIDs[hw.ID] {
 				continue
 			}

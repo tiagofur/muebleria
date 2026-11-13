@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Hardware } from './types';
 import {
+  accessoryRigidMembers,
   type AgregadoAssemblyInput,
   type AgregadoRigidMember,
   type AgregadoVariantSet,
@@ -1952,5 +1953,43 @@ describe('offsetFormula — alineación de validación y bounds (#1421 rev, pasa
         ],
       }),
     ).not.toThrow();
+  });
+});
+
+// #1613 — la elección de accesorio que ES kit con hijos miembros de un grupo
+// accesorio linkeado a sí mismo: los hijos-miembro jamás se materializan
+// (espejo de accessoryRigidMembers en accessory_kit.go con la exclusión de
+// syncAgregadoRigidMembersFromCatalog); el fallback monolítico se preserva.
+describe('accessoryRigidMembers — exclusión de miembros de grupos accesorios (#1613)', () => {
+  const kitE = 'kit-e-gray';
+  const galId = 'hw-gal-ig';
+  const fijId = 'hw-fij-e';
+  const movId = 'hw-mov-e';
+
+  const optionGroups = [
+    { id: 'og-inserto', code: 'INSERTO', name: 'Inserto', kind: 'hardware' as const, required: true, optionIds: [galId], kitHardwareId: kitE, version: 1 },
+  ];
+
+  const hardware: Hardware[] = [
+    { id: galId, code: 'MBOX-E-GAL-IG', name: 'Galería', active: true, unit: 'piece' as const, costPerUnit: 0, kitHardwareId: kitE, pieces: [{ anchor: 'left' as const }, { anchor: 'right' as const }] },
+    { id: fijId, code: 'MBOX-GRAY-E-FIJ', name: 'Perfil fijo E', active: true, unit: 'piece' as const, costPerUnit: 0, kitHardwareId: kitE, pieces: [{ anchor: 'left' as const }, { anchor: 'right' as const }] },
+    { id: movId, code: 'MBOX-GRAY-E-MOV', name: 'Perfil móvil E', active: true, unit: 'piece' as const, costPerUnit: 0, kitHardwareId: kitE, pieces: [{ anchor: 'left' as const }, { anchor: 'right' as const }] },
+    { id: 'hw-gal-suelta', code: 'GAL-LEAF', name: 'Galería leaf', active: true, unit: 'piece' as const, costPerUnit: 0, pieces: [{ anchor: 'left' as const }, { anchor: 'right' as const }] },
+  ];
+
+  it('el accesorio elegido que es kit excluye a sus hijos-miembro de grupo', () => {
+    // Elegido = kit E (sus hijos FIJ/MOV son partes legítimas; GAL es
+    // miembro del grupo linkeado a kit E → excluida).
+    const got = accessoryRigidMembers(hardware, optionGroups, kitE, 'AGR-X') ?? [];
+    const hwIds = got.map((m) => m.source?.fixed?.hardwareId);
+    expect(hwIds.filter((id) => id === fijId).length).toBe(2);
+    expect(hwIds.filter((id) => id === movId).length).toBe(2);
+    expect(hwIds).not.toContain(galId);
+  });
+
+  it('el accesorio monolítico (leaf) cae al fallback y se dibuja a sí mismo', () => {
+    const got = accessoryRigidMembers(hardware, optionGroups, 'hw-gal-suelta', 'AGR-X') ?? [];
+    const hwIds = got.map((m) => m.source?.fixed?.hardwareId);
+    expect(hwIds.filter((id) => id === 'hw-gal-suelta').length).toBe(2);
   });
 });
