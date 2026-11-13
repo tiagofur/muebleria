@@ -45,7 +45,7 @@ function defaultElevationForModule(
   module: Module | undefined,
 ): PlacementElevation {
   const t = module?.furnitureType;
-  if (t === 'superior' || t === 'alto') return 'wall';
+  if (t === 'superior') return 'wall';
   return 'floor';
 }
 

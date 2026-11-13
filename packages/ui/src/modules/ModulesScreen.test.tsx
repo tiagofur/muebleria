@@ -545,16 +545,14 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
     await screen.findByTestId('module-editor-page');
 
-    // El selector de eje NO existe para tipos no-panel.
+    // El selector de eje existe para cualquier tipo (mueble estándar por defecto).
     const select = screen.getByTestId('module-furniture-type') as HTMLSelectElement;
-    expect(screen.queryByTestId('module-thickness-dim')).toBeNull();
+    const axis = screen.getByTestId('module-thickness-dim') as HTMLSelectElement;
+    expect(axis.value).toBe('');
 
     await user.type(screen.getByLabelText('Código'), 'MOD-TER-X');
     await user.type(screen.getByLabelText('Nombre'), 'Panel Test');
     await user.selectOptions(select, 'panel');
-
-    const axis = await screen.findByTestId('module-thickness-dim') as HTMLSelectElement;
-    expect(axis.value).toBe(''); // sin declaración previa
     await user.selectOptions(axis, 'width');
 
     await user.click(screen.getByRole('button', { name: /^Guardar/i }));

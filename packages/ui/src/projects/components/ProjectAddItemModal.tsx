@@ -340,7 +340,11 @@ export function ProjectAddItemModal({
       optionChoices: addItem.optionChoices,
       measurePresetId: addItem.measurePresetId,
       baseMode:
-        mod.baseMode ?? defaultBaseModeForFurnitureType(mod.furnitureType),
+        mod.baseMode ??
+        defaultBaseModeForFurnitureType(
+          mod.furnitureType,
+          Boolean(mod.panelThicknessDim),
+        ),
     });
   }
 

@@ -204,8 +204,9 @@ export function applyBaseModeToHardwareLines(
  */
 export function defaultBaseModeForFurnitureType(
   furnitureType?: FurnitureType,
+  isPanel?: boolean,
 ): ModuleBaseMode {
-  return furnitureType === 'superior' || furnitureType === 'panel'
+  return isPanel || furnitureType === 'superior' || furnitureType === 'panel'
     ? 'none'
     : 'plinth_board';
 }
