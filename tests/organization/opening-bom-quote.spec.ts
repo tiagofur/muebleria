@@ -69,6 +69,28 @@ test('1263: gola selection resolves its BOM and the quote freezes it with exact 
   const token = owner.token;
   const repository = new APIWorkspaceRepository(apiBase, { getAccessToken: () => token });
 
+  // Shard-isolation (the same contract as the module seed below): earlier
+  // residents (e.g. gola-profile-editor) leave OFFERED non-default grip
+  // styles whose gola recipes curate THEIR profiles; this spec quotes its
+  // OWN profile, so it deletes those residents. The seeded DEFAULT style
+  // (handle-only) cannot be deleted and keeps capabilities nil — the #1134
+  // nil branch where any verified profile validates.
+  const residentStyles = await client.request<
+    readonly {
+      readonly id: string;
+      readonly version: number;
+      readonly isDefault: boolean;
+    }[]
+  >('GET', '/catalog/grip-styles', { token });
+  for (const style of residentStyles) {
+    if (style.isDefault) continue;
+    await client.request<{ readonly deleted: boolean }>(
+      'DELETE',
+      `/catalog/grip-styles/${style.id}`,
+      { token, ifMatch: style.version },
+    );
+  }
+
   // Catalog: a module with 18mm LATERAL sides (the body fact the interior
   // width derives from: 600 − 2×18 = 564) plus the 8006 datasheet hardware.
   const catalog = await repository.getCatalog();
