@@ -36,6 +36,7 @@ import {
 import { validateNonNegativeNumber, validateRequiredName } from '../../catalogs/catalogHelpers';
 import {
   draftSessionKey,
+  registerDraftSessionBaseline,
   seedEditorDraftFromBaseline,
   useDebouncedValue,
   useEntityEditorState,
@@ -54,6 +55,7 @@ import {
   moduleCompositionKey,
   moduleHardwareGridInputId,
   moduleToDraft,
+  moduleToDuplicateDraft,
   nextGridEnterTarget,
   optionGroupsForHardware,
   validateModuleCode,
@@ -167,6 +169,15 @@ export function useModulesScreenState({
     draftValidator: isModuleDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
+      if (closeAfterCreateRef.current) {
+        closeAfterCreateRef.current = false;
+        if (onRequestEdit) {
+          onRequestEdit(null as any);
+        } else {
+          setSelectedId(null);
+        }
+        return;
+      }
       if (restoreId && restoreId !== 'new') {
         if (onSelectionChange) {
           onSelectionChange(restoreId);
@@ -325,6 +336,8 @@ export function useModulesScreenState({
   );
 
   const seededModuleEditIdRef = useRef<string | null>(null);
+  const pendingDuplicateDraftRef = useRef<ModuleDraft | null>(null);
+  const closeAfterCreateRef = useRef(false);
   useEffect(() => {
     if (openModuleEditId == null || openModuleEditId === '') {
       setModalOpen(false);
@@ -334,13 +347,21 @@ export function useModulesScreenState({
     }
     if (openModuleEditId === 'new') {
       if (seededModuleEditIdRef.current === 'new') return;
-      seedEditorDraftFromBaseline(
-        draftKey,
-        emptyModuleDraft(),
-        setDraft,
-        setInitialDraft,
-        isModuleDraft,
-      );
+      const pendingDup = pendingDuplicateDraftRef.current;
+      pendingDuplicateDraftRef.current = null;
+      if (pendingDup) {
+        registerDraftSessionBaseline(draftKey, pendingDup, isModuleDraft);
+        setInitialDraft(pendingDup);
+        setDraft(pendingDup);
+      } else {
+        seedEditorDraftFromBaseline(
+          draftKey,
+          emptyModuleDraft(),
+          setDraft,
+          setInitialDraft,
+          isModuleDraft,
+        );
+      }
       setEditingId(null);
       setEditorTab('general');
       setError(null);
@@ -386,6 +407,7 @@ export function useModulesScreenState({
   }, [modalOpen, editingId, selectedId, onEditingChange]);
 
   const startCreate = () => {
+    pendingDuplicateDraftRef.current = null;
     if (onRequestEdit) {
       onRequestEdit('new');
       return;
@@ -400,6 +422,7 @@ export function useModulesScreenState({
   };
 
   const startEdit = (item: Module) => {
+    pendingDuplicateDraftRef.current = null;
     if (onRequestEdit) {
       onRequestEdit(item.id);
       return;
@@ -410,6 +433,26 @@ export function useModulesScreenState({
     setInitialDraft(fresh);
     setError(null);
     setEditorTab('general');
+    setModalOpen(true);
+  };
+
+  const startDuplicate = (item: Module) => {
+    const dupDraft = moduleToDuplicateDraft(
+      item,
+      modules.map((m) => m.code),
+    );
+    if (onRequestEdit) {
+      pendingDuplicateDraftRef.current = dupDraft;
+      onRequestEdit('new');
+      return;
+    }
+    registerDraftSessionBaseline(draftKey, dupDraft, isModuleDraft);
+    setInitialDraft(dupDraft);
+    setDraft(dupDraft);
+    setEditingId(null);
+    setEditorTab('general');
+    setError(null);
+    setStaleSave(false);
     setModalOpen(true);
   };
 
@@ -638,6 +681,7 @@ export function useModulesScreenState({
           await onUpdate(editingId, draftWithOverrides);
         } else {
           await onCreate(draftWithOverrides);
+          closeAfterCreateRef.current = true;
         }
         setStaleSave(false);
         onSaveOutcome?.(null);
@@ -829,6 +873,7 @@ export function useModulesScreenState({
     // Actions
     startCreate,
     startEdit,
+    startDuplicate,
     openDetail,
     backToList,
     handleSubmit,

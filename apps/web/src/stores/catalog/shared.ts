@@ -286,14 +286,12 @@ export interface CatalogState {
   readonly setStructureActive: (id: string, active: boolean) => void;
 
   // --- Components ---
-  readonly createComponent: (draft: ComponentDraft) => void;
-  readonly updateComponent: (id: string, draft: ComponentDraft) => void;
+  readonly createComponent: (draft: ComponentDraft) => Promise<void>;
+  readonly updateComponent: (id: string, draft: ComponentDraft) => Promise<void>;
   readonly toggleComponentActive: (id: string) => void;
-  /** Deep-copy with a fresh id/code and regenerated perforation ids (#1019 C3). */
-  readonly duplicateComponent: (id: string) => void;
 
   // --- Agregados ---
-  readonly createAgregado: (item: Agregado) => void;
+  readonly createAgregado: (item: Agregado) => Promise<void>;
   /**
    * #1416: kit wizard — executes the pure domain plan against live catalog
    * state (kit + design-only hardware + agregado with recipe, one atomic
@@ -309,15 +307,13 @@ export interface CatalogState {
   readonly loadKitTemplates: () => Promise<void>;
   readonly saveKitTemplate: (row: WorkshopKitTemplateRow) => Promise<WorkshopKitTemplateRow>;
   readonly deleteKitTemplate: (id: string, expectedVersion: number) => Promise<void>;
-  readonly updateAgregado: (item: Agregado) => void;
+  readonly updateAgregado: (item: Agregado) => Promise<void>;
   /** #1369: simular un cambio de receta (dry-run clasificado; server authority). */
   readonly simulateAgregadoRecipe: RecipeChangeActions['simulate'];
   /** #1369: aplicar la receta candidata con If-Match; 412 → re-simular. */
   readonly applyAgregadoRecipe: RecipeChangeActions['apply'];
   /** Auth: also DELETE /catalog/agregados/{id}. */
   readonly deleteAgregado: (id: string) => Promise<void>;
-  /** Deep-copy with a fresh id/code and regenerated nested ids (#1009 S5). */
-  readonly duplicateAgregado: (id: string) => void;
 
   // --- Customers ---
   readonly createCustomer: (

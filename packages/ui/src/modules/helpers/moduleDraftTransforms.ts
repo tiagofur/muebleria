@@ -18,6 +18,7 @@ import type {
 } from '@granete/domain';
 import {
   isModuleBaseMode,
+  suggestDuplicateCode,
 } from '@granete/domain';
 import { parseOptionalNumber } from './moduleValidation';
 import {
@@ -372,6 +373,42 @@ export function moduleToDraft(mod: Module): ModuleDraft {
     // Verbatim pass-through (#905/#497): dropping it here silently erased
     // every module's authoring contract on edit-save.
     parameterDefinitions: [...(mod.parameterDefinitions ?? [])],
+  };
+}
+
+function nextDuplicateNestedId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Prefill a create draft from an existing module: `<CODE>-COPY` (editable),
+ * `<Name> (copia)`, regenerated hardwareLine/preset ids, and deep-cloned
+ * component/agregado instances and parameter definitions.
+ */
+export function moduleToDuplicateDraft(
+  mod: Module,
+  existingCodes: readonly string[],
+  nextNestedId: () => string = nextDuplicateNestedId,
+): ModuleDraft {
+  const base = moduleToDraft(mod);
+  return {
+    ...base,
+    code: suggestDuplicateCode(mod.code, existingCodes),
+    name: `${mod.name} (copia)`,
+    components: base.components.map((c) => structuredClone(c)),
+    agregados: base.agregados.map((a) => structuredClone(a)),
+    hardwareLines: base.hardwareLines.map((l) => ({
+      ...l,
+      id: nextNestedId(),
+    })),
+    presets: base.presets.map((p) => ({
+      ...p,
+      id: nextNestedId(),
+    })),
+    parameterDefinitions: base.parameterDefinitions.map((p) => structuredClone(p)),
   };
 }
 

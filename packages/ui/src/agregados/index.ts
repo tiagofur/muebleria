@@ -1,6 +1,7 @@
 export { AgregadosScreen, type AgregadosScreenProps } from './AgregadosScreen';
 export {
   agregadoToDraft,
+  agregadoToDuplicateDraft,
   draftToAgregado,
   createEmptyAgregadoDraft,
   type AgregadoDraft,

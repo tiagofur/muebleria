@@ -76,6 +76,7 @@ export interface UseProjectsScreenStateProps {
   readonly onCreate: (draft: ProjectDraft) => void;
   readonly onUpdate: (id: string, draft: ProjectDraft) => void;
   readonly onDelete: (id: string) => void;
+  readonly onDuplicate?: (id: string, draft?: ProjectDraft) => void;
   readonly onCreateFromTemplate?: (templateId: string, draft: ProjectDraft) => void;
   readonly onDeleteTemplate?: (templateId: string) => void;
   readonly onAddItem: (
@@ -128,6 +129,7 @@ export function useProjectsScreenState({
   onCreate,
   onUpdate,
   onDelete,
+  onDuplicate,
   onCreateFromTemplate,
   onDeleteTemplate,
   onAddItem,
@@ -152,6 +154,7 @@ export function useProjectsScreenState({
   );
   const [metaModalOpen, setMetaModalOpen] = useState(false);
   const [metaEditingId, setMetaEditingId] = useState<string | null>(null);
+  const [duplicatingProjectId, setDuplicatingProjectId] = useState<string | null>(null);
   const [metaDraft, setMetaDraft] = useState<ProjectDraft>(() =>
     emptyProjectDraft(workshopSettings),
   );
@@ -303,6 +306,7 @@ export function useProjectsScreenState({
   useEffect(() => {
     if (!consumeRequestCreateKey('projects', requestCreateKey)) return;
     setMetaEditingId(null);
+    setDuplicatingProjectId(null);
     setMetaDraft(emptyProjectDraft(workshopSettings));
     setMetaModalOpen(true);
   }, [requestCreateKey, workshopSettings]);
@@ -330,6 +334,7 @@ export function useProjectsScreenState({
   const closeMetaModal = () => {
     setMetaModalOpen(false);
     setMetaEditingId(null);
+    setDuplicatingProjectId(null);
   };
 
   const closeAddItemModal = () => {
@@ -338,6 +343,7 @@ export function useProjectsScreenState({
 
   const startCreate = () => {
     setMetaEditingId(null);
+    setDuplicatingProjectId(null);
     setMetaDraft(emptyProjectDraft(workshopSettings));
     setMetaModalOpen(true);
   };
@@ -368,7 +374,19 @@ export function useProjectsScreenState({
 
   const startEditMeta = (project: Project) => {
     setMetaEditingId(project.id);
+    setDuplicatingProjectId(null);
     setMetaDraft(projectToDraft(project, customers));
+    setMetaModalOpen(true);
+  };
+
+  const startDuplicate = (project: Project) => {
+    setMetaEditingId(null);
+    setDuplicatingProjectId(project.id);
+    setMetaDraft({
+      ...projectToDraft(project, customers),
+      name: `${project.name} (copia)`,
+      status: 'draft',
+    });
     setMetaModalOpen(true);
   };
 
@@ -387,11 +405,14 @@ export function useProjectsScreenState({
     setItemError(null);
     setAddItemModalOpen(false);
     setMetaModalOpen(false);
+    setDuplicatingProjectId(null);
   };
 
   const handleSubmitMeta = (payload: ProjectDraft) => {
     if (metaEditingId) {
       onUpdate(metaEditingId, payload);
+    } else if (duplicatingProjectId) {
+      onDuplicate?.(duplicatingProjectId, payload);
     } else {
       onCreate(payload);
     }
@@ -584,6 +605,7 @@ export function useProjectsScreenState({
     startSaveAsTemplate,
     requestDeleteTemplate,
     startEditMeta,
+    startDuplicate,
     openDetail,
     backToList,
     handleSubmitMeta,

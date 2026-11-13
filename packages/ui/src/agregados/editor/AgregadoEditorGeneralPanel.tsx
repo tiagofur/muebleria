@@ -178,6 +178,7 @@ export function AgregadoEditorGeneralPanel({
                     setDraft((prev) => ({
                       ...prev,
                       motionType: e.target.value as AgregadoDraft['motionType'],
+                      preservedPresentationMotion: undefined,
                     }))
                   }
                   data-testid="agregado-field-motion-type"

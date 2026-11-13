@@ -373,7 +373,12 @@ export interface ProjectState {
     id: string,
     onProjectDeleted?: (id: string) => void,
   ) => void;
-  readonly duplicateProjectById: (id: string) => void;
+  readonly duplicateProjectById: (
+    id: string,
+    draft?: ProjectDraft,
+    catalog?: Catalog,
+    actor?: ProjectActor,
+  ) => void;
   readonly markProjectProduced: (id: string, catalog: Catalog) => void;
   /** roadmap-screens 2a.6 — create + persist the engineering log. */
   readonly startEngineering: (id: string, byUserId: string) => void;
@@ -1108,14 +1113,103 @@ export function createProjectStore(options: InternalOptions) {
       toast({ type: 'info', message: 'Cotización eliminada' });
     },
 
-    duplicateProjectById: (id) => {
+    duplicateProjectById: (id, draft, catalog, actor) => {
       const source = get().projects.find((p) => p.id === id);
       if (!source) return;
-      const copy = deepCopyProject(source, {
+      const now = new Date().toISOString();
+      if (!draft) {
+        const copy = deepCopyProject(source, {
+          newId: newId(),
+          itemIdFactory: newId,
+          nowIso: now,
+        });
+        set({ projects: [...get().projects, copy] });
+        persistCreateProject(copy).catch((err) => {
+          console.error('Error al duplicar proyecto:', err);
+          toast({
+            type: 'error',
+            message: 'No se pudo guardar el duplicado en el servidor',
+          });
+        });
+        toast({ type: 'success', message: `✓ Duplicado como ${copy.name}` });
+        return;
+      }
+
+      const inlineCustomerName =
+        draft.customerId.trim() === ''
+          ? (draft.customerName ?? '').trim()
+          : '';
+      const useAtomicInline =
+        inlineCustomerName !== '' &&
+        (canPersistInlineCustomer?.() ?? false) &&
+        !!persistCreateProjectWithInlineCustomer;
+      const resolved = useAtomicInline
+        ? { customerId: '', customers: [...(catalog?.customers ?? [])] }
+        : resolveCustomerFromDraft(draft, catalog?.customers ?? [], newId);
+      const meta = draftToProjectMeta(draft, resolved.customerId);
+      const ownerUserId = actor
+        ? resolveOwnerOnCreateRoles(actor.id, rolesOfUser(actor), draft.ownerUserId)
+        : (draft.ownerUserId.trim() || source.ownerUserId);
+
+      const baseCopy = deepCopyProject(source, {
         newId: newId(),
         itemIdFactory: newId,
-        nowIso: new Date().toISOString(),
+        nowIso: now,
+        newName: meta.name,
       });
+      const copy: Project = {
+        ...baseCopy,
+        customerId: meta.customerId,
+        currency: meta.currency,
+        marginFactor: meta.marginFactor,
+        laborFixedCost: meta.laborFixedCost,
+        notes: meta.notes,
+        status: 'draft',
+        ownerUserId,
+        createdBy: actor?.id ?? source.createdBy,
+        ...(source.measureDefaults ? { measureDefaults: source.measureDefaults } : {}),
+        ...(useWorkspaceStore.getState().session === 'guest'
+          ? { hasDigitalThreadContext: false as const }
+          : {}),
+      };
+
+      if (useAtomicInline) {
+        void persistCreateProjectWithInlineCustomer!(
+          copy,
+          inlineCustomerName,
+        ).then(
+          (created) => {
+            set({ projects: upsertById(get().projects, created.project) });
+            const currentCatalog = getCatalogStoreState().catalog;
+            if (currentCatalog) {
+              getCatalogStoreState().setCatalog({
+                ...currentCatalog,
+                customers: upsertById(
+                  currentCatalog.customers ?? [],
+                  created.customer,
+                ),
+              });
+            }
+            toast({
+              type: 'success',
+              message: `✓ Duplicado como ${created.project.name}`,
+            });
+          },
+          (err) => {
+            console.error('Error al duplicar proyecto con cliente nuevo:', err);
+            toast({
+              type: 'error',
+              message: 'No se pudo guardar el duplicado en el servidor',
+            });
+          },
+        );
+        return;
+      }
+
+      if (resolved.customers.length > (catalog?.customers ?? []).length) {
+        getCatalogStoreState().upsertCustomers(resolved.customers);
+      }
+
       set({ projects: [...get().projects, copy] });
       persistCreateProject(copy).catch((err) => {
         console.error('Error al duplicar proyecto:', err);

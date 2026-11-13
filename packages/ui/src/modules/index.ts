@@ -31,6 +31,7 @@ export {
   findModuleCodeConflict,
   formatModuleMoney,
   moduleToDraft,
+  moduleToDuplicateDraft,
   draftToModule,
   mergeBoardOverridesIntoDraft,
   moduleCompositionKey,

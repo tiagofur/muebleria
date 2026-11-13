@@ -18,6 +18,7 @@ import {
   nextGridEnterTarget,
   modulePartGridInputId,
   moduleToDraft,
+  moduleToDuplicateDraft,
   patchInstanceOverrides,
   optionGroupsForBoardParts,
   optionGroupsForHardware,
@@ -734,5 +735,46 @@ describe('#1404 hardware line component link', () => {
     const mod = draftToModule('m-agr', draft);
     expect(mod.agregados).toHaveLength(1);
     expect(mod.agregados![0]!.optionRole).toBe('SISTEMA_CAJON');
+  });
+
+  it('moduleToDuplicateDraft prefills -COPY, regenerates nested ids and isolates clones (#1610)', () => {
+    let seq = 0;
+    const source: Module = {
+      id: 'mod-src',
+      code: 'MOD-GAB-01',
+      name: 'Bajo 600',
+      structureId: 'struct-1',
+      externalDims: { width: 600, height: 720, depth: 560 },
+      components: [
+        {
+          componentId: 'comp-1',
+          quantity: 1,
+          overrides: {
+            edges: [{ side: 'L1', enabled: true }],
+          },
+        },
+      ],
+      hardwareLines: [{ id: 'hl-orig', quantity: 2, optionRole: 'BISAGRA' }],
+      presets: [{ id: 'pre-orig', name: 'Estándar', width: 600, height: 720, depth: 560 }],
+      agregados: [{ id: 'agr-inst-1', agregadoId: 'agr-1', quantity: 1 }],
+      parameterDefinitions: [
+        { name: 'gap', label: 'Luz', type: 'number', defaultValue: 3, category: 'metadata' },
+      ],
+    };
+
+    const dup = moduleToDuplicateDraft(
+      source,
+      ['MOD-GAB-01', 'MOD-GAB-01-COPY'],
+      () => `nested-${++seq}`,
+    );
+
+    expect(dup.code).toBe('MOD-GAB-01-COPY2');
+    expect(dup.name).toBe('Bajo 600 (copia)');
+    expect(dup.hardwareLines[0]!.id).toBe('nested-1');
+    expect(dup.presets[0]!.id).toBe('nested-2');
+    expect(dup.components[0]).not.toBe(source.components![0]);
+    expect(dup.components[0]!.overrides).not.toBe(source.components![0]!.overrides);
+    expect(dup.agregados[0]).not.toBe(source.agregados![0]);
+    expect(dup.parameterDefinitions[0]).not.toBe(source.parameterDefinitions![0]);
   });
 });

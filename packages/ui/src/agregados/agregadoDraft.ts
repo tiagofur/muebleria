@@ -11,8 +11,10 @@ import type {
   HardwareLine,
   ModuleComponentInstance,
 } from '@granete/domain';
+import { suggestDuplicateCode } from '@granete/domain';
 import {
   arrayRule,
+  booleanRule,
   numberRule,
   objectRule,
   optionalRule,
@@ -41,6 +43,9 @@ export interface AgregadoDraft {
   variantSets: AgregadoVariantSet[];
   compatibilityRules: AssemblyCompatibilityRule[];
   commercialKitHardwareId?: string;
+  active?: boolean;
+  /** Preserved when an agregado carries keyframes or a custom non-side pivot. */
+  preservedPresentationMotion?: AgregadoPresentationMotion;
 }
 
 export function createEmptyAgregadoDraft(): AgregadoDraft {
@@ -139,19 +144,56 @@ const agregadoDraftRule = objectRule({
   variantSets: optionalRule(arrayRule(variantSetDraftRule)),
   compatibilityRules: optionalRule(arrayRule(compatibilityRuleDraftRule)),
   commercialKitHardwareId: optionalRule(stringRule),
+  active: optionalRule(booleanRule),
+  preservedPresentationMotion: optionalRule(
+    (value) => typeof value === 'object' && value !== null && !Array.isArray(value),
+  ),
 });
 export function isAgregadoDraft(value: unknown): value is AgregadoDraft { return agregadoDraftRule(value); }
+
+function clonePresentationMotion(
+  motion: AgregadoPresentationMotion,
+): AgregadoPresentationMotion {
+  if (motion.kind === 'keyframes') {
+    return {
+      kind: 'keyframes',
+      keyframes: motion.keyframes.map((k) => ({
+        progress: k.progress,
+        translationMm: [...k.translationMm] as [number, number, number],
+        rotationDeg: k.rotationDeg ? { ...k.rotationDeg } : undefined,
+      })),
+    };
+  }
+  if (motion.kind === 'rotate') {
+    return {
+      ...motion,
+      axis: { ...motion.axis },
+      pivot:
+        typeof motion.pivot === 'string'
+          ? motion.pivot
+          : { localMm: [...motion.pivot.localMm] as [number, number, number] },
+    };
+  }
+  return { ...motion, axis: { ...motion.axis } };
+}
 
 export function agregadoToDraft(a: Agregado): AgregadoDraft {
   const dims = a.externalDims ?? { width: 0, height: 0, depth: 0 };
   let motionType: AgregadoMotionType = 'none';
   let openAngleDeg = 110;
+  let preservedPresentationMotion: AgregadoPresentationMotion | undefined;
   if (a.presentationMotion) {
     if (a.presentationMotion.kind === 'rotate') {
-      motionType = a.presentationMotion.pivot === 'right' ? 'rotate_right' : 'rotate_left';
-      openAngleDeg = a.presentationMotion.openAngleDeg ?? 110;
+      if (a.presentationMotion.pivot === 'left' || a.presentationMotion.pivot === 'right') {
+        motionType = a.presentationMotion.pivot === 'right' ? 'rotate_right' : 'rotate_left';
+        openAngleDeg = a.presentationMotion.openAngleDeg ?? 110;
+      } else {
+        preservedPresentationMotion = clonePresentationMotion(a.presentationMotion);
+      }
     } else if (a.presentationMotion.kind === 'translate') {
       motionType = 'translate';
+    } else if (a.presentationMotion.kind === 'keyframes') {
+      preservedPresentationMotion = clonePresentationMotion(a.presentationMotion);
     }
   }
   return {
@@ -162,14 +204,45 @@ export function agregadoToDraft(a: Agregado): AgregadoDraft {
     widthMm: dims.width,
     heightMm: dims.height,
     depthMm: dims.depth,
-    components: (a.components ?? []).map((c) => ({ ...c })),
+    components: (a.components ?? []).map((c) => structuredClone(c)),
     hardwareLines: (a.hardwareLines ?? []).map((h) => ({ ...h })),
     motionType,
     openAngleDeg,
-    rigidMembers: (a.rigidMembers ?? []).map((m) => ({ ...m })),
-    variantSets: (a.variantSets ?? []).map((s) => ({ ...s })),
+    rigidMembers: (a.rigidMembers ?? []).map((m) => structuredClone(m)),
+    variantSets: (a.variantSets ?? []).map((s) => structuredClone(s)),
     compatibilityRules: (a.compatibilityRules ?? []).map((r) => ({ ...r })),
     commercialKitHardwareId: a.commercialKitHardwareId ?? undefined,
+    ...(a.active !== undefined ? { active: a.active } : {}),
+    ...(preservedPresentationMotion ? { preservedPresentationMotion } : {}),
+  };
+}
+
+function nextDuplicateNestedId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Prefill a create draft from an existing agregado: `<CODE>-COPY` (editable),
+ * `<Name> (copia)`, regenerated hardwareLine ids, and deep-cloned recipe/parts.
+ */
+export function agregadoToDuplicateDraft(
+  item: Agregado,
+  existingCodes: readonly string[],
+  nextNestedId: () => string = nextDuplicateNestedId,
+): AgregadoDraft {
+  const base = agregadoToDraft(item);
+  return {
+    ...base,
+    code: suggestDuplicateCode(item.code, existingCodes),
+    name: `${item.name} (copia)`,
+    ...(item.active !== undefined ? { active: true } : {}),
+    hardwareLines: base.hardwareLines.map((h) => ({
+      ...h,
+      id: nextNestedId(),
+    })),
   };
 }
 
@@ -195,7 +268,7 @@ export function draftToAgregado(id: string, draft: AgregadoDraft): Agregado {
           axis: { x: 0, y: 1, z: 0 },
           distanceMm: draft.depthMm > 0 ? draft.depthMm * 0.8 : 400,
         }
-      : undefined;
+      : draft.preservedPresentationMotion;
 
   return {
     id,
@@ -203,6 +276,7 @@ export function draftToAgregado(id: string, draft: AgregadoDraft): Agregado {
     name: draft.name.trim(),
     description: draft.description.trim() || undefined,
     notes: draft.notes.trim() || undefined,
+    ...(draft.active !== undefined ? { active: draft.active } : {}),
     externalDims:
       draft.widthMm > 0 || draft.heightMm > 0 || draft.depthMm > 0
         ? { width: draft.widthMm, height: draft.heightMm, depth: draft.depthMm }

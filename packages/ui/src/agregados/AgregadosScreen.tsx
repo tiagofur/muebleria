@@ -4,6 +4,7 @@
  */
 
 import {
+  useEffect,
   useId,
   useMemo,
   useRef,
@@ -26,6 +27,7 @@ import {
   EntityEditorLayout,
   ConfirmDialog,
   draftSessionKey,
+  registerDraftSessionBaseline,
   seedEditorDraftFromBaseline,
   useDebouncedValue,
   useEntityEditorState,
@@ -35,6 +37,7 @@ import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import {
   createEmptyAgregadoDraft,
   agregadoToDraft,
+  agregadoToDuplicateDraft,
   draftToAgregado,
   isAgregadoDraft,
   type AgregadoDraft,
@@ -60,8 +63,6 @@ export interface AgregadosScreenProps {
   readonly onCreate: (agregado: Agregado) => void | Promise<void>;
   readonly onUpdate: (agregado: Agregado) => void | Promise<void>;
   readonly onDelete?: (id: string) => void;
-  /** Deep-copy handler wired to the store (#1009 S5). */
-  readonly onDuplicate?: (id: string) => void;
   readonly canMutate?: boolean;
   readonly openAgregadoId?: string | null;
   readonly onSelectionChange?: (id: string | null) => void;
@@ -90,7 +91,6 @@ export function AgregadosScreen({
   onCreate,
   onUpdate,
   onDelete,
-  onDuplicate,
   canMutate = true,
   openAgregadoId = null,
   onSelectionChange,
@@ -106,6 +106,9 @@ export function AgregadosScreen({
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const seededEditIdRef = useRef<string | null>(null);
+  const pendingDuplicateDraftRef = useRef<AgregadoDraft | null>(null);
+  const closeAfterCreateRef = useRef(false);
+  const [creatingDraftMode, setCreatingDraftMode] = useState(false);
 
   const agregadoIds = useMemo(() => agregados.map((a) => a.id), [agregados]);
 
@@ -115,7 +118,10 @@ export function AgregadosScreen({
     knownIds: agregadoIds,
   });
 
-  const draftKey = draftSessionKey('agregado', expandedId ?? 'new');
+  const draftKey = draftSessionKey(
+    'agregado',
+    creatingDraftMode ? 'new' : (expandedId ?? 'new'),
+  );
   const {
     modalOpen,
     setModalOpen,
@@ -139,10 +145,26 @@ export function AgregadosScreen({
     draftValidator: isAgregadoDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
+      setCreatingDraftMode(false);
+      if (closeAfterCreateRef.current) {
+        closeAfterCreateRef.current = false;
+        setSelectedId(null);
+        return;
+      }
       onSelectionChange?.(restoreId);
     },
     currentSelectionId: expandedId,
   });
+
+  useEffect(() => {
+    if (!modalOpen || !creatingDraftMode) return;
+    const pendingDup = pendingDuplicateDraftRef.current;
+    if (!pendingDup) return;
+    pendingDuplicateDraftRef.current = null;
+    registerDraftSessionBaseline(draftKey, pendingDup, isAgregadoDraft);
+    setInitialDraft(pendingDup);
+    setDraft(pendingDup);
+  }, [modalOpen, creatingDraftMode, draftKey, setDraft, setInitialDraft]);
 
   const rows = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
@@ -180,6 +202,8 @@ export function AgregadosScreen({
 
   const handleCreateNew = () => {
     const fresh = createEmptyAgregadoDraft();
+    pendingDuplicateDraftRef.current = null;
+    setCreatingDraftMode(true);
     seedEditorDraftFromBaseline(draftKey, fresh, setDraft, setInitialDraft, isAgregadoDraft);
     setEditingId(null);
     setEditorTab('general');
@@ -191,6 +215,8 @@ export function AgregadosScreen({
 
   const handleEdit = (item: Agregado) => {
     const fresh = agregadoToDraft(item);
+    pendingDuplicateDraftRef.current = null;
+    setCreatingDraftMode(false);
     seedEditorDraftFromBaseline(draftKey, fresh, setDraft, setInitialDraft, isAgregadoDraft);
     setEditingId(item.id);
     setEditorTab('general');
@@ -198,6 +224,20 @@ export function AgregadosScreen({
     setSaveFailed(false);
     setModalOpen(true);
     seededEditIdRef.current = item.id;
+  };
+
+  const handleDuplicate = (item: Agregado) => {
+    pendingDuplicateDraftRef.current = agregadoToDuplicateDraft(
+      item,
+      agregados.map((a) => a.code),
+    );
+    setCreatingDraftMode(true);
+    setEditingId(null);
+    setEditorTab('general');
+    setError(null);
+    setSaveFailed(false);
+    setModalOpen(true);
+    seededEditIdRef.current = 'new';
   };
 
   const onSubmit = (e: FormEvent) => {
@@ -218,10 +258,10 @@ export function AgregadosScreen({
     }
     // Code uniqueness check
     const codeConflict = agregados.find(
-      (a) => a.code.toLowerCase() === draft.code.trim().toLowerCase() && a.id !== editingId,
+      (a) => a.code.trim().toLowerCase() === draft.code.trim().toLowerCase() && a.id !== editingId,
     );
     if (codeConflict) {
-      setError(`El código "${draft.code}" ya está en uso.`);
+      setError(`El código "${draft.code.trim()}" ya está en uso.`);
       setEditorTab('general');
       return;
     }
@@ -264,8 +304,12 @@ export function AgregadosScreen({
         if (editingId) {
           await onUpdate(draftToAgregado(editingId, draft));
         } else {
-          const newId = `agr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          const newId =
+            typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+              ? crypto.randomUUID()
+              : `agr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
           await onCreate(draftToAgregado(newId, draft));
+          closeAfterCreateRef.current = true;
         }
         setSaving(false);
         forceCloseEditor();
@@ -371,7 +415,7 @@ export function AgregadosScreen({
                       : undefined
                   }
                   onDelete={canMutate && onDelete ? (id) => setConfirmDeleteId(id) : undefined}
-                  onDuplicate={canMutate && onDuplicate ? onDuplicate : undefined}
+                  onDuplicate={canMutate ? () => handleDuplicate(selectedAgregado) : undefined}
                   canMutate={canMutate}
                   optionGroups={optionGroups}
                 />

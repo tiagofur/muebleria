@@ -1242,3 +1242,150 @@ describe('ComponentsScreen — save contract (C1 #1019)', () => {
     expect(screen.queryByTestId('component-editor-save-error')).toBeNull();
   });
 });
+
+describe('ComponentsScreen — duplicar como crear prellenado (#1610)', () => {
+  afterEach(() => {
+    cleanup();
+    sessionStorage.clear();
+  });
+
+  const richSource: Component = {
+    ...mockComponents[0]!,
+    notes: 'Puerta estándar',
+    perforations: [
+      {
+        id: 'perf-orig-1',
+        relativePosition: { xPercent: 10, yPercent: 20 },
+        diameterMm: 35,
+        depthMm: 12.5,
+        type: 'hinge_cup',
+      },
+    ],
+  };
+
+  it('abre el editor de creación prellenado con -COPY editable, regenera ids de perforaciones y guarda la modificación', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentsScreen
+        components={[richSource, mockComponents[1]!]}
+        optionGroups={mockOptionGroups}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    await user.click(screen.getByTestId('component-card-COM-PUE-01'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /Duplicar/i }));
+
+    const page = await screen.findByTestId('component-editor-page');
+    expect(page.textContent).toContain('Nuevo componente');
+    const codeInput = screen.getByTestId('input-code') as HTMLInputElement;
+    const nameInput = screen.getByTestId('input-name') as HTMLInputElement;
+    expect(codeInput.disabled).toBe(false);
+    expect(codeInput.value).toBe('COM-PUE-01-COPY');
+    expect(nameInput.value).toBe('Puerta (copia)');
+
+    // Rejects colliding with an existing inactive code before saving.
+    await user.clear(codeInput);
+    await user.type(codeInput, 'COM-ENT-01');
+    await user.click(screen.getByTestId('save-btn'));
+    expect(screen.getByTestId('form-error').textContent).toMatch(/Ya existe/);
+    expect(onCreate).not.toHaveBeenCalled();
+
+    // Edit to a new code and name, then save.
+    await user.clear(codeInput);
+    await user.type(codeInput, 'COM-PUE-02');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Puerta Derecha');
+    await user.click(screen.getByTestId('save-btn'));
+
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    const saved = onCreate.mock.calls[0]![0];
+    expect(saved.code).toBe('COM-PUE-02');
+    expect(saved.name).toBe('Puerta Derecha');
+    expect(saved.notes).toBe('Puerta estándar');
+    expect(saved.perforations).toHaveLength(1);
+    expect(saved.perforations![0]!.id).not.toBe('perf-orig-1');
+  });
+
+  it('no crea nada al cancelar y mantiene el editor abierto si el servidor rechaza', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn().mockRejectedValue(new Error('409'));
+    render(
+      <ComponentsScreen
+        components={[richSource]}
+        optionGroups={mockOptionGroups}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    await user.click(screen.getByTestId('component-card-COM-PUE-01'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /Duplicar/i }));
+    await screen.findByTestId('component-editor-page');
+
+    // Cancel without edits closes back to detail without creating.
+    await user.click(screen.getByTestId('component-editor-cancel'));
+    expect(screen.queryByTestId('component-editor-page')).toBeNull();
+    expect(onCreate).not.toHaveBeenCalled();
+
+    // Re-open duplicate, edit code, and reject on server.
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /Duplicar/i }));
+    const codeInput = (await screen.findByTestId('input-code')) as HTMLInputElement;
+    await user.clear(codeInput);
+    await user.type(codeInput, 'COM-PUE-03');
+    await user.click(screen.getByTestId('save-btn'));
+
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('component-editor-save-error')).toBeTruthy();
+    expect((screen.getByTestId('input-code') as HTMLInputElement).value).toBe('COM-PUE-03');
+  });
+
+  it('en modo enrutado (/components/new/edit) conserva el borrador duplicado al transicionar la ruta', async () => {
+    const user = userEvent.setup();
+    const onRequestEdit = vi.fn();
+    const { rerender } = render(
+      <ComponentsScreen
+        components={[richSource]}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentId="c1"
+        openComponentEditId={null}
+        onRequestEdit={onRequestEdit}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /Duplicar/i }));
+    expect(onRequestEdit).toHaveBeenCalledWith('new');
+
+    rerender(
+      <ComponentsScreen
+        components={[richSource]}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentId={null}
+        openComponentEditId="new"
+        onRequestEdit={onRequestEdit}
+      />,
+    );
+
+    await screen.findByTestId('component-editor-page');
+    expect((screen.getByTestId('input-code') as HTMLInputElement).value).toBe('COM-PUE-01-COPY');
+    expect((screen.getByTestId('input-name') as HTMLInputElement).value).toBe('Puerta (copia)');
+  });
+});

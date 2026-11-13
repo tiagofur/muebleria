@@ -741,3 +741,48 @@ describe('OpeningProfilesCatalog — ronda 2: defectos de la corrección (re-jui
     expect(openingProfileWriteBody(withPair).datasheet_status).toBe('verified');
   });
 });
+
+describe('OpeningProfilesCatalog — duplicar con código editable (#1610)', () => {
+  it('deriva el id del código final editado por el usuario y no del -COPY inicial', async () => {
+    const user = userEvent.setup();
+    const existing: OpeningProfileRow = {
+      id: 'profile.gola-l.8006',
+      code: 'GOLA-L',
+      name: 'Gola L',
+      version: 1,
+      gripType: 'gola',
+      crossSection: 'L',
+      placements: ['top'],
+      datasheetStatus: 'verified',
+      doorReductionMm: 40,
+      frontReductionMm: null,
+      gripClearanceMm: null,
+      material: 'aluminum',
+      frontDiscountTopMm: 40,
+      frontDiscountBetweenMm: null,
+      profileHeightMm: 56.5,
+      profileDepthMm: 27.2,
+      geometryOrigin: 'Ficha SCILM',
+      bodyModifiers: [{ role: 'horizontal', effect: 'depth_reduction' }],
+      bomMembers: {},
+      active: true,
+      manufacturer: 'SCILM',
+    } as unknown as OpeningProfileRow;
+    const onCreate = renderCatalog(vi.fn(), [existing]);
+
+    await user.click(screen.getByRole('button', { name: 'Duplicar GOLA-L' }));
+    await waitFor(() => expect(screen.getByTestId('gola-profile-editor')).toBeInTheDocument());
+
+    const codeInput = screen.getByTestId('gola-profile-code') as HTMLInputElement;
+    expect(codeInput.value).toBe('GOLA-L-COPY');
+    await user.clear(codeInput);
+    await user.type(codeInput, 'GOLA-L-NEGRA');
+
+    await user.click(within(screen.getByTestId('gola-profile-editor')).getByTestId('gola-profile-save'));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+
+    const [createdId, createdDraft] = onCreate.mock.calls[0]!;
+    expect(createdId).toBe('profile.gola-l-negra');
+    expect((createdDraft as OpeningProfileDraft).code).toBe('GOLA-L-NEGRA');
+  });
+});

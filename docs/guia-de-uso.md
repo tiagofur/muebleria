@@ -78,8 +78,43 @@ El orden recomendado — cada paso usa los anteriores:
    medidas comerciales (presets) + foto de vitrina.
 
 En cada lista: buscar, filtro de activos, y el patrón es siempre el mismo —
-click para **ver**, botón **Editar** para el modal, **Desactivar** para sacar
+click para **ver**, botón **Editar** para editar, **Desactivar** para sacar
 sin perder historia.
+
+### 5.2 Duplicar para crear a partir de otro
+
+**Para qué sirve.** Crear un componente, agregado, mueble, material, canto,
+herraje, acabado, perfil o cotización nuevo partiendo de uno existente, con el
+código y todas sus propiedades editables **antes** de guardarlo.
+
+**Cuándo usarla.** Cuando necesitás una variante de una pieza o mueble que ya
+armaste (por ejemplo, duplicar `MBOX-RES-M` para ajustar el código a
+`MBOX-RES-E` y cambiar medidas, fórmulas o cantos) sin crear una copia `-COPY`
+previa en el catálogo ni volver a cargar todo desde cero.
+
+**Pasos.**
+
+1. Abrí el ítem que querés tomar como base:
+   - En **Componentes**, **Agregados**, **Muebles** o **Cotizaciones**, entrá
+     al detalle del ítem y tocá **Más → Duplicar**.
+   - En **Materiales**, **Cantos**, **Herrajes**, **Acabados**, **Perfiles de
+     herraje** o **Perfiles de apertura**, tocá **Duplicar** en la fila de la
+     tabla.
+2. Se abre el formulario de creación **prellenado** con todo lo del ítem
+   original:
+   - En catálogos, el campo **Código** aparece desbloqueado y sugerido con
+     `<CÓDIGO>-COPY`, y el **Nombre** con `<Nombre> (copia)`.
+   - En **Cotizaciones**, se abre la ventana de nueva cotización prellenada con
+     `<Nombre> (copia)`, cliente, margen, mano de obra y notas editables (los
+     muebles y el plano 3D se copian automáticamente al guardar).
+3. Editá el **Código**, el **Nombre** y cualquier otra propiedad que cambie, y
+   tocá **Guardar**. Si tocás **Cancelar** (o salís sin guardar), no se crea
+   ningún duplicado.
+
+**Cómo saber que quedó bien.** Aparece el aviso de confirmación con el código
+(o nombre) que elegiste y el nuevo ítem queda listado independiente del
+original; si el código ya existía (incluso inactivo), el formulario te avisa y
+se mantiene abierto para corregirlo sin perder tus cambios.
 
 ### 5.1 El zócalo desde la librería
 

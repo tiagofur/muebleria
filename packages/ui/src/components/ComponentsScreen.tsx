@@ -43,6 +43,7 @@ import {
 import {
   EntityEditorLayout,
   draftSessionKey,
+  registerDraftSessionBaseline,
   seedEditorDraftFromBaseline,
   useDebouncedValue,
   useEntityEditorState,
@@ -55,6 +56,7 @@ import {
 } from '../catalogs';
 import {
   componentToDraft,
+  componentToDuplicateDraft,
   emptyComponentDraft,
   isComponentDraft,
   placementLabel,
@@ -82,8 +84,6 @@ export interface ComponentsScreenProps {
   readonly onCreate: (draft: ComponentDraft) => void | Promise<void>;
   readonly onUpdate: (id: string, draft: ComponentDraft) => void | Promise<void>;
   readonly onToggleActive: (id: string) => void;
-  /** Deep-copy handler wired to the store (#1019 C3). */
-  readonly onDuplicate?: (id: string) => void;
   readonly canMutate: boolean;
   readonly openComponentId?: string | null;
   /**
@@ -129,7 +129,6 @@ export function ComponentsScreen({
   onCreate,
   onUpdate,
   onToggleActive,
-  onDuplicate,
   canMutate = true,
   openComponentId = null,
   openComponentEditId = null,
@@ -147,6 +146,8 @@ export function ComponentsScreen({
   const [placementFilter, setPlacementFilter] = useState<string>('all');
   /** Last edit-id we seeded into the draft — prevents wipe on `components` identity churn. */
   const seededEditIdRef = useRef<string | null>(null);
+  const pendingDuplicateDraftRef = useRef<ComponentDraft | null>(null);
+  const closeAfterCreateRef = useRef(false);
 
   const componentIds = useMemo(
     () => components.map((c) => c.id),
@@ -185,6 +186,15 @@ export function ComponentsScreen({
     draftValidator: isComponentDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
+      if (closeAfterCreateRef.current) {
+        closeAfterCreateRef.current = false;
+        if (onRequestEdit) {
+          onRequestEdit(null as any);
+        } else {
+          setSelectedId(null);
+        }
+        return;
+      }
       if (restoreId && restoreId !== 'new') {
         if (onSelectionChange) {
           onSelectionChange(restoreId);
@@ -303,14 +313,22 @@ export function ComponentsScreen({
     }
     if (openComponentEditId === 'new') {
       if (seededEditIdRef.current === 'new') return;
-      // Do not wipe session-restored draft on F5/remount (R3-C1).
-      seedEditorDraftFromBaseline(
-        draftKey,
-        emptyComponentDraft(),
-        setDraft,
-        setInitialDraft,
-        isComponentDraft,
-      );
+      const pendingDup = pendingDuplicateDraftRef.current;
+      pendingDuplicateDraftRef.current = null;
+      if (pendingDup) {
+        registerDraftSessionBaseline(draftKey, pendingDup, isComponentDraft);
+        setInitialDraft(pendingDup);
+        setDraft(pendingDup);
+      } else {
+        // Do not wipe session-restored draft on F5/remount (R3-C1).
+        seedEditorDraftFromBaseline(
+          draftKey,
+          emptyComponentDraft(),
+          setDraft,
+          setInitialDraft,
+          isComponentDraft,
+        );
+      }
       setEditingId(null);
       setEditorTab('general');
       setError(null);
@@ -364,6 +382,7 @@ export function ComponentsScreen({
    * the shell navigates to `/components/new/edit`. Otherwise open the modal.
    */
   const handleCreateNew = () => {
+    pendingDuplicateDraftRef.current = null;
     if (onRequestEdit) {
       onRequestEdit('new');
       return;
@@ -374,6 +393,31 @@ export function ComponentsScreen({
     setEditingId(null);
     setEditorTab('general');
     setError(null);
+    setSaveFailed(false);
+    setModalOpen(true);
+  };
+
+  /**
+   * Open the create editor prefilled from an existing component so the user
+   * can adjust the `-COPY` code and properties before creating (#1610).
+   */
+  const handleDuplicate = (item: Component) => {
+    const dupDraft = componentToDuplicateDraft(
+      item,
+      normalizedComponents.map((c) => c.code),
+    );
+    if (onRequestEdit) {
+      pendingDuplicateDraftRef.current = dupDraft;
+      onRequestEdit('new');
+      return;
+    }
+    registerDraftSessionBaseline(draftKey, dupDraft, isComponentDraft);
+    setInitialDraft(dupDraft);
+    setDraft(dupDraft);
+    setEditingId(null);
+    setEditorTab('general');
+    setError(null);
+    setSaveFailed(false);
     setModalOpen(true);
   };
 
@@ -505,6 +549,7 @@ export function ComponentsScreen({
           await onUpdate(editingId, draft);
         } else {
           await onCreate(draft);
+          closeAfterCreateRef.current = true;
         }
         setSaving(false);
         forceCloseEditor();
@@ -592,7 +637,7 @@ export function ComponentsScreen({
                 onBack={() => setSelectedId(null)}
                 onEdit={handleEdit}
                 onToggleActive={canMutate ? handleToggleActive : undefined}
-                onDuplicate={canMutate && onDuplicate ? onDuplicate : undefined}
+                onDuplicate={canMutate ? () => handleDuplicate(selectedComponent) : undefined}
                 canMutate={canMutate}
                 optionGroups={optionGroups}
               />

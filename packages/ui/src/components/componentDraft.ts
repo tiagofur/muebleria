@@ -9,6 +9,7 @@ import type {
   ComponentPlacement,
   Perforation,
 } from '@granete/domain';
+import { suggestDuplicateCode } from '@granete/domain';
 import { arrayRule, booleanRule, enumRule, nullableRule, numberRule, objectRule, optionalRule, stringFields, stringRule } from '../common/draftValidation';
 import { edgesFromFlags } from '../modules/helpers/moduleDraftTransforms';
 
@@ -293,6 +294,44 @@ export function componentToDraft(item: Component): ComponentDraft {
     perforations: item.perforations,
   };
   return draft;
+}
+
+function nextDuplicateNestedId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Prefill a create draft from an existing component: `<CODE>-COPY` (editable),
+ * `<Name> (copia)`, regenerated perforation ids, and cloned construction refs.
+ */
+export function componentToDuplicateDraft(
+  item: Component,
+  existingCodes: readonly string[],
+  nextNestedId: () => string = nextDuplicateNestedId,
+): ComponentDraft {
+  const base = componentToDraft(item);
+  return {
+    ...base,
+    code: suggestDuplicateCode(item.code, existingCodes),
+    name: `${item.name} (copia)`,
+    active: true,
+    perforations: base.perforations?.map((p) => ({
+      ...p,
+      id: nextNestedId(),
+      relativePosition: { ...p.relativePosition },
+    })),
+    constructionOverride: base.constructionOverride
+      ? {
+          ...base.constructionOverride,
+          connectionFaces: base.constructionOverride.connectionFaces
+            ? [...base.constructionOverride.connectionFaces]
+            : undefined,
+        }
+      : undefined,
+  };
 }
 
 function optionalNotes(notes: string): string | undefined {

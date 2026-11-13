@@ -858,6 +858,65 @@ describe('projectStore — duplicateProjectById', () => {
     expect(createdProjects).toHaveLength(0);
     expect(store.getState().projects).toHaveLength(1);
   });
+
+  it('applies edited draft metadata while cloning items and remapping kitchenLayout (#1610)', () => {
+    let seq = 0;
+    const { deps, createdProjects, toasts } = makeDeps({
+      newId: () => `dup-${++seq}`,
+    });
+    const store = createProjectStore({ deps });
+    const source = makeProject({
+      status: 'draft',
+      items: [
+        {
+          id: 'item-orig',
+          moduleId: 'mod-1',
+          quantity: 1,
+          optionChoices: { FRENTE: 'mat-a' },
+        },
+      ],
+      projectLevelChoices: { INTERIOR: 'mat-b' },
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          { itemId: 'item-orig', instanceIndex: 0, wallId: 'w1', offsetMm: 100, elevation: 'floor' },
+        ],
+      },
+    });
+    store.getState().setProjects([source]);
+
+    store.getState().duplicateProjectById(
+      'proj-1',
+      {
+        name: 'Cocina Editada',
+        customerId: 'cust-2',
+        customerName: '',
+        currency: 'USD',
+        marginFactor: '1.5',
+        laborFixedCost: '250',
+        status: 'draft',
+        notes: 'Nueva nota',
+        ownerUserId: '',
+      },
+      seedCatalog(),
+      { id: 'seller-1', role: 'vendedor' },
+    );
+
+    expect(createdProjects).toHaveLength(1);
+    const created = createdProjects[0]!;
+    expect(created.id).toBe('dup-1');
+    expect(created.name).toBe('Cocina Editada');
+    expect(created.customerId).toBe('cust-2');
+    expect(created.currency).toBe('USD');
+    expect(created.marginFactor).toBe(1.5);
+    expect(created.laborFixedCost).toBe(250);
+    expect(created.notes).toBe('Nueva nota');
+    expect(created.status).toBe('draft');
+    expect(created.items).toHaveLength(1);
+    expect(created.items[0]!.id).toBe('dup-2');
+    expect(created.kitchenLayout?.placements[0]!.itemId).toBe('dup-2');
+    expect(toasts[0]!.message).toContain('Cocina Editada');
+  });
 });
 
 describe('projectStore — markProjectProduced', () => {

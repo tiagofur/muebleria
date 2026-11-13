@@ -5,8 +5,6 @@
 
 import {
   bumpStructureRevision,
-  duplicateAgregado,
-  duplicateComponent,
   duplicateModule as deepCopyModule,
   suggestDuplicateCode,
   Agregado,
@@ -33,13 +31,11 @@ type EntitiesSlice = Pick<
   | 'createComponent'
   | 'updateComponent'
   | 'toggleComponentActive'
-  | 'duplicateComponent'
   | 'createAgregado'
   | 'updateAgregado'
   | 'simulateAgregadoRecipe'
   | 'applyAgregadoRecipe'
   | 'deleteAgregado'
-  | 'duplicateAgregado'
 >;
 
 export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
@@ -218,7 +214,7 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
     // --- Components ---
     createComponent: (draft) => {
       const item = draftToComponent(ctx.newId(), draft);
-      ctx.saveAndToast(
+      return ctx.saveAndToast(
         (c) => ({
           ...c,
           components: [...(c.components ?? []), item],
@@ -228,7 +224,7 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
     },
 
     updateComponent: (id, draft) => {
-      ctx.saveAndToast(
+      return ctx.saveAndToast(
         (c) => ({
           ...c,
           components: (c.components ?? []).map((comp) =>
@@ -248,27 +244,9 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
       }));
     },
 
-    duplicateComponent: (id) => {
-      const source = ctx.get().catalog?.components?.find((c) => c.id === id);
-      if (!source) return;
-      const newCode = suggestDuplicateCode(
-        source.code,
-        (ctx.get().catalog?.components ?? []).map((c) => c.code),
-      );
-      const copy = duplicateComponent(source, {
-        newId: ctx.newId(),
-        newCode,
-        nextNestedId: ctx.newId,
-      });
-      ctx.saveAndToast(
-        (c) => ({ ...c, components: [...(c.components ?? []), copy] }),
-        `✓ Duplicado como ${newCode}`,
-      );
-    },
-
     // --- Agregados ---
     createAgregado: (item) => {
-      ctx.saveAndToast(
+      return ctx.saveAndToast(
         (c) => ({
           ...c,
           agregados: [...(c.agregados ?? []), item],
@@ -278,7 +256,7 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
     },
 
     updateAgregado: (item) => {
-      ctx.saveAndToast(
+      return ctx.saveAndToast(
         (c) => ({
           ...c,
           agregados: (c.agregados ?? []).map((a) => (a.id === item.id ? item : a)),
@@ -367,24 +345,6 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
       if (ok) {
         ctx.toast({ type: 'info', message: 'Agregado eliminado' });
       }
-    },
-
-    duplicateAgregado: (id) => {
-      const source = ctx.get().catalog?.agregados?.find((a) => a.id === id);
-      if (!source) return;
-      const newCode = suggestDuplicateCode(
-        source.code,
-        (ctx.get().catalog?.agregados ?? []).map((a) => a.code),
-      );
-      const copy = duplicateAgregado(source, {
-        newId: ctx.newId(),
-        newCode,
-        nextNestedId: ctx.newId,
-      });
-      ctx.saveAndToast(
-        (c) => ({ ...c, agregados: [...(c.agregados ?? []), copy] }),
-        `✓ Duplicado como ${newCode}`,
-      );
     },
   };
 }
