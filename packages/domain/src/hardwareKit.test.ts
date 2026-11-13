@@ -621,8 +621,8 @@ describe('agregadoDeclaresKitViaVariant (#1493)', () => {
   });
 });
 
-describe('#1518 regresión: pos: label no aplasta piezas multi-diseño (sync TS)', () => {
-  it('syncAgregadoWithKitParts: parte con pieces + label pos:min conserva el ancla por pieza', () => {
+describe('#1518 regresión + #1613: pos: label no aplasta piezas multi-diseño y el miembro guardado se refresca desde su pieza (sync TS)', () => {
+  it('syncAgregadoWithKitParts: parte con pieces + label pos:min refresca desde SU pieza (el label nunca aplasta)', () => {
     const agregado = {
       id: 'agr-reg',
       code: 'AGR-REG',
@@ -641,7 +641,14 @@ describe('#1518 regresión: pos: label no aplasta piezas multi-diseño (sync TS)
           memberId: 'part_mbox_igm_m_right',
           role: 'slide',
           source: { kind: 'fixed', fixed: { hardwareId: 'hw-perfil-m' } },
-          placement: { x: { ref: 'max', offsetMm: -12 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 100 } },
+          // x=12 legacy SIN negar: el placement guardado quedó atrás del
+          // registro (la pieza declara X=12 → max−12).
+          placement: {
+            x: { ref: 'max', offsetMm: 12 },
+            y: { ref: 'min', offsetMm: 0 },
+            z: { ref: 'min', offsetMm: 100 },
+            rotationDeg: { x: 90, y: 0, z: 0 },
+          },
           bomRole: 'included_in_kit',
           actorMembership: 'body',
           hand: 'right',
@@ -655,7 +662,10 @@ describe('#1518 regresión: pos: label no aplasta piezas multi-diseño (sync TS)
         name: 'Perfil MERIVOBOX M',
         // El label del editor de posición (el que antes colapsaba ambos lados a min).
         designParts: [{ componentName: 'MBOX-IGM-M', actorMembership: 'body', label: 'pos:min:10:0:0' }],
-        pieces: [{ anchor: 'left' as const }, { anchor: 'right' as const }],
+        pieces: [
+          { anchor: 'left' as const, offsetMm: { x: 8, y: 0, z: 0 } },
+          { anchor: 'right' as const, offsetMm: { x: 12, y: 0, z: 0 } },
+        ],
       },
     ];
 
@@ -663,8 +673,17 @@ describe('#1518 regresión: pos: label no aplasta piezas multi-diseño (sync TS)
     expect(synced.rigidMembers).toHaveLength(2);
     const left = synced.rigidMembers.find((m: any) => m.hand === 'left');
     const right = synced.rigidMembers.find((m: any) => m.hand === 'right');
+    // #1613: el placement guardado se RE-DERIVA de la pieza — idéntico a una
+    // materialización fresca; el label pos:min:10 NO aplasta (de pisar, left
+    // sería 10).
     expect(left.placement.x).toEqual({ ref: 'min', offsetMm: 8 });
     expect(right.placement.x).toEqual({ ref: 'max', offsetMm: -12 });
+    // El z=100 guardado sin declaración en la pieza también refresca a 0.
+    expect(left.placement.z).toEqual({ ref: 'min', offsetMm: 0 });
+    expect(right.placement.z).toEqual({ ref: 'min', offsetMm: 0 });
+    // La rotación autorada del miembro se PRESERVA (#1613 review r1).
+    expect(right.placement.rotationDeg).toEqual({ x: 90, y: 0, z: 0 });
+    expect(left.placement.rotationDeg).toBeUndefined();
   });
 
   it('ensureAgregadoKitParts: misma regla para recetas por variante', () => {
@@ -676,7 +695,12 @@ describe('#1518 regresión: pos: label no aplasta piezas multi-diseño (sync TS)
           memberId: 'part_mbox_igm_m_right',
           role: 'slide',
           source: { kind: 'fixed', fixed: { hardwareId: 'hw-perfil-m' } },
-          placement: { x: { ref: 'max', offsetMm: -12 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 100 } },
+          placement: {
+            x: { ref: 'max', offsetMm: 12 },
+            y: { ref: 'min', offsetMm: 0 },
+            z: { ref: 'min', offsetMm: 100 },
+            rotationDeg: { x: 0, y: 0, z: 15 },
+          },
           bomRole: 'included_in_kit',
           actorMembership: 'body',
           hand: 'right',
@@ -689,13 +713,21 @@ describe('#1518 regresión: pos: label no aplasta piezas multi-diseño (sync TS)
         code: 'MBOX-IGM-M',
         name: 'Perfil MERIVOBOX M',
         designParts: [{ componentName: 'MBOX-IGM-M', actorMembership: 'body', label: 'pos:min:10:0:0' }],
-        pieces: [{ anchor: 'left' as const }, { anchor: 'right' as const }],
+        pieces: [
+          { anchor: 'left' as const, offsetMm: { x: 8, y: 0, z: 0 } },
+          { anchor: 'right' as const, offsetMm: { x: 12, y: 0, z: 0 } },
+        ],
       },
     ];
 
     const synced = ensureAgregadoKitParts(agregado, kitParts);
     const right = synced.rigidMembers.find((m: any) => m.hand === 'right');
+    // #1613: refresco desde la pieza (X=12 negado en right; el z=100 legacy
+    // sin declaración cae a 0).
     expect(right.placement.x).toEqual({ ref: 'max', offsetMm: -12 });
+    expect(right.placement.z).toEqual({ ref: 'min', offsetMm: 0 });
+    // La rotación autorada del miembro se PRESERVA (#1613 review r1).
+    expect(right.placement.rotationDeg).toEqual({ x: 0, y: 0, z: 15 });
     // La pieza left faltante se agrega desde el catálogo (expansión por pieza).
     const left = synced.rigidMembers.find((m: any) => m.hand === 'left');
     expect(left).toBeDefined();
