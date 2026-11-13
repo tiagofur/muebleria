@@ -75,8 +75,8 @@ export const HARDWARE_KIT_SLOTS: readonly HardwareKitSlotInfo[] = [
   },
 ];
 
-export const DEFAULT_FIXED_OFFSET_MM = 10;
-export const DEFAULT_MOVING_OFFSET_MM = 35;
+export const DEFAULT_FIXED_OFFSET_MM = 0;
+export const DEFAULT_MOVING_OFFSET_MM = 0;
 
 export function defaultAgregadoCode(kitCode: string, labelEs = 'Cajón'): string {
   const suffixes: Record<string, string> = {
@@ -441,7 +441,7 @@ export const HARDWARE_KIT_TEMPLATES: readonly HardwareKitTemplate[] = [
         membership: 'body',
         anchorXRef: 'min',
         offsetSign: 1,
-        defaultOffsetMm: 10,
+        defaultOffsetMm: 0,
         hand: 'left',
         partGroup: 'fixed',
       },
@@ -454,7 +454,7 @@ export const HARDWARE_KIT_TEMPLATES: readonly HardwareKitTemplate[] = [
         membership: 'body',
         anchorXRef: 'max',
         offsetSign: -1,
-        defaultOffsetMm: 10,
+        defaultOffsetMm: 0,
         hand: 'right',
         partGroup: 'fixed',
       },
@@ -467,7 +467,7 @@ export const HARDWARE_KIT_TEMPLATES: readonly HardwareKitTemplate[] = [
         membership: 'actor:drawer',
         anchorXRef: 'min',
         offsetSign: 1,
-        defaultOffsetMm: 35,
+        defaultOffsetMm: 0,
         hand: 'left',
         partGroup: 'moving',
       },
@@ -480,7 +480,7 @@ export const HARDWARE_KIT_TEMPLATES: readonly HardwareKitTemplate[] = [
         membership: 'actor:drawer',
         anchorXRef: 'max',
         offsetSign: -1,
-        defaultOffsetMm: 35,
+        defaultOffsetMm: 0,
         hand: 'right',
         partGroup: 'moving',
       },
@@ -615,7 +615,7 @@ export function planHardwareKit(
             memberId: slot.memberId,
             role: slot.role,
             membership: slot.membership,
-            offsetMm: slot.offsetSign * offset,
+            offsetMm: slot.offsetSign * offset === 0 ? 0 : slot.offsetSign * offset,
           };
         });
         return {
@@ -626,7 +626,7 @@ export function planHardwareKit(
           memberId: slots[0]!.memberId,
           membership: slots[0]!.membership,
           placement: {
-            x: { ref: slots[0]!.anchorXRef, offsetMm: slots[0]!.offsetSign * slots[0]!.defaultOffsetMm },
+            x: { ref: slots[0]!.anchorXRef, offsetMm: slots[0]!.offsetSign * slots[0]!.defaultOffsetMm === 0 ? 0 : slots[0]!.offsetSign * slots[0]!.defaultOffsetMm },
             y: { ref: 'min', offsetMm: 0 },
             z: { ref: 'min', offsetMm: 0 },
           },
@@ -649,7 +649,7 @@ export function planHardwareKit(
           memberId: slot.memberId,
           membership: slot.membership,
           placement: {
-            x: { ref: slot.anchorXRef, offsetMm: slot.offsetSign * offset },
+            x: { ref: slot.anchorXRef, offsetMm: slot.offsetSign * offset === 0 ? 0 : slot.offsetSign * offset },
             y: { ref: 'min', offsetMm: 0 },
             z: { ref: 'min', offsetMm: 0 },
           },
@@ -784,12 +784,12 @@ export function inferDefaultKitPartConfig(
       ? 'actor:door'
       : 'actor:drawer'
     : 'body';
-  const baseOffset = isCenter ? 0 : 10;
+  const baseOffset = 0;
 
   return {
     actorMembership,
     xRef,
-    xOffsetMm: offsetSign * baseOffset,
+    xOffsetMm: baseOffset === 0 ? 0 : offsetSign * baseOffset,
     yOffsetMm: 0,
     zOffsetMm: 0,
   };
@@ -1002,14 +1002,11 @@ function newKitPartMembers(
     return part.pieces.map((piece) => {
       // #1518 (review P2): los offsets de la PIEZA (paridad con kitPieceMember
       // Go) pisan los derivados del config cuando existen.
-      // #1557: el FALLBACK (pieza sin offsetMm) espeja kitPieceMember Go:
-      // base 10, 35 para miembro móvil de cajón, negado en right; center
-      // como left (el cfg con su 0 de centro divergía del motor).
-      let fallbackX = 10;
-      if (inferDefaultKitPartConfig(part, agregado.code ?? '').actorMembership === 'actor:drawer') {
-        fallbackX = 35;
-      }
-      const xOff = piece.offsetMm ? piece.offsetMm.x : piece.anchor === 'right' ? -fallbackX : fallbackX;
+      // #1613 (owner): SIN defaults — pieza sin offsetMm = offset 0 (el
+      // registro manda; el ancla right niega: positivo = hacia adentro).
+      const xOff0 = piece.offsetMm ? piece.offsetMm.x : 0;
+      // Normaliza −0 → +0 (Object.is de los tests distingue).
+      const xOff = xOff0 === 0 || piece.anchor !== 'right' ? xOff0 : -xOff0;
       const yOff = piece.offsetMm ? piece.offsetMm.y : cfg.yOffsetMm;
       const zOff = piece.offsetMm ? piece.offsetMm.z : cfg.zOffsetMm;
       return {

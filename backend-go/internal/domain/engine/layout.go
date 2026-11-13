@@ -972,18 +972,18 @@ func kitPieceMember(hw domain.Hardware, piece domain.HardwarePiece, agrCode stri
 	if !okRef {
 		xRef = domain.AxisRefMin
 	}
-	xOff := 10.0
-	if isMoving && actor == "actor:drawer" {
-		xOff = 35.0
-	}
-	if xRef == domain.AxisRefMax {
-		xOff = -xOff
-	}
-	yOff, zOff := 0.0, 0.0
+	// #1613 (owner): SIN desfases hardcodeados — el offset viene
+	// EXCLUSIVAMENTE del registro de la pieza (offsetMm; ausente = 0).
+	// Convención: positivo = hacia adentro desde el ancla (el ancla right
+	// niega: 35 = 35 mm desde cada costado hacia el centro).
+	xOff, yOff, zOff := 0.0, 0.0, 0.0
 	if piece.OffsetMm != nil {
 		xOff = piece.OffsetMm.X
 		yOff = piece.OffsetMm.Y
 		zOff = piece.OffsetMm.Z
+	}
+	if xRef == domain.AxisRefMax {
+		xOff = -xOff
 	}
 	if len(hw.DesignParts) > 0 {
 		dp := hw.DesignParts[0]
@@ -1043,13 +1043,12 @@ func kitPartMember(hw domain.Hardware, agrCode string, hand string) domain.Agreg
 		}
 	}
 	xRef := domain.AxisRefMin
-	xOff := 10.0
-	if isMoving && actor == "actor:drawer" {
-		xOff = 35.0
-	}
+	// #1613 (owner): SIN desfases hardcodeados — el pos: label del registro
+	// manda; sin label, 0. Convención: positivo = hacia adentro desde el
+	// ancla (right niega).
+	xOff := 0.0
 	if isRight {
 		xRef = domain.AxisRefMax
-		xOff = -xOff
 	}
 	yOff, zOff := 0.0, 0.0
 	if len(hw.DesignParts) > 0 {
@@ -1063,6 +1062,9 @@ func kitPartMember(hw domain.Hardware, agrCode string, hand string) domain.Agreg
 			yOff = py
 			zOff = pz
 		}
+	}
+	if xRef == domain.AxisRefMax && xOff != 0 {
+		xOff = -xOff
 	}
 	safeID := "part_" + strings.ToLower(strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(hw.Code))
 	role := "part"

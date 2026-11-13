@@ -129,14 +129,15 @@ test.describe.serial('Herrajes — asistente Juego de herraje (#1416)', () => {
       'moving_rail_right',
     ]);
     const byId = new Map(members.map((m) => [m.memberId as string, m]));
+    // #1613: sin defaults de desfase — offset 0 salvo que el registro lo declare.
     expect(byId.get('fixed_rail_left')).toMatchObject({
       actorMembership: 'body',
       bomRole: 'included_in_kit',
-      placement: { x: { ref: 'min', offsetMm: 10 } },
+      placement: { x: { ref: 'min', offsetMm: 0 } },
     });
     expect(byId.get('fixed_rail_right')).toMatchObject({
       actorMembership: 'body',
-      placement: { x: { ref: 'max', offsetMm: -10 } },
+      placement: { x: { ref: 'max', offsetMm: 0 } },
     });
     expect(byId.get('moving_rail_left')).toMatchObject({ actorMembership: 'actor:drawer' });
     expect(byId.get('moving_rail_right')).toMatchObject({ actorMembership: 'actor:drawer' });
