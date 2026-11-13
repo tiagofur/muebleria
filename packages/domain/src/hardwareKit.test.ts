@@ -55,12 +55,12 @@ describe('planHardwareKit (#1416)', () => {
     expect(fij.handsParts).toHaveLength(2);
     expect(fij.handsParts?.map((p) => p.hand)).toEqual(['left', 'right']);
     expect(fij.handsParts?.map((p) => p.memberId)).toEqual(['fixed_rail_left', 'fixed_rail_right']);
-    expect(fij.handsParts?.map((p) => p.offsetMm)).toEqual([10, -10]);
+    expect(fij.handsParts?.map((p) => p.offsetMm)).toEqual([0, 0]); // #1613: sin defaults
     expect(fij.handsParts?.every((p) => p.membership === 'body')).toBe(true);
 
     const mov = plan.designs[1]!;
     expect(mov.handsParts?.map((p) => p.hand)).toEqual(['left', 'right']);
-    expect(mov.handsParts?.map((p) => p.offsetMm)).toEqual([35, -35]);
+    expect(mov.handsParts?.map((p) => p.offsetMm)).toEqual([0, 0]); // #1613: sin defaults
     expect(mov.handsParts?.every((p) => p.membership === 'actor:drawer')).toBe(true);
 
     // El agregado es idéntico al drawer legacy (mismo motion/label).
@@ -113,10 +113,11 @@ describe('planHardwareKit (#1416)', () => {
     const plan = planHardwareKit(baseInput, noExisting);
     const byMember = new Map(plan.designs.map((d) => [d.memberId, d]));
 
-    expect(byMember.get('fixed_rail_left')?.placement.x).toEqual({ ref: 'min', offsetMm: 10 });
-    expect(byMember.get('fixed_rail_right')?.placement.x).toEqual({ ref: 'max', offsetMm: -10 });
-    expect(byMember.get('moving_rail_left')?.placement.x).toEqual({ ref: 'min', offsetMm: 35 });
-    expect(byMember.get('moving_rail_right')?.placement.x).toEqual({ ref: 'max', offsetMm: -35 });
+    // #1613: sin defaults — offset 0 salvo que el registro lo declare.
+    expect(byMember.get('fixed_rail_left')?.placement.x).toEqual({ ref: 'min', offsetMm: 0 });
+    expect(byMember.get('fixed_rail_right')?.placement.x).toEqual({ ref: 'max', offsetMm: 0 });
+    expect(byMember.get('moving_rail_left')?.placement.x).toEqual({ ref: 'min', offsetMm: 0 });
+    expect(byMember.get('moving_rail_right')?.placement.x).toEqual({ ref: 'max', offsetMm: 0 });
     for (const d of plan.designs) {
       expect(d.placement.y).toEqual({ ref: 'min', offsetMm: 0 });
       expect(d.placement.z).toEqual({ ref: 'min', offsetMm: 0 });
@@ -421,13 +422,13 @@ describe('plantillas del taller editables (#1422 slice 2 — fixture compartido 
       expect(left.memberId).toBe('part_mbox_igm_m_left');
       expect(left.hand).toBe('left');
       expect(left.placement.x.ref).toBe('min');
-      expect(left.placement.x.offsetMm).toBeGreaterThan(0);
+      expect(left.placement.x.offsetMm).toBe(0); // #1613: sin defaults — offset del registro
 
       const right = synced.rigidMembers[1];
       expect(right.memberId).toBe('part_mbox_igm_m_right');
       expect(right.hand).toBe('right');
       expect(right.placement.x.ref).toBe('max');
-      expect(right.placement.x.offsetMm).toBeLessThan(0);
+      expect(right.placement.x.offsetMm).toBe(0); // #1613: sin defaults — offset del registro
     });
 
     it('#1512: una parte legacy (sin hands) sigue creando UN miembro byte-idéntico', () => {
@@ -468,7 +469,7 @@ describe('plantillas del taller editables (#1422 slice 2 — fixture compartido 
       const added = synced.rigidMembers[1];
       expect(added.source.fixed.hardwareId).toBe('hw-mov-d');
       expect(added.placement.x.ref).toBe('max'); // Inferido de '-D'
-      expect(added.placement.x.offsetMm).toBe(-10); // Offset invertido para max
+      expect(added.placement.x.offsetMm).toBe(0); // #1613: sin defaults — offset del registro (0 si ausente)
       expect(added.actorMembership).toBe('actor:drawer'); // Inferido de '-MOV'
     });
 

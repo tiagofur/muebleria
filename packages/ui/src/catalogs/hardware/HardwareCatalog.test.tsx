@@ -585,7 +585,7 @@ describe('HardwareCatalog — kit con partes anidadas (#1422 owner)', () => {
           designParts: [
             expect.objectContaining({
               actorMembership: 'body',
-              label: 'pos:max:-10:0:0',
+              label: 'pos:max:0:0:0', // #1613: sin defaults — el offset viene del registro
             }),
           ],
         }),

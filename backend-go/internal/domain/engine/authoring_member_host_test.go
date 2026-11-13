@@ -735,8 +735,10 @@ func TestKitPieceMemberIgnoresPosLabel_1518(t *testing.T) {
 			}
 		}
 		if m.Hand == domain.MemberHandRight {
-			if m.Placement.X.Ref != domain.AxisRefMax || m.Placement.X.OffsetMm != 12 {
-				t.Errorf("right: X = %v/%g, want max/12 (offset de LA PIEZA; el label min lo colapsaba)",
+			// #1613: la pieza right declara X=12 → max−12 (positivo = hacia
+			// adentro desde el ancla; el ancla right niega).
+			if m.Placement.X.Ref != domain.AxisRefMax || m.Placement.X.OffsetMm != -12 {
+				t.Errorf("right: X = %v/%g, want max/-12 (offset de LA PIEZA negado en right; el label min lo colapsaba)",
 					m.Placement.X.Ref, m.Placement.X.OffsetMm)
 			}
 		}

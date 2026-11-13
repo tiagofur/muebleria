@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "schemaId": "granete.kitPartAnchorParity.v1",
-  "comment": "#1557 — paridad TS↔Go de la expansión/sync por ancla de partes de kit multi-diseño (#1518 F1). Una receta PARCIAL (sólo el ancla left de parte-fij) debe reparar el ancla faltante en AMBOS runtimes (el sync Go la tragaba entera), y los DEFAULTS de fallback (pieza sin offsetMm) son idénticos: base 10, 35 para miembro móvil de cajón (actor:drawer), negado en right, center como left. Go: syncAgregadoRigidMembersFromCatalog; TS: syncAgregadoWithKitParts + newKitPartMembers.",
+  "comment": "#1557 — paridad TS↔Go de la expansión/sync por ancla de partes de kit multi-diseño (#1518 F1). Una receta PARCIAL (sólo el ancla left de parte-fij) debe reparar el ancla faltante en AMBOS runtimes (el sync Go la tragaba entera). #1613 (owner): SIN defaults de fallback — pieza sin offsetMm = offset 0; el offset del registro viaja verbatim y el ancla right lo niega (positivo = hacia adentro desde el ancla). Go: syncAgregadoRigidMembersFromCatalog; TS: syncAgregadoWithKitParts + newKitPartMembers.",
   "kit": {
     "id": "kit-par",
     "code": "KIT-PAR",
@@ -62,19 +62,19 @@
       "memberId": "part_parte_fij_right",
       "hand": "right",
       "xRef": "max",
-      "xOffsetMm": -10
+      "xOffsetMm": 0
     },
     {
       "memberId": "part_parte_mov_left",
       "hand": "left",
       "xRef": "min",
-      "xOffsetMm": 35
+      "xOffsetMm": 0
     },
     {
       "memberId": "part_parte_mov_right",
       "hand": "right",
       "xRef": "max",
-      "xOffsetMm": -35
+      "xOffsetMm": 0
     }
   ]
 }
