@@ -52,6 +52,24 @@ func linkedAccessoryGroups(catalog domain.Catalog, kitID string) []domain.Option
 	return groups
 }
 
+// accessoryKitMemberHardwareIDs (#1613) indexes the hardware that is a
+// MEMBER of any accessory option group linked to the kit. Those pieces are
+// consumable choices (Galería/Boxcap/Boxcover resolved per bay through
+// resolveAccessoryAssemblies) — the kit sync must never materialize them as
+// fixed parts, or every bay draws the full inserto set alongside the user's
+// chosen inserto.
+func accessoryKitMemberHardwareIDs(catalog domain.Catalog, kitID string) map[string]bool {
+	ids := make(map[string]bool)
+	for _, og := range linkedAccessoryGroups(catalog, kitID) {
+		for _, id := range og.OptionIDs {
+			if trimmed := strings.TrimSpace(id); trimmed != "" {
+				ids[trimmed] = true
+			}
+		}
+	}
+	return ids
+}
+
 // accessoryRigidMembers materializes the chosen accessory as bay rigid
 // members: an accessory that is itself a kit contributes its design parts
 // (same sync machinery as the main kit — placements from DesignParts[0].Label,

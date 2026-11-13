@@ -110,6 +110,68 @@ class DrawerAssemblyLinkContractTest < Minitest::Test
     refute_includes hardware_names, 'fixed_rail_left', 'el riel fijo (body) queda en el mueble'
   end
 
+  # #1613: el ensamble del accesorio elegido (#1555, `<bayId>-acc-<group>`)
+  # es un ADJUNTO del cajón de su bahía — sus tiras viajan con el actor del
+  # cajón base. Agruparlas bajo su propio assemblyInstanceId emitía un
+  # «Cajón» fantasma (grupo con herrajes sin frente no es inerte por la
+  # compuerta #1573) y desalineaba el emparejamiento frente↔caja.
+  def test_accessory_assembly_rides_the_bay_drawer_not_a_phantom
+    acc_asm = "#{ASM_ID}-acc-mbox_iridium_gray_e_inserto"
+    layout_body = {
+      'furnitureDefinitionId' => '11111111-1111-1111-1111-111111111111',
+      'definitionName' => 'Gabinete con accesorio',
+      'transformContract' => 'granete.local-basis.v1',
+      'dimensionsMm' => [600, 720, 500],
+      'components' => [
+        { 'componentInstanceId' => 'agr-frente-u0', 'slotId' => 'frente_cajon',
+          'role' => 'FRENTE', 'name' => 'Frente Cajon',
+          'assemblyInstanceId' => ASM_ID,
+          'widthMm' => 564, 'thicknessMm' => 18, 'lengthMm' => 150,
+          'localTransform' => { 'translationMm' => [0, 500, 30], 'basis' => IDENTITY_BASIS } },
+        { 'componentInstanceId' => 'agr-cajon-u0-lat-copy-0',
+          'slotId' => 'lateral_izquierdo', 'role' => 'INTERIOR', 'name' => 'Lateral Cajon',
+          'assemblyInstanceId' => ASM_ID,
+          'widthMm' => 450, 'thicknessMm' => 15, 'lengthMm' => 500,
+          'localTransform' => { 'translationMm' => [13, 90, 30], 'basis' => IDENTITY_BASIS } }
+      ],
+      'assemblies' => [
+        { 'assemblyInstanceId' => ASM_ID, 'agregadoId' => AGR_ID,
+          'placement' => { 'translationMm' => [0, 0, 0], 'basis' => IDENTITY_BASIS },
+          'rigidMembers' => [
+            { 'memberId' => 'moving_rail_left', 'name' => 'moving_rail_left',
+              'actorMembership' => 'actor:drawer', 'dimensionsMm' => [12, 450, 45],
+              'localTransform' => { 'translationMm' => [35, 0, 0], 'basis' => IDENTITY_BASIS } }
+          ] },
+        { 'assemblyInstanceId' => acc_asm, 'agregadoId' => AGR_ID,
+          'placement' => { 'translationMm' => [0, 0, 0], 'basis' => IDENTITY_BASIS },
+          'rigidMembers' => [
+            { 'memberId' => 'galeria_left', 'name' => 'galeria_left',
+              'actorMembership' => 'actor:drawer', 'dimensionsMm' => [14, 450, 110],
+              'localTransform' => { 'translationMm' => [10, 0, 40], 'basis' => IDENTITY_BASIS } },
+            { 'memberId' => 'galeria_right', 'name' => 'galeria_right',
+              'actorMembership' => 'actor:drawer', 'dimensionsMm' => [14, 450, 110],
+              'localTransform' => { 'translationMm' => [540, 0, 40], 'basis' => IDENTITY_BASIS } }
+          ] }
+      ]
+    }
+
+    layout = Granete::SketchUpExtension::Library::LayoutContract.parse!(
+      JSON.parse(JSON.generate(layout_body))
+    )
+    definition = @provider.find_definition('kitchen-base-standard')
+    @builder.insert_furniture(@model, definition, {}, resolved_layout: layout)
+
+    furniture = @model.active_entities.instances.first
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_equal 1, scanned.drawers.length,
+                 'las tiras del accesorio viajan con el cajón de la bahía — sin Cajón fantasma'
+    hardware_names = scanned.drawers.first.hardware.map(&:name)
+    assert_includes hardware_names, 'galeria_left',
+                    'la tira del accesorio elegido viaja en el hardware del cajón base'
+    assert_includes hardware_names, 'galeria_right'
+  end
+
   private
 
   def parsed_layout

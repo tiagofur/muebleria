@@ -856,6 +856,12 @@ func parseKitPartPlacementLabelGo(label string) (domain.AssemblyAxisRef, float64
 func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Catalog, effectiveKitHardwareID string) domain.Agregado {
 	members := make([]domain.AgregadoRigidMember, 0, len(agr.RigidMembers))
 	existingHwIDs := make(map[string]bool, len(agr.RigidMembers))
+	// #1613: pieces that are MEMBERS of an accessory option group linked to
+	// this kit (Galería/Boxcap/Boxcover) are CONSUMABLE CHOICES consumed by
+	// resolveAccessoryAssemblies — never fixed kit parts. Materializing them
+	// here drew the full inserto set (plus a phantom complete drawer) on
+	// every bay alongside the user's chosen inserto.
+	accessoryMemberHwIDs := accessoryKitMemberHardwareIDs(catalog, effectiveKitHardwareID)
 
 	for _, rm := range agr.RigidMembers {
 		if rm.Source.Fixed != nil && rm.Source.Fixed.HardwareID != "" {
@@ -889,6 +895,11 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 	if kitID := strings.TrimSpace(effectiveKitHardwareID); kitID != "" {
 		for _, hw := range catalog.Hardware {
 			if !hw.Active || hw.KitHardwareID == nil || *hw.KitHardwareID != kitID {
+				continue
+			}
+			// #1613: consumable accessory choices never materialize as fixed
+			// parts — they resolve through resolveAccessoryAssemblies.
+			if accessoryMemberHwIDs[hw.ID] {
 				continue
 			}
 			if existingHwIDs[hw.ID] {
