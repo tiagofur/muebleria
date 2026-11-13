@@ -280,6 +280,35 @@ sistema dibuja cada lado con su pieza.
 **Cómo saber que quedó bien:** la fila muestra la marca «N piezas D/I/C» y,
 al insertar el mueble, cada lado dibuja su pieza en su lado.
 
+#### Cómo dibujar los SKP de un par (convención de autoría)
+
+Dibujá **cada pieza como se ve montada en SU lado, mirando el mueble de
+frente** (igual que la vista 3D de la web, donde el ancho del mueble
+arranca a la izquierda de la pantalla):
+
+1. **El origen del SKP es el punto de apoyo**: donde la pieza toca la
+   pared o el lugar de montaje. Lo que dibujes alrededor del origen no se
+   mueve; los offsets X/Y/Z del alta posicionan ese origen.
+2. **Pieza izquierda:** la pared queda hacia la izquierda del origen y la
+   pieza se extiende hacia la derecha (hacia adentro del mueble).
+   **Pieza derecha:** la pared queda hacia la derecha del origen y la
+   pieza se extiende hacia la izquierda.
+3. **Altura** hacia arriba (eje azul, +Z). **Profundidad:** el frente del
+   mueble hacia el eje verde positivo (+Y).
+4. Dibujá con la plantilla en **milímetros** para que las medidas sean las
+   reales.
+
+Con esa convención, Granete dibuja cada pieza en su lado y con su
+orientación correcta tanto en la web como en SketchUp — incluyendo el
+espejado automático de piezas con mano cuando el mueble se refleja
+(#1605). Si una pieza es **simétrica** (se ve igual espejada), podés ligar
+el mismo SKP a ambos lados.
+
+**Si tu par ya estaba subido y se ve invertido en SketchUp:** no hace
+falta re-dibujar. Revisá contra esta convención qué archivo corresponde a
+cada lado y, si están cruzados, re-ligalos en la ficha del juego o del
+par (Editar → cada lado → *Cambiar*). Guardá y volvé a insertar.
+
 ### 8c.3 Insertos de un juego y su selector
 
 **Para qué sirve:** los accesorios que se eligen por cajón dentro de un
