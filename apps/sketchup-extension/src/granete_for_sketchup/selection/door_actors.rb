@@ -104,6 +104,19 @@ module Granete
           membership = (intent['actorMembership'] || identity['actorMembership']).to_s.strip
           return if membership == 'body'
 
+          # #1613: accessory-choice assemblies (`<bayId>-acc-<group>`, #1555)
+          # are ATTACHMENTS to the bay's drawer — the chosen Galería/Boxcap/
+          # Boxcover strips ride the bay's own actor. Grouping them under
+          # their own assembly id emitted a phantom extra «Cajón» (hardware
+          # without front is not inert by the #1573 gate) and shifted the
+          # front↔box pairing by one.
+          # Anclado al sufijo del contrato (#1555: `-acc-<group_code_lower>`):
+          # un id de bahía legítimo nunca lo termina en '-acc-…'.
+          if assembly_id.to_s.match?(/-acc-[a-z0-9_-]+\z/)
+            base_assembly = assembly_id.split('-acc-', 2).first
+            assembly_id = base_assembly unless base_assembly.to_s.strip.empty?
+          end
+
           # #1468: moving slide rails ride the drawer's assembly group. Legacy
           # metadata without an explicit membership but WITH an assembly id is
           # grouped best-effort (a fresh re-sync restores the explicit

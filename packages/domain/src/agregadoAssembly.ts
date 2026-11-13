@@ -28,7 +28,7 @@ import type {
   Structure,
 } from './types';
 import { calculateAgregadoSubspaceUnits, resolveEffectiveAgregadoId, type SubspaceUnit } from './agregados';
-import { ensureAgregadoKitParts } from './hardwareKit';
+import { accessoryKitMemberHardwareIds, ensureAgregadoKitParts } from './hardwareKit';
 import type { HardwareDesignPart } from './hardwareDesignParts';
 import { resolveHardwareDimensions, type EffectiveHardwareDimensions } from './hardwarePlacement';
 import { evaluatePartFormula } from './engine/shared';
@@ -1959,13 +1959,20 @@ export function enrichFabricatedComponentsWithAuthority(
  * accesorio monolítico se dibuja a sí mismo con su asset. Espejo de
  * accessoryRigidMembers en accessory_kit.go.
  */
-function accessoryRigidMembers(
+export function accessoryRigidMembers(
   hardware: readonly Hardware[] | undefined,
+  optionGroups: readonly OptionGroup[] | undefined,
   accessoryKitId: string,
   hostCode: string,
 ): AgregadoAssemblyInput['rigidMembers'] {
   const active = (hardware ?? []).filter((h) => h.active);
-  const parts = active.filter((h) => (h.kitHardwareId ?? '') === accessoryKitId);
+  // #1613: los miembros de grupos accesorios linkeados al kit ELEGIDO son
+  // elecciones consumibles — jamás partes fijas del ensamble (espejo de la
+  // exclusión de syncAgregadoRigidMembersFromCatalog en Go).
+  const excluded = accessoryKitMemberHardwareIds(hardware, optionGroups, accessoryKitId);
+  const parts = active.filter(
+    (h) => (h.kitHardwareId ?? '') === accessoryKitId && !excluded.has(h.id),
+  );
   const source = parts.length > 0 ? parts : active.filter((h) => h.id === accessoryKitId);
   if (source.length === 0) return [];
   return ensureAgregadoKitParts({ id: '', code: hostCode, rigidMembers: [] }, source).rigidMembers;
@@ -2037,7 +2044,7 @@ function resolveAccessoryAssembliesForUnit(
       continue;
     }
     try {
-      const accMembers = accessoryRigidMembers(catalog.hardware, choice, agregado.code ?? '');
+      const accMembers = accessoryRigidMembers(catalog.hardware, catalog.optionGroups, choice, agregado.code ?? '');
       if (!accMembers || accMembers.length === 0) continue;
       // La receta sintética sólo alimenta resolveAgregadoAssembly: su kit
       // comercial mantiene legales los miembros included_in_kit y su BOM

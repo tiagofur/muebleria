@@ -20,6 +20,7 @@ import type {
   KitPartPlacementConfig,
 } from '@granete/domain';
 import {
+  accessoryKitMemberHardwareIds,
   UNCATEGORIZED_FILTER,
   HARDWARE_KIT_SYSTEM_HEIGHTS,
   ValidationError,
@@ -427,10 +428,14 @@ export function HardwareCatalog({
     const declaresAnyVariantKit = (recipe.variantSets ?? []).some((vs) =>
       (vs.variants ?? []).some((v) => (v.commercialKitHardwareId ?? '').trim() !== ''),
     );
+    // #1613: los miembros de grupos accesorios linkeados al kit (Galería/
+    // Boxcap/Boxcover) son elecciones consumibles — el sync de guardado
+    // jamás los persiste como partes fijas de la receta.
+    const excluded = accessoryKitMemberHardwareIds(hardware, optionGroups, kitId);
     const synced =
       recipe.commercialKitHardwareId === kitId && !declaresAnyVariantKit
-        ? syncAgregadoWithKitParts(recipe, updatedParts)
-        : ensureAgregadoKitParts(recipe, updatedParts);
+        ? syncAgregadoWithKitParts(recipe, updatedParts, excluded)
+        : ensureAgregadoKitParts(recipe, updatedParts, excluded);
     void onUpdateAgregado(synced);
   };
 

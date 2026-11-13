@@ -852,6 +852,36 @@ export function resolveKitPartConfig(
 }
 
 /**
+ * #1613: ids de herraje que son MIEMBROS de un grupo de opciones accesorio
+ * linkeado al kit (Galería/Boxcap/Boxcover). Esas piezas son elecciones
+ * consumibles (resueltas por bahía vía resolveAccessoryAssemblies) — el sync
+ * del kit nunca las materializa como partes fijas, o cada bahía dibuja el
+ * set completo de insertos además del elegido. Espejo de
+ * accessoryKitMemberHardwareIDs en accessory_kit.go.
+ */
+export function accessoryKitMemberHardwareIds(
+  hardware: readonly { readonly id: string; readonly active?: boolean }[] | undefined,
+  optionGroups: readonly { readonly kind: string; readonly kitHardwareId?: string; readonly optionIds: readonly string[] }[] | undefined,
+  kitId: string,
+): Set<string> {
+  const target = kitId.trim();
+  const ids = new Set<string>();
+  if (!target || !optionGroups || optionGroups.length === 0) return ids;
+  for (const og of optionGroups) {
+    if (og.kind !== 'hardware' || (og.kitHardwareId ?? '').trim() !== target) continue;
+    for (const id of og.optionIds) {
+      const trimmed = (id ?? '').trim();
+      if (!trimmed) continue;
+      // Un miembro inactivo nunca llegaría al sync (partes activas only),
+      // pero el id manda: la exclusión es por membresía de grupo.
+      if (hardware && hardware.length > 0 && !hardware.some((h) => h.id === trimmed)) continue;
+      ids.add(trimmed);
+    }
+  }
+  return ids;
+}
+
+/**
  * Sincroniza un Agregado con la lista efectiva de partes vinculadas a su Kit (#1422 / #1435).
  * - Preserva los miembros rígidos existentes y actualiza su apertura/posición si la parte declara designParts[0].
  * - Si una parte vinculada no tiene miembro en la receta, infiere o toma su slot configurado.
@@ -867,9 +897,15 @@ export function syncAgregadoWithKitParts(
     readonly designParts?: readonly { readonly componentName: string; readonly actorMembership: string; readonly label?: string }[];
     readonly pieces?: readonly { readonly anchor: 'left' | 'right' | 'center' }[];
   }[],
+  /** #1613: ids de piezas-inserto (miembros de grupos accesorios del kit) —
+   * nunca se materializan como partes fijas. */
+  excludedHardwareIds?: ReadonlySet<string>,
 ): any {
+  const effectiveParts = excludedHardwareIds
+    ? kitParts.filter((p) => !excludedHardwareIds.has(p.id))
+    : kitParts;
   const currentMembers = agregado.rigidMembers ?? [];
-  const partById = new Map(kitParts.map((p) => [p.id, p] as const));
+  const partById = new Map(effectiveParts.map((p) => [p.id, p] as const));
 
   // 1. Filtrar miembros de partes que ya no pertenecen al kit y sincronizar cambios explícitos
   const keptMembers = currentMembers
@@ -910,7 +946,7 @@ export function syncAgregadoWithKitParts(
 
   // 2. Para cada parte del kit que no esté en la receta, usar su configuración o inferir un slot inicial
   const newMembers: any[] = [];
-  for (const part of kitParts) {
+  for (const part of effectiveParts) {
     // #1518 F1: expansión POR ANCLA (ver ensureAgregadoKitParts).
     if (part.pieces && part.pieces.length > 0) {
       const presentAnchors = new Set(
@@ -1063,7 +1099,12 @@ export function ensureAgregadoKitParts(
     readonly designParts?: readonly { readonly componentName: string; readonly actorMembership: string; readonly label?: string }[];
     readonly pieces?: readonly { readonly anchor: 'left' | 'right' | 'center' }[];
   }[],
+  /** #1613: ids de piezas-inserto — nunca se materializan como partes fijas. */
+  excludedHardwareIds?: ReadonlySet<string>,
 ): any {
+  const effectiveParts = excludedHardwareIds
+    ? kitParts.filter((p) => !excludedHardwareIds.has(p.id))
+    : kitParts;
   const currentMembers = (agregado.rigidMembers ?? []).map((m) => {
     const hwId = m.source?.fixed?.hardwareId;
     const part = hwId ? kitParts.find((p) => p.id === hwId) : undefined;
@@ -1092,7 +1133,7 @@ export function ensureAgregadoKitParts(
 
   const existingHwIds = new Set(currentMembers.map((m) => m.source?.fixed?.hardwareId).filter(Boolean));
   const newMembers: any[] = [];
-  for (const part of kitParts) {
+  for (const part of effectiveParts) {
     // #1518 F1: piezas multi-diseño se expanden POR ANCLA — una parte con
     // sólo un lado presente agrega el faltante (el índice por herraje único
     // se lo tragaba).
