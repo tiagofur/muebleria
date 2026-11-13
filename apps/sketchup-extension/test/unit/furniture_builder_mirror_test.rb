@@ -111,7 +111,11 @@ class FurnitureBuilderMirrorTest < Minitest::Test
           { 'memberId' => 'm-sym', 'name' => 'riel simetrico',
             'localTransform' => { 'translationMm' => [560, 400, 5],
                                   'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] } },
-            'dimensionsMm' => [12, 450, 45] }
+            'dimensionsMm' => [12, 450, 45] },
+          { 'memberId' => 'm-centro', 'name' => 'riel centro',
+            'localTransform' => { 'translationMm' => [300, 400, 5],
+                                  'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] } },
+            'dimensionsMm' => [12, 450, 45], 'hand' => 'center' }
         ] }
     ]
   }.freeze
@@ -214,6 +218,12 @@ class FurnitureBuilderMirrorTest < Minitest::Test
     assert_in_delta(-10.0 * MM, symmetric.transformation.origin.x, 1e-6)
     assert_in_delta 1.0, det.call(symmetric), 1e-6,
                     'un miembro sin mano jamás se vuelve instancia espejada'
+
+    # #1608 review: a center-hand member is neither wall — never mirrored.
+    centro = part_named('riel centro')
+    refute_nil centro
+    assert_in_delta 1.0, det.call(centro), 1e-6,
+                    'un miembro de mano center no se refleja'
   end
 
   def test_contract_parses_member_hand_for_the_mirror_decision
