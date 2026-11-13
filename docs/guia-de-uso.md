@@ -81,6 +81,19 @@ En cada lista: buscar, filtro de activos, y el patrón es siempre el mismo —
 click para **ver**, botón **Editar** para editar, **Desactivar** para sacar
 sin perder historia.
 
+### 5.1 El zócalo desde la librería
+
+Al crear o editar un mueble, en la pestaña General está **"Zócalo: ¿cómo
+apoya en el piso?"**:
+
+- **Automático según tipo de mueble (recomendado):** al cotizar, bajos y
+  despensas salen con zócalo de melamina heredando el frente; alacenas sin
+  zócalo. No tenés que hacer nada más.
+- **Zócalo de melamina:** ese mueble siempre cotiza con zócalo de corte.
+- **Perfil comprado / Patas:** siempre con perfil o patas.
+- **Altura B:** solo si el mueble se aparta del default (100 mm). Entra en las
+  fórmulas de pieza como `B`.
+
 ### 5.2 Duplicar para crear a partir de otro
 
 **Para qué sirve.** Crear un componente, agregado, mueble, material, canto,
@@ -104,30 +117,18 @@ previa en el catálogo ni volver a cargar todo desde cero.
    original:
    - En catálogos, el campo **Código** aparece desbloqueado y sugerido con
      `<CÓDIGO>-COPY`, y el **Nombre** con `<Nombre> (copia)`.
-   - En **Cotizaciones**, se abre la ventana de nueva cotización prellenada con
-     `<Nombre> (copia)`, cliente, margen, mano de obra y notas editables (los
-     muebles y el plano 3D se copian automáticamente al guardar).
+   - En **Cotizaciones**, se abre la ventana **Duplicar cotización** prellenada
+     con `<Nombre> (copia)`, cliente, margen, mano de obra y notas editables
+     (los muebles y el plano 3D se copian automáticamente al guardar).
 3. Editá el **Código**, el **Nombre** y cualquier otra propiedad que cambie, y
    tocá **Guardar**. Si tocás **Cancelar** (o salís sin guardar), no se crea
-   ningún duplicado.
+   ningún duplicado; si el servidor rechaza el guardado, la ventana queda
+   abierta con lo que editaste para corregir y reintentar.
 
 **Cómo saber que quedó bien.** Aparece el aviso de confirmación con el código
 (o nombre) que elegiste y el nuevo ítem queda listado independiente del
 original; si el código ya existía (incluso inactivo), el formulario te avisa y
 se mantiene abierto para corregirlo sin perder tus cambios.
-
-### 5.1 El zócalo desde la librería
-
-Al crear o editar un mueble, en la pestaña General está **"Zócalo: ¿cómo
-apoya en el piso?"**:
-
-- **Automático según tipo de mueble (recomendado):** al cotizar, bajos y
-  despensas salen con zócalo de melamina heredando el frente; alacenas sin
-  zócalo. No tenés que hacer nada más.
-- **Zócalo de melamina:** ese mueble siempre cotiza con zócalo de corte.
-- **Perfil comprado / Patas:** siempre con perfil o patas.
-- **Altura B:** solo si el mueble se aparta del default (100 mm). Entra en las
-  fórmulas de pieza como `B`.
 
 ## 6. Cotizar
 

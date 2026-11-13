@@ -58,6 +58,8 @@ export interface ProjectModalsContainerProps {
   readonly canMutate?: boolean;
   readonly metaModalOpen: boolean;
   readonly metaEditingId: string | null;
+  /** #1610: el modal opera sobre un duplicado (título propio + guardado asentado). */
+  readonly metaDuplicateMode?: boolean;
   readonly metaDraft: ProjectDraft;
   readonly addItemModalOpen: boolean;
   readonly confirmDelete: boolean;
@@ -169,6 +171,7 @@ export function ProjectModalsContainer({
   canMutate,
   metaModalOpen,
   metaEditingId,
+  metaDuplicateMode = false,
   metaDraft,
   addItemModalOpen,
   confirmDelete,
@@ -231,6 +234,7 @@ export function ProjectModalsContainer({
       <ProjectMetaModal
         open={metaModalOpen}
         editingId={metaEditingId}
+        duplicateMode={metaDuplicateMode}
         initialDraft={metaDraft}
         onClose={onCloseMetaModal}
         onSubmit={onSubmitMeta}

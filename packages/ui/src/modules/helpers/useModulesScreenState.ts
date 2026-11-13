@@ -90,7 +90,7 @@ export interface UseModulesScreenStateProps {
   readonly requestCreateKey?: number;
   readonly openModuleId?: string | null;
   readonly openModuleEditId?: string | null;
-  readonly onRequestEdit?: (moduleId: string) => void;
+  readonly onRequestEdit?: (moduleId: string | null) => void;
   readonly onSelectionChange?: (moduleId: string | null) => void;
   readonly boardEditorSlot?: ReactNode;
   readonly renderBoardEditor?: (args: {
@@ -172,7 +172,7 @@ export function useModulesScreenState({
       if (closeAfterCreateRef.current) {
         closeAfterCreateRef.current = false;
         if (onRequestEdit) {
-          onRequestEdit(null as any);
+          onRequestEdit(null);
         } else {
           setSelectedId(null);
         }
@@ -182,10 +182,10 @@ export function useModulesScreenState({
         if (onSelectionChange) {
           onSelectionChange(restoreId);
         } else if (onRequestEdit) {
-          onRequestEdit(null as any);
+          onRequestEdit(null);
         }
       } else if (onRequestEdit) {
-        onRequestEdit(null as any);
+        onRequestEdit(null);
       } else if (onSelectionChange) {
         onSelectionChange(null);
       }

@@ -95,9 +95,9 @@ export interface ModulesScreenProps {
   readonly openModuleEditId?: string | null;
   /**
    * Navigate to the editor route. The shell handles the URL change.
-   * Pass `'new'` for the create-new editor.
+   * Pass `'new'` for the create-new editor, `null` to return to the list.
    */
-  readonly onRequestEdit?: (moduleId: string) => void;
+  readonly onRequestEdit?: (moduleId: string | null) => void;
   /** Notifies parent when detail selection changes (for URL sync). */
   readonly onSelectionChange?: (moduleId: string | null) => void;
   /** Catalog structures for composed module picker. */

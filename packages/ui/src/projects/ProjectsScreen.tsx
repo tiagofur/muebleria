@@ -1004,6 +1004,7 @@ export function ProjectsScreen({
         canMutate={canMutateCommercialDraft}
         metaModalOpen={state.metaModalOpen}
         metaEditingId={state.metaEditingId}
+        metaDuplicateMode={state.duplicatingProjectId != null}
         metaDraft={state.metaDraft}
         addItemModalOpen={state.addItemModalOpen}
         confirmDelete={state.confirmDelete}

@@ -833,14 +833,14 @@ describe('projectStore — deleteProject', () => {
 });
 
 describe('projectStore — duplicateProjectById', () => {
-  it('creates a copy with new id', () => {
+  it('creates a copy with new id', async () => {
     const { deps, createdProjects, toasts } = makeDeps({
       newId: () => 'dup-id',
     });
     const store = createProjectStore({ deps });
     store.getState().setProjects([makeProject()]);
 
-    store.getState().duplicateProjectById('proj-1');
+    await store.getState().duplicateProjectById('proj-1');
 
     expect(store.getState().projects).toHaveLength(2);
     expect(createdProjects).toHaveLength(1);
@@ -848,18 +848,51 @@ describe('projectStore — duplicateProjectById', () => {
     expect(toasts[0]!.message).toContain('Duplicado');
   });
 
-  it('no-op when source not found', () => {
+  it('no-op when source not found', async () => {
     const { deps, createdProjects } = makeDeps();
     const store = createProjectStore({ deps });
     store.getState().setProjects([makeProject()]);
 
-    store.getState().duplicateProjectById('missing');
+    await store.getState().duplicateProjectById('missing');
 
     expect(createdProjects).toHaveLength(0);
     expect(store.getState().projects).toHaveLength(1);
   });
 
-  it('applies edited draft metadata while cloning items and remapping kitchenLayout (#1610)', () => {
+  it('server rejection rolls back the optimistic copy and rejects so the modal stays open (#1610)', async () => {
+    const { deps, toasts } = makeDeps({
+      createProject: async () => {
+        throw new Error('network down');
+      },
+    });
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makeProject()]);
+
+    await expect(
+      store.getState().duplicateProjectById(
+        'proj-1',
+        {
+          name: 'Copia rechazada',
+          customerId: 'cust-1',
+          customerName: '',
+          currency: 'MXN',
+          marginFactor: '1.35',
+          laborFixedCost: '100',
+          status: 'draft',
+          notes: '',
+          ownerUserId: '',
+        },
+        seedCatalog(),
+        { id: 'seller-1', role: 'vendedor' },
+      ),
+    ).rejects.toThrow('network down');
+
+    // Sin fantasma: el insert optimista se revierte al rechazar el servidor.
+    expect(store.getState().projects).toHaveLength(1);
+    expect(toasts.some((t) => t.type === 'error')).toBe(true);
+  });
+
+  it('applies edited draft metadata while cloning items and remapping kitchenLayout (#1610)', async () => {
     let seq = 0;
     const { deps, createdProjects, toasts } = makeDeps({
       newId: () => `dup-${++seq}`,
@@ -885,7 +918,7 @@ describe('projectStore — duplicateProjectById', () => {
     });
     store.getState().setProjects([source]);
 
-    store.getState().duplicateProjectById(
+    await store.getState().duplicateProjectById(
       'proj-1',
       {
         name: 'Cocina Editada',

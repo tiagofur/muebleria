@@ -378,7 +378,7 @@ export interface ProjectState {
     draft?: ProjectDraft,
     catalog?: Catalog,
     actor?: ProjectActor,
-  ) => void;
+  ) => Promise<void>;
   readonly markProjectProduced: (id: string, catalog: Catalog) => void;
   /** roadmap-screens 2a.6 — create + persist the engineering log. */
   readonly startEngineering: (id: string, byUserId: string) => void;
@@ -1113,7 +1113,7 @@ export function createProjectStore(options: InternalOptions) {
       toast({ type: 'info', message: 'Cotización eliminada' });
     },
 
-    duplicateProjectById: (id, draft, catalog, actor) => {
+    duplicateProjectById: async (id, draft, catalog, actor) => {
       const source = get().projects.find((p) => p.id === id);
       if (!source) return;
       const now = new Date().toISOString();
@@ -1124,13 +1124,19 @@ export function createProjectStore(options: InternalOptions) {
           nowIso: now,
         });
         set({ projects: [...get().projects, copy] });
-        persistCreateProject(copy).catch((err) => {
+        try {
+          await persistCreateProject(copy);
+        } catch (err) {
+          // Rollback del insert optimista: el rechazo del servidor nunca
+          // deja una cotización fantasma (#1610).
+          set({ projects: get().projects.filter((p) => p.id !== copy.id) });
           console.error('Error al duplicar proyecto:', err);
           toast({
             type: 'error',
             message: 'No se pudo guardar el duplicado en el servidor',
           });
-        });
+          throw err;
+        }
         toast({ type: 'success', message: `✓ Duplicado como ${copy.name}` });
         return;
       }
@@ -1159,11 +1165,9 @@ export function createProjectStore(options: InternalOptions) {
       });
       const copy: Project = {
         ...baseCopy,
-        customerId: meta.customerId,
-        currency: meta.currency,
-        marginFactor: meta.marginFactor,
-        laborFixedCost: meta.laborFixedCost,
-        notes: meta.notes,
+        // Mismos metadatos editables que createProject (#1610): superficie de
+        // autoría, ingeniero asignado, fecha de instalación, etc.
+        ...meta,
         status: 'draft',
         ownerUserId,
         createdBy: actor?.id ?? source.createdBy,
@@ -1174,35 +1178,34 @@ export function createProjectStore(options: InternalOptions) {
       };
 
       if (useAtomicInline) {
-        void persistCreateProjectWithInlineCustomer!(
-          copy,
-          inlineCustomerName,
-        ).then(
-          (created) => {
-            set({ projects: upsertById(get().projects, created.project) });
-            const currentCatalog = getCatalogStoreState().catalog;
-            if (currentCatalog) {
-              getCatalogStoreState().setCatalog({
-                ...currentCatalog,
-                customers: upsertById(
-                  currentCatalog.customers ?? [],
-                  created.customer,
-                ),
-              });
-            }
-            toast({
-              type: 'success',
-              message: `✓ Duplicado como ${created.project.name}`,
+        try {
+          const created = await persistCreateProjectWithInlineCustomer!(
+            copy,
+            inlineCustomerName,
+          );
+          set({ projects: upsertById(get().projects, created.project) });
+          const currentCatalog = getCatalogStoreState().catalog;
+          if (currentCatalog) {
+            getCatalogStoreState().setCatalog({
+              ...currentCatalog,
+              customers: upsertById(
+                currentCatalog.customers ?? [],
+                created.customer,
+              ),
             });
-          },
-          (err) => {
-            console.error('Error al duplicar proyecto con cliente nuevo:', err);
-            toast({
-              type: 'error',
-              message: 'No se pudo guardar el duplicado en el servidor',
-            });
-          },
-        );
+          }
+          toast({
+            type: 'success',
+            message: `✓ Duplicado como ${created.project.name}`,
+          });
+        } catch (err) {
+          console.error('Error al duplicar proyecto con cliente nuevo:', err);
+          toast({
+            type: 'error',
+            message: 'No se pudo guardar el duplicado en el servidor',
+          });
+          throw err;
+        }
         return;
       }
 
@@ -1211,13 +1214,17 @@ export function createProjectStore(options: InternalOptions) {
       }
 
       set({ projects: [...get().projects, copy] });
-      persistCreateProject(copy).catch((err) => {
+      try {
+        await persistCreateProject(copy);
+      } catch (err) {
+        set({ projects: get().projects.filter((p) => p.id !== copy.id) });
         console.error('Error al duplicar proyecto:', err);
         toast({
           type: 'error',
           message: 'No se pudo guardar el duplicado en el servidor',
         });
-      });
+        throw err;
+      }
       toast({ type: 'success', message: `✓ Duplicado como ${copy.name}` });
     },
 

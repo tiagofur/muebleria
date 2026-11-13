@@ -1301,8 +1301,8 @@ export function AppContent({
     [projectActions],
   );
   const duplicateProjectById = useCallback(
-    (id: string, draft?: ProjectDraft) => {
-      projectActions.duplicateProjectById(id, draft, catalog ?? undefined, {
+    async (id: string, draft?: ProjectDraft) => {
+      await projectActions.duplicateProjectById(id, draft, catalog ?? undefined, {
         id: authUser?.id,
         role: authUser?.role,
         roles: authUser?.roles,

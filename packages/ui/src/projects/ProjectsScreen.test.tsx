@@ -3118,4 +3118,42 @@ describe('ProjectsScreen — duplicar con ventana previa editable (#1610)', () =
       }),
     );
   });
+
+  it('mantiene el modal abierto con lo editado cuando el servidor rechaza el duplicado (#1610)', async () => {
+    const user = userEvent.setup();
+    const onDuplicate = vi
+      .fn<(id: string, draft?: unknown) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(undefined);
+    renderScreen({ onDuplicate, showCosts: true });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /^Duplicar$/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const nameInput = within(dialog).getByLabelText('Nombre') as HTMLInputElement;
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Cocina Rechazada');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+
+    // Rechazo: el modal queda ABIERTO, lo editado intacto y el footer vuelve.
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: 'Guardar' })).toBeTruthy();
+    });
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect((within(dialog).getByLabelText('Nombre') as HTMLInputElement).value).toBe(
+      'Cocina Rechazada',
+    );
+    expect(onDuplicate).toHaveBeenCalledTimes(1);
+
+    // Reintento exitoso cierra el modal y persiste lo editado.
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(onDuplicate).toHaveBeenCalledTimes(2);
+    expect(onDuplicate).toHaveBeenLastCalledWith(
+      'prj-1',
+      expect.objectContaining({ name: 'Cocina Rechazada' }),
+    );
+  });
 });

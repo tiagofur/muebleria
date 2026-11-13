@@ -92,9 +92,10 @@ export interface ComponentsScreenProps {
    */
   readonly openComponentEditId?: string | null;
   /**
-   * Navigate to the editor route. Pass `'new'` for the create-new editor.
+   * Navigate to the editor route. Pass `'new'` for the create-new editor,
+   * `null` to return to the section list.
    */
-  readonly onRequestEdit?: (componentId: string) => void;
+  readonly onRequestEdit?: (componentId: string | null) => void;
   readonly onSelectionChange?: (id: string | null) => void;
   /** Factory construction policy (#875). */
   readonly factoryPolicy?: FactoryConstructionPolicy;
@@ -189,7 +190,7 @@ export function ComponentsScreen({
       if (closeAfterCreateRef.current) {
         closeAfterCreateRef.current = false;
         if (onRequestEdit) {
-          onRequestEdit(null as any);
+          onRequestEdit(null);
         } else {
           setSelectedId(null);
         }
@@ -199,10 +200,10 @@ export function ComponentsScreen({
         if (onSelectionChange) {
           onSelectionChange(restoreId);
         } else if (onRequestEdit) {
-          onRequestEdit(null as any);
+          onRequestEdit(null);
         }
       } else if (onRequestEdit) {
-        onRequestEdit(null as any);
+        onRequestEdit(null);
       } else if (onSelectionChange) {
         onSelectionChange(null);
       }

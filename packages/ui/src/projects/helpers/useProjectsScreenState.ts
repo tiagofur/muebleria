@@ -76,7 +76,7 @@ export interface UseProjectsScreenStateProps {
   readonly onCreate: (draft: ProjectDraft) => void;
   readonly onUpdate: (id: string, draft: ProjectDraft) => void;
   readonly onDelete: (id: string) => void;
-  readonly onDuplicate?: (id: string, draft?: ProjectDraft) => void;
+  readonly onDuplicate?: (id: string, draft?: ProjectDraft) => void | Promise<void>;
   readonly onCreateFromTemplate?: (templateId: string, draft: ProjectDraft) => void;
   readonly onDeleteTemplate?: (templateId: string) => void;
   readonly onAddItem: (
@@ -408,14 +408,25 @@ export function useProjectsScreenState({
     setDuplicatingProjectId(null);
   };
 
-  const handleSubmitMeta = (payload: ProjectDraft) => {
+  const handleSubmitMeta = async (payload: ProjectDraft) => {
     if (metaEditingId) {
       onUpdate(metaEditingId, payload);
-    } else if (duplicatingProjectId) {
-      onDuplicate?.(duplicatingProjectId, payload);
-    } else {
-      onCreate(payload);
+      closeMetaModal();
+      return;
     }
+    if (duplicatingProjectId) {
+      try {
+        await onDuplicate?.(duplicatingProjectId, payload);
+      } catch {
+        // Rechazo del servidor: el modal queda ABIERTO con lo editado intacto
+        // (#1610, paridad #1009 S3/#1019 C1); el error ya viaja por el toast
+        // del store y el usuario puede corregir y reintentar.
+        return;
+      }
+      closeMetaModal();
+      return;
+    }
+    onCreate(payload);
     closeMetaModal();
   };
 
@@ -561,6 +572,7 @@ export function useProjectsScreenState({
     selectedProject,
     metaModalOpen,
     metaEditingId,
+    duplicatingProjectId,
     metaDraft,
     addItemModalOpen,
     itemError,
