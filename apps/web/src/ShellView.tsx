@@ -278,13 +278,13 @@ export interface ShellViewCtx {
   readonly categories: readonly CategoryNode[];
   readonly commandItems: CommandPaletteItem[];
   readonly components: readonly Component[];
-  readonly createAgregado: (item: Agregado) => void;
+  readonly createAgregado: (item: Agregado) => Promise<void>;
   readonly simulateAgregadoRecipe: RecipeChangeActions['simulate'];
   readonly applyAgregadoRecipe: RecipeChangeActions['apply'];
   readonly createAmbientCategory: (draft: CategoryDraft) => void;
   readonly createAmbientMaterial: (draft: AmbientMaterialDraft) => Promise<void>;
   readonly createCategory: (draft: CategoryDraft) => void;
-  readonly createComponent: (draft: ComponentDraft) => void;
+  readonly createComponent: (draft: ComponentDraft) => Promise<void>;
   readonly createCustomer: (draft: CustomerDraft) => void;
   readonly createEdge: (draft: EdgeDraft) => Promise<string>;
   readonly createFromTemplate: (templateId: string, draft: ProjectDraft) => void;
@@ -338,10 +338,7 @@ export interface ShellViewCtx {
   readonly deleteStructure: (id: string) => Promise<void>;
   readonly deleteTemplate: (templateId: string) => void;
   readonly dismissGuestImport: () => void;
-  readonly duplicateAgregado: (id: string) => void;
-  readonly duplicateComponent: (id: string) => void;
-  readonly duplicateModuleById: (id: string) => void;
-  readonly duplicateProjectById: (id: string) => void;
+  readonly duplicateProjectById: (id: string, draft?: ProjectDraft) => Promise<void>;
   readonly duplicateWithScenarioB: (projectId: string, role: string, choiceId: string) => void;
   readonly edges: readonly EdgeBand[];
   readonly exportBusy: boolean;
@@ -679,9 +676,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     deleteStructure,
     deleteTemplate,
     dismissGuestImport,
-    duplicateAgregado,
-    duplicateComponent,
-    duplicateModuleById,
     duplicateProjectById,
     duplicateWithScenarioB,
     edges,
@@ -2318,7 +2312,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onCreateCategory={createCategory}
           onUpdateCategory={updateCategory}
           onDeleteCategory={deleteCategory}
-          onDuplicate={duplicateModuleById}
           onEditingChange={setEditingModuleId}
           onSelectionChange={onModuleSelectionChange}
           openModuleId={routeModuleId}
@@ -2400,7 +2393,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onCreate={createComponent}
           onUpdate={updateComponent}
           onToggleActive={toggleComponentActive}
-          onDuplicate={duplicateComponent}
           openComponentId={routeComponentId}
           openComponentEditId={routeComponentEditId}
           onRequestEdit={(id) => onEntityEditRequest('components', id)}
@@ -2449,7 +2441,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onSimulateRecipe={simulateAgregadoRecipe}
           onApplyRecipe={applyAgregadoRecipe}
           onDelete={deleteAgregado}
-          onDuplicate={duplicateAgregado}
           canMutate={canMutateModules}
           optionGroups={optionGroups}
           catalogMaterials={materials}

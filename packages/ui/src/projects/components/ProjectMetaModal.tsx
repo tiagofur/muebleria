@@ -30,13 +30,17 @@ export interface ProjectMetaModalProps {
   readonly open: boolean;
   /** Project id being edited; null = create flow (drives the modal title). */
   readonly editingId: string | null;
+  /** #1610: create-from-duplicate — título propio y guardado asentado. */
+  readonly duplicateMode?: boolean;
   /** Draft used to seed the form on open. Parent computes this from
    * workshopSettings (create) or projectToDraft (edit). */
   readonly initialDraft: ProjectDraft;
   readonly onClose: () => void;
   /** Receives the validated, normalized payload. Parent routes to
-   * onCreate / onUpdate based on editingId, then closes the modal. */
-  readonly onSubmit: (payload: ProjectDraft) => void;
+   * onCreate / onUpdate based on editingId, then closes the modal.
+   * May return a promise (#1610): the modal locks its footer while the
+   * save is in flight so a server rejection keeps the draft editable. */
+  readonly onSubmit: (payload: ProjectDraft) => void | Promise<void>;
   readonly customers: readonly Customer[];
   /** F034: admin can pick portfolio owner on create/edit. */
   readonly canAssignOwner: boolean;
@@ -52,6 +56,7 @@ export interface ProjectMetaModalProps {
 export function ProjectMetaModal({
   open,
   editingId,
+  duplicateMode = false,
   initialDraft,
   onClose,
   onSubmit,
@@ -65,6 +70,8 @@ export function ProjectMetaModal({
   /** When true, meta form uses free-text name to create a customer on submit. */
   const [newCustomerMode, setNewCustomerMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** #1610: save in flight — footer locked until the parent settles it. */
+  const [saving, setSaving] = useState(false);
 
   // Reset internal state only on the closed → open transition so the user's
   // in-progress edits are never clobbered by a parent re-render.
@@ -83,8 +90,9 @@ export function ProjectMetaModal({
     draft.customerId,
   );
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (saving) return;
     const payload: ProjectDraft = newCustomerMode
       ? {
           ...draft,
@@ -102,22 +110,40 @@ export function ProjectMetaModal({
       return;
     }
     setError(null);
-    onSubmit(payload);
+    // #1610: the parent settles the save (await) — on rejection the modal
+    // stays open with the draft intact and the footer unlocks for a retry.
+    setSaving(true);
+    try {
+      await onSubmit(payload);
+    } finally {
+      setSaving(false);
+    }
   }
+
+  const modalTitle = editingId
+    ? 'Editar cotización'
+    : duplicateMode
+      ? 'Duplicar cotización'
+      : 'Nueva cotización';
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={editingId ? 'Editar cotización' : 'Nueva cotización'}
+      title={modalTitle}
       size="md"
       footer={
         <>
-          <button type="button" className="btn" onClick={onClose}>
+          <button type="button" className="btn" onClick={onClose} disabled={saving}>
             Cancelar
           </button>
-          <button type="submit" className="btn btn--primary" form={formId}>
-            Guardar
+          <button
+            type="submit"
+            className="btn btn--primary"
+            form={formId}
+            disabled={saving}
+          >
+            {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </>
       }

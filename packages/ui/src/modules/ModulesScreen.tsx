@@ -62,8 +62,6 @@ export interface ModulesScreenProps {
   readonly onCreateCategory?: (draft: CategoryDraft) => void;
   readonly onUpdateCategory?: (id: string, draft: CategoryDraft) => void;
   readonly onDeleteCategory?: (id: string) => void;
-  /** Deep-copy module (MOD-05). Shell owns id/code generation. */
-  readonly onDuplicate?: (id: string) => void;
   /**
    * Notifies parent when the module used for domain cost preview changes
    * (detail selection or edit modal). Null = none / create mode.
@@ -97,9 +95,9 @@ export interface ModulesScreenProps {
   readonly openModuleEditId?: string | null;
   /**
    * Navigate to the editor route. The shell handles the URL change.
-   * Pass `'new'` for the create-new editor.
+   * Pass `'new'` for the create-new editor, `null` to return to the list.
    */
-  readonly onRequestEdit?: (moduleId: string) => void;
+  readonly onRequestEdit?: (moduleId: string | null) => void;
   /** Notifies parent when detail selection changes (for URL sync). */
   readonly onSelectionChange?: (moduleId: string | null) => void;
   /** Catalog structures for composed module picker. */
@@ -155,7 +153,6 @@ export function ModulesScreen({
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
-  onDuplicate,
   onEditingChange,
   costPreview = null,
   previewBlocked = false,
@@ -307,7 +304,7 @@ export function ModulesScreen({
                 moduleEstimates={moduleEstimates}
                 onBack={state.backToList}
                 onEdit={state.startEdit}
-                onDuplicate={onDuplicate}
+                onDuplicate={canMutate ? () => state.startDuplicate(state.selected!) : undefined}
                 onDelete={(id) => state.setConfirmDeleteId(id)}
                 onView3D={(mod) => {
                   state.setViewerModule(mod);

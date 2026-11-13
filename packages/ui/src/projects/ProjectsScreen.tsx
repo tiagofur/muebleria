@@ -126,8 +126,8 @@ export interface ProjectsScreenProps {
   readonly onCreate: (draft: ProjectDraft) => void;
   readonly onUpdate: (id: string, draft: ProjectDraft) => void;
   readonly onDelete: (id: string) => void;
-  /** Deep-copy project as draft (F015). Shell owns ids/timestamps. */
-  readonly onDuplicate?: (id: string) => void;
+  /** Deep-copy project as draft (F015 / #1610). Shell owns ids/timestamps. */
+  readonly onDuplicate?: (id: string, draft?: ProjectDraft) => void;
   // --- Project templates (#110 / H15) ---
   /** Reusable project templates available to start a quote from. */
   readonly projectTemplates?: readonly ProjectTemplate[];
@@ -629,6 +629,7 @@ export function ProjectsScreen({
     onCreate,
     onUpdate,
     onDelete,
+    onDuplicate,
     onCreateFromTemplate,
     onDeleteTemplate,
     onAddItem,
@@ -850,7 +851,9 @@ export function ProjectsScreen({
               : undefined
           }
           onEditMeta={state.startEditMeta}
-          onDuplicate={onDuplicate}
+          onDuplicate={
+            onDuplicate ? () => state.startDuplicate(state.selectedProject!) : undefined
+          }
           onSaveAsTemplate={
             canMutate && onSaveAsTemplate
               ? () => state.startSaveAsTemplate()
@@ -1001,6 +1004,7 @@ export function ProjectsScreen({
         canMutate={canMutateCommercialDraft}
         metaModalOpen={state.metaModalOpen}
         metaEditingId={state.metaEditingId}
+        metaDuplicateMode={state.duplicatingProjectId != null}
         metaDraft={state.metaDraft}
         addItemModalOpen={state.addItemModalOpen}
         confirmDelete={state.confirmDelete}

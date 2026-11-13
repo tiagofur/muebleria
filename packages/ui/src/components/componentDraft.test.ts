@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { Component } from '@granete/domain';
-import { componentToDraft, draftToComponent, geometrySummary, type ComponentDraft } from './componentDraft';
+import { componentToDraft, componentToDuplicateDraft, draftToComponent, geometrySummary, type ComponentDraft } from './componentDraft';
 
 const base: Component = {
   id: 'c1',
@@ -250,5 +250,50 @@ describe('draftToComponent construction block (#1052 slice 1)', () => {
     };
     expect(draftToComponent('c1', draft).construction).toBeUndefined();
     expect(draftToComponent('c1', baseDraft()).construction).toBeUndefined();
+  });
+});
+
+describe('componentToDuplicateDraft (#1610)', () => {
+  it('prefills -COPY code, «(copia)» name, fresh perforation ids and cloned refs', () => {
+    const source: Component = {
+      ...base,
+      active: false,
+      perforations: [
+        {
+          id: 'perf-orig',
+          relativePosition: { xPercent: 25, yPercent: 75 },
+          diameterMm: 8,
+          depthMm: 12,
+          type: 'dowel',
+        },
+      ],
+      construction: {
+        constructiveRole: 'lateral',
+        connectionFaces: ['top', 'bottom'],
+        joinerySystemId: 'minifix-dowel',
+      },
+    };
+    const draft = componentToDuplicateDraft(
+      source,
+      ['COM-1', 'COM-1-COPY'],
+      () => 'perf-fresh-1',
+    );
+    expect(draft.code).toBe('COM-1-COPY2');
+    expect(draft.name).toBe('Test (copia)');
+    expect(draft.active).toBe(true);
+    expect(draft.perforations).toEqual([
+      {
+        id: 'perf-fresh-1',
+        relativePosition: { xPercent: 25, yPercent: 75 },
+        diameterMm: 8,
+        depthMm: 12,
+        type: 'dowel',
+      },
+    ]);
+    expect(draft.perforations![0]).not.toBe(source.perforations![0]);
+    expect(draft.constructionOverride?.connectionFaces).toEqual(['top', 'bottom']);
+    expect(draft.constructionOverride?.connectionFaces).not.toBe(
+      source.construction?.connectionFaces,
+    );
   });
 });

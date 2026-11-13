@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { resetRequestCreateKeyConsumers } from '../common/consumeRequestCreateKey';
@@ -3071,5 +3071,89 @@ describe('Cotizaciones S3 corrección (#1118 re-critique)', () => {
     await user.click(screen.getByRole('button', { name: /^Todas \(/i }));
     expect(screen.getAllByTestId(/^project-card-/).length).toBe(24);
     expect(screen.getByTestId('projects-show-more')).toBeTruthy();
+  });
+});
+
+describe('ProjectsScreen — duplicar con ventana previa editable (#1610)', () => {
+  it('abre el modal prellenado con «(copia)» y metadatos editables antes de crear el duplicado', async () => {
+    const user = userEvent.setup();
+    const { onDuplicate } = renderScreen({ showCosts: true });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /^Duplicar$/i }));
+
+    expect(onDuplicate).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole('dialog');
+    const nameInput = within(dialog).getByLabelText('Nombre') as HTMLInputElement;
+    const marginInput = within(dialog).getByLabelText('Factor de margen') as HTMLInputElement;
+    expect(nameInput.value).toBe('Cocina Ana (copia)');
+    expect(marginInput.value).toBe('1.35');
+
+    // Canceling creates nothing.
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(onDuplicate).not.toHaveBeenCalled();
+
+    // Open again, edit name and margin, and submit.
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /^Duplicar$/i }));
+    const dialog2 = await screen.findByRole('dialog');
+    const nameInput2 = within(dialog2).getByLabelText('Nombre') as HTMLInputElement;
+    const marginInput2 = within(dialog2).getByLabelText('Factor de margen') as HTMLInputElement;
+    await user.clear(nameInput2);
+    await user.type(nameInput2, 'Cocina Ana — Isla');
+    await user.clear(marginInput2);
+    await user.type(marginInput2, '1.45');
+    await user.click(within(dialog2).getByRole('button', { name: 'Guardar' }));
+
+    expect(onDuplicate).toHaveBeenCalledTimes(1);
+    expect(onDuplicate).toHaveBeenCalledWith(
+      'prj-1',
+      expect.objectContaining({
+        name: 'Cocina Ana — Isla',
+        customerId: 'cust-ana',
+        marginFactor: '1.45',
+        status: 'draft',
+      }),
+    );
+  });
+
+  it('mantiene el modal abierto con lo editado cuando el servidor rechaza el duplicado (#1610)', async () => {
+    const user = userEvent.setup();
+    const onDuplicate = vi
+      .fn<(id: string, draft?: unknown) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(undefined);
+    renderScreen({ onDuplicate, showCosts: true });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /^Duplicar$/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const nameInput = within(dialog).getByLabelText('Nombre') as HTMLInputElement;
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Cocina Rechazada');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+
+    // Rechazo: el modal queda ABIERTO, lo editado intacto y el footer vuelve.
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: 'Guardar' })).toBeTruthy();
+    });
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect((within(dialog).getByLabelText('Nombre') as HTMLInputElement).value).toBe(
+      'Cocina Rechazada',
+    );
+    expect(onDuplicate).toHaveBeenCalledTimes(1);
+
+    // Reintento exitoso cierra el modal y persiste lo editado.
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(onDuplicate).toHaveBeenCalledTimes(2);
+    expect(onDuplicate).toHaveBeenLastCalledWith(
+      'prj-1',
+      expect.objectContaining({ name: 'Cocina Rechazada' }),
+    );
   });
 });

@@ -19,7 +19,7 @@ import type {
   QuoteBreakdown,
 } from '@granete/domain';
 import { resetRequestCreateKeyConsumers } from '../common/consumeRequestCreateKey';
-import { ModulesScreen } from './ModulesScreen';
+import { ModulesScreen, type ModuleDraft } from './ModulesScreen';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -141,7 +141,6 @@ function renderScreen(
   const onCreate = vi.fn();
   const onUpdate = vi.fn();
   const onDelete = vi.fn();
-  const onDuplicate = vi.fn();
   const onEditingChange = vi.fn();
   const result = render(
     <ModulesScreen
@@ -152,7 +151,6 @@ function renderScreen(
       onCreate={onCreate}
       onUpdate={onUpdate}
       onDelete={onDelete}
-      onDuplicate={onDuplicate}
       onEditingChange={onEditingChange}
       moduleEstimates={{
         'mod-1': 202.5,
@@ -162,7 +160,7 @@ function renderScreen(
       {...props}
     />,
   );
-  return { ...result, onCreate, onUpdate, onDelete, onDuplicate, onEditingChange };
+  return { ...result, onCreate, onUpdate, onDelete, onEditingChange };
 }
 
 beforeEach(() => {
@@ -636,7 +634,6 @@ describe('ModulesScreen navigation + modals (F021)', () => {
       onCreate: vi.fn(),
       onUpdate: vi.fn(),
       onDelete: vi.fn(),
-      onDuplicate: vi.fn(),
       catalogComponents,
       requestCreateKey: 1,
     };
@@ -659,7 +656,6 @@ describe('ModulesScreen navigation + modals (F021)', () => {
       onCreate: vi.fn(),
       onUpdate: vi.fn(),
       onDelete: vi.fn(),
-      onDuplicate: vi.fn(),
       catalogComponents,
       requestCreateKey: 1,
     };
@@ -841,7 +837,6 @@ describe('ModulesScreen URL handoff / deep links (F152)', () => {
       onCreate: vi.fn(),
       onUpdate: vi.fn(),
       onDelete: vi.fn(),
-      onDuplicate: vi.fn(),
       onEditingChange: vi.fn(),
       moduleEstimates: { 'mod-1': 202.5, 'mod-2': null },
       catalogComponents,
@@ -1073,5 +1068,100 @@ describe('ModulesScreen URL handoff / deep links (F152)', () => {
     expect(
       screen.getByLabelText('Componente (opcional)').textContent,
     ).toMatch(/COM-LAT/);
+  });
+});
+
+describe('ModulesScreen — duplicar como crear prellenado (#1610)', () => {
+  it('abre el editor de creación prellenado con -COPY editable, regenera ids y guarda con el nuevo código', async () => {
+    const user = userEvent.setup();
+    const modWithPreset: Module = {
+      ...modules[0]!,
+      presets: [{ id: 'pre-orig', name: 'Base 600', width: 600, height: 720, depth: 560 }],
+    };
+    const onCreate = vi.fn().mockResolvedValue(undefined);
+    renderScreen({
+      modules: [modWithPreset, modules[1]!],
+      onCreate,
+    });
+
+    await user.click(screen.getByTestId('module-card-mod-1'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /Duplicar/i }));
+
+    const page = await screen.findByTestId('module-editor-page');
+    expect(within(page).getByText('Nuevo mueble')).toBeTruthy();
+    const codeInput = within(page).getByLabelText('Código') as HTMLInputElement;
+    const nameInput = within(page).getByLabelText('Nombre') as HTMLInputElement;
+    expect(codeInput.disabled).toBe(false);
+    expect(codeInput.value).toBe('MOD-GAB-01-COPY');
+    expect(nameInput.value).toBe('Bajo mesada 600 (copia)');
+
+    // Colliding code fails closed before saving.
+    await user.clear(codeInput);
+    await user.type(codeInput, 'MOD-CAJ-01');
+    await user.click(screen.getByTestId('module-editor-save'));
+    expect(within(page).getByRole('alert').textContent).toMatch(/Ya existe/);
+    expect(onCreate).not.toHaveBeenCalled();
+
+    // Valid edited code & name persists via onCreate.
+    await user.clear(codeInput);
+    await user.type(codeInput, 'MOD-GAB-02');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Bajo mesada 800');
+    await user.click(screen.getByTestId('module-editor-save'));
+
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    const draft = onCreate.mock.calls[0]![0] as ModuleDraft;
+    expect(draft.code).toBe('MOD-GAB-02');
+    expect(draft.name).toBe('Bajo mesada 800');
+    expect(draft.hardwareLines[0]!.id).not.toBe('hl1');
+    expect(draft.presets[0]!.id).not.toBe('pre-orig');
+  });
+
+  it('no crea nada al cancelar y en modo enrutado conserva el borrador duplicado', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn();
+    const onRequestEdit = vi.fn();
+    const { rerender } = render(
+      <ModulesScreen
+        modules={modules}
+        optionGroups={optionGroups}
+        hardware={hardware}
+        categories={categories}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        catalogComponents={catalogComponents}
+        openModuleId="mod-1"
+        openModuleEditId={null}
+        onRequestEdit={onRequestEdit}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /Duplicar/i }));
+    expect(onRequestEdit).toHaveBeenCalledWith('new');
+
+    rerender(
+      <ModulesScreen
+        modules={modules}
+        optionGroups={optionGroups}
+        hardware={hardware}
+        categories={categories}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        catalogComponents={catalogComponents}
+        openModuleId={null}
+        openModuleEditId="new"
+        onRequestEdit={onRequestEdit}
+      />,
+    );
+
+    const page = await screen.findByTestId('module-editor-page');
+    expect((within(page).getByLabelText('Código') as HTMLInputElement).value).toBe('MOD-GAB-01-COPY');
+    await user.click(screen.getByTestId('module-editor-cancel'));
+    expect(onRequestEdit).toHaveBeenCalledWith(null);
+    expect(onCreate).not.toHaveBeenCalled();
   });
 });

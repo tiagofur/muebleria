@@ -338,3 +338,80 @@ describe('AgregadosScreen — guard de receta (#1412)', () => {
     expect(screen.getByTestId('agregado-editor-page')).toBeTruthy();
   });
 });
+
+describe('AgregadosScreen — duplicar como crear prellenado (#1610)', () => {
+  afterEach(cleanDraftStorage);
+
+  const sourceWithLines: Agregado = {
+    ...mockAgregado,
+    notes: 'Nota de prueba',
+    hardwareLines: [{ id: 'hl-orig-1', quantity: 2, optionRole: 'BISAGRA' }],
+  };
+
+  it('abre el editor de creación prellenado con -COPY, permite editar el código y regenera ids de herrajes', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn().mockResolvedValue(undefined);
+    renderScreen({ agregados: [sourceWithLines], onCreate });
+
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /Duplicar/i }));
+
+    const page = await screen.findByTestId('agregado-editor-page');
+    expect(within(page).getByText('Nuevo agregado')).toBeTruthy();
+    expect(within(page).getByText('NUEVO')).toBeTruthy();
+
+    const codeInput = within(page).getByLabelText('Código') as HTMLInputElement;
+    const nameInput = within(page).getByLabelText('Nombre') as HTMLInputElement;
+    expect(codeInput.value).toBe('AGR-01-COPY');
+    expect(nameInput.value).toBe('Puerta Batiente (copia)');
+
+    // Reject duplicate code before calling onCreate.
+    await user.clear(codeInput);
+    await user.type(codeInput, 'AGR-01');
+    await user.click(screen.getByTestId('agregado-save-btn'));
+    expect(screen.getByTestId('form-error').textContent).toContain('ya está en uso');
+    expect(onCreate).not.toHaveBeenCalled();
+
+    // Edit code and save.
+    await user.clear(codeInput);
+    await user.type(codeInput, 'MBOX-RES-E');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Respaldo E');
+    await user.click(screen.getByTestId('agregado-save-btn'));
+
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    const created = onCreate.mock.calls[0]![0] as Agregado;
+    expect(created.id).not.toBe('agr-1');
+    expect(created.code).toBe('MBOX-RES-E');
+    expect(created.name).toBe('Respaldo E');
+    expect(created.notes).toBe('Nota de prueba');
+    expect(created.hardwareLines).toHaveLength(1);
+    expect(created.hardwareLines![0]!.id).not.toBe('hl-orig-1');
+  });
+
+  it('no crea nada al cancelar y mantiene el editor abierto si falla el servidor', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn().mockRejectedValue(new Error('409'));
+    renderScreen({ agregados: [sourceWithLines], onCreate });
+
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /Duplicar/i }));
+    await screen.findByTestId('agregado-editor-page');
+
+    await user.click(screen.getByTestId('agregado-editor-cancel'));
+    expect(screen.queryByTestId('agregado-editor-page')).toBeNull();
+    expect(onCreate).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /Duplicar/i }));
+    const codeInput = (await screen.findByLabelText('Código')) as HTMLInputElement;
+    await user.clear(codeInput);
+    await user.type(codeInput, 'AGR-NEW-ERR');
+    await user.click(screen.getByTestId('agregado-save-btn'));
+
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(screen.getByTestId('agregado-editor-page')).toBeTruthy();
+    expect((screen.getByLabelText('Código') as HTMLInputElement).value).toBe('AGR-NEW-ERR');
+  });
+});

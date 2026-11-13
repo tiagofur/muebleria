@@ -76,6 +76,7 @@ export interface UseProjectsScreenStateProps {
   readonly onCreate: (draft: ProjectDraft) => void;
   readonly onUpdate: (id: string, draft: ProjectDraft) => void;
   readonly onDelete: (id: string) => void;
+  readonly onDuplicate?: (id: string, draft?: ProjectDraft) => void | Promise<void>;
   readonly onCreateFromTemplate?: (templateId: string, draft: ProjectDraft) => void;
   readonly onDeleteTemplate?: (templateId: string) => void;
   readonly onAddItem: (
@@ -128,6 +129,7 @@ export function useProjectsScreenState({
   onCreate,
   onUpdate,
   onDelete,
+  onDuplicate,
   onCreateFromTemplate,
   onDeleteTemplate,
   onAddItem,
@@ -152,6 +154,7 @@ export function useProjectsScreenState({
   );
   const [metaModalOpen, setMetaModalOpen] = useState(false);
   const [metaEditingId, setMetaEditingId] = useState<string | null>(null);
+  const [duplicatingProjectId, setDuplicatingProjectId] = useState<string | null>(null);
   const [metaDraft, setMetaDraft] = useState<ProjectDraft>(() =>
     emptyProjectDraft(workshopSettings),
   );
@@ -303,6 +306,7 @@ export function useProjectsScreenState({
   useEffect(() => {
     if (!consumeRequestCreateKey('projects', requestCreateKey)) return;
     setMetaEditingId(null);
+    setDuplicatingProjectId(null);
     setMetaDraft(emptyProjectDraft(workshopSettings));
     setMetaModalOpen(true);
   }, [requestCreateKey, workshopSettings]);
@@ -330,6 +334,7 @@ export function useProjectsScreenState({
   const closeMetaModal = () => {
     setMetaModalOpen(false);
     setMetaEditingId(null);
+    setDuplicatingProjectId(null);
   };
 
   const closeAddItemModal = () => {
@@ -338,6 +343,7 @@ export function useProjectsScreenState({
 
   const startCreate = () => {
     setMetaEditingId(null);
+    setDuplicatingProjectId(null);
     setMetaDraft(emptyProjectDraft(workshopSettings));
     setMetaModalOpen(true);
   };
@@ -368,7 +374,19 @@ export function useProjectsScreenState({
 
   const startEditMeta = (project: Project) => {
     setMetaEditingId(project.id);
+    setDuplicatingProjectId(null);
     setMetaDraft(projectToDraft(project, customers));
+    setMetaModalOpen(true);
+  };
+
+  const startDuplicate = (project: Project) => {
+    setMetaEditingId(null);
+    setDuplicatingProjectId(project.id);
+    setMetaDraft({
+      ...projectToDraft(project, customers),
+      name: `${project.name} (copia)`,
+      status: 'draft',
+    });
     setMetaModalOpen(true);
   };
 
@@ -387,14 +405,28 @@ export function useProjectsScreenState({
     setItemError(null);
     setAddItemModalOpen(false);
     setMetaModalOpen(false);
+    setDuplicatingProjectId(null);
   };
 
-  const handleSubmitMeta = (payload: ProjectDraft) => {
+  const handleSubmitMeta = async (payload: ProjectDraft) => {
     if (metaEditingId) {
       onUpdate(metaEditingId, payload);
-    } else {
-      onCreate(payload);
+      closeMetaModal();
+      return;
     }
+    if (duplicatingProjectId) {
+      try {
+        await onDuplicate?.(duplicatingProjectId, payload);
+      } catch {
+        // Rechazo del servidor: el modal queda ABIERTO con lo editado intacto
+        // (#1610, paridad #1009 S3/#1019 C1); el error ya viaja por el toast
+        // del store y el usuario puede corregir y reintentar.
+        return;
+      }
+      closeMetaModal();
+      return;
+    }
+    onCreate(payload);
     closeMetaModal();
   };
 
@@ -540,6 +572,7 @@ export function useProjectsScreenState({
     selectedProject,
     metaModalOpen,
     metaEditingId,
+    duplicatingProjectId,
     metaDraft,
     addItemModalOpen,
     itemError,
@@ -584,6 +617,7 @@ export function useProjectsScreenState({
     startSaveAsTemplate,
     requestDeleteTemplate,
     startEditMeta,
+    startDuplicate,
     openDetail,
     backToList,
     handleSubmitMeta,

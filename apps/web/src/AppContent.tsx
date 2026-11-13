@@ -1196,9 +1196,6 @@ export function AppContent({
     },
     [catalogActions, editingModuleId],
   );
-  const duplicateAgregado = catalogActions.duplicateAgregado;
-  const duplicateComponent = catalogActions.duplicateComponent;
-  const duplicateModuleById = catalogActions.duplicateModuleById;
   const createStructure = catalogActions.createStructure;
   const updateStructure = catalogActions.updateStructure;
   const deleteStructure = catalogActions.deleteStructure;
@@ -1303,7 +1300,16 @@ export function AppContent({
     },
     [projectActions],
   );
-  const duplicateProjectById = projectActions.duplicateProjectById;
+  const duplicateProjectById = useCallback(
+    async (id: string, draft?: ProjectDraft) => {
+      await projectActions.duplicateProjectById(id, draft, catalog ?? undefined, {
+        id: authUser?.id,
+        role: authUser?.role,
+        roles: authUser?.roles,
+      });
+    },
+    [projectActions, catalog, authUser?.id, authUser?.role, authUser?.roles],
+  );
   const saveAsTemplate = projectActions.saveAsTemplate;
   const createFromTemplate = useCallback(
     (templateId: string, draft: ProjectDraft) => {
@@ -1896,9 +1902,6 @@ export function AppContent({
     deleteStructure,
     deleteTemplate,
     dismissGuestImport,
-    duplicateAgregado,
-    duplicateComponent,
-    duplicateModuleById,
     duplicateProjectById,
     duplicateWithScenarioB,
     edges,

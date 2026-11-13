@@ -233,7 +233,8 @@ export function OpeningProfilesCatalog({
   const startDuplicate = (row: OpeningProfileRow) => {
     const next = {
       ...toOpeningProfileDraft(row),
-      id: suggestOpeningProfileId(suggestDuplicateCode(row.code, profiles.map((p) => p.code))),
+      // Keep id empty so handleSubmit derives it from the final user-edited code.
+      id: '',
       code: suggestDuplicateCode(row.code, profiles.map((p) => p.code)),
       name: `${row.name} (copia)`,
     };

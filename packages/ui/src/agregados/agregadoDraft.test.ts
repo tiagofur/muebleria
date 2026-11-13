@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { Agregado } from '@granete/domain';
 import {
   agregadoToDraft,
+  agregadoToDuplicateDraft,
   createEmptyAgregadoDraft,
   draftToAgregado,
   isAgregadoDraft,
@@ -188,5 +189,37 @@ describe('isAgregadoDraft acepta los campos vivos de la receta (#1460)', () => {
       width: { mm: 500 },
       depth: { formula: 'PD/10' },
     });
+  });
+
+  it('agregadoToDuplicateDraft prefills -COPY, regenerates hardwareLine ids and preserves custom keyframes/active (#1610)', () => {
+    const source: Agregado = {
+      ...agregadoConReceta,
+      active: false,
+      hardwareLines: [{ id: 'hl-orig', quantity: 2, optionRole: 'BISAGRA' }],
+      presentationMotion: {
+        kind: 'keyframes',
+        keyframes: [
+          { progress: 0, translationMm: [0, 0, 0] },
+          { progress: 1, translationMm: [0, 200, 0] },
+        ],
+      },
+    };
+    const dupDraft = agregadoToDuplicateDraft(
+      source,
+      ['CAJ-TEL', 'CAJ-TEL-COPY'],
+      () => 'hl-fresh',
+    );
+    expect(dupDraft.code).toBe('CAJ-TEL-COPY2');
+    expect(dupDraft.name).toBe('Cajón Corredera (copia)');
+    expect(dupDraft.active).toBe(true);
+    expect(dupDraft.hardwareLines).toEqual([
+      { id: 'hl-fresh', quantity: 2, optionRole: 'BISAGRA' },
+    ]);
+    expect(isAgregadoDraft(dupDraft)).toBe(true);
+    expect(isAgregadoDraft(JSON.parse(JSON.stringify(dupDraft)))).toBe(true);
+
+    const saved = draftToAgregado('agr-new', dupDraft);
+    expect(saved.presentationMotion).toEqual(source.presentationMotion);
+    expect(saved.active).toBe(true);
   });
 });

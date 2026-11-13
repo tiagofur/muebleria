@@ -2307,3 +2307,50 @@ describe('#1493 sync de kit declarado por VARIANTE en updateHardware', () => {
     expect((agr.rigidMembers ?? []).some((m) => m.source?.fixed?.hardwareId === 'hw-parte-m')).toBe(false);
   });
 });
+
+describe('catalogStore — createComponent/createAgregado awaitable persistence (#1610)', () => {
+  it('propagates rejection from createComponent and createAgregado so editors keep drafts open', async () => {
+    const { deps } = makeDeps({
+      saveCatalog: async () => {
+        throw new Error('409 duplicate code');
+      },
+    });
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+
+    await expect(
+      store.getState().createComponent({
+        code: 'COM-NEW',
+        name: 'Nueva puerta',
+        placement: 'puerta',
+        lengthMm: 717,
+        widthMm: 396,
+        thicknessMm: 18,
+        lengthFormula: '',
+        widthFormula: '',
+        xFormula: '',
+        yFormula: '',
+        zFormula: '',
+        rotateX: null,
+        rotateY: null,
+        rotateZ: null,
+        edgeL1: true,
+        edgeL2: false,
+        edgeW1: false,
+        edgeW2: false,
+        optionRoles: 'FRENTE',
+        notes: '',
+        active: true,
+      }),
+    ).rejects.toThrow('409 duplicate code');
+
+    const agregado: Agregado = {
+      id: 'agr-new-test',
+      code: 'AGR-NEW',
+      name: 'Agregado test',
+      components: [],
+      hardwareLines: [],
+    };
+    await expect(store.getState().createAgregado(agregado)).rejects.toThrow('409 duplicate code');
+  });
+});
