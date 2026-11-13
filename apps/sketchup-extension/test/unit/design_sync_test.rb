@@ -319,6 +319,42 @@ class DesignSyncTest < Minitest::Test
     )['authoringDirty'], 'confirmed sync clears the dirty flag'
   end
 
+  def test_real_authoring_path_drops_removed_choice_and_mode_through_design_sync
+    entity = place_local_root(
+      FI_1,
+      parameters: { 'widthMm' => 600 },
+      material_choices: { 'FRONT' => 'material-a', 'CAJON' => 'agr-mbox', 'MBOX_INSERTO' => 'hw-gal' }
+    )
+    stub_working_copy([working_item(FI_1, {}, entity).merge(
+      'material_choices' => { 'FRONT' => 'material-a', 'CAJON' => 'agr-mbox', 'MBOX_INSERTO' => 'hw-gal' },
+      'material_choice_modes' => { 'FRONT' => 'override', 'CAJON' => 'override', 'MBOX_INSERTO' => 'override' }
+    )])
+
+    builder = FBUILDER.new(metadata_store: MS.new(@model))
+    resolved = Granete::SketchUpExtension::Library::NativeLayout.new(
+      'granete.local-basis.v1', [], []
+    )
+    outcome = builder.update_furniture(
+      @model, entity, MiniCatalog.new.definition, { 'widthMm' => 600 },
+      resolved_layout: resolved,
+      material_choices: { 'CAJON' => 'agr-hafele' },
+      material_choice_modes: { 'CAJON' => 'override' },
+      removed_material_choices: ['MBOX_INSERTO']
+    )
+    assert outcome['success'], "real authoring update failed: #{outcome['error']}"
+
+    edited = PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+    metadata = MS.new(@model).read(edited)
+    assert_equal({ 'FRONT' => 'material-a', 'CAJON' => 'agr-hafele' }, metadata.dig('intent', 'materialChoices'))
+    assert_equal({ 'CAJON' => 'override' }, metadata.dig('intent', 'materialChoiceModes'))
+
+    result = @synchronizer.synchronize_design
+    assert result['ok'], result.inspect
+    item = @transport.working_copy_puts.first['body']['items'].first
+    assert_equal({ 'FRONT' => 'material-a', 'CAJON' => 'agr-hafele' }, item['material_choices'])
+    assert_equal({ 'FRONT' => 'override', 'CAJON' => 'override' }, item['material_choice_modes'])
+  end
+
   # ------------------------------------------------------------------
   # Golden sequence (#810 Definition of Done)
   # ------------------------------------------------------------------

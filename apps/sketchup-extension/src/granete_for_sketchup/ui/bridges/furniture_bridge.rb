@@ -59,8 +59,7 @@ module Granete
 
         # A selector changes one role, while the server must resolve the whole
         # furniture with the complete accepted authoring intent. Preserve every
-        # persisted role that was not included in this edit; never make an omitted
-        # role silently fall back to nominal geometry.
+        # omitted persisted role unless explicitly listed in removedMaterialChoiceRoles.
         def merged_material_choices(target_entity, payload)
           store = @metadata_store_factory.call(active_model)
           persisted = store.read(target_entity)&.dig('intent', 'materialChoices') || {}
@@ -69,7 +68,10 @@ module Granete
             raise ArgumentError, 'materialChoices debe ser un objeto role → materialId'
           end
 
-          persisted.merge(requested)
+          merged = persisted.merge(requested)
+          removed = payload['removedMaterialChoiceRoles'] || payload[:removedMaterialChoiceRoles]
+          Array(removed).each { |role| merged.delete(role.to_s.strip) }
+          merged
         end
 
         def find_target_furniture_entity(instance_id)

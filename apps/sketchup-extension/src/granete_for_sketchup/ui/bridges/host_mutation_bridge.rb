@@ -167,6 +167,7 @@ module Granete
 
           params = payload['parameters'] || payload[:parameters] || {}
           choices = merged_material_choices(context.entity, payload)
+          removed_roles = removed_roles_from_payload(payload)
           # #784 R3: explicit lineage markers (role → design|override) from
           # the caller (e.g. a role restore); they reach the item intent so
           # the working-copy sync emits the full-parity statement.
@@ -183,9 +184,15 @@ module Granete
             context_valid: -> { update_context_valid?(context.entity, context.target) },
             apply: lambda { |result, host_context|
               apply_update_result(host_context, context.entity, context.definition, params, choices,
-                                  result, material_choice_modes: modes)
+                                  result, material_choice_modes: modes,
+                                          removed_material_choices: removed_roles)
             }
           )
+        end
+
+        def removed_roles_from_payload(payload)
+          raw = payload['removedMaterialChoiceRoles'] || payload[:removedMaterialChoiceRoles]
+          Array(raw).filter_map { |role| role.to_s.strip unless role.to_s.strip.empty? }
         end
 
         UpdateContext = Struct.new(:entity, :definition, :target, keyword_init: true)
@@ -233,7 +240,7 @@ module Granete
         end
 
         def apply_update_result(_host_context, entity, definition, params, choices, result,
-                                material_choice_modes: nil)
+                                material_choice_modes: nil, removed_material_choices: nil)
           model = entity.respond_to?(:model) && entity.model ? entity.model : active_model
           relationships = result.normalized_snapshot.is_a?(Hash) ? result.normalized_snapshot['relationships'] : nil
           # The server-normalized echo is the authoritative parameter intent
@@ -249,6 +256,7 @@ module Granete
             model, entity, definition, normalized_params,
             resolved_layout: result.layout, material_choices: choices,
             material_choice_modes: material_choice_modes,
+            removed_material_choices: removed_material_choices,
             transaction: false, relationships: relationships
           )
           return outcome if outcome['success'] == true

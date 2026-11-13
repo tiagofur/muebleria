@@ -449,6 +449,24 @@ panel se actualiza solo a esa versión publicada.
 **Cómo saber que quedó bien:** la fila de sesión muestra la versión
 publicada nueva (vN) y los herrajes nuevos aparecen al insertar.
 
+### 8d.4 Cambiar cajones e insertos desde el Inspector
+
+**Para qué sirve:** elegir o cambiar el sistema de cajón (por ejemplo
+MERIVOBOX) y su **inserto** (galería, BOXCOVER o BOXCAP) sobre un mueble ya
+colocado en SketchUp, sin eliminarlo ni volver a insertarlo.
+
+**Pasos:**
+
+1. Seleccioná el mueble en SketchUp y abrí la pestaña **Inspector**.
+2. En la tarjeta **Herrajes del mueble**, si el sistema de cajón elegido
+   lleva accesorios, aparece la fila **Inserto** justo debajo del cajón.
+3. Hacé clic en **Inserto**, elegí la opción deseada (galería, BOXCOVER o
+   BOXCAP) y pulsá **Aplicar**.
+
+**Cómo saber que quedó bien:** el mueble se reconstruye en el lugar con el
+inserto elegido; si cambiás el cajón a otro sistema sin insertos, la fila
+desaparece sola al instante.
+
 > Cada cambio de catálogo exige publicar una versión nueva: SketchUp no ve
 > la base de datos viva, ve la versión publicada (excepto el modo
 > desarrollo de biblioteca, que es de ingeniería — ver su propia entrada

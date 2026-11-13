@@ -745,13 +745,14 @@ module Granete
         #   * nil                        → NO statement: the persisted intent
         #     survives untouched (MetadataWriter then omits the key and the
         #     working-copy merger preserves the server value, per #810/R2).
-        def merge_material_choices(existing_meta, incoming_choices)
+        def merge_material_choices(existing_meta, incoming_choices, removed_roles: nil)
           existing = existing_meta&.dig('intent', 'materialChoices')
           existing = {} unless existing.is_a?(Hash)
           return {} if incoming_choices == FurnitureBuilder::CLEAR_MATERIAL_CHOICES
-          return existing.merge(incoming_choices) if incoming_choices.is_a?(Hash)
 
-          existing.dup
+          merged = incoming_choices.is_a?(Hash) ? existing.merge(incoming_choices) : existing.dup
+          Array(removed_roles).each { |role| merged.delete(role.to_s.strip) }
+          merged
         end
 
         def material_choices_changed?(existing_meta, merged_choices)
@@ -1448,9 +1449,13 @@ module Granete
         # the top-level instance (identity + world transform) is never
         # replaced, only its definition's children are regenerated. Child
         # persistent_ids may change; Granete contract IDs are the durable link.
+        # ParameterLists allowance: atomic update contract carries choices,
+        # modes and removed_material_choices together inside the single undo op.
+        # rubocop:disable Metrics/ParameterLists
         def update_furniture(model, furniture, definition, raw_parameters = {}, resolved_layout: nil,
-                             material_choices: nil, material_choice_modes: nil, transaction: true,
-                             relationships: nil, authoring_dirty: true)
+                             material_choices: nil, material_choice_modes: nil, removed_material_choices: nil,
+                             transaction: true, relationships: nil, authoring_dirty: true)
+          # rubocop:enable Metrics/ParameterLists
           # Host-accurate native check: in SketchUp a Group ALSO responds to
           # #definition, so entity type — not duck typing — is the only safe
           # discriminator. Legacy Group representations fail closed: use the
@@ -1462,7 +1467,9 @@ module Granete
           parameters = normalize_parameters(definition, raw_parameters)
           existing_meta = @metadata_store&.read(furniture)
           instance_id = existing_meta&.dig('identity', 'instanceRef') || generate_instance_id
-          merged_material_choices = merge_material_choices(existing_meta, material_choices)
+          merged_material_choices = merge_material_choices(
+            existing_meta, material_choices, removed_roles: removed_material_choices
+          )
 
           if material_choices_changed?(existing_meta, merged_material_choices) &&
              !resolved_layout.is_a?(Library::NativeLayout)
@@ -1839,6 +1846,10 @@ module Granete
           # into the full-parity statement the backend requires.
           if material_choice_modes.is_a?(Hash) && !material_choice_modes.empty?
             intent['materialChoiceModes'] = material_choice_modes
+          end
+          if intent['materialChoiceModes'].is_a?(Hash) && material_choices.is_a?(Hash)
+            intent['materialChoiceModes'] = intent['materialChoiceModes'].slice(*material_choices.keys)
+            intent.delete('materialChoiceModes') if intent['materialChoiceModes'].empty?
           end
           intent
         end
