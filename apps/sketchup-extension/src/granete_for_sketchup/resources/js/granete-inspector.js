@@ -234,6 +234,14 @@
         pending += 1;
       }
     }
+    if (draft.base && draft.base.materialChoices) {
+      for (var baseRole in draft.base.materialChoices) {
+        if (!Object.prototype.hasOwnProperty.call(inspectorMaterialChoices, baseRole) &&
+            !Object.prototype.hasOwnProperty.call(draft.choices, baseRole)) {
+          pending += 1;
+        }
+      }
+    }
     return pending;
   }
 
@@ -528,6 +536,268 @@
     return labels[unit] || (unit ? unit : null);
   }
 
+  function inspectorAgregadoRoles(def) {
+    return (def && Array.isArray(def.agregadoRoles)) ? def.agregadoRoles : [];
+  }
+
+  function findInspectorAgregadoRole(def, code) {
+    var roles = inspectorAgregadoRoles(def);
+    for (var i = 0; i < roles.length; i++) {
+      if (roles[i] && roles[i].code === code) return roles[i];
+    }
+    return null;
+  }
+
+  function hardwareGroupsByCode(context) {
+    var map = {};
+    var groups = (context && context.kind === "furniture" && Array.isArray(context.hardwareGroups))
+      ? context.hardwareGroups : [];
+    for (var i = 0; i < groups.length; i++) {
+      if (groups[i] && groups[i].code) map[groups[i].code] = groups[i];
+    }
+    return map;
+  }
+
+  function knownInspectorAccessoryGroupCodes(def) {
+    var known = {};
+    inspectorAgregadoRoles(def).forEach(function (role) {
+      (role.options || []).forEach(function (opt) {
+        (opt.accessoryGroups || []).forEach(function (acc) {
+          if (acc && acc.code) known[acc.code] = true;
+        });
+      });
+    });
+    return known;
+  }
+
+  function effectiveInspectorAccessoryGroupCodes(def, groupsByCode) {
+    var valid = {};
+    inspectorAgregadoRoles(def).forEach(function (role) {
+      var scanned = groupsByCode ? groupsByCode[role.code] : null;
+      var chosenId = inspectorMaterialChoices[role.code] || (scanned && scanned.chosenHardwareId);
+      if (!chosenId) return;
+      (role.options || []).forEach(function (opt) {
+        if (opt.agregadoId !== chosenId) return;
+        (opt.accessoryGroups || []).forEach(function (acc) {
+          if (acc && acc.code) valid[acc.code] = true;
+        });
+      });
+    });
+    return valid;
+  }
+
+  function dropOrphanInspectorAccessoryChoices(def, groupsByCode) {
+    var valid = effectiveInspectorAccessoryGroupCodes(def, groupsByCode);
+    var known = knownInspectorAccessoryGroupCodes(def);
+    for (var code in known) {
+      if (!valid[code]) {
+        if (Object.prototype.hasOwnProperty.call(inspectorMaterialChoices, code)) {
+          delete inspectorMaterialChoices[code];
+        }
+        if (draft && draft.choices && Object.prototype.hasOwnProperty.call(draft.choices, code)) {
+          delete draft.choices[code];
+        }
+        if (draft && draft.modes && Object.prototype.hasOwnProperty.call(draft.modes, code)) {
+          delete draft.modes[code];
+        }
+      }
+    }
+  }
+
+  function restoreBaseAccessoriesForAgregado(def, agrId) {
+    if (!draft || !draft.base || !draft.base.materialChoices || !agrId) return;
+    inspectorAgregadoRoles(def).forEach(function (role) {
+      (role.options || []).forEach(function (opt) {
+        if (!opt || opt.agregadoId !== agrId) return;
+        (opt.accessoryGroups || []).forEach(function (acc) {
+          if (!acc || !acc.code) return;
+          if (!Object.prototype.hasOwnProperty.call(inspectorMaterialChoices, acc.code) &&
+              Object.prototype.hasOwnProperty.call(draft.base.materialChoices, acc.code)) {
+            inspectorMaterialChoices[acc.code] = draft.base.materialChoices[acc.code];
+          }
+        });
+      });
+    });
+  }
+
+  function canEditInspectorWorkingCopy() {
+    return !window.GraneteUI || !window.GraneteUI.modelBinding ||
+      typeof window.GraneteUI.modelBinding.canEditWorkingCopy !== "function" ||
+      window.GraneteUI.modelBinding.canEditWorkingCopy();
+  }
+
+  function canEditInspectorFurniture() {
+    if (!selectedContext || selectedContext.kind !== "furniture") return false;
+    if (selectedContext.selectionCount && selectedContext.selectionCount > 1) return false;
+    return Boolean(deps.capabilityEnabled(selectedContext, "canEditParameters") && canEditInspectorWorkingCopy());
+  }
+
+  function selectInspectorHardwarePick(groupCode, hardwareId) {
+    if (!canEditInspectorFurniture()) return;
+    if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
+    inspectorMaterialChoices[groupCode] = hardwareId;
+    recordHardwareGroupPick(groupCode, hardwareId);
+    if (findInspectorAgregadoRole(inspectorDef, groupCode)) {
+      dropOrphanInspectorAccessoryChoices(inspectorDef, hardwareGroupsByCode(selectedContext));
+      updateInspectorFooter();
+    }
+    renderInspectorHardwareGroups();
+  }
+
+  function openHardwareGroupSelector(groupCode, groupName, currentId, optionIds) {
+    if (window.sketchup && typeof window.sketchup.open_hardware_selector === "function") {
+      window.sketchup.open_hardware_selector(JSON.stringify({
+        groupCode: groupCode,
+        groupName: groupName,
+        currentHardwareId: currentId,
+        optionIds: optionIds,
+        context: {
+          source: "inspector",
+          instanceId: selectedContext ? selectedContext.furnitureInstanceRef : null,
+          definitionId: selectedContext ? selectedContext.furnitureDefinitionId : null
+        }
+      }));
+    } else if (window.GraneteUI.hardwareGroupSelector) {
+      var rows = optionIds.map(function (hwId) {
+        var entry = hardwareDefinitionById(hwId);
+        var entryNotes = entry && (entry.description || entry.notes) ? (entry.description || entry.notes) : null;
+        return {
+          id: hwId,
+          name: entry ? (entry.name || entry.code) : hwId,
+          code: entry ? entry.code : null,
+          categoryLabel: entry ? hardwareCategoryLabel(entry.category) : null,
+          unitLabel: entry ? hardwareUnitLabel(entry.unit) : null,
+          notes: entryNotes
+        };
+      });
+      window.GraneteUI.hardwareGroupSelector.open({
+        title: "Elegir " + groupName,
+        groupLabel: groupName,
+        rows: rows,
+        chosenId: currentId,
+        onPick: function (hwId) {
+          selectInspectorHardwarePick(groupCode, hwId);
+        }
+      });
+    }
+  }
+
+  function buildHardwareSwatch(chosen, fallbackSvg) {
+    var rawImg = chosen ? (chosen.imageUrl || chosen.image_url || chosen.thumbnailUrl || chosen.thumbnail_url || chosen.previewUrl) : null;
+    var resolvedImg = (rawImg && window.GraneteUI && window.GraneteUI.media && typeof window.GraneteUI.media.resolveUrl === "function")
+      ? window.GraneteUI.media.resolveUrl(rawImg)
+      : rawImg;
+
+    var tile = document.createElement("span");
+    tile.className = "material-swatch material-swatch--hardware";
+    if (resolvedImg) {
+      tile.style.backgroundImage = "url('" + resolvedImg + "')";
+      tile.style.backgroundSize = "contain";
+      tile.style.backgroundRepeat = "no-repeat";
+      tile.style.backgroundPosition = "center";
+      tile.style.backgroundColor = "var(--surface-card)";
+    } else {
+      tile.innerHTML = fallbackSvg;
+    }
+    return tile;
+  }
+
+  function renderAccessoryGroupRow(acc, scannedAcc, accCatalogDef) {
+    var inChoices = Object.prototype.hasOwnProperty.call(inspectorMaterialChoices, acc.code);
+    var wasConfirmed = !!(confirmedBase && confirmedBase.materialChoices &&
+      Object.prototype.hasOwnProperty.call(confirmedBase.materialChoices, acc.code));
+    var allowScanFallback = !draft && !wasConfirmed;
+    var accConfirmedId = wasConfirmed
+      ? confirmedBase.materialChoices[acc.code]
+      : ((!draft && scannedAcc && scannedAcc.chosenHardwareId) || null);
+    var accChosenId = inChoices
+      ? (inspectorMaterialChoices[acc.code] || null)
+      : ((allowScanFallback && scannedAcc && scannedAcc.chosenHardwareId) || null);
+    var accChosen = accChosenId ? hardwareDefinitionById(accChosenId) : null;
+    var accOverridden = !!accChosenId && accChosenId !== accConfirmedId;
+    var accOptionIds = (Array.isArray(acc.optionIds) && acc.optionIds.length > 0)
+      ? acc.optionIds
+      : (accCatalogDef && Array.isArray(accCatalogDef.optionIds) ? accCatalogDef.optionIds : []);
+    var hasOptions = accOptionIds.length > 0;
+    var accLabel = acc.name || (accCatalogDef && accCatalogDef.name) || acc.code;
+
+    var accBlock = document.createElement("div");
+    accBlock.className = "material-role-block";
+    accBlock.style.marginLeft = "var(--space-3)";
+
+    var accHeader = document.createElement("div");
+    accHeader.className = "material-role-header";
+    var accTitle = document.createElement("span");
+    accTitle.className = "material-role-title";
+    accTitle.textContent = accLabel;
+    accHeader.appendChild(accTitle);
+    if (acc.required) {
+      var accReq = document.createElement("span");
+      accReq.className = "status-badge neutral";
+      accReq.textContent = "requerido";
+      accHeader.appendChild(accReq);
+    }
+    if (accOverridden) {
+      var accBadge = document.createElement("span");
+      accBadge.className = "material-role-badge material-role-badge--override";
+      accBadge.textContent = "Personalizado";
+      accHeader.appendChild(accBadge);
+    }
+    accBlock.appendChild(accHeader);
+
+    if (accOverridden && accConfirmedId) {
+      var accRestore = document.createElement("button");
+      accRestore.type = "button";
+      accRestore.className = "btn material-role-restore";
+      accRestore.textContent = "Restaurar valor del diseño";
+      accRestore.addEventListener("click", function () {
+        inspectorMaterialChoices[acc.code] = accConfirmedId;
+        if (draft && draft.choices) draft.choices[acc.code] = accConfirmedId;
+        if (draft && draft.modes) delete draft.modes[acc.code];
+        updateInspectorFooter();
+        renderInspectorHardwareGroups();
+      });
+      accBlock.appendChild(accRestore);
+    }
+
+    var accPreview = document.createElement("button");
+    accPreview.type = "button";
+    accPreview.className = "material-selected-preview";
+    accPreview.style.marginTop = "var(--space-1)";
+    accPreview.title = hasOptions ? "Clic para elegir un accesorio del catálogo" : "Sin miembros activos en el catálogo";
+    accPreview.disabled = !hasOptions;
+
+    var accFallbackSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="8" rx="2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>';
+    accPreview.appendChild(buildHardwareSwatch(accChosen, accFallbackSvg));
+
+    var accInfo = document.createElement("span");
+    accInfo.className = "material-selected-info";
+    var accName = document.createElement("span");
+    accName.className = "material-selected-name";
+    accName.textContent = accChosen ? (accChosen.name || accChosen.code) : (accChosenId || "--");
+    accInfo.appendChild(accName);
+    var accMeta = document.createElement("span");
+    accMeta.className = "material-selected-meta";
+    accMeta.textContent = hasOptions
+      ? ((accChosen && accChosen.code) ? accChosen.code : "Clic para elegir un accesorio del catálogo")
+      : "Sin miembros activos en el catálogo";
+    accInfo.appendChild(accMeta);
+    accPreview.appendChild(accInfo);
+
+    var accChevron = document.createElement("span");
+    accChevron.className = "material-chevron";
+    accChevron.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
+    accPreview.appendChild(accChevron);
+
+    accPreview.addEventListener("click", function () {
+      if (!hasOptions) return;
+      openHardwareGroupSelector(acc.code, accLabel, accChosenId, accOptionIds);
+    });
+    accBlock.appendChild(accPreview);
+
+    return accBlock;
+  }
+
   function renderInspectorHardwareGroups() {
     if (!inspectorHardwareGroupsCard || !inspectorHardwareGroupsContainer) return;
     var context = selectedContext;
@@ -544,10 +814,24 @@
       if (group && group.code) groupDefs[group.code] = group;
     });
 
+    var groupByCode = hardwareGroupsByCode(context);
+    var nestedKnownAccessories = {};
+    groups.forEach(function (g) {
+      var agrRole = findInspectorAgregadoRole(inspectorDef, g && g.code);
+      if (!agrRole) return;
+      (agrRole.options || []).forEach(function (opt) {
+        (opt.accessoryGroups || []).forEach(function (acc) {
+          if (acc && acc.code) nestedKnownAccessories[acc.code] = true;
+        });
+      });
+    });
+
     inspectorHardwareGroupsContainer.innerHTML = "";
 
     groups.forEach(function (group) {
-      var def = groupDefs[group.code];
+      if (nestedKnownAccessories[group.code]) return;
+      var agrRole = findInspectorAgregadoRole(inspectorDef, group.code);
+      var def = groupDefs[group.code] || agrRole;
       // The working draft choice wins over the scanned chosen so a pending
       // pick repaints immediately; both are the same map the Apply sends.
       var chosenId = inspectorMaterialChoices[group.code] || group.chosenHardwareId;
@@ -591,8 +875,20 @@
         restore.className = "btn material-role-restore";
         restore.textContent = "Restaurar valor del diseño";
         restore.addEventListener("click", function () {
-          inspectorMaterialChoices[group.code] = group.chosenHardwareId;
-          delete draft.modes[group.code];
+          var restoreTarget = group.chosenHardwareId ||
+            (confirmedBase && confirmedBase.materialChoices && confirmedBase.materialChoices[group.code]) || null;
+          if (restoreTarget) {
+            inspectorMaterialChoices[group.code] = restoreTarget;
+            if (draft && draft.choices) draft.choices[group.code] = restoreTarget;
+          } else {
+            delete inspectorMaterialChoices[group.code];
+            if (draft && draft.choices) delete draft.choices[group.code];
+          }
+          if (draft && draft.modes) delete draft.modes[group.code];
+          if (agrRole) {
+            dropOrphanInspectorAccessoryChoices(inspectorDef, groupByCode);
+            restoreBaseAccessoriesForAgregado(inspectorDef, restoreTarget);
+          }
           updateInspectorFooter();
           renderInspectorHardwareGroups();
         });
@@ -605,23 +901,8 @@
       preview.title = membersKnown ? "Cambiar herraje" : "Catálogo sin grupos";
       preview.disabled = !membersKnown;
 
-      var rawImg = chosen ? (chosen.imageUrl || chosen.image_url || chosen.thumbnailUrl || chosen.thumbnail_url || chosen.previewUrl) : null;
-      var resolvedImg = (rawImg && window.GraneteUI && window.GraneteUI.media && typeof window.GraneteUI.media.resolveUrl === "function")
-        ? window.GraneteUI.media.resolveUrl(rawImg)
-        : rawImg;
-
-      var tile = document.createElement("span");
-      tile.className = "material-swatch material-swatch--hardware";
-      if (resolvedImg) {
-        tile.style.backgroundImage = "url('" + resolvedImg + "')";
-        tile.style.backgroundSize = "contain";
-        tile.style.backgroundRepeat = "no-repeat";
-        tile.style.backgroundPosition = "center";
-        tile.style.backgroundColor = "var(--surface-card)";
-      } else {
-        tile.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8 4.5v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/></svg>';
-      }
-      preview.appendChild(tile);
+      var mainFallbackSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8 4.5v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/></svg>';
+      preview.appendChild(buildHardwareSwatch(chosen, mainFallbackSvg));
       var info = document.createElement("span");
       info.className = "material-selected-info";
       var nameSpan = document.createElement("span");
@@ -640,46 +921,23 @@
       preview.appendChild(chevron);
       preview.addEventListener("click", function () {
         if (!membersKnown) return;
-        if (window.sketchup && typeof window.sketchup.open_hardware_selector === "function") {
-          window.sketchup.open_hardware_selector(JSON.stringify({
-            groupCode: group.code,
-            groupName: def ? (def.name || group.code) : group.code,
-            currentHardwareId: chosenId,
-            optionIds: def.optionIds,
-            context: {
-              source: "inspector",
-              instanceId: selectedContext ? selectedContext.furnitureInstanceRef : null,
-              definitionId: selectedContext ? selectedContext.furnitureDefinitionId : null
-            }
-          }));
-        } else if (window.GraneteUI.hardwareGroupSelector) {
-          var rows = def.optionIds.map(function (hwId) {
-            var entry = hardwareDefinitionById(hwId);
-            return {
-              id: hwId,
-              name: entry ? (entry.name || entry.code) : hwId,
-              code: entry ? entry.code : null,
-              categoryLabel: entry ? hardwareCategoryLabel(entry.category) : null,
-              unitLabel: entry ? hardwareUnitLabel(entry.unit) : null,
-              notes: entry && entry.notes ? entry.notes : null
-            };
-          });
-          window.GraneteUI.hardwareGroupSelector.open({
-            title: "Elegir " + (def.name || group.code),
-            groupLabel: def.name || group.code,
-            rows: rows,
-            chosenId: chosenId,
-            onPick: function (hwId) {
-              inspectorMaterialChoices[group.code] = hwId;
-              recordHardwareGroupPick(group.code, hwId);
-              renderInspectorHardwareGroups();
-            }
-          });
-        }
+        openHardwareGroupSelector(group.code, def ? (def.name || group.code) : group.code, chosenId, def.optionIds);
       });
       row.appendChild(preview);
 
       inspectorHardwareGroupsContainer.appendChild(row);
+
+      if (agrRole && chosenId) {
+        (agrRole.options || []).forEach(function (opt) {
+          if (!opt || opt.agregadoId !== chosenId) return;
+          (opt.accessoryGroups || []).forEach(function (acc) {
+            if (!acc || !acc.code) return;
+            inspectorHardwareGroupsContainer.appendChild(
+              renderAccessoryGroupRow(acc, groupByCode[acc.code], groupDefs[acc.code])
+            );
+          });
+        });
+      }
     });
 
     inspectorHardwareGroupsCard.style.display = "block";
@@ -691,12 +949,15 @@
   function repaintConfirmedSnapshots() {
     if (!selectedContext || selectedContext.kind !== "furniture" || !inspectorDef ||
         !deps.capabilityEnabled(selectedContext, "canEditParameters")) return;
+    var canEditMaterials = deps.capabilityEnabled(selectedContext, "canEditMaterialRoles") &&
+      canEditInspectorWorkingCopy();
     inspectorParams = Object.assign({}, deps.getDefaultParams(inspectorDef), selectedContext.parameters || {});
-    inspectorMaterialChoices = Object.assign({},
-      window.GraneteUI.materialRoles.defaultMaterialChoices(inspectorDef), selectedContext.materialChoices || {});
+    inspectorMaterialChoices = canEditMaterials
+      ? Object.assign({}, window.GraneteUI.materialRoles.defaultMaterialChoices(inspectorDef), selectedContext.materialChoices || {})
+      : Object.assign({}, selectedContext.materialChoices || {});
     confirmedBase = { parameters: copyMap(inspectorParams), materialChoices: copyMap(inspectorMaterialChoices) };
     deps.renderParamForm(inspectorParamsContainer, inspectorDef, inspectorParams, paramChangeHandler());
-    if (deps.capabilityEnabled(selectedContext, "canEditMaterialRoles")) {
+    if (canEditMaterials) {
       renderInspectorMaterialSelectors();
     }
     // #1046 S3: repintar Herrajes del mueble desde el contexto confirmado.
@@ -734,6 +995,7 @@
     };
     var modes = {};
     for (var role in draft.choices) {
+      if (!Object.prototype.hasOwnProperty.call(payload.materialChoices, role)) continue;
       if (draft.modes[role]) {
         modes[role] = draft.modes[role];
       } else if (draft.choices[role] !== draft.base.materialChoices[role]) {
@@ -741,6 +1003,15 @@
       }
     }
     if (Object.keys(modes).length > 0) payload.materialChoiceModes = modes;
+    var removedRoles = [];
+    if (draft && draft.base && draft.base.materialChoices) {
+      for (var baseRole in draft.base.materialChoices) {
+        if (!Object.prototype.hasOwnProperty.call(payload.materialChoices, baseRole)) {
+          removedRoles.push(baseRole);
+        }
+      }
+    }
+    if (removedRoles.length > 0) payload.removedMaterialChoiceRoles = removedRoles;
     appliedRef = selectedContext.furnitureInstanceRef;
     applyInFlight = true;
     btnApply.disabled = true;
@@ -1467,7 +1738,7 @@
     var freshParams = Object.assign({}, (def ? deps.getDefaultParams(def) : {}), context.parameters || {});
     var freshChoices = canEditMaterials
       ? Object.assign({}, window.GraneteUI.materialRoles.defaultMaterialChoices(def), context.materialChoices || {})
-      : {};
+      : Object.assign({}, context.materialChoices || {});
     if (draft && (!context || context.kind !== "furniture" ||
                   context.furnitureInstanceRef !== draft.instanceRef ||
                   !sameMap(freshParams, draft.base.parameters) ||
@@ -1578,14 +1849,29 @@
       deps.showToast("success", "✓ Mueble " + (result.name || "") + " actualizado in-place" + detail + ".");
       // Only the item the Apply was built for absorbs the result; a
       // selection switch mid-flight never gets the old item's values.
-      if (selectedContext && selectedContext.kind === "furniture" &&
-          selectedContext.furnitureInstanceRef === appliedRef) {
+      var isSameSelection = selectedContext && selectedContext.kind === "furniture" &&
+        selectedContext.furnitureInstanceRef === appliedRef;
+      if (isSameSelection) {
         selectedContext.parameters = Object.assign({}, inspectorParams);
         selectedContext.materialChoices = Object.assign({}, inspectorMaterialChoices);
+        if (Array.isArray(selectedContext.hardwareGroups)) {
+          selectedContext.hardwareGroups.forEach(function (g) {
+            if (!g || !g.code) return;
+            if (Object.prototype.hasOwnProperty.call(inspectorMaterialChoices, g.code)) {
+              g.chosenHardwareId = inspectorMaterialChoices[g.code];
+            } else if (confirmedBase && confirmedBase.materialChoices &&
+                Object.prototype.hasOwnProperty.call(confirmedBase.materialChoices, g.code)) {
+              delete g.chosenHardwareId;
+            }
+          });
+        }
       }
       confirmedBase = { parameters: copyMap(inspectorParams), materialChoices: copyMap(inspectorMaterialChoices) };
       draft = null; // confirmed: the draft is done
       updateInspectorFooter();
+      if (isSameSelection && deps.capabilityEnabled(selectedContext, "canEditParameters")) {
+        renderInspectorHardwareGroups();
+      }
       // #784 R3 final review: the authoritative projection (server
       // material_choice_modes) must be re-read after any successful
       // furniture mutation — the badge never infers mode changes locally.
@@ -1744,10 +2030,12 @@
       return;
     }
 
-    if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
-    inspectorMaterialChoices[groupCode] = hardwareId;
-    recordHardwareGroupPick(groupCode, hardwareId);
-    renderInspectorHardwareGroups();
+    if (payload.context && payload.context.instanceId &&
+        (!selectedContext || selectedContext.furnitureInstanceRef !== payload.context.instanceId)) {
+      return;
+    }
+
+    selectInspectorHardwarePick(groupCode, hardwareId);
   }
 
   function onDeleteResult(result) {

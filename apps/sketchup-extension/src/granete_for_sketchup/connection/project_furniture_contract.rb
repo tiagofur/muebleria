@@ -631,6 +631,17 @@ module Granete
             return item unless intent.is_a?(Hash)
 
             item.parameters = intent['parameters'] if intent.key?('parameters') && intent['parameters'].is_a?(Hash)
+            apply_material_authoring_intent!(item, intent)
+            definition_id = intent['furnitureDefinitionId']
+            item.furniture_definition_id = definition_id if definition_id.is_a?(String) && !definition_id.strip.empty?
+            version = Contract.authoritative_definition_version(
+              intent['definitionVersion'], intent['definition_version']
+            )
+            item.definition_version = version unless version.nil?
+            item
+          end
+
+          def apply_material_authoring_intent!(item, intent)
             choices = intent['materialChoices']
             item.material_choices = choices if intent.key?('materialChoices') && choices.is_a?(Hash)
             # #784 R3: explicit lineage markers (role → design|override).
@@ -640,13 +651,9 @@ module Granete
             if modes.is_a?(Hash) && !modes.empty?
               item.material_choice_modes = (item.material_choice_modes || {}).merge(modes)
             end
-            definition_id = intent['furnitureDefinitionId']
-            item.furniture_definition_id = definition_id if definition_id.is_a?(String) && !definition_id.strip.empty?
-            version = Contract.authoritative_definition_version(
-              intent['definitionVersion'], intent['definition_version']
-            )
-            item.definition_version = version unless version.nil?
-            item
+            return unless item.material_choice_modes.is_a?(Hash) && item.material_choices.is_a?(Hash)
+
+            item.material_choice_modes = item.material_choice_modes.slice(*item.material_choices.keys)
           end
 
           def new_working_item(furniture_instance_id, entity, intent, locator)

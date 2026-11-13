@@ -315,7 +315,7 @@ class DialogControllerTest < Minitest::Test
   # builder's host contract (#498): an update runs as exactly ONE SketchUp
   # operation through the coordinator's journal.
   class BuilderSpy
-    attr_reader :insert_layout, :update_layout, :material_choices, :relationships
+    attr_reader :insert_layout, :update_layout, :material_choices, :removed_material_choices, :relationships
 
     def insert_furniture(_model, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil)
       @insert_layout = resolved_layout
@@ -325,9 +325,10 @@ class DialogControllerTest < Minitest::Test
     end
 
     def update_furniture(model, _group, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil,
-                         transaction: true, relationships: nil, **_extra_kwargs)
+                         removed_material_choices: nil, transaction: true, relationships: nil, **_extra_kwargs)
       @update_layout = resolved_layout
       @material_choices = material_choices
+      @removed_material_choices = removed_material_choices
       @relationships = relationships
       if transaction
         model.start_operation('Editar Mueble', true)
@@ -424,6 +425,38 @@ class DialogControllerTest < Minitest::Test
     }
     assert_equal expected, catalog.requested_choices
     assert_equal expected, builder.material_choices
+  end
+
+  def test_material_update_removes_orphan_roles_while_preserving_unaffected_persisted_choices
+    catalog = LayoutResolvingCatalog.new
+    builder = BuilderSpy.new
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new,
+      catalog_provider: catalog, furniture_builder: builder,
+      metadata_store_factory: ->(_model) { @store }
+    )
+    furniture = native_furniture('inst-material-remove-01')
+    metadata = @store.read(furniture)
+    metadata['intent']['materialChoices'] = {
+      'BODY' => 'mat-white-16', 'CAJON' => 'agr-mbox', 'MBOX_INSERTO' => 'hw-gal'
+    }
+    @store.write(furniture, metadata)
+    @model.selection.add(furniture)
+
+    dialog = controller.show
+    dialog.callbacks.fetch('update_furniture').call(
+      nil,
+      'instanceId' => 'inst-material-remove-01',
+      'definitionId' => 'kitchen-base-standard',
+      'parameters' => { 'widthMm' => 600 },
+      'materialChoices' => { 'CAJON' => 'agr-hafele' },
+      'removedMaterialChoiceRoles' => ['MBOX_INSERTO']
+    )
+
+    expected = { 'BODY' => 'mat-white-16', 'CAJON' => 'agr-hafele' }
+    assert_equal expected, catalog.requested_choices
+    assert_equal expected, builder.material_choices
+    assert_equal ['MBOX_INSERTO'], builder.removed_material_choices
   end
 
   class FailingLayoutCatalog < Granete::SketchUpExtension::Library::StaticCatalogProvider

@@ -1852,4 +1852,268 @@ test('#1535: grip surfaces follow the lanes and async answers re-render only gri
   assert.deepStrictEqual(calls[3], ['furniture', 'inst-2']);
 });
 
+test('#1609 accessory groups: renders inserto under drawer, routes inspector pick to draft, applies and clears badge', () => {
+  const openCalls = [];
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false, applyMaterialChoice: () => {} }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  sandbox.window.sketchup = {
+    open_hardware_selector: (raw) => openCalls.push(JSON.parse(raw))
+  };
+  const api = sandbox.window.GraneteUI.inspector;
+  api.setAgregadosCatalog([
+    { id: 'agr-mbox', code: 'MBOX-GRAY', name: 'Cajón Merivobox Gray' },
+    { id: 'agr-hafele', code: 'HAF-CAJ', name: 'Cajón Hafele' }
+  ]);
+  api.setHardwareCatalog([
+    { id: 'hw-gal', code: 'MBOX-E-GAL', name: 'Galería Merivobox', category: 'drawer_system', unit: 'piece' },
+    { id: 'hw-bcap', code: 'MBOX-E-BCAP', name: 'Boxcap Merivobox', category: 'drawer_system', unit: 'piece' }
+  ]);
+  api.setOptionGroups([
+    { id: 'og-caj', code: 'CAJON', name: 'Cajones', kind: 'agregado', required: true, optionIds: ['agr-mbox', 'agr-hafele'] }
+  ]);
+
+  const defWithAccessories = {
+    furnitureDefinitionId: 'def-caj',
+    name: 'Bajo 3 cajones',
+    parameters: [{ name: 'widthMm', label: 'Ancho', type: 'number', defaultValue: 600 }],
+    materialRoles: [],
+    agregadoRoles: [
+      {
+        code: 'CAJON',
+        name: 'Cajones',
+        required: true,
+        optionIds: ['agr-mbox', 'agr-hafele'],
+        options: [
+          {
+            agregadoId: 'agr-mbox',
+            accessoryGroups: [
+              { code: 'MBOX_INSERTO', name: 'Inserto', required: true, optionIds: ['hw-gal', 'hw-bcap'] }
+            ]
+          },
+          { agregadoId: 'agr-hafele', accessoryGroups: [] }
+        ]
+      }
+    ]
+  };
+
+  api.onSelectionChange(furnitureContext({
+    definition: defWithAccessories,
+    materialChoices: { CAJON: 'agr-mbox' },
+    hardwareGroups: [{ code: 'CAJON', chosenHardwareId: 'agr-mbox', count: 3 }]
+  }));
+
+  const rows = el(sandbox, 'inspector-hardware-groups-container').children;
+  assert.strictEqual(rows.length, 2, 'drawer row + nested accessory row');
+  const accRow = rows[1];
+  assert.strictEqual(accRow.style.marginLeft, 'var(--space-3)', 'nested accessory row is indented');
+  assert.strictEqual(accRow.children[0].children[0].textContent, 'Inserto');
+  assert.strictEqual(accRow.children[0].children[1].textContent, 'requerido');
+  const accPreview = accRow.children[1];
+  assert.strictEqual(accPreview.children[1].children[0].textContent, '--');
+  assert.strictEqual(accPreview.children[1].children[1].textContent, 'Clic para elegir un accesorio del catálogo');
+
+  // Click opens native hardware selector with inspector context and accessory optionIds
+  accPreview.click();
+  assert.strictEqual(openCalls.length, 1);
+  assert.strictEqual(openCalls[0].groupCode, 'MBOX_INSERTO');
+  assert.deepStrictEqual(openCalls[0].optionIds, ['hw-gal', 'hw-bcap']);
+  assert.strictEqual(openCalls[0].context.source, 'inspector');
+  assert.strictEqual(openCalls[0].context.instanceId, 'ref-1');
+
+  // Late response for another furniture instance is ignored
+  api.onHardwareChoiceApplied({
+    groupCode: 'MBOX_INSERTO',
+    hardwareId: 'hw-bcap',
+    context: { source: 'inspector', instanceId: 'ref-other' }
+  });
+  assert(!visible(el(sandbox, 'inspector-footer')), 'stale instance pick does not touch draft');
+
+  // Matching pick lands in draft and paints name/code/badge
+  api.onHardwareChoiceApplied({
+    groupCode: 'MBOX_INSERTO',
+    hardwareId: 'hw-gal',
+    context: { source: 'inspector', instanceId: 'ref-1' }
+  });
+  assert(visible(el(sandbox, 'inspector-footer')), 'accessory pick enables Apply');
+  assert.strictEqual(el(sandbox, 'inspector-pending').textContent, '1 cambio pendiente');
+  const draftedAccRow = el(sandbox, 'inspector-hardware-groups-container').children[1];
+  assert.strictEqual(draftedAccRow.children[0].children[2].textContent, 'Personalizado');
+  assert.strictEqual(draftedAccRow.children[1].children[1].children[0].textContent, 'Galería Merivobox');
+  assert.strictEqual(draftedAccRow.children[1].children[1].children[1].textContent, 'MBOX-E-GAL');
+
+  el(sandbox, 'btn-apply').click();
+  const submit = sandbox.__mutation.filter((c) => c.action === 'submitUpdate').pop();
+  assert.strictEqual(submit.payload.materialChoices.CAJON, 'agr-mbox');
+  assert.strictEqual(submit.payload.materialChoices.MBOX_INSERTO, 'hw-gal');
+  assert.strictEqual(submit.payload.materialChoiceModes.MBOX_INSERTO, 'override');
+
+  // Confirmed update clears draft and Personalizado badge in-place
+  api.onUpdateResult({ success: true, name: 'Bajo 3 cajones', component_count: 12 });
+  assert(!visible(el(sandbox, 'inspector-footer')), 'confirmed apply clears footer');
+  const confirmedAccRow = el(sandbox, 'inspector-hardware-groups-container').children[1];
+  assert.strictEqual(confirmedAccRow.children[0].children.length, 2, 'Personalizado badge cleared after Apply');
+  assert.strictEqual(confirmedAccRow.children[1].children[1].children[0].textContent, 'Galería Merivobox');
+});
+
+test('#1609 accessory groups: switching drawer prunes orphan accessory, restores cleanly, and sends removedMaterialChoiceRoles', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false, applyMaterialChoice: () => {} }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.setAgregadosCatalog([
+    { id: 'agr-mbox', code: 'MBOX-GRAY', name: 'Cajón Merivobox Gray' },
+    { id: 'agr-hafele', code: 'HAF-CAJ', name: 'Cajón Hafele' }
+  ]);
+  api.setHardwareCatalog([
+    { id: 'hw-gal', code: 'MBOX-E-GAL', name: 'Galería Merivobox', category: 'drawer_system', unit: 'piece' }
+  ]);
+  api.setOptionGroups([
+    { id: 'og-caj', code: 'CAJON', name: 'Cajones', kind: 'agregado', required: true, optionIds: ['agr-mbox', 'agr-hafele'] }
+  ]);
+
+  const defWithAccessories = {
+    furnitureDefinitionId: 'def-caj',
+    name: 'Bajo 3 cajones',
+    parameters: [{ name: 'widthMm', label: 'Ancho', type: 'number', defaultValue: 600 }],
+    materialRoles: [],
+    agregadoRoles: [
+      {
+        code: 'CAJON',
+        name: 'Cajones',
+        required: true,
+        optionIds: ['agr-mbox', 'agr-hafele'],
+        options: [
+          {
+            agregadoId: 'agr-mbox',
+            accessoryGroups: [
+              { code: 'MBOX_INSERTO', name: 'Inserto', required: true, optionIds: ['hw-gal'] }
+            ]
+          },
+          { agregadoId: 'agr-hafele', accessoryGroups: [] }
+        ]
+      }
+    ]
+  };
+
+  // Even if scanned hardwareGroups ever included the accessory, it is never rendered twice
+  api.onSelectionChange(furnitureContext({
+    definition: defWithAccessories,
+    materialChoices: { CAJON: 'agr-mbox', MBOX_INSERTO: 'hw-gal' },
+    hardwareGroups: [
+      { code: 'CAJON', chosenHardwareId: 'agr-mbox', count: 3 },
+      { code: 'MBOX_INSERTO', chosenHardwareId: 'hw-gal', count: 2 }
+    ]
+  }));
+  assert.strictEqual(el(sandbox, 'inspector-hardware-groups-container').children.length, 2, 'never duplicated');
+
+  // Switch drawer from Merivobox to Hafele → accessory row disappears
+  api.onHardwareChoiceApplied({
+    groupCode: 'CAJON',
+    hardwareId: 'agr-hafele',
+    context: { source: 'inspector', instanceId: 'ref-1' }
+  });
+  assert.strictEqual(el(sandbox, 'inspector-hardware-groups-container').children.length, 1,
+    'orphan accessory row disappears when switching drawer');
+
+  // Click Restaurar on CAJON → reverts CAJON and restores confirmed accessory, dissolving draft
+  const drawerRow = el(sandbox, 'inspector-hardware-groups-container').children[0];
+  const restoreBtn = drawerRow.children[1];
+  assert.strictEqual(restoreBtn.textContent, 'Restaurar valor del diseño');
+  restoreBtn.click();
+  assert(!visible(el(sandbox, 'inspector-footer')), 'restoring drawer and its base accessory dissolves draft');
+  assert.strictEqual(el(sandbox, 'inspector-hardware-groups-container').children.length, 2);
+
+  // Switch CAJON to Hafele, then back to Merivobox via selector (NOT Restaurar):
+  // the pruned accessory must NOT reappear from stale scannedAcc.chosenHardwareId
+  api.onHardwareChoiceApplied({
+    groupCode: 'CAJON',
+    hardwareId: 'agr-hafele',
+    context: { source: 'inspector', instanceId: 'ref-1' }
+  });
+  api.onHardwareChoiceApplied({
+    groupCode: 'CAJON',
+    hardwareId: 'agr-mbox',
+    context: { source: 'inspector', instanceId: 'ref-1' }
+  });
+  const backRows = el(sandbox, 'inspector-hardware-groups-container').children;
+  assert.strictEqual(backRows.length, 2, 'accessory row reappears when switching back to Merivobox');
+  assert.strictEqual(backRows[1].children[1].children[1].children[0].textContent, '--',
+    'pruned accessory is not resurrected from stale scanned hardwareGroups');
+
+  // Switch again to Hafele and Apply → removedMaterialChoiceRoles carries MBOX_INSERTO without orphan mode
+  api.onHardwareChoiceApplied({
+    groupCode: 'CAJON',
+    hardwareId: 'agr-hafele',
+    context: { source: 'inspector', instanceId: 'ref-1' }
+  });
+  el(sandbox, 'btn-apply').click();
+  const submit = sandbox.__mutation.filter((c) => c.action === 'submitUpdate').pop();
+  assert.strictEqual(submit.payload.materialChoices.CAJON, 'agr-hafele');
+  assert.strictEqual(submit.payload.materialChoices.MBOX_INSERTO, undefined);
+  assert.deepStrictEqual(Array.from(submit.payload.removedMaterialChoiceRoles), ['MBOX_INSERTO']);
+  assert.strictEqual(submit.payload.materialChoiceModes.MBOX_INSERTO, undefined);
+
+  // Confirm Apply, then switch back to Merivobox before a fresh selection event arrives:
+  // post-Apply hardwareGroups cleared stale chosenHardwareId, so accessory shows '--'
+  api.onUpdateResult({ success: true, name: 'Bajo 3 cajones', component_count: 10 });
+  api.onHardwareChoiceApplied({
+    groupCode: 'CAJON',
+    hardwareId: 'agr-mbox',
+    context: { source: 'inspector', instanceId: 'ref-1' }
+  });
+  const postApplyRows = el(sandbox, 'inspector-hardware-groups-container').children;
+  assert.strictEqual(postApplyRows.length, 2);
+  assert.strictEqual(postApplyRows[1].children[1].children[1].children[0].textContent, '--',
+    'post-Apply cleared stale hardwareGroups.chosenHardwareId');
+
+  // Read-only furniture selection (canEditParameters: false) ignores hardware picks too
+  api.onSelectionChange(furnitureContext({
+    definition: defWithAccessories,
+    materialChoices: { CAJON: 'agr-mbox' },
+    hardwareGroups: [{ code: 'CAJON', chosenHardwareId: 'agr-mbox', count: 3 }],
+    capabilities: {
+      canEditParameters: { supported: false, reason: 'read-only' },
+      canEditMaterialRoles: { supported: false, reason: 'read-only' }
+    }
+  }));
+  assert(!visible(el(sandbox, 'inspector-hardware-groups-card')), 'read-only hides card');
+  assert(!visible(el(sandbox, 'inspector-footer')), 'read-only hides footer');
+  api.onHardwareChoiceApplied({
+    groupCode: 'CAJON',
+    hardwareId: 'agr-hafele',
+    context: { source: 'inspector', instanceId: 'ref-1' }
+  });
+  assert(!visible(el(sandbox, 'inspector-hardware-groups-card')), 'read-only pick does not unhide card');
+  assert(!visible(el(sandbox, 'inspector-footer')), 'read-only pick does not draft');
+
+  // Late pick while a child part is selected (same furnitureInstanceRef, kind !== furniture) is ignored
+  api.onSelectionChange({
+    kind: 'part',
+    furnitureInstanceRef: 'ref-1',
+    componentInstanceId: 'part-1',
+    display: { name: 'Costado' },
+    capabilities: { canEditParameters: { supported: false, reason: 'part' } }
+  });
+  api.onHardwareChoiceApplied({
+    groupCode: 'CAJON',
+    hardwareId: 'agr-hafele',
+    context: { source: 'inspector', instanceId: 'ref-1' }
+  });
+  assert(!visible(el(sandbox, 'inspector-footer')), 'child selection never creates furniture draft');
+  assert(!visible(el(sandbox, 'inspector-hardware-groups-card')), 'child selection ignores furniture hardware picks');
+});
+
 console.log(JSON.stringify({ success: true, testsPassed: testsPassed, module: 'granete-inspector.js' }));
