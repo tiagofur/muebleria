@@ -101,7 +101,8 @@ export interface ProjectModalsContainerProps {
   };
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
   readonly onCloseMetaModal: () => void;
-  readonly onSubmitMeta: (payload: ProjectDraft) => void;
+  /** #1610: may return a promise — the modal awaits it to keep the draft on rejection. */
+  readonly onSubmitMeta: (payload: ProjectDraft) => void | Promise<void>;
   readonly onCloseAddItemModal: () => void;
   readonly onAddItemSubmit: (payload: {
     moduleId: string;
