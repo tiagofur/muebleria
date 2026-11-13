@@ -2,8 +2,10 @@
  * #1557 — paridad TS↔Go de la expansión/sync por ancla de partes de kit
  * multi-diseño (#1518 F1). El MISMO fixture lo consume el engine Go
  * (kit_part_anchor_parity_test.go): receta parcial → reparación del ancla
- * faltante + defaults de fallback idénticos (10 / 35 móvil-cajón / negado en
- * right) en ambos runtimes, drift 0.
+ * faltante + derivation de offsets por pieza idénticos en ambos runtimes,
+ * drift 0. #1613 (owner): el miembro GUARDADO se refresca desde SU pieza en
+ * cada sync — el registro del catálogo manda sobre la receta persistida
+ * (x=10 legacy → 4 del registro, y=136 llega).
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -19,7 +21,10 @@ interface AnchorFixture {
     readonly code: string;
     readonly name: string;
     readonly previewShape: string;
-    readonly pieces: readonly { readonly anchor: 'left' | 'right' | 'center' }[];
+    readonly pieces: readonly {
+      readonly anchor: 'left' | 'right' | 'center';
+      readonly offsetMm?: { readonly x: number; readonly y: number; readonly z: number };
+    }[];
   }[];
   readonly partialRecipe: readonly {
     readonly memberId: string;
@@ -32,6 +37,7 @@ interface AnchorFixture {
     readonly hand: string;
     readonly xRef: string;
     readonly xOffsetMm: number;
+    readonly yOffsetMm: number;
   }[];
 }
 
@@ -80,10 +86,11 @@ describe('kitPartAnchorParity contract (#1557)', () => {
   });
 
   for (const want of fixture.expectedMembers) {
-    it(`${want.memberId}: hand/ancla/offset por pieza (defaults por-ancla)`, () => {
+    it(`${want.memberId}: hand/ancla/offset por pieza (el registro manda)`, () => {
       const got = byMember.get(want.memberId);
       expect(got?.hand).toBe(want.hand);
       expect(got?.placement.x).toEqual({ ref: want.xRef, offsetMm: want.xOffsetMm });
+      expect(got?.placement.y).toEqual({ ref: 'min', offsetMm: want.yOffsetMm });
     });
   }
 });

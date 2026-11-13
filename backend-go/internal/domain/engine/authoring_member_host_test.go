@@ -745,9 +745,11 @@ func TestKitPieceMemberIgnoresPosLabel_1518(t *testing.T) {
 	}
 }
 
-// #1518 F1 (review follow-up): el gate del pos: sobre MIEMBROS EXISTENTES —
-// una receta guardada con label pos:min y dos miembros multi-pieza conserva
-// su placement por pieza al re-sincronizar (el label nunca los colapsa).
+// #1518 F1 (review follow-up) + #1613 (owner): el gate del pos: sobre
+// MIEMBROS EXISTENTES — una receta guardada con label pos:min y dos miembros
+// multi-pieza se REFRESCA desde su pieza al re-sincronizar (el label nunca
+// los colapsa; el placement persistido —incluido el x=12 legacy sin negar y
+// el z=100 sin declaración— se re-deriva del registro: el catálogo manda).
 func TestSyncKeepsPiecePlacementOnExistingMembers_1518(t *testing.T) {
 	kitID := "kit-m"
 	hw := domain.Hardware{
@@ -805,13 +807,23 @@ func TestSyncKeepsPiecePlacementOnExistingMembers_1518(t *testing.T) {
 		t.Fatalf("members = %d, want 2", len(got.RigidMembers))
 	}
 	for _, m := range got.RigidMembers {
+		// El refresco por pieza produce EXACTAMENTE lo que produce una
+		// materialización fresca (paridad #1613): left min/8; right max/-12
+		// (la pieza declara X=12, el ancla right niega). El label pos:min:10
+		// NO pisa — de pisar, left sería 10.
 		wantRef, wantOff := domain.AxisRefMin, 8.0
 		if m.Hand == domain.MemberHandRight {
-			wantRef, wantOff = domain.AxisRefMax, 12.0
+			wantRef, wantOff = domain.AxisRefMax, -12.0
 		}
 		if m.Placement.X.Ref != wantRef || m.Placement.X.OffsetMm != wantOff {
 			t.Errorf("%s: X = %v/%g, want %v/%g (el label pos:min NO pisa el placement por pieza)",
 				m.MemberID, m.Placement.X.Ref, m.Placement.X.OffsetMm, wantRef, wantOff)
+		}
+		// Z sin declaración en la pieza = 0 (#1613: sin nada en el registro,
+		// no se conserva el z=100 legacy guardado).
+		if m.Placement.Z.OffsetMm != 0 {
+			t.Errorf("%s: Z = %g, want 0 (la pieza no declara z; el registro manda)",
+				m.MemberID, m.Placement.Z.OffsetMm)
 		}
 	}
 }

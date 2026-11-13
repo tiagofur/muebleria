@@ -895,7 +895,10 @@ export function syncAgregadoWithKitParts(
     readonly name: string;
     readonly previewShape?: string;
     readonly designParts?: readonly { readonly componentName: string; readonly actorMembership: string; readonly label?: string }[];
-    readonly pieces?: readonly { readonly anchor: 'left' | 'right' | 'center' }[];
+    readonly pieces?: readonly {
+      readonly anchor: 'left' | 'right' | 'center';
+      readonly offsetMm?: { readonly x: number; readonly y: number; readonly z: number };
+    }[];
   }[],
   /** #1613: ids de piezas-inserto (miembros de grupos accesorios del kit) —
    * nunca se materializan como partes fijas. */
@@ -917,14 +920,24 @@ export function syncAgregadoWithKitParts(
     .map((m) => {
       const hwId = m.source?.fixed?.hardwareId;
       const part = hwId ? partById.get(hwId) : undefined;
-      const dp = part?.designParts?.[0];
-      if (!part || !dp) return m;
-      const nextActor = dp.actorMembership?.trim() || m.actorMembership;
+      if (!part) return m;
+      const dp = part.designParts?.[0];
+      const nextActor = dp?.actorMembership?.trim() || m.actorMembership;
       // #1518 F1: piezas multi-diseño NUNCA toman el pos: override — cada
       // pieza declara su placement en el catálogo; el label único aplastaba
       // ambos lados al mismo X (SKPs superpuestos).
       const isMultiPiece = (part.pieces?.length ?? 0) > 0;
-      const parsedPos = isMultiPiece ? null : parseKitPartPlacementLabel(dp.label);
+      // #1613 (owner): el miembro YA guardado se REFRESCA desde SU pieza en
+      // cada sync — la colocación persistida quedaba congelada y el dibujo
+      // ignoraba para siempre los offsets editados en el catálogo (y=0
+      // eterno). Mismo placement que produce una materialización fresca.
+      if (isMultiPiece) {
+        const piece = m.hand ? part.pieces?.find((pc) => pc.anchor === m.hand) : undefined;
+        if (!piece) return nextActor ? { ...m, actorMembership: nextActor } : m;
+        return { ...m, actorMembership: nextActor, placement: pieceAnchorPlacement(piece) };
+      }
+      if (!dp) return nextActor ? { ...m, actorMembership: nextActor } : m;
+      const parsedPos = parseKitPartPlacementLabel(dp.label);
       if (!parsedPos) {
         return nextActor ? { ...m, actorMembership: nextActor } : m;
       }
@@ -978,6 +991,37 @@ export function syncAgregadoWithKitParts(
  * min/+; right → max/−), nunca de regex sobre el nombre. Legacy: 1 miembro
  * byte-idéntico (la inferencia por regex histórica queda intacta).
  */
+/**
+ * #1613 (owner): placement POR PIEZA — el único derivation para partes
+ * multi-pieza, compartido por la materialización fresca (newKitPartMembers)
+ * y el refresco de miembros YA guardados (syncAgregadoWithKitParts /
+ * ensureAgregadoKitParts). SIN defaults: pieza sin offsetMm = offset 0 (el
+ * registro manda; el ancla right niega: positivo = hacia adentro). Paridad
+ * con kitPieceMember Go.
+ */
+function pieceAnchorPlacement(
+  piece: {
+    readonly anchor: 'left' | 'right' | 'center';
+    readonly offsetMm?: { readonly x: number; readonly y: number; readonly z: number };
+  },
+): {
+  readonly x: { readonly ref: 'min' | 'max' | 'center'; readonly offsetMm: number };
+  readonly y: { readonly ref: 'min'; readonly offsetMm: number };
+  readonly z: { readonly ref: 'min'; readonly offsetMm: number };
+} {
+  const xOff0 = piece.offsetMm ? piece.offsetMm.x : 0;
+  // Normaliza −0 → +0 (Object.is de los tests distingue).
+  const xOff = xOff0 === 0 || piece.anchor !== 'right' ? xOff0 : -xOff0;
+  return {
+    x: {
+      ref: piece.anchor === 'right' ? 'max' : piece.anchor === 'center' ? 'center' : 'min',
+      offsetMm: xOff,
+    },
+    y: { ref: 'min', offsetMm: piece.offsetMm ? piece.offsetMm.y : 0 },
+    z: { ref: 'min', offsetMm: piece.offsetMm ? piece.offsetMm.z : 0 },
+  };
+}
+
 function newKitPartMembers(
   part: {
     readonly id: string;
@@ -999,33 +1043,15 @@ function newKitPartMembers(
   // placement derivado del ancla (left→min/+, right→max/−). El pos: label NO
   // aplica a partes multi-pieza (cada pieza declara sus offsets propios).
   if (part.pieces && part.pieces.length > 0) {
-    return part.pieces.map((piece) => {
-      // #1518 (review P2): los offsets de la PIEZA (paridad con kitPieceMember
-      // Go) pisan los derivados del config cuando existen.
-      // #1613 (owner): SIN defaults — pieza sin offsetMm = offset 0 (el
-      // registro manda; el ancla right niega: positivo = hacia adentro).
-      const xOff0 = piece.offsetMm ? piece.offsetMm.x : 0;
-      // Normaliza −0 → +0 (Object.is de los tests distingue).
-      const xOff = xOff0 === 0 || piece.anchor !== 'right' ? xOff0 : -xOff0;
-      const yOff = piece.offsetMm ? piece.offsetMm.y : cfg.yOffsetMm;
-      const zOff = piece.offsetMm ? piece.offsetMm.z : cfg.zOffsetMm;
-      return {
-        memberId: `${safeMemberId}_${piece.anchor}`,
-        role: part.previewShape || 'part',
-        source: { kind: 'fixed', fixed: { hardwareId: part.id } },
-        placement: {
-          x: {
-            ref: piece.anchor === 'right' ? 'max' : piece.anchor === 'center' ? 'center' : 'min',
-            offsetMm: xOff,
-          },
-          y: { ref: 'min', offsetMm: yOff },
-          z: { ref: 'min', offsetMm: zOff },
-        },
-        bomRole: 'included_in_kit',
-        actorMembership: cfg.actorMembership,
-        hand: piece.anchor,
-      };
-    });
+    return part.pieces.map((piece) => ({
+      memberId: `${safeMemberId}_${piece.anchor}`,
+      role: part.previewShape || 'part',
+      source: { kind: 'fixed', fixed: { hardwareId: part.id } },
+      placement: pieceAnchorPlacement(piece),
+      bomRole: 'included_in_kit',
+      actorMembership: cfg.actorMembership,
+      hand: piece.anchor,
+    }));
   }
   // Single/legacy: pos: label de DesignParts[0] sigue mandando (paridad Go).
   const parsedPos = part.designParts?.[0]?.label
@@ -1094,7 +1120,10 @@ export function ensureAgregadoKitParts(
     readonly name: string;
     readonly previewShape?: string;
     readonly designParts?: readonly { readonly componentName: string; readonly actorMembership: string; readonly label?: string }[];
-    readonly pieces?: readonly { readonly anchor: 'left' | 'right' | 'center' }[];
+    readonly pieces?: readonly {
+      readonly anchor: 'left' | 'right' | 'center';
+      readonly offsetMm?: { readonly x: number; readonly y: number; readonly z: number };
+    }[];
   }[],
   /** #1613: ids de piezas-inserto — nunca se materializan como partes fijas. */
   excludedHardwareIds?: ReadonlySet<string>,
@@ -1112,7 +1141,16 @@ export function ensureAgregadoKitParts(
     // #1518 F1: piezas multi-diseño NUNCA toman el pos: override (el label
     // único aplastaba ambos lados al mismo X).
     const isMultiPiece = (part.pieces?.length ?? 0) > 0;
-    const parsedPos = dp && !isMultiPiece ? parseKitPartPlacementLabel(dp.label) : undefined;
+    // #1613 (owner): el miembro YA guardado se REFRESCA desde SU pieza en
+    // cada sync — la colocación persistida quedaba congelada y el dibujo
+    // ignoraba para siempre los offsets editados en el catálogo. Mismo
+    // placement que produce una materialización fresca.
+    if (isMultiPiece) {
+      const piece = m.hand ? part.pieces?.find((pc) => pc.anchor === m.hand) : undefined;
+      if (!piece) return nextActor ? { ...m, actorMembership: nextActor } : m;
+      return { ...m, actorMembership: nextActor, placement: pieceAnchorPlacement(piece) };
+    }
+    const parsedPos = dp ? parseKitPartPlacementLabel(dp.label) : undefined;
     if (!parsedPos) {
       return nextActor ? { ...m, actorMembership: nextActor } : m;
     }

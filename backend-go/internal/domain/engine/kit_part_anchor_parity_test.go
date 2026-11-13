@@ -13,8 +13,10 @@ import (
 // multi-diseño (#1518 F1). Autoridad única: contracts/fixtures/
 // kitPartAnchorParity.contract.json — Go (syncAgregadoRigidMembersFromCatalog)
 // y TS (syncAgregadoWithKitParts) deben producir el MISMO conjunto de
-// miembros desde la receta parcial (reparación del ancla faltante) y los
-// MISMOS defaults de fallback (10 / 35 móvil-cajón / negado en right).
+// miembros desde la receta parcial (reparación del ancla faltante) y el
+// MISMO derivation de offsets por pieza. #1613 (owner): el miembro GUARDADO
+// se refresca desde SU pieza en cada sync — el registro del catálogo manda
+// sobre la receta persistida (x=10 legacy → 4 del registro, y=136 llega).
 
 type kitPartAnchorFixture struct {
 	Kit struct {
@@ -31,7 +33,12 @@ type kitPartAnchorFixture struct {
 		Name         string `json:"name"`
 		PreviewShape string `json:"previewShape"`
 		Pieces       []struct {
-			Anchor string `json:"anchor"`
+			Anchor   string `json:"anchor"`
+			OffsetMm *struct {
+				X float64 `json:"x"`
+				Y float64 `json:"y"`
+				Z float64 `json:"z"`
+			} `json:"offsetMm"`
 		} `json:"pieces"`
 	} `json:"parts"`
 	PartialRecipe []struct {
@@ -48,6 +55,7 @@ type kitPartAnchorFixture struct {
 		Hand      string  `json:"hand"`
 		XRef      string  `json:"xRef"`
 		XOffsetMm float64 `json:"xOffsetMm"`
+		YOffsetMm float64 `json:"yOffsetMm"`
 	} `json:"expectedMembers"`
 }
 
@@ -78,7 +86,15 @@ func TestKitPartAnchorSyncParity_1557(t *testing.T) {
 	for _, p := range f.Parts {
 		pieces := make([]domain.HardwarePiece, 0, len(p.Pieces))
 		for _, pc := range p.Pieces {
-			pieces = append(pieces, domain.HardwarePiece{Anchor: pc.Anchor})
+			piece := domain.HardwarePiece{Anchor: pc.Anchor}
+			if pc.OffsetMm != nil {
+				piece.OffsetMm = &domain.HardwarePieceOffset{
+					X: pc.OffsetMm.X,
+					Y: pc.OffsetMm.Y,
+					Z: pc.OffsetMm.Z,
+				}
+			}
+			pieces = append(pieces, piece)
 		}
 		kitLink := p.ID
 		_ = kitLink
@@ -135,6 +151,9 @@ func TestKitPartAnchorSyncParity_1557(t *testing.T) {
 		}
 		if got.Placement.X.OffsetMm != want.XOffsetMm {
 			t.Errorf("%s xOffset = %g, want %g (defaults por-ancla)", want.MemberID, got.Placement.X.OffsetMm, want.XOffsetMm)
+		}
+		if got.Placement.Y.OffsetMm != want.YOffsetMm {
+			t.Errorf("%s yOffset = %g, want %g (#1613: el miembro guardado se refresca desde su pieza)", want.MemberID, got.Placement.Y.OffsetMm, want.YOffsetMm)
 		}
 	}
 }

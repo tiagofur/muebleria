@@ -867,16 +867,31 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 		if rm.Source.Fixed != nil && rm.Source.Fixed.HardwareID != "" {
 			existingHwIDs[rm.Source.Fixed.HardwareID] = true
 			hw, hwOK := findHardware(catalog, rm.Source.Fixed.HardwareID)
-			if hwOK && len(hw.DesignParts) > 0 {
-				dp := hw.DesignParts[0]
-				if strings.TrimSpace(dp.ActorMembership) != "" {
-					rm.ActorMembership = strings.TrimSpace(dp.ActorMembership)
+			if hwOK {
+				if len(hw.DesignParts) > 0 {
+					dp := hw.DesignParts[0]
+					if strings.TrimSpace(dp.ActorMembership) != "" {
+						rm.ActorMembership = strings.TrimSpace(dp.ActorMembership)
+					}
 				}
-				// #1518 F1: multi-piece hardware NEVER takes the pos: label
-				// override — each piece declares its own anchor + offsets on
-				// the catalog row. The single-pos label used to flatten BOTH
-				// sides onto the same X (superposed SKPs).
-				if !(hwOK && len(hw.Pieces) > 0) {
+				// #1613 (owner): multi-piece members take their placement from
+				// THEIR piece on EVERY sync — the persisted placement goes stale
+				// the moment the catalog row changes (the owner edited the piece
+				// offsets and the drawing kept y=0 forever). Match by hand ↔
+				// anchor; a hand-less legacy member keeps its placement.
+				if len(hw.Pieces) > 0 {
+					for _, piece := range hw.Pieces {
+						if rm.Hand == "" || rm.Hand != piece.Anchor {
+							continue
+						}
+						refreshMemberPlacementFromPiece(&rm, piece)
+						break
+					}
+				} else if len(hw.DesignParts) > 0 {
+					// #1518 F1: single-piece parts keep the pos: label override —
+					// each side was being flattened onto the same X (superposed
+					// SKPs) before the label ruled.
+					dp := hw.DesignParts[0]
 					if xRef, xOff, yOff, zOff, okPos := parseKitPartPlacementLabelGo(dp.Label); okPos {
 						rm.Placement.X.Ref = xRef
 						rm.Placement.X.OffsetMm = xOff
@@ -1011,6 +1026,33 @@ func kitPieceMember(hw domain.Hardware, piece domain.HardwarePiece, agrCode stri
 		BOMRole:         domain.BOMRoleIncludedInKit,
 		ActorMembership: actor,
 		Hand:            piece.Anchor,
+	}
+}
+
+// refreshMemberPlacementFromPiece (#1613) rewrites a STORED member's
+// placement from its piece declaration — identical to what kitPieceMember
+// produces for a fresh materialization, so catalog edits (offsetMm)
+// propagate to already-inserted recipes. Positive = hacia adentro desde el
+// ancla (right niega); the wholesale Placement replacement also clears any
+// stale OffsetFormula.
+func refreshMemberPlacementFromPiece(rm *domain.AgregadoRigidMember, piece domain.HardwarePiece) {
+	xRef, okRef := domain.AnchorAxisRef(piece.Anchor)
+	if !okRef {
+		xRef = domain.AxisRefMin
+	}
+	xOff, yOff, zOff := 0.0, 0.0, 0.0
+	if piece.OffsetMm != nil {
+		xOff = piece.OffsetMm.X
+		yOff = piece.OffsetMm.Y
+		zOff = piece.OffsetMm.Z
+	}
+	if xRef == domain.AxisRefMax {
+		xOff = -xOff
+	}
+	rm.Placement = domain.AssemblyAnchorRule{
+		X: domain.AssemblyAxisPlacement{Ref: xRef, OffsetMm: xOff},
+		Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: yOff},
+		Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: zOff},
 	}
 }
 

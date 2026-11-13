@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "schemaId": "granete.kitPartAnchorParity.v1",
-  "comment": "#1557 — paridad TS↔Go de la expansión/sync por ancla de partes de kit multi-diseño (#1518 F1). Una receta PARCIAL (sólo el ancla left de parte-fij) debe reparar el ancla faltante en AMBOS runtimes (el sync Go la tragaba entera). #1613 (owner): SIN defaults de fallback — pieza sin offsetMm = offset 0; el offset del registro viaja verbatim y el ancla right lo niega (positivo = hacia adentro desde el ancla). Go: syncAgregadoRigidMembersFromCatalog; TS: syncAgregadoWithKitParts + newKitPartMembers.",
+  "comment": "#1557 — paridad TS↔Go de la expansión/sync por ancla de partes de kit multi-diseño (#1518 F1). Una receta PARCIAL (sólo el ancla left de parte-fij) debe reparar el ancla faltante en AMBOS runtimes (el sync Go la tragaba entera). #1613 (owner): SIN defaults de fallback — pieza sin offsetMm = offset 0; el offset del registro viaja verbatim y el ancla right lo niega (positivo = hacia adentro desde el ancla). El miembro GUARDADO (parte-fij left con x=10 legacy) se REFRESCA desde SU pieza en cada sync: el registro del catálogo manda sobre la receta persistida (el owner editó los offsets de las piezas y el dibujo conservaba y=0 para siempre). PARTE-FIJ declara offsetMm {x:4, y:136} en ambas piezas; PARTE-MOV declara ninguna (=0). Go: syncAgregadoRigidMembersFromCatalog; TS: syncAgregadoWithKitParts + newKitPartMembers.",
   "kit": {
     "id": "kit-par",
     "code": "KIT-PAR",
@@ -18,10 +18,12 @@
       "previewShape": "slide",
       "pieces": [
         {
-          "anchor": "left"
+          "anchor": "left",
+          "offsetMm": { "x": 4, "y": 136, "z": 0 }
         },
         {
-          "anchor": "right"
+          "anchor": "right",
+          "offsetMm": { "x": 4, "y": 136, "z": 0 }
         }
       ]
     },
@@ -56,25 +58,29 @@
       "memberId": "part_parte_fij_left",
       "hand": "left",
       "xRef": "min",
-      "xOffsetMm": 10
+      "xOffsetMm": 4,
+      "yOffsetMm": 136
     },
     {
       "memberId": "part_parte_fij_right",
       "hand": "right",
       "xRef": "max",
-      "xOffsetMm": 0
+      "xOffsetMm": -4,
+      "yOffsetMm": 136
     },
     {
       "memberId": "part_parte_mov_left",
       "hand": "left",
       "xRef": "min",
-      "xOffsetMm": 0
+      "xOffsetMm": 0,
+      "yOffsetMm": 0
     },
     {
       "memberId": "part_parte_mov_right",
       "hand": "right",
       "xRef": "max",
-      "xOffsetMm": 0
+      "xOffsetMm": 0,
+      "yOffsetMm": 0
     }
   ]
 }
