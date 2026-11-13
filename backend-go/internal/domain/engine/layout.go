@@ -997,7 +997,10 @@ func kitPieceMember(hw domain.Hardware, piece domain.HardwarePiece, agrCode stri
 		yOff = piece.OffsetMm.Y
 		zOff = piece.OffsetMm.Z
 	}
-	if xRef == domain.AxisRefMax {
+	// Same expression as the TS pieceAnchorPlacement: a zero offset (absent
+	// in the registro) is never negated — no IEEE −0 in the serialized
+	// placement (JSON parity between runtimes).
+	if xOff != 0 && xRef == domain.AxisRefMax {
 		xOff = -xOff
 	}
 	if len(hw.DesignParts) > 0 {
@@ -1046,13 +1049,20 @@ func refreshMemberPlacementFromPiece(rm *domain.AgregadoRigidMember, piece domai
 		yOff = piece.OffsetMm.Y
 		zOff = piece.OffsetMm.Z
 	}
-	if xRef == domain.AxisRefMax {
+	// Same expression as the TS pieceAnchorPlacement: a zero offset (absent
+	// in the registro) is never negated — no IEEE −0 in the serialized
+	// placement (JSON parity between runtimes).
+	if xOff != 0 && xRef == domain.AxisRefMax {
 		xOff = -xOff
 	}
+	// #1613 review: the rotation is MEMBER-AUTHORED data (Rotación avanzada
+	// del editor de recetas); the piece cannot re-express it — preserved.
+	rotation := rm.Placement.RotationDeg
 	rm.Placement = domain.AssemblyAnchorRule{
-		X: domain.AssemblyAxisPlacement{Ref: xRef, OffsetMm: xOff},
-		Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: yOff},
-		Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: zOff},
+		X:           domain.AssemblyAxisPlacement{Ref: xRef, OffsetMm: xOff},
+		Y:           domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: yOff},
+		Z:           domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: zOff},
+		RotationDeg: rotation,
 	}
 }
 

@@ -643,7 +643,12 @@ describe('#1518 regresión + #1613: pos: label no aplasta piezas multi-diseño y
           source: { kind: 'fixed', fixed: { hardwareId: 'hw-perfil-m' } },
           // x=12 legacy SIN negar: el placement guardado quedó atrás del
           // registro (la pieza declara X=12 → max−12).
-          placement: { x: { ref: 'max', offsetMm: 12 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 100 } },
+          placement: {
+            x: { ref: 'max', offsetMm: 12 },
+            y: { ref: 'min', offsetMm: 0 },
+            z: { ref: 'min', offsetMm: 100 },
+            rotationDeg: { x: 90, y: 0, z: 0 },
+          },
           bomRole: 'included_in_kit',
           actorMembership: 'body',
           hand: 'right',
@@ -676,6 +681,9 @@ describe('#1518 regresión + #1613: pos: label no aplasta piezas multi-diseño y
     // El z=100 guardado sin declaración en la pieza también refresca a 0.
     expect(left.placement.z).toEqual({ ref: 'min', offsetMm: 0 });
     expect(right.placement.z).toEqual({ ref: 'min', offsetMm: 0 });
+    // La rotación autorada del miembro se PRESERVA (#1613 review r1).
+    expect(right.placement.rotationDeg).toEqual({ x: 90, y: 0, z: 0 });
+    expect(left.placement.rotationDeg).toBeUndefined();
   });
 
   it('ensureAgregadoKitParts: misma regla para recetas por variante', () => {
@@ -687,7 +695,12 @@ describe('#1518 regresión + #1613: pos: label no aplasta piezas multi-diseño y
           memberId: 'part_mbox_igm_m_right',
           role: 'slide',
           source: { kind: 'fixed', fixed: { hardwareId: 'hw-perfil-m' } },
-          placement: { x: { ref: 'max', offsetMm: 12 }, y: { ref: 'min', offsetMm: 0 }, z: { ref: 'min', offsetMm: 100 } },
+          placement: {
+            x: { ref: 'max', offsetMm: 12 },
+            y: { ref: 'min', offsetMm: 0 },
+            z: { ref: 'min', offsetMm: 100 },
+            rotationDeg: { x: 0, y: 0, z: 15 },
+          },
           bomRole: 'included_in_kit',
           actorMembership: 'body',
           hand: 'right',
@@ -713,6 +726,8 @@ describe('#1518 regresión + #1613: pos: label no aplasta piezas multi-diseño y
     // sin declaración cae a 0).
     expect(right.placement.x).toEqual({ ref: 'max', offsetMm: -12 });
     expect(right.placement.z).toEqual({ ref: 'min', offsetMm: 0 });
+    // La rotación autorada del miembro se PRESERVA (#1613 review r1).
+    expect(right.placement.rotationDeg).toEqual({ x: 0, y: 0, z: 15 });
     // La pieza left faltante se agrega desde el catálogo (expansión por pieza).
     const left = synced.rigidMembers.find((m: any) => m.hand === 'left');
     expect(left).toBeDefined();

@@ -792,9 +792,10 @@ func TestSyncKeepsPiecePlacementOnExistingMembers_1518(t *testing.T) {
 				Fixed: &domain.FixedHardwareSource{HardwareID: "hw-perfil-m"},
 			},
 			Placement: domain.AssemblyAnchorRule{
-				X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: 12},
-				Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
-				Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 100},
+				X:           domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: 12},
+				Y:           domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
+				Z:           domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 100},
+				RotationDeg: &domain.HardwareRotationDeg{X: 90},
 			},
 			BOMRole:         domain.BOMRoleIncludedInKit,
 			ActorMembership: "body",
@@ -824,6 +825,18 @@ func TestSyncKeepsPiecePlacementOnExistingMembers_1518(t *testing.T) {
 		if m.Placement.Z.OffsetMm != 0 {
 			t.Errorf("%s: Z = %g, want 0 (la pieza no declara z; el registro manda)",
 				m.MemberID, m.Placement.Z.OffsetMm)
+		}
+		// La rotación es dato AUTORADO del miembro (Rotación avanzada del
+		// editor de recetas): la pieza no puede re-expresarla — se conserva
+		// en el refresco (#1613 review r1, confirmado por ambos jueces).
+		if m.Hand == domain.MemberHandRight {
+			if m.Placement.RotationDeg == nil || m.Placement.RotationDeg.X != 90 {
+				t.Errorf("%s: rotationDeg = %+v, want X=90 preservado por el refresco",
+					m.MemberID, m.Placement.RotationDeg)
+			}
+		} else if m.Placement.RotationDeg != nil {
+			t.Errorf("%s: rotationDeg = %+v, want nil (el miembro left no declara rotación)",
+				m.MemberID, m.Placement.RotationDeg)
 		}
 	}
 }

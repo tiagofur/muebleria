@@ -934,7 +934,11 @@ export function syncAgregadoWithKitParts(
       if (isMultiPiece) {
         const piece = m.hand ? part.pieces?.find((pc) => pc.anchor === m.hand) : undefined;
         if (!piece) return nextActor ? { ...m, actorMembership: nextActor } : m;
-        return { ...m, actorMembership: nextActor, placement: pieceAnchorPlacement(piece) };
+        return {
+          ...m,
+          actorMembership: nextActor,
+          placement: withAuthoredRotation(pieceAnchorPlacement(piece), m.placement),
+        };
       }
       if (!dp) return nextActor ? { ...m, actorMembership: nextActor } : m;
       const parsedPos = parseKitPartPlacementLabel(dp.label);
@@ -999,6 +1003,25 @@ export function syncAgregadoWithKitParts(
  * registro manda; el ancla right niega: positivo = hacia adentro). Paridad
  * con kitPieceMember Go.
  */
+/**
+ * #1613 review r1 (confirmado por ambos jueces): la ROTACIÓN es dato AUTORADO
+ * del miembro (Rotación avanzada del editor de recetas) — la pieza del
+ * catálogo no puede re-expresarla, así que el refresco del placement la
+ * conserva en vez de borrarla.
+ */
+function withAuthoredRotation(
+  placement: {
+    readonly x: { readonly ref: 'min' | 'max' | 'center'; readonly offsetMm: number };
+    readonly y: { readonly ref: 'min'; readonly offsetMm: number };
+    readonly z: { readonly ref: 'min'; readonly offsetMm: number };
+  },
+  stored?: { readonly rotationDeg?: { readonly x: number; readonly y: number; readonly z: number } } | null,
+) {
+  return stored?.rotationDeg != null
+    ? { ...placement, rotationDeg: stored.rotationDeg }
+    : placement;
+}
+
 function pieceAnchorPlacement(
   piece: {
     readonly anchor: 'left' | 'right' | 'center';
@@ -1148,7 +1171,11 @@ export function ensureAgregadoKitParts(
     if (isMultiPiece) {
       const piece = m.hand ? part.pieces?.find((pc) => pc.anchor === m.hand) : undefined;
       if (!piece) return nextActor ? { ...m, actorMembership: nextActor } : m;
-      return { ...m, actorMembership: nextActor, placement: pieceAnchorPlacement(piece) };
+      return {
+        ...m,
+        actorMembership: nextActor,
+        placement: withAuthoredRotation(pieceAnchorPlacement(piece), m.placement),
+      };
     }
     const parsedPos = dp ? parseKitPartPlacementLabel(dp.label) : undefined;
     if (!parsedPos) {
