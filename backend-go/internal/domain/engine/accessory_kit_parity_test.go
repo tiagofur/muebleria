@@ -865,3 +865,38 @@ func TestFrozenAccessoryChoicesRequiredGroup_1627(t *testing.T) {
 		t.Fatalf("legacy none must not be written on a required group, got %+v", got)
 	}
 }
+
+// #1627 s3 (review): catalog edits after the quote. A frozen group the
+// catalog unlinked from the kit is never written (it would be an unconsumed
+// choice that blocks the release); a group added to the kit after the quote
+// (mounted but not frozen) releases without insert — never an unpriced one.
+func TestFrozenAccessoryChoicesAfterCatalogEdits_1627(t *testing.T) {
+	f := loadAccessoryKitFixture(t)
+
+	// Unlinked after the quote.
+	catalog, mod, item := releaseItemScenario(t, f, false)
+	frozen := engine.FrozenAccessoryChoices(mod, catalog, item.MaterialChoices)
+	for i := range catalog.OptionGroups {
+		if catalog.OptionGroups[i].Code == f.AccessoryGroup.Code {
+			catalog.OptionGroups[i].KitHardwareID = nil
+		}
+	}
+	applied := engine.ApplyFrozenAccessoryChoices(mod, catalog, item.MaterialChoices, frozen)
+	if _, written := applied[f.AccessoryGroup.Code]; written {
+		t.Fatalf("a group no longer mounted must not be written, got %+v", applied)
+	}
+	item.MaterialChoices = applied
+	if _, err := engine.ResolveReleaseUnit(item, catalog); err != nil {
+		t.Fatalf("the release must not fail on an unlinked frozen group: %v", err)
+	}
+
+	// Added to the kit after the quote: the quote froze nothing for it.
+	catalog2, mod2, item2 := releaseItemScenario(t, f, false)
+	applied2 := engine.ApplyFrozenAccessoryChoices(mod2, catalog2, item2.MaterialChoices, map[string]string{"OTRO_GRUPO": domain.AccessoryChoiceNone})
+	if applied2[f.AccessoryGroup.Code] != domain.AccessoryChoiceNone {
+		t.Fatalf("a mounted optional group the quote did not freeze releases without insert, got %+v", applied2)
+	}
+	if _, written := applied2["OTRO_GRUPO"]; written {
+		t.Fatalf("a frozen code the module does not mount is never written, got %+v", applied2)
+	}
+}

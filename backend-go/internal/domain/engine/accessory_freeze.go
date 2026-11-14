@@ -41,15 +41,19 @@ func FrozenAccessoryChoices(module domain.Module, catalog domain.Catalog, choice
 }
 
 // ApplyFrozenAccessoryChoices returns the item's choices with the quote's
-// frozen inserts applied (a new map; the input is never mutated).
+// frozen inserts applied (a new map; the input is never mutated). Only insert
+// groups the module MOUNTS at release are touched (a group the catalog
+// unlinked after the quote is never written — it would be an unconsumed
+// choice):
 //
-//   - frozen present (snapshot from #1627 on): each frozen group takes its
-//     frozen value. A frozen «none» on a REQUIRED group is not written (it is
-//     not a legal choice there); the group keeps whatever the item says and
-//     the release gate/resolve report it as before.
+//   - frozen present (snapshot from #1627 on): a mounted group takes its
+//     frozen value, except a frozen «none» on a REQUIRED group (not a legal
+//     choice there). A mounted OPTIONAL group the quote did not freeze (added
+//     to the kit after the quote) releases without insert, unless the item
+//     chose one explicitly — never an insert nobody priced.
 //   - frozen nil (snapshot frozen before #1627 — owner decision): every
-//     mounted OPTIONAL insert group the item did not choose explicitly is
-//     released without insert; explicit choices are kept untouched.
+//     mounted OPTIONAL group the item did not choose explicitly is released
+//     without insert; explicit choices are kept untouched.
 func ApplyFrozenAccessoryChoices(module domain.Module, catalog domain.Catalog, choices map[string]string, frozen map[string]string) map[string]string {
 	out := make(map[string]string, len(choices)+len(frozen))
 	for code, id := range choices {
@@ -61,16 +65,14 @@ func ApplyFrozenAccessoryChoices(module domain.Module, catalog domain.Catalog, c
 			required[og.Code] = true
 		}
 	}
-	if frozen != nil {
-		for code, id := range frozen {
-			if id == domain.AccessoryChoiceNone && required[code] {
+	for code := range mountedAccessoryGroupCodes(module, catalog, choices) {
+		if value, wasFrozen := frozen[code]; wasFrozen {
+			if value == domain.AccessoryChoiceNone && required[code] {
 				continue
 			}
-			out[code] = id
+			out[code] = value
+			continue
 		}
-		return out
-	}
-	for code := range mountedAccessoryGroupCodes(module, catalog, choices) {
 		if required[code] || strings.TrimSpace(out[code]) != "" {
 			continue
 		}
