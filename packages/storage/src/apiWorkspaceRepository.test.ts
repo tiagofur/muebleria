@@ -2197,3 +2197,68 @@ describe('APIWorkspaceRepository simple families concurrency (#1091 / #443 slice
     expect(methods).toEqual([{ method: 'POST', ifMatch: null }]);
   });
 });
+
+// Review #1626 (major): «Añadir altura» con un grupo de elegibilidad EXISTENTE
+// sube su versión en el servidor; el próximo guardado del catálogo debe
+// aprenderla, nunca mandar el If-Match viejo sembrado por getCatalog (412).
+it('addHardwareKitSystemHeight forgets the cached version of an existing eligibility group (#1625)', async () => {
+  const requests: { method: string; url: string; ifMatch?: string }[] = [];
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? 'GET';
+    const ifMatch = (init?.headers as Record<string, string> | undefined)?.['If-Match'];
+    requests.push({ method, url, ifMatch });
+    if (method === 'GET' && url.endsWith('/catalog/option-groups')) {
+      return {
+        ok: true,
+        json: async () => [
+          { id: 'og-sys', code: 'SISTEMA_CAJON', name: 'Sistemas', kind: 'agregado', required: false, option_ids: ['agr-a'], version: 4 },
+        ],
+      } as Response;
+    }
+    if (method === 'GET' && url.endsWith('/catalog/option-groups/og-sys')) {
+      return {
+        ok: true,
+        json: async () => ({ id: 'og-sys', code: 'SISTEMA_CAJON', name: 'Sistemas', kind: 'agregado', required: false, option_ids: ['agr-a', 'agr-sys'], version: 5 }),
+      } as Response;
+    }
+    if (method === 'GET' && url.endsWith('/catalog/agregados/agr-sys')) {
+      return { ok: true, json: async () => ({ id: 'agr-sys', version: 2 }) } as Response;
+    }
+    if (method === 'POST' && url.includes('/catalog/hardware-kit-systems/agr-sys/heights')) {
+      return {
+        ok: true,
+        status: 201,
+        json: async () => ({ created_codes: ['SYS-E'], agregado_id: 'agr-sys', agregado_version: 3, variant_set_id: 'vs-h', height_mm: 209 }),
+      } as Response;
+    }
+    if (method === 'PUT' && url.includes('/catalog/option-groups/og-sys')) {
+      return { ok: true, json: async () => ({ id: 'og-sys', version: 6 }) } as Response;
+    }
+    return { ok: true, json: async () => [] } as Response;
+  });
+
+  const repo = new APIWorkspaceRepository();
+  await repo.getCatalog();
+  await repo.addHardwareKitSystemHeight('agr-sys', {
+    hardware: [{ id: 'kit-e', code: 'SYS-E', name: 'Sistema E', unit: 'set', cost_per_unit: 0, active: true }],
+    variant: { nominalDimensionMm: 209, kit_hardware_id: 'kit-e' },
+    option_group: null,
+    eligibility_group: { existing_group_id: 'og-sys' },
+  });
+  await repo.saveCatalog({
+    materials: [],
+    edges: [],
+    hardware: [],
+    optionGroups: [
+      { id: 'og-sys', code: 'SISTEMA_CAJON', name: 'Sistemas', kind: 'agregado', required: false, optionIds: ['agr-a', 'agr-sys'] },
+    ],
+    modules: [],
+    categories: [],
+    customers: [],
+  });
+
+  const put = requests.find((r) => r.method === 'PUT' && r.url.includes('/catalog/option-groups/og-sys'));
+  expect(put, 'the group is saved').toBeTruthy();
+  expect(put?.ifMatch, 'If-Match learned from the server, not the stale getCatalog seed').toBe('"v5"');
+});

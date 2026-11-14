@@ -1106,6 +1106,17 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       payload,
     );
     this.entityVersions.set(key, added.agregado_version);
+    // Review #1626 (major): with an EXISTING eligibility group the server
+    // appended the ensamble to it in the same transaction, bumping its
+    // version. Forget the cached version and baseline body so the next
+    // catalog save learns the current version first — never a stale
+    // If-Match that would 412 every later save of the session.
+    const existingGroupId = req.eligibility_group?.existing_group_id;
+    if (existingGroupId) {
+      const groupKey = this.versionKey('option-groups', existingGroupId);
+      this.entityVersions.delete(groupKey);
+      this.lastSentBody.delete(groupKey);
+    }
     return added;
   }
 

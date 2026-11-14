@@ -127,3 +127,21 @@ describe('#1625 — partes de los juegos por altura', () => {
     expect(screen.getByTestId('agregado-cajon-hardware-kit-member-0').textContent).toContain('MBOX-E-FIJ');
   });
 });
+
+describe('review #1626 — juego principal colgante', () => {
+  it('Herrajes del cajón: con un juego principal que ya no existe, las partes por altura siguen visibles', () => {
+    render(
+      <Harness
+        editor="cajon"
+        initial={{
+          commercialKitHardwareId: 'kit-borrado',
+          variantSets: [
+            { id: 'vs-h', dimension: 'height', variants: [{ nominalDimensionMm: 209, hardwareId: 'kit-e', commercialKitHardwareId: 'kit-e' }] },
+          ],
+          rigidMembers: [member('hw-e-parte')],
+        }}
+      />,
+    );
+    expect(screen.getByTestId('agregado-cajon-hardware-kit-member-0').textContent).toContain('MBOX-E-FIJ');
+  });
+});

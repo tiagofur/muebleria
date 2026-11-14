@@ -104,12 +104,40 @@ func (s *Server) HandleHardwareKitSystemHeightAdd(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Review #1626: the selector and a new eligibility group have codes too —
+	// a taken one is a typed 409 decided BEFORE any write, never a 5xx from
+	// the insert.
+	groups, err := s.Store.ListOptionGroups(r.Context())
+	if err != nil {
+		respondWithInternalError(w, err, "kit system height option group probe")
+		return
+	}
+	existingGroupCodes := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		existingGroupCodes[g.Code] = true
+	}
+	takenGroups := []string{}
+	if plan.optionGroup != nil && existingGroupCodes[plan.optionGroup.Code] {
+		takenGroups = append(takenGroups, plan.optionGroup.Code)
+	}
+	if plan.eligibility != nil && plan.eligibility.newGroup != nil && existingGroupCodes[plan.eligibility.newGroup.Code] {
+		takenGroups = append(takenGroups, plan.eligibility.newGroup.Code)
+	}
+	if plan.optionGroup != nil && plan.eligibility != nil && plan.eligibility.newGroup != nil &&
+		plan.optionGroup.Code == plan.eligibility.newGroup.Code {
+		respondWithJSON(w, http.StatusUnprocessableEntity, invalidPayload("el selector de insertos y el grupo de elegibilidad no pueden compartir código", nil))
+		return
+	}
+	if len(takenGroups) > 0 {
+		respondWithJSON(w, http.StatusConflict, map[string]any{
+			"code":    "HARDWARE_KIT_SYSTEM_CODE_TAKEN",
+			"message": fmt.Sprintf("códigos de grupo ya existen en el catálogo: %v", takenGroups),
+			"details": map[string]any{"codes": takenGroups},
+		})
+		return
+	}
+
 	if plan.eligibility != nil && plan.eligibility.existingGroupID != "" {
-		groups, err := s.Store.ListOptionGroups(r.Context())
-		if err != nil {
-			respondWithInternalError(w, err, "kit system height eligibility probe")
-			return
-		}
 		for i := range groups {
 			if groups[i].ID == plan.eligibility.existingGroupID {
 				plan.eligibility.eligibilityTarget = &groups[i]

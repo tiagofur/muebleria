@@ -464,9 +464,10 @@ export function AgregadoCajonHardwareSection({
             ) : null}
           </>
         ) : null}
-        {/* #1625: sin juego principal, las partes de los juegos por altura
-            (variantes) siguen visibles aquí en solo lectura — nunca ocultas. */}
-        {!kitId && kitEntries.length > 0 ? (
+        {/* #1625: sin juego principal (o con uno que ya no existe), las partes
+            de los juegos por altura siguen visibles aquí en solo lectura —
+            nunca ocultas. */}
+        {!(kitId && kitEntity) && kitEntries.length > 0 ? (
           <div className="agregado-editor__item-fields" data-testid={`${testId}-variant-kit-members`}>
             <p className="catalog-form__hint">
               {kitEntries.length} herraje(s) de los juegos por altura · se

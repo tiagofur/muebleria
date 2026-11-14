@@ -172,6 +172,7 @@ func TestHardwareKitSystemHeight_FailuresLeaveNothingBehind_1625(t *testing.T) {
 		{"versión del ensamble que no coincide", version + 5, heightPayload("HSYS-C-M", 46, 108, false, ""), http.StatusPreconditionFailed, "", []string{"HSYS-C-M", "HSYS-C-M-FIJ"}},
 		{"altura repetida", version, heightPayload("HSYS-C-E2", 47, 209, false, ""), http.StatusUnprocessableEntity, "HARDWARE_KIT_SYSTEM_HEIGHT_EXISTS", []string{"HSYS-C-E2", "HSYS-C-E2-FIJ"}},
 		{"código tomado (el kit del sistema)", version, heightPayload("HSYS-C", 48, 108, false, ""), http.StatusConflict, "HARDWARE_KIT_SYSTEM_CODE_TAKEN", []string{"HSYS-C-FIJ-NUEVO"}},
+		{"código del selector tomado (el del sistema)", version, strings.Replace(heightPayload("HSYS-C-K", 52, 146, true, ""), `"code":"HSYS-C-K_INSERTOS"`, `"code":"HSYS-C_LATERAL_E"`, 1), http.StatusConflict, "HARDWARE_KIT_SYSTEM_CODE_TAKEN", []string{"HSYS-C-K", "HSYS-C-K-FIJ", "HSYS-C-K-GAL"}},
 		{"fila de inserto sin selector", version, strings.Replace(heightPayload("HSYS-C-N", 49, 85.5, true, ""), `"option_group":{`, `"option_group":null,"_":{`, 1), http.StatusUnprocessableEntity, "HARDWARE_KIT_SYSTEM_PAYLOAD_INVALID", []string{"HSYS-C-N", "HSYS-C-N-FIJ", "HSYS-C-N-GAL"}},
 	}
 	for _, c := range cases {
