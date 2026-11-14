@@ -599,3 +599,79 @@ func TestAccessoryKitSurvivesBulkDedupe_1502(t *testing.T) {
 		t.Fatalf("accessory line must survive the bulk dedupe, got %+v", accLines)
 	}
 }
+
+// #1620 (review P1-2): la intersección de elecciones consumidas (#826) es
+// BOM-neutral sólo si nunca suelta la clave de un grupo de insertos que el
+// mueble monta: una elección explícita INVÁLIDA no dibuja ni cotiza nada,
+// mientras que la clave ausente cae a la primera opción activa. La clave
+// stale se conserva y el gate estricto de liberación la rechaza por nombre.
+// La clave de un grupo vinculado a un kit que el mueble NO monta sigue
+// siendo descartable.
+func TestIntersectKeepsStaleMountedAccessoryChoice_1620(t *testing.T) {
+	f := loadAccessoryKitFixture(t)
+	catalog, mod := buildAccessoryKitScenario(f, false, true)
+	// The release unit only accepts agregados on a composed (structure-backed)
+	// definition, with explicit integer dimensions.
+	catalog.Structures = append(catalog.Structures, domain.Structure{ID: "st-acc", Code: "ST-ACC", Name: "Cuerpo", Active: true})
+	mod.StructureID = "st-acc"
+	catalog.Modules = append(catalog.Modules, mod)
+	otherKit := "kit-otro"
+	catalog.Hardware = append(catalog.Hardware,
+		domain.Hardware{ID: otherKit, Code: "KIT-OTRO", Name: "Kit otro", Unit: "set", Active: true},
+		domain.Hardware{ID: "acc-otro", Code: "ACC-OTRO", Name: "Accesorio otro", Unit: "set", Active: true},
+	)
+	catalog.OptionGroups = append(catalog.OptionGroups, domain.OptionGroup{
+		ID: "og-otro", Code: "LATERAL_OTRO", Name: "Lateral otro", Kind: "hardware",
+		OptionIDs: []string{"acc-otro"}, KitHardwareID: &otherKit,
+	})
+	stale := f.AccessoryGroup.Accessories[0].ID
+	for i := range catalog.Hardware {
+		if catalog.Hardware[i].ID == stale {
+			catalog.Hardware[i].Active = false
+		}
+	}
+	item := domain.DesignRevisionItem{
+		FurnitureInstanceID:   "fi-acc",
+		FurnitureDefinitionID: mod.ID,
+		Parameters: map[string]any{
+			"widthMm": float64(f.Module.WidthMm), "heightMm": float64(f.Module.HeightMm), "depthMm": float64(f.Module.DepthMm),
+		},
+		MaterialChoices: map[string]string{
+			"LATERAL":             "mat-lateral",
+			f.AccessoryGroup.Code: stale,
+			"LATERAL_OTRO":        "acc-otro",
+		},
+	}
+
+	filtered, ok := engine.IntersectConsumedOptionChoices(item, catalog)
+	if !ok {
+		t.Fatal("resolvable unit must intersect")
+	}
+	if filtered[f.AccessoryGroup.Code] != stale {
+		t.Fatalf("the stale pick of a mounted accessory group must survive the intersection, got %+v", filtered)
+	}
+	if _, kept := filtered["LATERAL_OTRO"]; kept {
+		t.Fatalf("an accessory group of a kit the module does not mount must stay droppable, got %+v", filtered)
+	}
+
+	// BOM-neutral: the frozen choices quote exactly what the original choices
+	// quoted (no accessory line), never the silent default.
+	before, err := engine.ResolveBomWithContext(mod, item.MaterialChoices, catalog, nil, "", nil, nil)
+	if err != nil {
+		t.Fatalf("ResolveBomWithContext(before): %v", err)
+	}
+	after, err := engine.ResolveBomWithContext(mod, filtered, catalog, nil, "", nil, nil)
+	if err != nil {
+		t.Fatalf("ResolveBomWithContext(after): %v", err)
+	}
+	if len(accessoryKitLinesOf(before)) != 0 || len(accessoryKitLinesOf(after)) != 0 {
+		t.Fatalf("a stale pick quotes nothing before and after the intersection: before=%+v after=%+v",
+			accessoryKitLinesOf(before), accessoryKitLinesOf(after))
+	}
+
+	// The strict release gate rejects the stale value by name.
+	item.MaterialChoices = filtered
+	if _, err := engine.ResolveReleaseUnit(item, catalog); err == nil || !strings.Contains(err.Error(), f.AccessoryGroup.Code) {
+		t.Fatalf("release gate must reject the stale accessory pick by name, got %v", err)
+	}
+}

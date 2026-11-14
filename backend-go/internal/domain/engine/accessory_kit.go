@@ -335,6 +335,35 @@ func consumeAgregadoAndAccessoryChoices(module domain.Module, catalog domain.Cat
 	}
 }
 
+// mountedAccessoryGroupCodes (#1620) lists the codes of the kit-linked
+// accessory groups the module can consult: every linked group of every kit
+// (level + height variants) of each instance's EFFECTIVE agregado — the same
+// walk consumeAgregadoAndAccessoryChoices runs. A choice under one of these
+// codes is never BOM-neutral to drop: an invalid pick draws and quotes
+// nothing, while the absent key falls back to the group's first active
+// option (effectiveAccessoryChoice). Codes of groups the module cannot mount
+// (orphans of a previous drawer) are not listed and stay droppable.
+func mountedAccessoryGroupCodes(module domain.Module, catalog domain.Catalog, choices map[string]string) map[string]bool {
+	codes := map[string]bool{}
+	instances := append(append([]domain.ModuleAgregadoInstance{}, structureAgregadosOf(module, catalog)...), module.Agregados...)
+	for _, inst := range instances {
+		effectiveID := ResolveEffectiveAgregadoID(inst, choices)
+		if effectiveID == "" {
+			continue
+		}
+		agr, ok := findAgregado(catalog, effectiveID)
+		if !ok {
+			continue
+		}
+		for _, kitID := range AgregadoKitIDs(agr) {
+			for _, og := range linkedAccessoryGroups(catalog, kitID) {
+				codes[og.Code] = true
+			}
+		}
+	}
+	return codes
+}
+
 // AgregadoKitIDs lists the commercial kits the agregado can mount: the level
 // kit plus every height-variant kit (#1493). Accessory groups are declared
 // per kit; the web offering unions them across variants and so does the
