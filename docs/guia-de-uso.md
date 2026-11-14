@@ -381,6 +381,13 @@ ese mueble vaya sin inserto aunque el selector tenga un default. En la web,
 la opción de heredar dice qué lleva el cajón («Por defecto del juego
 (Galería…)» o «(Sin inserto)»).
 
+**Cotizaciones congeladas:** al congelar una cotización se guarda qué
+inserto lleva cada cajón en ese momento (el elegido o el del default). Si
+después cambiás el orden o el default del selector, esa cotización se libera
+igual con el inserto que se cotizó. Las cotizaciones congeladas antes de este
+cambio se liberan **sin inserto** en los cajones donde no se había elegido
+uno (los insertos elegidos explícitamente se respetan).
+
 **Cómo saber que quedó bien:** al agregar el mueble a una cotización
 aparece el selector con las opciones; el precio del inserto — el elegido
 o, sin elección, el primero — sale en la cotización por cajón.

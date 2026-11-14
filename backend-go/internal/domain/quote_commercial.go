@@ -79,6 +79,14 @@ type QuoteCommercialPricingContext struct {
 	// dimensions — measure presets are not consulted for it. Frozen so later
 	// requotes carry the same authority instead of re-deriving it.
 	DimsAuthoritative bool `json:"dimsAuthoritative,omitempty"`
+	// AccessoryChoices (#1627): the insert each kit-linked insert group the
+	// unit mounts resolved to WHEN THE QUOTE FROZE — an option id or
+	// AccessoryChoiceNone. The quoted release applies it over the design
+	// revision items, so a later catalog reorder or default change never
+	// alters a frozen quote. Nil on snapshots frozen before #1627 (and on
+	// units that mount no insert group): the release then leaves those groups
+	// without insert unless the item chose one explicitly (owner decision).
+	AccessoryChoices map[string]string `json:"accessoryChoices,omitempty"`
 }
 
 // QuoteCommercialUnit is the frozen customer-facing descriptor of ONE physical
@@ -568,6 +576,12 @@ func CloneQuoteCommercialPricingContext(source *QuoteCommercialPricingContext) *
 	if source.PlinthSides != nil {
 		sides := *source.PlinthSides
 		cloned.PlinthSides = &sides
+	}
+	if source.AccessoryChoices != nil {
+		cloned.AccessoryChoices = make(map[string]string, len(source.AccessoryChoices))
+		for code, id := range source.AccessoryChoices {
+			cloned.AccessoryChoices[code] = id
+		}
 	}
 	return &cloned
 }
