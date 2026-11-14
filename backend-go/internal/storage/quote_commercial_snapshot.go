@@ -222,6 +222,9 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 				Left: baseContext.PlinthSides.Left, Right: baseContext.PlinthSides.Right, Back: baseContext.PlinthSides.Back,
 			}
 		}
+		// #1627: freeze the insert each mounted insert group resolves to now
+		// (explicit or default), so the quoted release mounts what was priced.
+		items[i].PricingContext.AccessoryChoices = engine.FrozenAccessoryChoices(module, catalog, items[i].MaterialChoices)
 	}
 	// #986: the governed resolve's commercial demand joins the frozen price —
 	// same derivation the release freeze persists. Q1 pricing items are the
@@ -365,6 +368,11 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 				revision := engine.StructureRevisionNumber(structure)
 				item.PricingContext.StructureRevisionPin = &revision
 			}
+		}
+		// #1627: a requote is a new commercial truth — re-freeze the inserts
+		// from the current choices and catalog (never the source's map).
+		if module, ok := moduleByID[item.FurnitureDefinitionID]; ok {
+			item.PricingContext.AccessoryChoices = engine.FrozenAccessoryChoices(module, catalog, item.MaterialChoices)
 		}
 		choices := item.MaterialChoices
 		if choices == nil {

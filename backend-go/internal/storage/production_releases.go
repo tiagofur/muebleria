@@ -177,7 +177,10 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 		return nil, err
 	}
 
-	if err := s.insertReleaseManufacturingSnapshot(txCtx, release, items, collection, catalog); err != nil {
+	// #1627: the snapshot records what was manufactured — the items with the
+	// quote's frozen inserts applied (the fingerprint above stays on the
+	// immutable revision items so staleness compares like with like).
+	if err := s.insertReleaseManufacturingSnapshot(txCtx, release, outcome.resolvedItems, collection, catalog); err != nil {
 		return nil, err
 	}
 
@@ -229,10 +232,16 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 // collection. The release command resolves ONCE here and reuses the
 // collection for its immutable snapshot — no second resolution.
 type releaseGateOutcome struct {
-	items      []domain.DesignRevisionItem
-	preflight  *domain.ManufacturingPreflightResult
-	catalog    domain.Catalog
-	collection *engine.ResolvedReleaseCollection
+	// items are the exact immutable revision items (the manufacturing
+	// fingerprint and the staleness check read these).
+	items []domain.DesignRevisionItem
+	// resolvedItems (#1627) are the items the release actually resolved and
+	// snapshots: the revision items with the quote's frozen inserts applied.
+	// Equal to items for a quote-less release.
+	resolvedItems []domain.DesignRevisionItem
+	preflight     *domain.ManufacturingPreflightResult
+	catalog       domain.Catalog
+	collection    *engine.ResolvedReleaseCollection
 }
 
 // evaluateReleaseManufacturingReadiness runs the authoritative manufacturing
@@ -301,6 +310,16 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
+	// #1627: a quoted release mounts the inserts the quote froze per unit —
+	// applied over the revision items before anything resolves, so the gate,
+	// the snapshot and the requirements all see the same choices.
+	resolvedItems := items
+	if quoteRevisionID != "" {
+		resolvedItems, err = s.applyQuotedReleaseAccessories(ctx, quoteRevisionID, items, catalog)
+		if err != nil {
+			return nil, err
+		}
+	}
 	// Server-resolved inputs (#875 slice 2): the organization's pinned
 	// profiles, synthesized side recipes and factory construction policy —
 	// the SAME loader the authoring resolve uses, so fabrication freezes
@@ -320,7 +339,7 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 	// the command AND the preflight verdict — a partial opening never freezes.
 	var openings map[string]engine.ReleaseUnitOpening
 	if openingGoverned {
-		openings, err = s.resolveReleaseOpenings(ctx, gripCtx, items, catalog)
+		openings, err = s.resolveReleaseOpenings(ctx, gripCtx, resolvedItems, catalog)
 		if err != nil {
 			preflight = preflightBlockedByOpeningRelease(preflight, err)
 			return &releaseGateOutcome{items: items, preflight: preflight},
@@ -331,7 +350,7 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 	// The routing program and per-unit profile demand derive INSIDE the
 	// collection resolve, so the gate verdict, the merged requirements and
 	// the frozen snapshot are one derivation.
-	collection, err := engine.ResolveReleaseCollection(designRevisionID, items, catalog, authority, serverInputs, openings)
+	collection, err := engine.ResolveReleaseCollection(designRevisionID, resolvedItems, catalog, authority, serverInputs, openings)
 	if err != nil {
 		// Server-side diagnostics: the 409 envelope is business-safe (typed
 		// blocker, unit identities only) — the underlying resolution cause is
@@ -340,7 +359,7 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 		return &releaseGateOutcome{items: items, preflight: preflightBlockedBySnapshotResolution(preflight, err)},
 			fmt.Errorf("%w: %w", ErrReleaseSnapshotResolution, err)
 	}
-	return &releaseGateOutcome{items: items, preflight: preflight, catalog: catalog, collection: collection}, nil
+	return &releaseGateOutcome{items: items, resolvedItems: resolvedItems, preflight: preflight, catalog: catalog, collection: collection}, nil
 }
 
 // releaseGripContext is the effective-grip state a release resolves with:

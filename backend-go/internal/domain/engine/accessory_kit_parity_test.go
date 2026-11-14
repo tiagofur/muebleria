@@ -766,3 +766,137 @@ func TestAccessoryKitExplicitNoneReleaseGate_1627(t *testing.T) {
 		}
 	}
 }
+
+// releaseItemScenario (#1627 s3): structure-backed release unit of the
+// accessory scenario (agregados need a composed definition at release).
+func releaseItemScenario(t *testing.T, f accessoryKitFixture, required bool) (domain.Catalog, domain.Module, domain.DesignRevisionItem) {
+	t.Helper()
+	catalog, mod := buildAccessoryKitScenario(f, required, true)
+	catalog.Structures = append(catalog.Structures, domain.Structure{ID: "st-acc", Code: "ST-ACC", Name: "Cuerpo", Active: true})
+	mod.StructureID = "st-acc"
+	catalog.Modules = append(catalog.Modules, mod)
+	item := domain.DesignRevisionItem{
+		FurnitureInstanceID:   "fi-frozen",
+		FurnitureDefinitionID: mod.ID,
+		Parameters: map[string]any{
+			"widthMm": float64(f.Module.WidthMm), "heightMm": float64(f.Module.HeightMm), "depthMm": float64(f.Module.DepthMm),
+		},
+		MaterialChoices: map[string]string{},
+	}
+	return catalog, mod, item
+}
+
+// #1627 s3: the quote freezes the insert the unit resolved to; reordering
+// the catalog afterwards changes the live default but the frozen choice,
+// applied at release, keeps manufacturing what was priced.
+func TestFrozenAccessoryChoicesSurviveCatalogReorder_1627(t *testing.T) {
+	f := loadAccessoryKitFixture(t)
+	catalog, mod, item := releaseItemScenario(t, f, false)
+	first, second := f.AccessoryGroup.Accessories[0].ID, f.AccessoryGroup.Accessories[1].ID
+
+	frozen := engine.FrozenAccessoryChoices(mod, catalog, item.MaterialChoices)
+	if frozen[f.AccessoryGroup.Code] != first {
+		t.Fatalf("freeze must record the default the unit mounts now (%q), got %+v", first, frozen)
+	}
+
+	// The workshop reorders the selector after the quote froze.
+	for i := range catalog.OptionGroups {
+		if catalog.OptionGroups[i].Code == f.AccessoryGroup.Code {
+			catalog.OptionGroups[i].OptionIDs = []string{second, first}
+		}
+	}
+	live, err := engine.ResolveReleaseUnit(item, catalog)
+	if err != nil {
+		t.Fatalf("live release: %v", err)
+	}
+	if lines := accessoryKitLinesOf(live.BOM); len(lines) != 1 || lines[0].HardwareID != second {
+		t.Fatalf("without the frozen choice the release follows the new default %q, got %+v", second, lines)
+	}
+
+	item.MaterialChoices = engine.ApplyFrozenAccessoryChoices(mod, catalog, item.MaterialChoices, frozen)
+	frozenUnit, err := engine.ResolveReleaseUnit(item, catalog)
+	if err != nil {
+		t.Fatalf("frozen release: %v", err)
+	}
+	if lines := accessoryKitLinesOf(frozenUnit.BOM); len(lines) != 1 || lines[0].HardwareID != first {
+		t.Fatalf("the frozen quote must release its priced insert %q, got %+v", first, lines)
+	}
+}
+
+// #1627 s3 (owner decision): a quote frozen BEFORE this change carries no
+// frozen inserts — its unchosen optional insert groups release without
+// insert; explicit choices are kept.
+func TestFrozenAccessoryChoicesLegacySnapshot_1627(t *testing.T) {
+	f := loadAccessoryKitFixture(t)
+	catalog, mod, item := releaseItemScenario(t, f, false)
+
+	applied := engine.ApplyFrozenAccessoryChoices(mod, catalog, item.MaterialChoices, nil)
+	if applied[f.AccessoryGroup.Code] != domain.AccessoryChoiceNone {
+		t.Fatalf("legacy snapshot: unchosen optional group must release without insert, got %+v", applied)
+	}
+	item.MaterialChoices = applied
+	unit, err := engine.ResolveReleaseUnit(item, catalog)
+	if err != nil {
+		t.Fatalf("legacy release must resolve: %v", err)
+	}
+	if lines := accessoryKitLinesOf(unit.BOM); len(lines) != 0 {
+		t.Fatalf("legacy release must carry no insert line, got %+v", lines)
+	}
+
+	explicit := map[string]string{f.AccessoryGroup.Code: f.AccessoryGroup.Accessories[1].ID}
+	if kept := engine.ApplyFrozenAccessoryChoices(mod, catalog, explicit, nil); kept[f.AccessoryGroup.Code] != f.AccessoryGroup.Accessories[1].ID {
+		t.Fatalf("legacy snapshot must keep the explicit choice, got %+v", kept)
+	}
+	if explicit[f.AccessoryGroup.Code] != f.AccessoryGroup.Accessories[1].ID {
+		t.Fatal("the input choices must never be mutated")
+	}
+}
+
+// #1627 s3: a frozen «none» is never written onto a REQUIRED group (not a
+// legal choice there), legacy or not.
+func TestFrozenAccessoryChoicesRequiredGroup_1627(t *testing.T) {
+	f := loadAccessoryKitFixture(t)
+	catalog, mod, item := releaseItemScenario(t, f, true)
+	frozenNone := map[string]string{f.AccessoryGroup.Code: domain.AccessoryChoiceNone}
+	if got := engine.ApplyFrozenAccessoryChoices(mod, catalog, item.MaterialChoices, frozenNone); got[f.AccessoryGroup.Code] != "" {
+		t.Fatalf("frozen none must not be written on a required group, got %+v", got)
+	}
+	if got := engine.ApplyFrozenAccessoryChoices(mod, catalog, item.MaterialChoices, nil); got[f.AccessoryGroup.Code] != "" {
+		t.Fatalf("legacy none must not be written on a required group, got %+v", got)
+	}
+}
+
+// #1627 s3 (review): catalog edits after the quote. A frozen group the
+// catalog unlinked from the kit is never written (it would be an unconsumed
+// choice that blocks the release); a group added to the kit after the quote
+// (mounted but not frozen) releases without insert — never an unpriced one.
+func TestFrozenAccessoryChoicesAfterCatalogEdits_1627(t *testing.T) {
+	f := loadAccessoryKitFixture(t)
+
+	// Unlinked after the quote.
+	catalog, mod, item := releaseItemScenario(t, f, false)
+	frozen := engine.FrozenAccessoryChoices(mod, catalog, item.MaterialChoices)
+	for i := range catalog.OptionGroups {
+		if catalog.OptionGroups[i].Code == f.AccessoryGroup.Code {
+			catalog.OptionGroups[i].KitHardwareID = nil
+		}
+	}
+	applied := engine.ApplyFrozenAccessoryChoices(mod, catalog, item.MaterialChoices, frozen)
+	if _, written := applied[f.AccessoryGroup.Code]; written {
+		t.Fatalf("a group no longer mounted must not be written, got %+v", applied)
+	}
+	item.MaterialChoices = applied
+	if _, err := engine.ResolveReleaseUnit(item, catalog); err != nil {
+		t.Fatalf("the release must not fail on an unlinked frozen group: %v", err)
+	}
+
+	// Added to the kit after the quote: the quote froze nothing for it.
+	catalog2, mod2, item2 := releaseItemScenario(t, f, false)
+	applied2 := engine.ApplyFrozenAccessoryChoices(mod2, catalog2, item2.MaterialChoices, map[string]string{"OTRO_GRUPO": domain.AccessoryChoiceNone})
+	if applied2[f.AccessoryGroup.Code] != domain.AccessoryChoiceNone {
+		t.Fatalf("a mounted optional group the quote did not freeze releases without insert, got %+v", applied2)
+	}
+	if _, written := applied2["OTRO_GRUPO"]; written {
+		t.Fatalf("a frozen code the module does not mount is never written, got %+v", applied2)
+	}
+}
