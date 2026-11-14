@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.memberPlacementAuthority.v1",
+  "comment": "#1625 — cuándo la posición X/Y/Z de un miembro de receta la manda el catálogo: el sync del motor (Go syncAgregadoRigidMembersFromCatalog) la reescribe en cada resolve y el editor web debe mostrarla en solo lectura. Go comprueba el sync real contra una posición centinela; TS comprueba memberPlacementAuthority. expected: piece | label | none. expectedPlacement (sólo casos derivados): la posición que el sync deja en el miembro guardado — Go la lee del sync real, TS de catalogMemberPlacement. La posición centinela del miembro tiene Y/Z con ref min.",
+  "hardware": [
+    {
+      "id": "hw-par",
+      "code": "PAR-FIJ",
+      "pieces": [
+        {
+          "anchor": "left",
+          "offsetMm": {
+            "x": 4,
+            "y": 136,
+            "z": 0
+          }
+        },
+        {
+          "anchor": "right",
+          "offsetMm": {
+            "x": 4,
+            "y": 136,
+            "z": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "hw-par-label",
+      "code": "PAR-CON-LABEL",
+      "pieces": [
+        {
+          "anchor": "left"
+        }
+      ],
+      "label": "pos:min:10:0:0"
+    },
+    {
+      "id": "hw-label",
+      "code": "SUELTO-LABEL",
+      "label": "pos:max:12:5:30"
+    },
+    {
+      "id": "hw-label-rota",
+      "code": "SUELTO-LABEL-ROTA",
+      "label": "posicion libre"
+    },
+    {
+      "id": "hw-plano",
+      "code": "TORNILLO"
+    }
+  ],
+  "cases": [
+    {
+      "name": "pieza por lado con mano coincidente",
+      "hardwareId": "hw-par",
+      "hand": "left",
+      "expected": "piece",
+      "expectedPlacement": {
+        "x": {
+          "ref": "min",
+          "offsetMm": 4
+        },
+        "y": {
+          "ref": "min",
+          "offsetMm": 136
+        },
+        "z": {
+          "ref": "min",
+          "offsetMm": 0
+        }
+      }
+    },
+    {
+      "name": "pieza por lado, mano derecha",
+      "hardwareId": "hw-par",
+      "hand": "right",
+      "expected": "piece",
+      "expectedPlacement": {
+        "x": {
+          "ref": "max",
+          "offsetMm": -4
+        },
+        "y": {
+          "ref": "min",
+          "offsetMm": 136
+        },
+        "z": {
+          "ref": "min",
+          "offsetMm": 0
+        }
+      }
+    },
+    {
+      "name": "herraje con piezas y miembro sin mano (legacy)",
+      "hardwareId": "hw-par",
+      "hand": "",
+      "expected": "none"
+    },
+    {
+      "name": "herraje con piezas y mano sin pieza",
+      "hardwareId": "hw-par",
+      "hand": "center",
+      "expected": "none"
+    },
+    {
+      "name": "con piezas la etiqueta pos: no aplica aunque la mano no coincida",
+      "hardwareId": "hw-par-label",
+      "hand": "right",
+      "expected": "none"
+    },
+    {
+      "name": "etiqueta pos: en herraje sin piezas",
+      "hardwareId": "hw-label",
+      "hand": "",
+      "expected": "label",
+      "expectedPlacement": {
+        "x": {
+          "ref": "max",
+          "offsetMm": 12
+        },
+        "y": {
+          "ref": "min",
+          "offsetMm": 5
+        },
+        "z": {
+          "ref": "min",
+          "offsetMm": 30
+        }
+      }
+    },
+    {
+      "name": "etiqueta que no es pos:",
+      "hardwareId": "hw-label-rota",
+      "hand": "",
+      "expected": "none"
+    },
+    {
+      "name": "herraje sin piezas ni etiqueta",
+      "hardwareId": "hw-plano",
+      "hand": "",
+      "expected": "none"
+    },
+    {
+      "name": "herraje ausente del catálogo",
+      "hardwareId": "hw-no-existe",
+      "hand": "left",
+      "expected": "none"
+    }
+  ]
+}

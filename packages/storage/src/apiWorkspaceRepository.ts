@@ -1045,6 +1045,82 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   /**
+   * #1625 — añade UNA altura a un sistema de cajones existente en una
+   * transacción server-side (juego + diseños + variante del ensamble +
+   * insertos/selector + elegibilidad; todo o nada). El If-Match sale de la
+   * caché de versiones de la sesión (aprendida con un GET si falta) y la
+   * versión nueva del ensamble se recuerda: el próximo guardado del catálogo
+   * no puede tropezar con un 412 por una versión vieja.
+   */
+  async addHardwareKitSystemHeight(
+    agregadoId: string,
+    req: import('./openapi/generated/types').HardwareKitSystemHeightAddRequest,
+  ): Promise<import('./openapi/generated/types').HardwareKitSystemHeightAdded> {
+    const key = this.versionKey('agregados', agregadoId);
+    let expected = this.entityVersions.get(key);
+    let res: Response;
+    try {
+      if (expected === undefined) {
+        const learnRes = await this.fetch(`${this.baseUrl}/catalog/agregados/${encodeURIComponent(agregadoId)}`, {
+          method: 'GET',
+          headers: this.getHeaders(),
+        });
+        if (!learnRes.ok) throw new Error(`API learn failed agregado ${agregadoId}: ${learnRes.status}`);
+        const learned = (await learnRes.json()) as { version?: unknown };
+        if (typeof learned.version !== 'number' || learned.version < 1) {
+          throw new CatalogEntityVersionUnknownError('agregados', agregadoId);
+        }
+        expected = learned.version;
+      }
+      res = await this.fetch(
+        `${this.baseUrl}/catalog/hardware-kit-systems/${encodeURIComponent(agregadoId)}/heights`,
+        {
+          method: 'POST',
+          headers: { ...this.getHeaders(), 'If-Match': `"v${expected}"` },
+          body: JSON.stringify(req),
+        },
+      );
+    } catch (err) {
+      if (err instanceof TypeError) throw new GraneteNetworkError(err);
+      throw err;
+    }
+    const payload = (await res.json().catch(() => null)) as unknown;
+    if (!res.ok) {
+      const apiPayload = payload as
+        | { code?: string; message?: string; fieldErrors?: Record<string, string>; requestId?: string; retryable?: boolean; details?: Record<string, unknown> }
+        | null;
+      if (apiPayload && apiPayload.code) {
+        throw new GraneteApiError(res.status, {
+          code: apiPayload.code as ApiError['code'],
+          message: apiPayload.message ?? 'no se pudo añadir la altura',
+          fieldErrors: apiPayload.fieldErrors ?? {},
+          requestId: apiPayload.requestId ?? '',
+          retryable: apiPayload.retryable ?? res.status >= 500,
+          details: apiPayload.details ?? {},
+        });
+      }
+      throw new Error(`hardware kit system height add failed: ${res.status}`);
+    }
+    const added = parseGenerated<import('./openapi/generated/types').HardwareKitSystemHeightAdded>(
+      'HardwareKitSystemHeightAdded',
+      payload,
+    );
+    this.entityVersions.set(key, added.agregado_version);
+    // Review #1626 (major): with an EXISTING eligibility group the server
+    // appended the ensamble to it in the same transaction, bumping its
+    // version. Forget the cached version and baseline body so the next
+    // catalog save learns the current version first — never a stale
+    // If-Match that would 412 every later save of the session.
+    const existingGroupId = req.eligibility_group?.existing_group_id;
+    if (existingGroupId) {
+      const groupKey = this.versionKey('option-groups', existingGroupId);
+      this.entityVersions.delete(groupKey);
+      this.lastSentBody.delete(groupKey);
+    }
+    return added;
+  }
+
+  /**
    * #1553 — alta transaccional del sistema generador de cajones: el plan
    * materializado del asistente se aplica en UNA transacción server-side
    * (409 tipado con los códigos en conflicto, 422 fail-closed, rollback

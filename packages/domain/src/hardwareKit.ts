@@ -882,6 +882,117 @@ export function accessoryKitMemberHardwareIds(
 }
 
 /**
+ * #1625: de dónde sale la posición X/Y/Z de un miembro de receta cuando el
+ * catálogo la manda. El sync del motor (Go syncAgregadoRigidMembersFromCatalog)
+ * la reescribe en cada resolve: desde la PIEZA por lado cuando el herraje
+ * declara piezas y el miembro su mano, o desde la etiqueta `pos:` de su parte
+ * de diseño cuando el herraje no tiene piezas. En esos casos el editor la
+ * muestra en solo lectura — lo escrito ahí se perdería. La rotación nunca la
+ * manda el catálogo. Paridad: contracts/fixtures/memberPlacementAuthority.
+ */
+export type MemberPlacementAuthority =
+  | { readonly kind: 'piece'; readonly hardwareId: string; readonly anchor: 'left' | 'right' | 'center' }
+  | { readonly kind: 'label'; readonly hardwareId: string };
+
+export function memberPlacementAuthority(
+  member: {
+    readonly source?: { readonly kind?: string; readonly fixed?: { readonly hardwareId?: string } };
+    readonly hand?: string;
+  },
+  hardware:
+    | readonly {
+        readonly id: string;
+        readonly pieces?: readonly { readonly anchor: 'left' | 'right' | 'center' }[];
+        readonly designParts?: readonly { readonly label?: string }[];
+      }[]
+    | undefined,
+): MemberPlacementAuthority | null {
+  if (member.source?.kind !== 'fixed') return null;
+  const hardwareId = (member.source.fixed?.hardwareId ?? '').trim();
+  if (!hardwareId) return null;
+  const hw = (hardware ?? []).find((h) => h.id === hardwareId);
+  if (!hw) return null;
+  if ((hw.pieces?.length ?? 0) > 0) {
+    const hand = (member.hand ?? '').trim();
+    const piece = hand ? hw.pieces!.find((pc) => pc.anchor === hand) : undefined;
+    return piece ? { kind: 'piece', hardwareId, anchor: piece.anchor } : null;
+  }
+  return parseKitPartPlacementLabel(hw.designParts?.[0]?.label)
+    ? { kind: 'label', hardwareId }
+    : null;
+}
+
+/**
+ * #1625: la posición que el motor USA para un miembro cuya posición manda el
+ * catálogo (la misma que produce el sync: pieza por lado o etiqueta `pos:`).
+ * El editor la muestra en solo lectura en lugar de la guardada en la receta,
+ * que puede estar vieja. null cuando la posición es de la receta.
+ */
+export function catalogMemberPlacement(
+  member: Parameters<typeof memberPlacementAuthority>[0] & {
+    readonly placement?: {
+      readonly y?: { readonly ref?: 'min' | 'max' | 'center' };
+      readonly z?: { readonly ref?: 'min' | 'max' | 'center' };
+    };
+  },
+  hardware:
+    | readonly {
+        readonly id: string;
+        readonly pieces?: readonly {
+          readonly anchor: 'left' | 'right' | 'center';
+          readonly offsetMm?: { readonly x: number; readonly y: number; readonly z: number };
+        }[];
+        readonly designParts?: readonly { readonly label?: string }[];
+      }[]
+    | undefined,
+): {
+  readonly x: { readonly ref: 'min' | 'max' | 'center'; readonly offsetMm: number };
+  readonly y: { readonly ref: 'min' | 'max' | 'center'; readonly offsetMm: number };
+  readonly z: { readonly ref: 'min' | 'max' | 'center'; readonly offsetMm: number };
+} | null {
+  const authority = memberPlacementAuthority(member, hardware);
+  if (!authority) return null;
+  const hw = (hardware ?? []).find((h) => h.id === authority.hardwareId);
+  if (!hw) return null;
+  if (authority.kind === 'piece') {
+    const piece = hw.pieces?.find((pc) => pc.anchor === authority.anchor);
+    return piece ? pieceAnchorPlacement(piece) : null;
+  }
+  const parsed = parseKitPartPlacementLabel(hw.designParts?.[0]?.label);
+  if (!parsed) return null;
+  // Igual que el refresco del sync sobre un miembro YA guardado: la etiqueta
+  // fija ref y desfases tal cual (sin negar) y Y/Z conservan su referencia.
+  return {
+    x: { ref: parsed.xRef, offsetMm: parsed.xOffsetMm },
+    y: { ref: member.placement?.y?.ref ?? 'min', offsetMm: parsed.yOffsetMm },
+    z: { ref: member.placement?.z?.ref ?? 'min', offsetMm: parsed.zOffsetMm },
+  };
+}
+
+/**
+ * #1625: los juegos comerciales que un ensamble puede montar — el del
+ * ensamble más el de cada variante (#1493, alturas MERIVOBOX). Espejo de
+ * AgregadoKitIDs (accessory_kit.go).
+ */
+export function agregadoKitHardwareIds(agregado: {
+  readonly commercialKitHardwareId?: string;
+  readonly variantSets?: readonly {
+    readonly variants?: readonly { readonly commercialKitHardwareId?: string }[];
+  }[];
+}): string[] {
+  const ids: string[] = [];
+  const add = (id: string | undefined) => {
+    const trimmed = (id ?? '').trim();
+    if (trimmed && !ids.includes(trimmed)) ids.push(trimmed);
+  };
+  add(agregado.commercialKitHardwareId);
+  for (const vs of agregado.variantSets ?? []) {
+    for (const v of vs.variants ?? []) add(v.commercialKitHardwareId);
+  }
+  return ids;
+}
+
+/**
  * #1627: valor explícito «Sin inserto» de un grupo de insertos en el mapa de
  * elecciones del mueble (espejo de domain.AccessoryChoiceNone; fixture
  * accessoryKitParity). Los ids del catálogo son UUID: nunca colisiona.
