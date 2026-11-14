@@ -882,6 +882,30 @@ export function accessoryKitMemberHardwareIds(
 }
 
 /**
+ * La ÚNICA regla que decide qué accesorio monta una bahía para un grupo
+ * vinculado a su kit (layout, cotización y gates de la web): la elección
+ * explícita cuando existe — devuelta tal cual, quien llama valida la
+ * membresía y reporta la inválida — y, sin elección, la PRIMERA opción
+ * activa del grupo en el orden declarado (decisión del owner 2026-11-13,
+ * sustituye «sólo elección explícita» de #1555). Vacío sólo cuando el grupo
+ * no tiene ninguna opción activa. Espejo de effectiveAccessoryChoice en
+ * accessory_kit.go.
+ */
+export function effectiveAccessoryChoice(
+  og: { readonly code: string; readonly optionIds: readonly string[] },
+  hardware: readonly { readonly id: string; readonly active?: boolean }[] | undefined,
+  optionChoices: Readonly<Record<string, string | undefined>> | undefined,
+): string {
+  const explicit = (optionChoices?.[og.code] ?? '').trim();
+  if (explicit) return explicit;
+  for (const id of og.optionIds) {
+    const trimmed = (id ?? '').trim();
+    if (trimmed && (hardware ?? []).some((h) => h.id === trimmed && h.active)) return trimmed;
+  }
+  return '';
+}
+
+/**
  * Sincroniza un Agregado con la lista efectiva de partes vinculadas a su Kit (#1422 / #1435).
  * - Preserva los miembros rígidos existentes y actualiza su apertura/posición si la parte declara designParts[0].
  * - Si una parte vinculada no tiene miembro en la receta, infiere o toma su slot configurado.
@@ -1243,8 +1267,7 @@ export interface HardwareKitSystemAccessory {
   /**
    * #1596: offsets EXPLÍCITOS por pieza (decisión 2: el taller dibuja en
    * 0,0,0 y posiciona por offset). El motor honra el offset guardado; sin
-   * explicito aplicaría su default (10/35 mm) — el alta nueva nunca deja
-   * valores por defecto invisibles.
+   * offset la pieza queda en 0 (#1613: el motor no tiene defaults).
    */
   readonly pieceOffsets?: Readonly<Partial<Record<'left' | 'right' | 'center', { x: number; y: number; z: number }>>>;
   /**
@@ -1450,23 +1473,6 @@ export interface HardwareKitSystemCreateRequest {
 }
 
 /**
- * #1596 (mostrado = guardado): el default de offsets que el motor aplica a
- * una pieza de accesorio SIN offsetMm propio (kitPieceMember, rama de cajón):
- * 10 mm fija / 35 mm si el código o nombre la declaran móvil, negado en el
- * ancla derecha. El alta nueva SIEMPRE escribe offsets explícitos — esta
- * función existe para materializar el valor que un herraje legacy está
- * recibiendo en silencio al abrirlo en el alta nueva, de modo que lo
- * mostrado sea lo que se guarda.
- *
- * Límite documentado (review #1602): en el motor la rama móvil-sólo-cajón
- * exige actor == 'actor:drawer' tras resolver el agregado contenedor (un
- * herraje móvil dentro de un ensamble de PUERTA cae a actor:door con 10 mm).
- * Esta función no conoce el ensamble contenedor, así que replica la rama de
- * cajón (35) — caso dominante del alta de herrajes; si algún día se edita
- * un par móvil dentro de un kit de puerta, el valor materializado puede
- * diferir del default real y quedaría corregido a mano antes de guardar.
- */
-/**
  * #1596 (review B1): whether the ENGINE's legacy name inference would treat
  * this hardware as moving (kitPieceMember/kitPartMember regex: -MOV/-BRAZO in
  * the code, móvil/movil/brazo in the name). The alta never RELIES on the
@@ -1484,21 +1490,4 @@ export function hardwareNameSuggestsMotion(hw: {
     upperCode.includes('-MOV') || upperCode.includes('-BRAZO') ||
     lowerName.includes('móvil') || lowerName.includes('movil') || lowerName.includes('brazo')
   );
-}
-
-export function defaultPieceOffsetMm(
-  hw: {
-    readonly code: string;
-    readonly name: string;
-  },
-  anchor: 'left' | 'right' | 'center',
-): { x: number; y: number; z: number } {
-  // MISMA regex que kitPieceMember/kitPartMember (el nombre sigue siendo la
-  // inferencia legacy del motor; el alta nueva la esquiva con offsets
-  // explícitos, no se retira del motor — no-objetivo de #1596).
-  const isMoving = hardwareNameSuggestsMotion(hw);
-  let x = isMoving ? 35 : 10;
-  // AnchorAxisRef: left→min, right→max (max niega el offset en el motor).
-  if (anchor === 'right') x = -x;
-  return { x, y: 0, z: 0 };
 }

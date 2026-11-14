@@ -613,7 +613,11 @@
           accInfo.className = "material-selected-info";
           var accName = document.createElement("span");
           accName.className = "material-selected-name";
-          var accChosenId = libMaterialChoices[acc.code] || null;
+          // Sin elección, la fila muestra la PRIMERA opción: es la que el
+          // motor monta y cotiza por defecto (effectiveAccessoryChoice). No
+          // se siembra como override — el mueble sigue el orden del catálogo.
+          var accChosenId = libMaterialChoices[acc.code] ||
+            ((acc.optionIds && acc.optionIds.length > 0) ? acc.optionIds[0] : null);
           var accChosen = accChosenId ? hardwareEntryById(accChosenId) : null;
           accName.textContent = accChosen ? (accChosen.name || accChosen.code) : (accChosenId || "--");
           accInfo.appendChild(accName);
@@ -707,7 +711,13 @@
       (role.options || []).forEach(function (opt) {
         if (opt.agregadoId !== chosenId) return;
         (opt.accessoryGroups || []).forEach(function (acc) {
-          if (acc.required && (!libMaterialChoices[acc.code] || !hardwareEntryById(libMaterialChoices[acc.code]))) {
+          // Con opciones, el motor monta la primera sin elección: sólo
+          // falta el requerido que no ofrece ninguna, o cuya elección
+          // explícita ya no existe en el catálogo.
+          var chosenAcc = libMaterialChoices[acc.code];
+          var hasOptions = acc.optionIds && acc.optionIds.length > 0;
+          var staleChoice = chosenAcc && !hardwareEntryById(chosenAcc);
+          if (acc.required && (staleChoice || (!chosenAcc && !hasOptions))) {
             missing.push({ name: acc.name || acc.code });
           }
         });

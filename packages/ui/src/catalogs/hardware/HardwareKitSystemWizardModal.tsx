@@ -393,9 +393,9 @@ export function HardwareKitSystemWizardModal({
             <p className="catalog-form__hint">
               Un archivo por pieza (.skp). Las piezas sin diseño se ven con la
               representación genérica y podés subir el diseño después desde su
-              ficha. Los costados de cada altura nacen en su posición
-              canónica Blum: 10 mm el fijo, 35 mm el móvil, medidos del ancho
-              del cajón.
+              ficha. Los costados nacen sin desfase (0 mm): si tu diseño no
+              está dibujado en su posición final, ajustá el desfase de cada
+              lado en la ficha de la pieza, sección «Diseño — un SKP por lado».
             </p>
             {plan?.kits.map((kit) =>
               kit.designs.map((design) =>

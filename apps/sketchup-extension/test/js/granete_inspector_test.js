@@ -1916,8 +1916,12 @@ test('#1609 accessory groups: renders inserto under drawer, routes inspector pic
   assert.strictEqual(accRow.children[0].children[0].textContent, 'Inserto');
   assert.strictEqual(accRow.children[0].children[1].textContent, 'requerido');
   const accPreview = accRow.children[1];
-  assert.strictEqual(accPreview.children[1].children[0].textContent, '--');
-  assert.strictEqual(accPreview.children[1].children[1].textContent, 'Clic para elegir un accesorio del catálogo');
+  // Sin elección, la fila muestra la PRIMERA opción — la que el motor monta
+  // por defecto — sin badge «Personalizado» (sólo visual, no entra al draft).
+  assert.strictEqual(accPreview.children[1].children[0].textContent, 'Galería Merivobox');
+  assert.strictEqual(accPreview.children[1].children[1].textContent, 'MBOX-E-GAL');
+  assert.strictEqual(accRow.children[0].children.length, 2, 'default insert is not flagged as Personalizado');
+  assert(!visible(el(sandbox, 'inspector-footer')), 'showing the default insert opens no draft');
 
   // Click opens native hardware selector with inspector context and accessory optionIds
   accPreview.click();
@@ -2050,8 +2054,10 @@ test('#1609 accessory groups: switching drawer prunes orphan accessory, restores
   });
   const backRows = el(sandbox, 'inspector-hardware-groups-container').children;
   assert.strictEqual(backRows.length, 2, 'accessory row reappears when switching back to Merivobox');
-  assert.strictEqual(backRows[1].children[1].children[1].children[0].textContent, '--',
-    'pruned accessory is not resurrected from stale scanned hardwareGroups');
+  assert.strictEqual(backRows[1].children[1].children[1].children[0].textContent, 'Galería Merivobox',
+    'the row falls back to the default first option, never a resurrected stale pick');
+  assert.strictEqual(backRows[1].children[0].children.length, 2,
+    'pruned accessory is not resurrected as a Personalizado choice from stale scanned hardwareGroups');
 
   // Switch again to Hafele and Apply → removedMaterialChoiceRoles carries MBOX_INSERTO without orphan mode
   api.onHardwareChoiceApplied({
@@ -2067,7 +2073,8 @@ test('#1609 accessory groups: switching drawer prunes orphan accessory, restores
   assert.strictEqual(submit.payload.materialChoiceModes.MBOX_INSERTO, undefined);
 
   // Confirm Apply, then switch back to Merivobox before a fresh selection event arrives:
-  // post-Apply hardwareGroups cleared stale chosenHardwareId, so accessory shows '--'
+  // post-Apply hardwareGroups cleared stale chosenHardwareId, so the accessory
+  // shows the default first option without an override badge
   api.onUpdateResult({ success: true, name: 'Bajo 3 cajones', component_count: 10 });
   api.onHardwareChoiceApplied({
     groupCode: 'CAJON',
@@ -2076,8 +2083,10 @@ test('#1609 accessory groups: switching drawer prunes orphan accessory, restores
   });
   const postApplyRows = el(sandbox, 'inspector-hardware-groups-container').children;
   assert.strictEqual(postApplyRows.length, 2);
-  assert.strictEqual(postApplyRows[1].children[1].children[1].children[0].textContent, '--',
-    'post-Apply cleared stale hardwareGroups.chosenHardwareId');
+  assert.strictEqual(postApplyRows[1].children[1].children[1].children[0].textContent, 'Galería Merivobox',
+    'post-Apply the row shows the default first option');
+  assert.strictEqual(postApplyRows[1].children[0].children.length, 2,
+    'post-Apply cleared stale hardwareGroups.chosenHardwareId (no Personalizado badge)');
 
   // Read-only furniture selection (canEditParameters: false) ignores hardware picks too
   api.onSelectionChange(furnitureContext({

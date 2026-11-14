@@ -924,10 +924,11 @@ describe('canShowProjectPricePreview', () => {
     }
   });
 
-  // #1555: los grupos accesorios del kit del cajón ELEGIDO participan del
-  // gate del quote local — sin elección del accesorio requerido bloquea, y
-  // al cambiar de cajón el grupo deja de exigirse (paridad con el resolve
-  // conectado accessory_choice_required).
+  // Los grupos de insertos del juego del cajón ELEGIDO participan del gate
+  // del quote local con la MISMA regla del motor: sin elección el cajón
+  // lleva la primera opción, así que un grupo con opciones nunca bloquea;
+  // sólo bloquea el requerido que no ofrece ninguna (paridad con
+  // accessory_choice_required).
   describe('grupos accesorios del kit (#1555)', () => {
     const kitAgregados: Agregado[] = [
       {
@@ -951,19 +952,29 @@ describe('canShowProjectPricePreview', () => {
       agregados: [{ agregadoId: 'agr-e', quantity: 1, optionRole: 'CAJON' }],
     } as unknown as Parameters<typeof canShowProjectPricePreview>[1][number];
 
-    it('bloquea sin la elección del accesorio requerido del kit del cajón', () => {
-      const project: Project = {
-        ...baseProject(),
-        items: [
-          {
-            id: 'i1', moduleId: 'm1', quantity: 1,
-            optionChoices: { CAJON: 'agr-e' },
-          },
-        ],
-      };
+    const projectWithDrawerE = (): Project => ({
+      ...baseProject(),
+      items: [
+        {
+          id: 'i1', moduleId: 'm1', quantity: 1,
+          optionChoices: { CAJON: 'agr-e' },
+        },
+      ],
+    });
+
+    it('sin elección del inserto requerido NO bloquea: el motor monta la primera opción', () => {
       const gate = canShowProjectPricePreview(
-        project, [moduleWithDrawer], accessoryGroups,
+        projectWithDrawerE(), [moduleWithDrawer], accessoryGroups,
         undefined, undefined, kitAgregados, accessoryGroups,
+      );
+      expect(gate.ok).toBe(true);
+    });
+
+    it('bloquea el inserto requerido cuyo grupo no ofrece ninguna opción', () => {
+      const emptyGroups: OptionGroup[] = [{ ...accessoryGroups[0]!, optionIds: [] }];
+      const gate = canShowProjectPricePreview(
+        projectWithDrawerE(), [moduleWithDrawer], emptyGroups,
+        undefined, undefined, kitAgregados, emptyGroups,
       );
       expect(gate.ok).toBe(false);
       if (!gate.ok) {
@@ -1007,7 +1018,8 @@ describe('canShowProjectPricePreview', () => {
 
     // P2 del review #1563: el rol de AGREGADO requerido no bloquea el PRECIO
     // (el motor cae al default de la instancia) — un ítem legacy sin elección
-    // de CAJÓN sigue cotizable; el accesorio del kit DEFAULT sí se exige.
+    // de CAJÓN sigue cotizable, y el inserto del kit DEFAULT tampoco bloquea
+    // (lleva la primera opción).
     const drawerRoleGroup: OptionGroup = {
       id: 'og-cajon', code: 'CAJON', name: 'Cajón', kind: 'agregado',
       required: true, optionIds: ['agr-e', 'agr-m'],
@@ -1029,7 +1041,7 @@ describe('canShowProjectPricePreview', () => {
       expect(gate.ok).toBe(true);
     });
 
-    it('sin elección de CAJÓN exige SÓLO el accesorio requerido del kit default (no el rol)', () => {
+    it('sin elección de CAJÓN ni de inserto el ítem sigue cotizable (default de ambos)', () => {
       const project: Project = {
         ...baseProject(),
         items: [{ id: 'i1', moduleId: 'm1', quantity: 1, optionChoices: {} }],
@@ -1038,10 +1050,7 @@ describe('canShowProjectPricePreview', () => {
         project, [moduleWithDrawer], [drawerRoleGroup, ...accessoryGroups],
         undefined, undefined, kitAgregados, [drawerRoleGroup, ...accessoryGroups],
       );
-      expect(gate.ok).toBe(false);
-      if (!gate.ok) {
-        expect(gate.missingGroups).toEqual(['LATERAL_E']);
-      }
+      expect(gate.ok).toBe(true);
     });
   });
 });

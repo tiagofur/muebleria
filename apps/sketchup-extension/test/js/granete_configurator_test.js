@@ -1184,33 +1184,43 @@ function accessoryFixture(sandbox) {
   });
 }
 
-test('accessories: row renders under the chosen drawer with chosen-code meta and gates required choice', () => {
+test('accessories: row under the chosen drawer shows the default first option and never blocks insert', () => {
   const sandbox = runModule();
   accessoryFixture(sandbox);
+  sandbox.__state.connected = true;
   sandbox.window.GraneteUI.configurator.open(accessoryFixture(sandbox));
 
-  // Sin elección de cajón aún no hay fila de accesorio (depende del elegido).
   const container = el(sandbox, 'library-agregados-container');
   // Seed default de agregado = primer miembro (agr-e) → la fila del accesorio E aparece.
   assert.strictEqual(container.children.length, 2, 'drawer row + accessory row of the seeded drawer');
   const accRow = container.children[1];
   assert.strictEqual(accRow.children[0].children[0].textContent, 'Lateral superior E');
-  // Meta con elección activa = código; sin elección = invitación a elegir.
-  assert.strictEqual(accRow.children[1].children[1].children[1].textContent,
-    'Clic para elegir un accesorio del catálogo', 'no chosen accessory yet → invitation');
-
-  // Requerido sin elegir → Insert bloqueado nombrando el accesorio.
-  assert.strictEqual(el(sandbox, 'btn-insert').disabled, true, 'required accessory blocks insert');
-  assert(/Lateral superior E/.test(el(sandbox, 'btn-insert').title), 'the reason names the accessory');
-
-  // Elegido → meta muestra el CÓDIGO y el gate se abre (el re-render crea
-  // nodos nuevos: releer la fila).
-  sandbox.window.GraneteUI.configurator.applyHardwareChoice('LATERAL_E', 'hw-gal-e');
-  const accRowAfter = el(sandbox, 'library-agregados-container').children[1];
-  assert.strictEqual(accRowAfter.children[1].children[1].children[1].textContent, 'GAL-E',
-    'chosen accessory meta shows its code (#1555)');
+  // Sin elección, la fila muestra la PRIMERA opción: la que el motor monta
+  // y cotiza por defecto.
+  assert.strictEqual(accRow.children[1].children[1].children[0].textContent, 'Galería E',
+    'no explicit choice → the default first option is shown');
+  assert.strictEqual(accRow.children[1].children[1].children[1].textContent, 'GAL-E');
   assert.strictEqual(el(sandbox, 'btn-insert').disabled, false,
-    'choice unblocks insert (title: ' + el(sandbox, 'btn-insert').title + ')');
+    'a required accessory with options never blocks insert (title: ' + el(sandbox, 'btn-insert').title + ')');
+
+  // El default es sólo visual: no viaja como override — el mueble sigue el
+  // orden del catálogo.
+  sandbox.__calls.bridge.length = 0;
+  el(sandbox, 'btn-insert').click();
+  const sent = sandbox.__calls.bridge.filter((c) => c.fn === 'begin_catalog_placement_preview').pop();
+  assert(sent, 'preview dispatched');
+  assert.strictEqual(sent.payload.materialOverrides.LATERAL_E, undefined,
+    'the default insert is not sent as an explicit override');
+});
+
+test('accessories: a required group without options still blocks insert naming the accessory', () => {
+  const sandbox = runModule();
+  const def = accessoryFixture(sandbox);
+  def.agregadoRoles[0].options[0].accessoryGroups[0].optionIds = [];
+  sandbox.window.GraneteUI.configurator.open(def);
+
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, true, 'required accessory without options blocks insert');
+  assert(/Lateral superior E/.test(el(sandbox, 'btn-insert').title), 'the reason names the accessory');
 });
 
 test('accessories: connected insert rides chosen accessory groups inside materialOverrides', () => {
@@ -1284,7 +1294,8 @@ test('accessories: the row opens the shared hardware selector with the accessory
   assert(opened, 'open_hardware_selector called from the accessory row');
   assert.strictEqual(opened.payload.groupCode, 'LATERAL_E', 'the accessory group code rides the bridge');
   assert.deepStrictEqual(opened.payload.optionIds, ['hw-gal-e']);
-  assert.strictEqual(opened.payload.currentHardwareId, null, 'no accessory chosen yet');
+  assert.strictEqual(opened.payload.currentHardwareId, 'hw-gal-e',
+    'no explicit choice yet → the picker opens on the default first option');
   assert.strictEqual(opened.payload.context, 'configurator');
   assert(/Cajón · Lateral superior E/.test(opened.payload.groupName), 'the label names drawer and accessory');
 });

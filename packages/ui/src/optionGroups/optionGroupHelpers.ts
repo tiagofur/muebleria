@@ -314,8 +314,17 @@ export function requiredGroupCodesForModule(
     optionChoices,
   );
 
+  // Un grupo de insertos vinculado a un juego (kitHardwareId) con opciones
+  // nunca bloquea: sin elección el motor monta y cotiza la primera opción
+  // activa (effectiveAccessoryChoice). Sólo sigue siendo exigible el grupo
+  // requerido que no ofrece ninguna opción — el motor lo rechaza visible.
   const required = optionGroups
-    .filter((g) => g.required && usedRoles.has(g.code))
+    .filter(
+      (g) =>
+        g.required &&
+        usedRoles.has(g.code) &&
+        !(g.kitHardwareId && g.optionIds.length > 0),
+    )
     .map((g) => g.code);
 
   return [...new Set(required)];

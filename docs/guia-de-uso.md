@@ -364,9 +364,15 @@ En la sección **Insertos del juego** también está **Añadir existente**
 qué lados tienen diseño y cuáles están pendientes, con acceso directo para
 corregirlos.
 
+**Inserto por defecto:** si en el mueble no se elige ninguno, el cajón
+lleva la **primera opción** del selector, en el orden en que aparecen en
+**Insertos del juego** — se dibuja y se cotiza igual que una elegida. Para
+cambiar cuál es el default, dejá primero en la lista el inserto que más
+usás (quitá y volvé a añadir los demás).
+
 **Cómo saber que quedó bien:** al agregar el mueble a una cotización
-aparece el selector con las opciones; el precio del inserto elegido sale
-en la cotización por cajón.
+aparece el selector con las opciones; el precio del inserto — el elegido
+o, sin elección, el primero — sale en la cotización por cajón.
 
 ### 8c.4 Juego simple y sus partes
 
@@ -405,7 +411,10 @@ sus insertos y con el ensamble que los módulos eligen por bahía.
    del costado (fijo y móvil, por mano — subir o elegir).
 3. **Insertos del cajón E** (opcional, podés añadirlos después): cada uno
    nace con su SKP por lado, sus offsets y su «Al abrir» — nada queda a
-   medias.
+   medias. El primero de la lista es el que llevan los cajones E por
+   defecto. Los **costados** nacen sin desfase (0 mm): si el diseño no
+   está dibujado en su posición final, se ajusta después en la ficha de
+   cada pieza, sección **Diseño — un SKP por lado**.
 4. **Elegibilidad:** elegís en qué grupo queda disponible el sistema para
    los módulos (el default es el grupo de sistemas de cajón). Si decidís
    omitirlo, la app te avisa que ningún módulo podrá elegirlo y hay que
@@ -496,6 +505,8 @@ colocado en SketchUp, sin eliminarlo ni volver a insertarlo.
 1. Seleccioná el mueble en SketchUp y abrí la pestaña **Inspector**.
 2. En la tarjeta **Herrajes del mueble**, si el sistema de cajón elegido
    lleva accesorios, aparece la fila **Inserto** justo debajo del cajón.
+   Si nadie eligió uno, la fila muestra la primera opción del selector:
+   es la que el cajón lleva por defecto.
 3. Hacé clic en **Inserto**, elegí la opción deseada (galería, BOXCOVER o
    BOXCAP) y pulsá **Aplicar**.
 

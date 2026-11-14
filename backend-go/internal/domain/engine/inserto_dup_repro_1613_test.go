@@ -163,26 +163,26 @@ func assemblyMemberHwIDs(asm engine.LayoutAssembly) map[string]bool {
 func TestInsertoDupRepro_1613(t *testing.T) {
 	catalog, mod, f := buildInsertoDupCatalog(t)
 
-	// R1 sin elecciones: 3 bahías (E abajo, M arriba ×2), cero ensambles
-	// accesorios y cero insertos materializados.
+	// R1 sin elecciones: 3 bahías (E abajo, M arriba ×2) + el inserto POR
+	// DEFECTO (primera opción del grupo, decisión del owner 2026-11-13) como
+	// ensamble accesorio SÓLO en la bahía E. Nunca como parte fija.
 	layout, err := engine.ResolveFurnitureLayout(mod, catalog, nil, map[string]string{"LATERAL": "mat-lat"})
 	if err != nil {
 		t.Fatalf("R1 unexpected error: %v", err)
 	}
-	if len(layout.Assemblies) != 3 {
-		t.Fatalf("R1 assemblies = %d, want 3; rejections=%+v", len(layout.Assemblies), layout.AssemblyRejections)
+	if len(layout.Assemblies) != 4 {
+		t.Fatalf("R1 assemblies = %d, want 4 (3 bahías + inserto por defecto); rejections=%+v", len(layout.Assemblies), layout.AssemblyRejections)
 	}
-	if acc := accessoryAssembliesOf(layout); len(acc) != 0 {
-		t.Fatalf("R1 must have no accessory assemblies, got %d", len(acc))
+	if acc := accessoryAssembliesOf(layout); len(acc) != 1 {
+		t.Fatalf("R1 must mount exactly the default inserto, got %d accessory assemblies", len(acc))
 	}
-	// El grupo de insertos es REQUERIDO: sin elección, el rechazo
-	// accessory_choice_required es el fail-closed honesto (#1502) — el estado
-	// «3 cajones limpios, selector sin elegir» que ve el owner.
-	if len(layout.AssemblyRejections) != 1 ||
-		layout.AssemblyRejections[0].Reason != "accessory_choice_required" {
-		t.Fatalf("R1 rejections = %+v, want exactly the required-inserto rejection", layout.AssemblyRejections)
+	if len(layout.AssemblyRejections) != 0 {
+		t.Fatalf("R1 rejections = %+v, want none (the default inserto satisfies the required group)", layout.AssemblyRejections)
 	}
 	for _, asm := range layout.Assemblies {
+		if strings.Contains(asm.AssemblyInstanceID, "-acc-") {
+			continue
+		}
 		if assemblyMemberHwIDs(asm)[f.galID] {
 			t.Fatalf("R1: la galería quedó materializada como parte fija en %s", asm.AssemblyInstanceID)
 		}
@@ -201,10 +201,13 @@ func TestInsertoDupRepro_1613(t *testing.T) {
 	if err != nil {
 		t.Fatalf("R2 unexpected error: %v", err)
 	}
-	if len(layout2.Assemblies) != 3 {
-		t.Fatalf("R2 assemblies = %d, want 3; rejections=%+v", len(layout2.Assemblies), layout2.AssemblyRejections)
+	if len(layout2.Assemblies) != 4 {
+		t.Fatalf("R2 assemblies = %d, want 4 (3 bahías + inserto por defecto); rejections=%+v", len(layout2.Assemblies), layout2.AssemblyRejections)
 	}
 	for _, asm := range layout2.Assemblies {
+		if strings.Contains(asm.AssemblyInstanceID, "-acc-") {
+			continue
+		}
 		ids := assemblyMemberHwIDs(asm)
 		z := asm.Placement["translation"].([]float64)[2]
 		if z < 1 {
