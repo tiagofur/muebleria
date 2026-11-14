@@ -85,8 +85,24 @@ test.describe.serial('#714 inline customer project update', () => {
 
     await page.reload();
     await page.goto('/quotes');
-    await page.getByTestId(`project-card-${PROJECT_ID}`).click();
-    await expect(page.getByText(INLINE_CUSTOMER_NAME).first()).toBeVisible();
+    // The draft has no quote revision, so the detail header deliberately
+    // withholds commercial identity (#642: 'empty' authority) — it only
+    // flashes the live customer during the pre-query 'idle' frame, which is
+    // not something to assert on. The persisted relation is read from the
+    // surfaces that keep showing it: the card (a revision-less draft keeps
+    // its current identity) and the edit form of the reopened detail.
+    const refreshedCard = page.getByTestId(`project-card-${PROJECT_ID}`);
+    await expect(refreshedCard.locator('.project-card__client')).toHaveText(
+      INLINE_CUSTOMER_NAME,
+    );
+    await refreshedCard.click();
+    await page.getByRole('button', { name: /^Editar$/ }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Editar cotización' }),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId('project-customer-picker').getByRole('button', { name: 'Cliente' }),
+    ).toHaveText(INLINE_CUSTOMER_NAME);
 
     const [projects, catalog] = await Promise.all([
       repository.getProjects(),
