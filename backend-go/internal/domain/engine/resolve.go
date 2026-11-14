@@ -589,7 +589,7 @@ func expandComposedModulePartsWithDims(
 	parts := make([]domain.BoardPart, 0)
 	structureParts, err := expandComponentInstances(
 		filterInstancesForBaseMode(structure.Components, catalog, baseMode),
-		catalog, dims, "st-", optionChoices, baseClearance,
+		catalog, dims, "st-", optionChoices, baseClearance, nil,
 	)
 	if err != nil {
 		return nil, formulaDims{}, err
@@ -598,7 +598,7 @@ func expandComposedModulePartsWithDims(
 
 	moduleParts, err := expandComponentInstances(
 		filterInstancesForBaseMode(module.Components, catalog, baseMode),
-		catalog, dims, "mod-", optionChoices, baseClearance,
+		catalog, dims, "mod-", optionChoices, baseClearance, nil,
 	)
 	if err != nil {
 		return nil, formulaDims{}, err
@@ -707,9 +707,12 @@ func expandComposedModulePartsWithDims(
 				B:  baseClearance,
 			}
 			idPrefix := fmt.Sprintf("agr-%s-%su%d-", effectiveAgregadoID, instanceTag, unit.index)
+			// #1493: reglas de dimensión por variante de ESTA bahía (mismo
+			// contexto que la vía de tableros del layout).
 			agrParts, err := expandComponentInstances(
 				filterInstancesForBaseMode(agr.Components, catalog, baseMode),
 				catalog, unitDims, idPrefix, optionChoices, baseClearance,
+				agregadoDimensionRuleContext(agr, unit),
 			)
 			if err != nil {
 				return nil, formulaDims{}, err
@@ -770,6 +773,7 @@ func expandComponentInstances(
 	idPrefix string,
 	optionChoices map[string]string,
 	baseClearance int,
+	ruleCtx *dimensionRuleContext,
 ) ([]domain.BoardPart, error) {
 	parts := make([]domain.BoardPart, 0)
 	copyCounters := map[string]int{}
@@ -840,6 +844,25 @@ func expandComponentInstances(
 				return nil, fmt.Errorf("component %s width formula: %w", comp.Code, err)
 			}
 			widthMm = v
+		}
+		// #1493: regla declarativa por variante — espejo del bloque de
+		// expandLayoutInstances: la regla de la instancia MANDA sobre la
+		// fórmula del componente, con el nominal de la variante de ESTA bahía.
+		if ruleCtx != nil && inst.Overrides != nil {
+			if inst.Overrides.LengthRule != nil {
+				v, err := EvaluateDimensionRule(*inst.Overrides.LengthRule, ruleCtx.params, ruleCtx.selected)
+				if err != nil {
+					return nil, fmt.Errorf("component %s lengthRule: %w", comp.Code, err)
+				}
+				lengthMm = int(math.Round(v))
+			}
+			if inst.Overrides.WidthRule != nil {
+				v, err := EvaluateDimensionRule(*inst.Overrides.WidthRule, ruleCtx.params, ruleCtx.selected)
+				if err != nil {
+					return nil, fmt.Errorf("component %s widthRule: %w", comp.Code, err)
+				}
+				widthMm = int(math.Round(v))
+			}
 		}
 
 		for i := 0; i < inst.Quantity; i++ {

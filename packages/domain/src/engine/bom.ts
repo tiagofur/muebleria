@@ -19,8 +19,11 @@ import {
 } from '../agregados';
 import {
   effectiveKitHardwareId,
+  evaluateDimensionRule,
   selectAgregadoVariants,
   type AgregadoAssemblyInput,
+  type AssemblyResolutionParams,
+  type SelectedAssemblyVariant,
 } from '../agregadoAssembly';
 import {
   applyBaseTreatment,
@@ -490,6 +493,18 @@ function getComponentThickness(
     : 18;
 }
 
+/**
+ * #1493: contexto de variantes por bahía — habilita las reglas declarativas
+ * de dimensión (`overrides.lengthRule/widthRule` con `selected_variant`) sobre
+ * los componentes del agregado. Ausente (estructura/módulo o selección que no
+ * cabe) el camino de fórmulas queda intacto. Espejo de
+ * dimensionRuleContext en Go (layout.go).
+ */
+export interface VariantDimensionRuleContext {
+  readonly params: AssemblyResolutionParams;
+  readonly selected: ReadonlyMap<string, SelectedAssemblyVariant>;
+}
+
 function expandComponentInstances(
   instances: readonly ModuleComponentInstance[],
   catalog: Catalog,
@@ -498,6 +513,7 @@ function expandComponentInstances(
   optionChoices?: OptionChoices,
   /** Plinth height B (mm) for formulas. */
   baseClearanceMm = 0,
+  variantRules?: VariantDimensionRuleContext,
 ): BoardPart[] {
   const PW = dims.width;
   const PD = dims.depth;
@@ -560,6 +576,18 @@ function expandComponentInstances(
             field: 'width',
           })
         : component.geometry.widthMm;
+      // #1493: regla declarativa por variante — la regla de la instancia
+      // MANDA sobre la fórmula del componente (el respaldo per-bahía: el
+      // nominal de la variante de ESTA bahía no es expresable como fórmula
+      // del envelope). Espejo del bloque Go en expandLayoutInstances.
+      if (variantRules) {
+        if (instance.overrides?.lengthRule) {
+          lengthMm = evaluateDimensionRule(instance.overrides.lengthRule, variantRules.params, variantRules.selected);
+        }
+        if (instance.overrides?.widthRule) {
+          widthMm = evaluateDimensionRule(instance.overrides.widthRule, variantRules.params, variantRules.selected);
+        }
+      }
     }
 
     // Spatial coords: per-axis formula when set; empty axes keep placement pose.
@@ -911,19 +939,36 @@ export function resolveComposedModule(
         (vs.variants ?? []).some((v) => (v.commercialKitHardwareId ?? '').trim() !== ''),
       );
       let unitKitId: string | undefined;
-      if (unitAgregado && declaresVariantKit) {
+      // #1493: la selección de variantes de ESTA bahía alimenta el kit
+      // comercial Y las reglas de dimensión declarativas de los componentes
+      // (el respaldo per-bahía) — mismo criterio que el layout Go.
+      let unitVariantRules: VariantDimensionRuleContext | undefined;
+      if (unitAgregado && (unitAgregado.variantSets?.length ?? 0) > 0) {
         try {
+          const unitParams: AssemblyResolutionParams = {
+            widthMm: unit.width,
+            depthMm: unit.depth,
+            heightMm: unit.height,
+            hardwareDimensions: {},
+          };
           const selected = selectAgregadoVariants(
             unitAgregado as unknown as AgregadoAssemblyInput,
-            { widthMm: unit.width, depthMm: unit.depth, heightMm: unit.height, hardwareDimensions: {} },
+            unitParams,
           );
-          const kit = effectiveKitHardwareId(
-            unitAgregado as unknown as AgregadoAssemblyInput,
-            selected,
-          );
-          if (kit) unitKitId = kit;
+          unitVariantRules = {
+            params: unitParams,
+            selected: new Map(selected.map((sv) => [sv.variantSetId, sv] as const)),
+          };
+          if (declaresVariantKit) {
+            const kit = effectiveKitHardwareId(
+              unitAgregado as unknown as AgregadoAssemblyInput,
+              selected,
+            );
+            if (kit) unitKitId = kit;
+          }
         } catch {
           unitKitId = undefined;
+          unitVariantRules = undefined;
         }
       }
 
@@ -979,6 +1024,7 @@ export function resolveComposedModule(
         { width: unit.width, height: unit.height, depth: unit.depth },
         optionChoices,
         B,
+        unitVariantRules,
       );
 
       // Apply unit origin offset (spaceX + unit.x, spaceY + unit.y, spaceZ + unit.z)

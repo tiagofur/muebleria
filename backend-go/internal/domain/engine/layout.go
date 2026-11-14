@@ -1278,14 +1278,14 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 	boards := []layoutBoard{}
 
 	structureInstances := filterInstancesForBaseMode(structure.Components, catalog, baseMode)
-	structureBoards, err := expandLayoutInstances(structureInstances, catalog, dims, "st-", b, optionChoices, opts)
+	structureBoards, err := expandLayoutInstances(structureInstances, catalog, dims, "st-", b, optionChoices, opts, nil)
 	if err != nil {
 		return nil, err
 	}
 	boards = append(boards, structureBoards...)
 
 	moduleInstances := filterInstancesForBaseMode(module.Components, catalog, baseMode)
-	moduleBoards, err := expandLayoutInstances(moduleInstances, catalog, dims, "mod-", b, optionChoices, opts)
+	moduleBoards, err := expandLayoutInstances(moduleInstances, catalog, dims, "mod-", b, optionChoices, opts, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1477,6 +1477,37 @@ func filterInstancesForBaseMode(instances []domain.ComponentInstance, catalog do
 	return filtered
 }
 
+// dimensionRuleContext carries the per-unit variant selection so agregado
+// component instances can dimension declaratively by the bay's selected
+// variant (#1493: una regla {source: selected_variant} por bahía). nil = no
+// variant context — structure/module expansions and agregados without a
+// fitting selection keep the formula path untouched.
+type dimensionRuleContext struct {
+	params   AssemblyResolutionParams
+	selected map[string]domain.SelectedAssemblyVariant
+}
+
+// agregadoDimensionRuleContext selects the agregado's variants for THIS unit
+// — the same deterministic selection the assemblies path runs per bay. A
+// selection failure yields nil: the assemblies path already reports the bay's
+// rejection, and the boards keep the legacy formula path instead of failing
+// the whole layout.
+func agregadoDimensionRuleContext(agr domain.Agregado, unit agregadoUnit) *dimensionRuleContext {
+	if len(agr.VariantSets) == 0 {
+		return nil
+	}
+	params := AssemblyResolutionParams{WidthMm: unit.w, HeightMm: unit.h, DepthMm: unit.d}
+	selected, err := SelectAgregadoVariants(agr, params)
+	if err != nil || len(selected) == 0 {
+		return nil
+	}
+	m := make(map[string]domain.SelectedAssemblyVariant, len(selected))
+	for _, sv := range selected {
+		m[sv.VariantSetID] = sv
+	}
+	return &dimensionRuleContext{params: params, selected: m}
+}
+
 // expandLayoutInstances resolves component instances into positioned boards
 // (mirrors TS expandComponentInstances in engine/bom.ts, spatial branch).
 func expandLayoutInstances(
@@ -1487,6 +1518,7 @@ func expandLayoutInstances(
 	baseClearance int,
 	optionChoices map[string]string,
 	opts resolveOptions,
+	ruleCtx *dimensionRuleContext,
 ) ([]layoutBoard, error) {
 	boards := []layoutBoard{}
 	// #434: copy ids must be unique per component across the whole expansion —
@@ -1555,6 +1587,28 @@ func expandLayoutInstances(
 				return nil, fmt.Errorf("component %s width formula: %w", comp.Code, err)
 			}
 			widthMm = float64(v)
+		}
+		// #1493: regla declarativa por variante — la regla de la instancia
+		// MANDA sobre la fórmula del componente (el respaldo per-bahía: el
+		// nominal de la variante de ESTA bahía no es expresable como fórmula
+		// del envelope). Sin contexto de variante (estructura/módulo o
+		// selección que no cabe) las reglas no corren y el camino de fórmula
+		// queda intacto.
+		if ruleCtx != nil && inst.Overrides != nil {
+			if inst.Overrides.LengthRule != nil {
+				v, err := EvaluateDimensionRule(*inst.Overrides.LengthRule, ruleCtx.params, ruleCtx.selected)
+				if err != nil {
+					return nil, fmt.Errorf("component %s lengthRule: %w", comp.Code, err)
+				}
+				lengthMm = v
+			}
+			if inst.Overrides.WidthRule != nil {
+				v, err := EvaluateDimensionRule(*inst.Overrides.WidthRule, ruleCtx.params, ruleCtx.selected)
+				if err != nil {
+					return nil, fmt.Errorf("component %s widthRule: %w", comp.Code, err)
+				}
+				widthMm = v
+			}
 		}
 
 		xFormula := comp.XFormula
@@ -1828,9 +1882,11 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 		// #442: agregado components follow the same effective-base-mode
 		// filtering as the BOM so the visual cannot show a zoclo part the
 		// quote excludes.
+		// #1493: las reglas de dimensión por variante de esta bahía.
+		ruleCtx := agregadoDimensionRuleContext(agr, unit)
 		unitBoards, err := expandLayoutInstances(
 			filterInstancesForBaseMode(agr.Components, catalog, baseMode),
-			catalog, unitDims, fmt.Sprintf("agr-%s-%su%d-", effectiveID, instanceTag, unit.index), baseClearance, optionChoices, opts)
+			catalog, unitDims, fmt.Sprintf("agr-%s-%su%d-", effectiveID, instanceTag, unit.index), baseClearance, optionChoices, opts, ruleCtx)
 		if err != nil {
 			return nil, err
 		}
