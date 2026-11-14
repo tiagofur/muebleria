@@ -1,0 +1,36 @@
+{
+  "scenario": "#1493 — regla de dimensión por variante sobre componentes del agregado: el respaldo del cajón MERIVOBOX se dimensiona por el nominal de la variante de CADA bahía (M: 108−25=83, E: 209−25=184). El componente sigue declarando la fórmula constante legacy (184) — la regla de la instancia MANDA. El piso (sin regla) queda intacto por fórmula.",
+  "agregado": { "id": "agr-gray-cajon", "code": "MBOX-IRIDIUM-GRAY-CAJON", "variantSetId": "height-variants" },
+  "variants": [
+    { "hardwareId": "hw-alt-m", "nominalDimensionMm": 108 },
+    { "hardwareId": "hw-alt-e", "nominalDimensionMm": 209 }
+  ],
+  "components": [
+    {
+      "id": "comp-respaldo",
+      "code": "MBOX-RES",
+      "name": "Respaldo Merivobox",
+      "lengthFormula": "PW-51",
+      "widthFormula": "184",
+      "instanceOverrides": {
+        "widthRule": { "source": "selected_variant", "variantSetId": "height-variants", "multiplier": 1, "offsetMm": -25 }
+      }
+    },
+    {
+      "id": "comp-piso",
+      "code": "MBOX-PIS",
+      "name": "Piso Cajon Merivobox",
+      "lengthFormula": "PW-51",
+      "widthFormula": "PD-26"
+    }
+  ],
+  "module": { "widthMm": 600, "heightMm": 420, "depthMm": 500 },
+  "bays": [
+    { "id": "bay-e", "heightFormula": "209" },
+    { "id": "bay-m", "heightFormula": "108" }
+  ],
+  "expectedBoards": {
+    "bay-e": { "comp-respaldo": { "lengthMm": 549, "widthMm": 184 }, "comp-piso": { "lengthMm": 549, "widthMm": 474 } },
+    "bay-m": { "comp-respaldo": { "lengthMm": 549, "widthMm": 83 }, "comp-piso": { "lengthMm": 549, "widthMm": 474 } }
+  }
+}
