@@ -33,11 +33,15 @@ import type {
 import {
   attachVisualPins,
   createCatalogVisualAssetLookup,
+  effectiveKitHardwareId,
   enrichFabricatedComponentsWithAuthority,
+  filterRigidMembersByEffectiveKit,
   projectResolvedAssemblyFor3D,
   resolveAgregadoAssembly,
   resolveComposedModule,
   resolveHardwareDimensions,
+  selectAgregadoVariants,
+  type AgregadoAssemblyInput,
   type EffectiveHardwareDimensions,
 } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
@@ -238,17 +242,42 @@ export function resolveAgregado3DPreview(
         for (const hw of catalogInput.hardware ?? []) {
           hardwareDimensions[hw.id] = resolveHardwareDimensions(hw);
         }
-        const resolved = resolveAgregadoAssembly(
-          {
-            id: recipe.id,
-            commercialKitHardwareId: recipe.commercialKitHardwareId,
-            components: recipe.components,
-            rigidMembers: recipe.rigidMembers,
-            variantSets: recipe.variantSets,
-            compatibilityRules: recipe.compatibilityRules,
-          },
-          { widthMm: dims.width, depthMm: dims.depth, heightMm: dims.height, hardwareDimensions },
-        );
+        // #1613 ronda 4: el preview del agregado es UNA bahía — el kit
+        // efectivo para sus dimensiones de preview decide qué miembros
+        // persistidos se dibujan (la edición web persiste la UNIÓN de los
+        // kits por variante; sin filtro el preview muestra E+M superpuestos).
+        const previewParams = {
+          widthMm: dims.width,
+          depthMm: dims.depth,
+          heightMm: dims.height,
+          hardwareDimensions,
+        };
+        const previewInput: AgregadoAssemblyInput = {
+          id: recipe.id,
+          commercialKitHardwareId: recipe.commercialKitHardwareId,
+          components: recipe.components,
+          rigidMembers: recipe.rigidMembers,
+          variantSets: recipe.variantSets,
+          compatibilityRules: recipe.compatibilityRules,
+        };
+        let input: AgregadoAssemblyInput = previewInput;
+        try {
+          const kit = effectiveKitHardwareId(
+            previewInput,
+            selectAgregadoVariants(previewInput, previewParams),
+          );
+          input = filterRigidMembersByEffectiveKit(
+            previewInput,
+            new Map(
+              (catalogInput.hardware ?? []).map((h) => [h.id, (h.kitHardwareId ?? '').trim()] as const),
+            ),
+            kit,
+          );
+        } catch {
+          // variant_not_found / ambiguous en dims de preview: sin filtro — el
+          // resolve de abajo reporta el error honesto.
+        }
+        const resolved = resolveAgregadoAssembly(input, previewParams);
         const enriched = {
           ...resolved,
           fabricatedComponents: enrichFabricatedComponentsWithAuthority(

@@ -1214,6 +1214,32 @@ export function effectiveKitHardwareId(
   return agregado.commercialKitHardwareId?.trim() ?? '';
 }
 
+/**
+ * #1613 ronda 4: espejo TS del filtro Go (syncAgregadoRigidMembersFromCatalog)
+ * — un miembro persistido cuyo herraje pertenece a OTRO kit comercial (no al
+ * efectivo de esta bahía) se descarta. La edición del catálogo web persiste la
+ * UNIÓN de los kits por variante (E+M) como miembros fijos y sin este filtro
+ * el preview dibujaba el cajón del otro kit encima del suyo (fijador E más
+ * alto sobre la bahía M). Sin kit efectivo no hay filtro; un herraje sin kit
+ * (tornillos de perforación #1487) o ausente del catálogo nunca se descarta.
+ */
+export function filterRigidMembersByEffectiveKit(
+  agregado: AgregadoAssemblyInput,
+  kitByHardwareId: ReadonlyMap<string, string>,
+  effectiveKit: string,
+): AgregadoAssemblyInput {
+  const kit = effectiveKit.trim();
+  if (!kit || !agregado.rigidMembers?.length) return agregado;
+  const members = agregado.rigidMembers.filter((m) => {
+    const hwId = m.source?.fixed?.hardwareId;
+    if (!hwId) return true;
+    const hwKit = kitByHardwareId.get(hwId);
+    if (hwKit === undefined || hwKit === '') return true;
+    return hwKit === kit;
+  });
+  return { ...agregado, rigidMembers: members };
+}
+
 export function resolveAgregadoAssembly(
   agregado: AgregadoAssemblyInput,
   params: AssemblyResolutionParams,
@@ -2123,6 +2149,11 @@ export function resolveModuleAgregadoAssembliesDetailed(
   for (const hw of catalog.hardware ?? []) {
     hardwareDimensions[hw.id] = resolveHardwareDimensions(hw);
   }
+  // #1613 ronda 4: kit comercial por herraje — el filtro por bahía descarta
+  // los miembros persistidos de los kits NO efectivos (paridad Go).
+  const kitByHardwareId = new Map<string, string>(
+    (catalog.hardware ?? []).map((h) => [h.id, (h.kitHardwareId ?? '').trim()] as const),
+  );
 
   for (const agrInst of allAgregadoInstances) {
     const effectiveId = resolveEffectiveAgregadoId(agrInst, options.optionChoices);
@@ -2268,7 +2299,19 @@ export function resolveModuleAgregadoAssembliesDetailed(
       } else {
         let pinned: ResolvedAssembly;
         try {
-          const resolved = resolveAgregadoAssembly(agregado, {
+          // #1613 ronda 4: paridad del filtro Go — el miembro persistido cuyo
+          // herraje pertenece a OTRO kit comercial (la edición web persiste la
+          // UNIÓN de kits por variante) se descarta para ESTA bahía. La
+          // selección es determinista: el resolve interno repite la misma.
+          const selectedForKit = selectAgregadoVariants(agregado, {
+            widthMm: unit.width,
+            depthMm: unit.depth,
+            heightMm: unit.height,
+            hardwareDimensions,
+          });
+          const bayKit = effectiveKitHardwareId(agregado, selectedForKit);
+          const bayAgregado = filterRigidMembersByEffectiveKit(agregado, kitByHardwareId, bayKit);
+          const resolved = resolveAgregadoAssembly(bayAgregado, {
             widthMm: unit.width,
             depthMm: unit.depth,
             heightMm: unit.height,

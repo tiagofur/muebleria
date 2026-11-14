@@ -865,8 +865,18 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 
 	for _, rm := range agr.RigidMembers {
 		if rm.Source.Fixed != nil && rm.Source.Fixed.HardwareID != "" {
-			existingHwIDs[rm.Source.Fixed.HardwareID] = true
 			hw, hwOK := findHardware(catalog, rm.Source.Fixed.HardwareID)
+			// #1613 ronda 4: un miembro persistido cuyo herraje pertenece a
+			// OTRO kit comercial (no al efectivo de ESTA bahía) se descarta.
+			// El sync aditivo de la web persiste la UNIÓN de los kits por
+			// variante (E+M) en la receta y sin este filtro cada bahía dibujaba
+			// el cajón completo del otro kit encima del suyo (rev 14-17). Un
+			// herraje SIN kit (tornillos de perforación #1487, piezas sueltas)
+			// nunca se descarta.
+			if memberBelongsToOtherKit(hw, hwOK, effectiveKitHardwareID) {
+				continue
+			}
+			existingHwIDs[rm.Source.Fixed.HardwareID] = true
 			if hwOK {
 				if len(hw.DesignParts) > 0 {
 					dp := hw.DesignParts[0]
@@ -963,6 +973,19 @@ func syncAgregadoRigidMembersFromCatalog(agr domain.Agregado, catalog domain.Cat
 
 	agr.RigidMembers = members
 	return agr
+}
+
+// memberBelongsToOtherKit reports whether a catalog hardware row belongs to a
+// commercial kit OTHER than the effective kit of the bay being resolved.
+// Kit-less hardware (drilling screws, standalone pieces) never belongs to
+// "another" kit and is always kept; unknown hardware (hwOK=false) is kept so
+// the caller preserves legacy behavior for rows missing from the catalog.
+func memberBelongsToOtherKit(hw domain.Hardware, hwOK bool, effectiveKitHardwareID string) bool {
+	kit := strings.TrimSpace(effectiveKitHardwareID)
+	if kit == "" || !hwOK || hw.KitHardwareID == nil {
+		return false
+	}
+	return strings.TrimSpace(*hw.KitHardwareID) != kit
 }
 
 // kitPieceMember (#1518 F1) builds the rigid member that draws ONE design
