@@ -33,7 +33,7 @@ import {
   type CatalogMember,
   type PricePreviewGateResult,
 } from '../../optionGroups/optionGroupHelpers';
-import { ZOCLO_BOARD_ROLE } from '@granete/domain';
+import { ACCESSORY_CHOICE_NONE, effectiveAccessoryChoice, isNoAccessoryChoice, ZOCLO_BOARD_ROLE } from '@granete/domain';
 
 /**
  * OPT-04 / PRJ-03: option picker values for a group — only group members (by kind + optionIds).
@@ -62,7 +62,44 @@ export function optionsForGroup(
     return [];
   }
   const allowed = new Set(group.optionIds);
-  return members.filter((m) => allowed.has(m.id));
+  if (!group.kitHardwareId) {
+    return members.filter((m) => allowed.has(m.id));
+  }
+  // #1627: un selector de insertos lista sus opciones en el orden guardado
+  // (la primera activa es el inserto por defecto) y, si es opcional, ofrece
+  // «Sin inserto» explícito.
+  const byId = new Map(members.map((m) => [m.id, m] as const));
+  const ordered = group.optionIds
+    .map((id) => byId.get(id))
+    .filter((m): m is CatalogMember => m !== undefined);
+  return group.required
+    ? ordered
+    : [...ordered, { id: ACCESSORY_CHOICE_NONE, code: '', name: 'Sin inserto', active: true }];
+}
+
+/**
+ * #1627: etiqueta de «heredar» de un selector de insertos sin default del
+ * proyecto — dice qué monta el cajón: la opción por defecto del juego (la
+ * primera activa) o «Sin inserto». null para los demás grupos.
+ */
+export function accessoryInheritLabel(
+  group: OptionGroup,
+  catalogs: {
+    readonly materials: readonly MaterialBoard[];
+    readonly edges: readonly EdgeBand[];
+    readonly hardware: readonly Hardware[];
+    readonly agregados?: readonly Agregado[];
+  },
+): string | null {
+  if (!group.kitHardwareId) return null;
+  const choice = effectiveAccessoryChoice(group, catalogs.hardware, undefined);
+  if (isNoAccessoryChoice(choice)) return 'Por defecto del juego (Sin inserto)';
+  return `Por defecto del juego (${optionLabelForId(choice, group, catalogs)})`;
+}
+
+/** #1627: etiqueta de una opción en los selects («Sin inserto» no lleva código). */
+export function optionDisplayLabel(opt: Pick<CatalogMember, 'name' | 'code'>): string {
+  return opt.code ? `${opt.name} — ${opt.code}` : opt.name;
 }
 
 /**
@@ -116,6 +153,8 @@ export function canShowProjectPricePreview(
   catalogAgregados?: readonly Agregado[],
   /** #1502: grupos de accesorios declarados por los kits de los agregados. */
   catalogOptionGroups?: readonly OptionGroup[],
+  /** #1627: herrajes del catálogo (opciones de insertos activas). */
+  catalogHardware?: readonly Hardware[],
 ): PricePreviewGateResult {
   const missing = new Set<string>();
   const byId = new Map(modules.map((m) => [m.id, m]));
@@ -150,6 +189,7 @@ export function canShowProjectPricePreview(
       catalogAgregados,
       catalogOptionGroups,
       effective,
+      catalogHardware,
     ).filter((code) => !agregadoRoleCodes.has(code));
     // P0-2b: a plinth_board item without ZOCLO nor FRENTE explodes on accept
     // with an unresolvable synthesized zoclo — surface it at the preview gate.
@@ -185,7 +225,7 @@ export function optionLabelForId(
   },
 ): string {
   const opt = optionsForGroup(group, catalogs).find((o) => o.id === optionId);
-  return opt ? `${opt.name} — ${opt.code}` : optionId;
+  return opt ? optionDisplayLabel(opt) : optionId;
 }
 
 /** Visual chip swatch for presentation options (board finishes). */

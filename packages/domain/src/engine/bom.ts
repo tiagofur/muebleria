@@ -25,7 +25,7 @@ import {
   type AssemblyResolutionParams,
   type SelectedAssemblyVariant,
 } from '../agregadoAssembly';
-import { effectiveAccessoryChoice } from '../hardwareKit';
+import { effectiveAccessoryChoice, isNoAccessoryChoice } from '../hardwareKit';
 import {
   applyBaseTreatment,
   filterComponentInstancesForBaseMode,
@@ -999,7 +999,7 @@ export function resolveComposedModule(
         .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
       for (const og of accessoryGroups) {
         const choice = effectiveAccessoryChoice(og, catalog.hardware, optionChoices);
-        if (!choice) continue;
+        if (isNoAccessoryChoice(choice)) continue;
         const isActiveMember =
           og.optionIds.includes(choice) &&
           (catalog.hardware ?? []).some((h) => h.id === choice && h.active);

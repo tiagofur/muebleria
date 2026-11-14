@@ -28,7 +28,7 @@ import type {
   Structure,
 } from './types';
 import { calculateAgregadoSubspaceUnits, resolveEffectiveAgregadoId, type SubspaceUnit } from './agregados';
-import { accessoryKitMemberHardwareIds, effectiveAccessoryChoice, ensureAgregadoKitParts } from './hardwareKit';
+import { ACCESSORY_CHOICE_NONE, accessoryKitMemberHardwareIds, effectiveAccessoryChoice, ensureAgregadoKitParts, isNoAccessoryChoice } from './hardwareKit';
 import type { HardwareDesignPart } from './hardwareDesignParts';
 import { resolveHardwareDimensions, type EffectiveHardwareDimensions } from './hardwarePlacement';
 import { evaluatePartFormula } from './engine/shared';
@@ -2043,7 +2043,7 @@ function resolveAccessoryAssembliesForUnit(
   for (const og of groups) {
     const accInstanceId = `${accBaseInstanceId}-acc-${og.code.toLowerCase()}`;
     const choice = effectiveAccessoryChoice(og, catalog.hardware, optionChoices);
-    if (!choice) {
+    if (isNoAccessoryChoice(choice)) {
       if (og.required) {
         rejections.push({
           assemblyInstanceId: accInstanceId,
@@ -2051,7 +2051,10 @@ function resolveAccessoryAssembliesForUnit(
           agregadoCode: agregado.code ?? '',
           reason: 'accessory_choice_required',
           bayHeightMm: unit.height,
-          detail: `el grupo «${og.code}» es obligatorio para el kit montado en esta bahía y no tiene ninguna opción activa`,
+          detail:
+            choice === ACCESSORY_CHOICE_NONE
+              ? `el grupo «${og.code}» es obligatorio para el kit montado en esta bahía: elegí un inserto`
+              : `el grupo «${og.code}» es obligatorio para el kit montado en esta bahía y no tiene ninguna opción activa`,
         });
       }
       continue;

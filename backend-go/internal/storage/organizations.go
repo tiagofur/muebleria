@@ -392,8 +392,8 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 			JOIN tmp_boards m ON m.old_id = s.id
 			LEFT JOIN tmp_edges em ON em.old_id = s.default_edge_band_id
 			LEFT JOIN tmp_matcat cm ON cm.old_id = s.category_id`},
-		{"option_groups", 1, `INSERT INTO option_groups (id, organization_id, code, name, kind, required)
-			SELECT m.new_id, $2, s.code, s.name, s.kind, s.required
+		{"option_groups", 1, `INSERT INTO option_groups (id, organization_id, code, name, kind, required, default_choice)
+			SELECT m.new_id, $2, s.code, s.name, s.kind, s.required, s.default_choice
 			FROM option_groups s JOIN tmp_optgrp m ON m.old_id = s.id`},
 		{"option_group_members", 1, `INSERT INTO option_group_members (option_group_id, entity_id, organization_id, position)
 			SELECT gm.new_id,

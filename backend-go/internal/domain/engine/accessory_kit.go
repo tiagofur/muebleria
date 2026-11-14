@@ -30,6 +30,10 @@ import (
 //     (status blocked); la cotización no inventa demanda.
 //   - elección inválida (no es miembro activo del grupo) → rejection
 //     `resolve_failed` con el detalle; nunca un accesorio dibujado de más.
+//   - #1627: el grupo puede declarar default «ninguno» (DefaultChoice) — sin
+//     elección no se monta inserto — y el mueble puede elegir «Sin inserto»
+//     explícito (domain.AccessoryChoiceNone). Ambos dejan la bahía sin
+//     inserto; en un grupo REQUERIDO, el fail-closed de arriba.
 
 // accessoryChoiceRequiredReason is the machine rejection reason for a bay
 // whose mounted kit declares a REQUIRED accessory group with no choice.
@@ -130,9 +134,16 @@ func accessoryMemberForChoice(catalog domain.Catalog, og domain.OptionGroup, cho
 // choice when there is one — returned as-is, the caller validates membership
 // and reports an invalid one — otherwise the group's first ACTIVE member in
 // declared order. Empty only when the group has no active member at all.
+//
+// #1627: AccessoryChoiceNone means «no insert» — explicit (the furniture's
+// «Sin inserto») or the group's DefaultChoice "none" when nothing was chosen.
+// Callers treat it like an empty result.
 func effectiveAccessoryChoice(catalog domain.Catalog, og domain.OptionGroup, optionChoices map[string]string) string {
 	if choice := strings.TrimSpace(optionChoices[og.Code]); choice != "" {
 		return choice
+	}
+	if og.DefaultChoice == domain.OptionGroupDefaultNone {
+		return domain.AccessoryChoiceNone
 	}
 	for _, id := range og.OptionIDs {
 		if hw, ok := accessoryMemberForChoice(catalog, og, id); ok {
@@ -163,15 +174,19 @@ func resolveAccessoryAssemblies(
 	for _, og := range groups {
 		accInstanceID := fmt.Sprintf("%s-acc-%s", bayInstanceID, strings.ToLower(og.Code))
 		choice := effectiveAccessoryChoice(catalog, og, optionChoices)
-		if choice == "" {
+		if choice == "" || choice == domain.AccessoryChoiceNone {
 			if og.Required {
+				detail := fmt.Sprintf("el grupo «%s» es obligatorio para el kit montado en esta bahía y no tiene ninguna opción activa", og.Code)
+				if choice == domain.AccessoryChoiceNone {
+					detail = fmt.Sprintf("el grupo «%s» es obligatorio para el kit montado en esta bahía: elegí un inserto", og.Code)
+				}
 				rejections = append(rejections, LayoutAssemblyRejection{
 					AssemblyInstanceID: accInstanceID,
 					AgregadoID:         baseAgr.ID,
 					AgregadoCode:       baseAgr.Code,
 					Reason:             accessoryChoiceRequiredReason,
 					BayHeightMm:        unit.h,
-					Detail:             fmt.Sprintf("el grupo «%s» es obligatorio para el kit montado en esta bahía y no tiene ninguna opción activa", og.Code),
+					Detail:             detail,
 				})
 			}
 			continue
@@ -256,7 +271,7 @@ func collectAccessoryKitHardwareLines(
 	lines := make([]domain.HardwareLine, 0, len(groups))
 	for _, og := range groups {
 		choice := effectiveAccessoryChoice(catalog, og, optionChoices)
-		if choice == "" {
+		if choice == "" || choice == domain.AccessoryChoiceNone {
 			continue
 		}
 		if _, ok := accessoryMemberForChoice(catalog, og, choice); !ok {
@@ -284,11 +299,11 @@ func accessoryChoiceContractIssues(rejections []LayoutAssemblyRejection) []domai
 		}
 		issues = append(issues, domain.ContractIssue{
 			Code:        "ACCESSORY_CHOICE_REQUIRED",
-			Message:     fmt.Sprintf("la bahía %s monta un kit con accesorio obligatorio sin opciones activas", rej.AssemblyInstanceID),
+			Message:     fmt.Sprintf("la bahía %s monta un kit con inserto obligatorio y no lleva ninguno", rej.AssemblyInstanceID),
 			Severity:    domain.IssueSeverityError,
 			EntityID:    rej.AssemblyInstanceID,
 			Path:        "furniture.layout.assemblies",
-			Remediation: "Añadí o activá al menos una opción en el grupo de insertos vinculado al kit (Catálogo › Herrajes › el juego).",
+			Remediation: "Elegí un inserto en el mueble, o añadí/activá al menos una opción en el grupo de insertos vinculado al kit (Catálogo › Herrajes › el juego).",
 			Details:     map[string]any{"agregadoId": rej.AgregadoID, "agregadoCode": rej.AgregadoCode, "bayHeightMm": rej.BayHeightMm, "detail": rej.Detail},
 		})
 	}
@@ -329,6 +344,14 @@ func consumeAgregadoAndAccessoryChoices(module domain.Module, catalog domain.Cat
 				}
 				if hw, ok := accessoryMemberForChoice(catalog, og, choice); ok {
 					consumed[og.Code] = hw.ID
+					continue
+				}
+				// #1627: an explicit «Sin inserto» on an OPTIONAL group is a
+				// real statement the resolve consults (it suppresses the
+				// default insert). On a required group it is not legal and
+				// stays unconsumed — the release gate rejects it by name.
+				if choice == domain.AccessoryChoiceNone && !og.Required {
+					consumed[og.Code] = domain.AccessoryChoiceNone
 				}
 			}
 		}

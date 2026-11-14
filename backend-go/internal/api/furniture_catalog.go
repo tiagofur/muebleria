@@ -100,6 +100,9 @@ type workshopHardwareRole struct {
 	Name      string   `json:"name"`
 	Required  bool     `json:"required"`
 	OptionIDs []string `json:"optionIds"`
+	// DefaultChoice (#1627): only on kit-linked insert groups — "none" when
+	// the drawer mounts no insert without a choice; omitted = first active.
+	DefaultChoice string `json:"defaultChoice,omitempty"`
 }
 
 // workshopAgregadoRole is one sub-assembly (agregado) option group a definition consumes,
@@ -828,6 +831,9 @@ func buildAccessoryGroupsForAgregado(agr domain.Agregado, composition domain.Cat
 					Name:      og.Name,
 					Required:  og.Required,
 					OptionIDs: []string{},
+				}
+				if og.DefaultChoice == domain.OptionGroupDefaultNone {
+					role.DefaultChoice = domain.OptionGroupDefaultNone
 				}
 				byCode[og.Code] = role
 				order = append(order, og.Code)

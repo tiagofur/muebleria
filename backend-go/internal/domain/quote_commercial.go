@@ -405,7 +405,11 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 				looksLikeUUID(option.GroupCode) || looksLikeUUID(option.GroupLabel) || looksLikeUUID(option.ChoiceLabel) {
 				return fmt.Errorf("%w: commercial snapshot unit %s option %d has no customer-facing descriptor", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, j)
 			}
-			if _, err := uuid.Parse(option.ChoiceID); err != nil {
+			// #1627: the explicit «Sin inserto» freezes as the reserved pair
+			// (AccessoryChoiceNone, AccessoryNoneLabel); every other choice is
+			// a catalog UUID.
+			explicitNone := option.ChoiceID == AccessoryChoiceNone && option.ChoiceLabel == AccessoryNoneLabel
+			if _, err := uuid.Parse(option.ChoiceID); err != nil && !explicitNone {
 				return fmt.Errorf("%w: commercial snapshot unit %s option %d has invalid choice identity", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, j)
 			}
 			if j > 0 {

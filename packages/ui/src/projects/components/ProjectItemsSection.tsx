@@ -14,6 +14,8 @@ import { ProjectItemStructureRevisionIndicator } from './ProjectItemStructureRev
 import {
   groupsForModuleItem,
   optionLabelForId,
+  accessoryInheritLabel,
+  optionDisplayLabel,
   optionsForGroup,
   furnitureTypeLabel,
   formatProjectMoney,
@@ -702,7 +704,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                       const lineFinish = item.optionFinishes?.[group.code]?.trim() ?? '';
                       const inheritLabel = projectDefault
                         ? `Usar default del proyecto (${optionLabelForId(projectDefault, group, catalogs)})`
-                        : 'Usar default del proyecto';
+                        : (accessoryInheritLabel(group, catalogs) ?? 'Usar default del proyecto');
                       return (
                         <div key={group.id} className="catalog-form__field">
                           <label htmlFor={`choice-${item.id}-${group.code}`}>
@@ -726,7 +728,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                           >
                             <option value="">{inheritLabel}</option>
                             {options.map((opt) => (
-                              <option key={opt.id} value={opt.id}>{opt.name} — {opt.code}</option>
+                              <option key={opt.id} value={opt.id}>{optionDisplayLabel(opt)}</option>
                             ))}
                           </select>
                           {finishOptions.length > 0 ? (

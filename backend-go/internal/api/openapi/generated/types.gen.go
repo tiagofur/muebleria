@@ -3547,10 +3547,11 @@ type HardwareKitSystemCreated struct {
 }
 
 type WorkshopHardwareRole struct {
-	Code      string   `json:"code"`
-	Name      string   `json:"name"`
-	Required  bool     `json:"required"`
-	OptionIds []string `json:"optionIds"`
+	Code          string   `json:"code"`
+	Name          string   `json:"name"`
+	Required      bool     `json:"required"`
+	OptionIds     []string `json:"optionIds"`
+	DefaultChoice *string  `json:"defaultChoice,omitempty"`
 }
 
 type WorkshopMaterial struct {

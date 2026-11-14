@@ -771,3 +771,26 @@ describe('selectableGroupCodesForModule (F087)', () => {
     expect(sinEleccion).not.toContain('LATERAL_E');
   });
 });
+
+describe('#1627 — gate de precio de un selector de insertos', () => {
+  const group = (over: Partial<OptionGroup>): OptionGroup => ({
+    id: 'og-ins', code: 'INSERTOS_E', name: 'Insertos', kind: 'hardware', required: true,
+    optionIds: ['hw-gal'], kitHardwareId: 'kit-e', ...over,
+  });
+  const agr = {
+    id: 'agr-e', code: 'AGR-E', name: 'Cajón E', active: true, commercialKitHardwareId: 'kit-e',
+  } as unknown as Agregado;
+  const mod = { hardwareLines: [], components: [], agregados: [{ agregadoId: 'agr-e' }] };
+  const required = (g: OptionGroup, hardware?: readonly { id: string; active?: boolean }[]) =>
+    requiredGroupCodesForModule(mod, [g], [], [], [agr], [g], null, hardware);
+
+  it('con una opción activa no bloquea (el motor monta la primera)', () => {
+    expect(required(group({}), [{ id: 'hw-gal', active: true }])).not.toContain('INSERTOS_E');
+  });
+  it('con todas las opciones inactivas bloquea (el motor la rechaza)', () => {
+    expect(required(group({}), [{ id: 'hw-gal', active: false }])).toContain('INSERTOS_E');
+  });
+  it('con default «ninguno» bloquea hasta que el mueble elija', () => {
+    expect(required(group({ defaultChoice: 'none' }), [{ id: 'hw-gal', active: true }])).toContain('INSERTOS_E');
+  });
+});

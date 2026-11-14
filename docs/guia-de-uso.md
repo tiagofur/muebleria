@@ -364,13 +364,22 @@ En la sección **Insertos del juego** también está **Añadir existente**
 qué lados tienen diseño y cuáles están pendientes, con acceso directo para
 corregirlos.
 
-**Inserto por defecto:** si en el mueble no se elige ninguno, el cajón
-lleva la **primera opción activa** de la lista de **Insertos del juego** —
-se dibuja y se cotiza igual que una elegida. Esa opción aparece marcada
-**Por defecto**. Para cambiar cuál es, usá las **flechas** de cada opción
-para subirla o bajarla: el orden se guarda y los muebles sin elección
-pasan a llevar la nueva primera. Si un mueble necesita otro inserto,
-elegilo en el mueble.
+**Inserto por defecto:** cada selector define qué lleva el cajón cuando el
+mueble no elige, en **Si el mueble no elige**:
+
+- **Primera opción activa** (lo normal): el cajón lleva la opción marcada
+  **Por defecto**, que se dibuja y se cotiza igual que una elegida. Para
+  cambiar cuál es, usá las **flechas** de cada opción: el orden se guarda
+  y los muebles sin elección pasan a llevar la nueva primera.
+- **Sin inserto**: el cajón no lleva inserto salvo que el mueble elija uno.
+  Si además el selector es **obligatorio**, la app avisa que cada mueble
+  tiene que elegir, y el precio queda bloqueado hasta que lo haga.
+
+**Sin inserto en un mueble:** si el selector no es obligatorio, en las
+opciones del mueble (web) y en SketchUp aparece **Sin inserto** para que
+ese mueble vaya sin inserto aunque el selector tenga un default. En la web,
+la opción de heredar dice qué lleva el cajón («Por defecto del juego
+(Galería…)» o «(Sin inserto)»).
 
 **Cómo saber que quedó bien:** al agregar el mueble a una cotización
 aparece el selector con las opciones; el precio del inserto — el elegido
@@ -534,8 +543,10 @@ colocado en SketchUp, sin eliminarlo ni volver a insertarlo.
 1. Seleccioná el mueble en SketchUp y abrí la pestaña **Inspector**.
 2. En la tarjeta **Herrajes del mueble**, si el sistema de cajón elegido
    lleva accesorios, aparece la fila **Inserto** justo debajo del cajón.
-   Si nadie eligió uno, la fila muestra la primera opción del selector:
-   es la que el cajón lleva por defecto.
+   Si nadie eligió uno, la fila muestra lo que el cajón lleva por defecto:
+   la primera opción del selector, o **Sin inserto** si el selector no
+   tiene default. Si el selector no es obligatorio, el botón **Sin
+   inserto** deja ese mueble sin inserto.
 3. Hacé clic en **Inserto**, elegí la opción deseada (galería, BOXCOVER o
    BOXCAP) y pulsá **Aplicar**.
 

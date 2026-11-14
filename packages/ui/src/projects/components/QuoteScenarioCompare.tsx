@@ -14,7 +14,7 @@ import {
   type ScenarioCompareResult,
 } from '@granete/domain';
 import { formatMoneyDisplay } from '../../common';
-import { optionsForGroup } from '../projectHelpers';
+import { optionDisplayLabel, optionsForGroup } from '../projectHelpers';
 
 export type QuoteScenarioCompareProps = {
   readonly project: Project;
@@ -131,7 +131,7 @@ export function QuoteScenarioCompare({
             <option value="">Elegí una opción…</option>
             {options.map((opt) => (
               <option key={opt.id} value={opt.id}>
-                {opt.name} — {opt.code}
+                {optionDisplayLabel(opt)}
               </option>
             ))}
           </select>

@@ -6,6 +6,7 @@ import {
   type ResolvedModuleAssembly,
 } from './agregadoAssembly';
 import { resolveBom } from './engine/bom';
+import { ACCESSORY_CHOICE_NONE } from './hardwareKit';
 import type { Agregado, Catalog, Hardware, Module, OptionGroup, Structure } from './types';
 import type { ProductVariant } from './agregadoAssembly';
 
@@ -15,6 +16,7 @@ import type { ProductVariant } from './agregadoAssembly';
 // vive en backend-go/internal/domain/engine/accessory_kit_parity_test.go.
 
 interface AccessoryKitFixture {
+  choiceNone: string;
   heights: { code: string; nominalDimensionMm: number; hardwareId: string; kitHardwareId: string }[];
   module: { widthMm: number; heightMm: number; depthMm: number; bayHeightFormula: string };
   accessoryGroup: {
@@ -341,4 +343,49 @@ describe('#1502 — kit accesorio elegible (paridad con Go)', () => {
     expect(detailed.assemblies).toHaveLength(1);
     expect(detailed.rejections).toEqual([]);
   });
+});
+
+// #1627 slice 2 — default del selector «ninguno» y «Sin inserto» explícito
+// (espejo de TestAccessoryKitDefaultNoneAndExplicitNone_1627): sin inserto
+// dibujado ni cotizado; en grupo requerido, rechazo accessory_choice_required.
+describe('#1627 — default del selector y «Sin inserto» (paridad con Go)', () => {
+  it('el valor «Sin inserto» es el del contrato compartido', () => {
+    expect(ACCESSORY_CHOICE_NONE).toBe(f.choiceNone);
+  });
+
+  const cases = [
+    { name: 'default ninguno, opcional, sin elección', required: false, defaultNone: true, choice: '', reject: false },
+    { name: 'default ninguno, requerido, sin elección', required: true, defaultNone: true, choice: '', reject: true },
+    { name: '«Sin inserto» explícito, opcional', required: false, defaultNone: false, choice: 'none', reject: false },
+    { name: '«Sin inserto» explícito, requerido', required: true, defaultNone: false, choice: 'none', reject: true },
+  ];
+  for (const c of cases) {
+    it(c.name, () => {
+      const { catalog, module, groupCode } = buildScenario(c.required, true);
+      const withDefault = c.defaultNone
+        ? {
+            ...catalog,
+            optionGroups: (catalog.optionGroups ?? []).map((g) =>
+              g.code === groupCode ? { ...g, defaultChoice: 'none' as const } : g,
+            ),
+          }
+        : catalog;
+      const choices = c.choice ? { [groupCode]: c.choice } : {};
+      const detailed = resolveModuleAgregadoAssembliesDetailed(
+        module,
+        { width: f.module.widthMm, height: f.module.heightMm, depth: f.module.depthMm },
+        withDefault,
+        { optionChoices: choices },
+      );
+      expect(accAssembliesOf(detailed.assemblies)).toHaveLength(0);
+      if (c.reject) {
+        expect(detailed.rejections).toHaveLength(1);
+        expect(detailed.rejections[0]!.reason).toBe('accessory_choice_required');
+      } else {
+        expect(detailed.rejections).toHaveLength(0);
+      }
+      const bom = resolveBom(module, choices, withDefault);
+      expect(bom.hardwareLines.filter((line) => line.id.startsWith('kit-acc-'))).toHaveLength(0);
+    });
+  }
 });

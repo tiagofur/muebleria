@@ -21454,6 +21454,11 @@
             "type": "array",
             "items": { "type": "string" },
             "description": "Active hardware ids the group offers."
+          },
+          "defaultChoice": {
+            "type": "string",
+            "enum": ["none"],
+            "description": "#1627: sólo en grupos de insertos vinculados a un kit — \"none\" cuando el cajón no lleva inserto sin elección; ausente = la primera opción activa."
           }
         }
       },

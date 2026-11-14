@@ -993,6 +993,20 @@ export function agregadoKitHardwareIds(agregado: {
 }
 
 /**
+ * #1627: valor explícito «Sin inserto» de un grupo de insertos en el mapa de
+ * elecciones del mueble (espejo de domain.AccessoryChoiceNone; fixture
+ * accessoryKitParity). Los ids del catálogo son UUID: nunca colisiona.
+ * effectiveAccessoryChoice lo devuelve también cuando el selector declara
+ * default «ninguno»; quien llama lo trata como «sin inserto».
+ */
+export const ACCESSORY_CHOICE_NONE = 'none';
+
+/** #1627: true si la elección efectiva deja la bahía sin inserto. */
+export function isNoAccessoryChoice(choice: string): boolean {
+  return choice === '' || choice === ACCESSORY_CHOICE_NONE;
+}
+
+/**
  * La ÚNICA regla que decide qué accesorio monta una bahía para un grupo
  * vinculado a su kit (layout, cotización y gates de la web): la elección
  * explícita cuando existe — devuelta tal cual, quien llama valida la
@@ -1003,12 +1017,18 @@ export function agregadoKitHardwareIds(agregado: {
  * accessory_kit.go.
  */
 export function effectiveAccessoryChoice(
-  og: { readonly code: string; readonly optionIds: readonly string[] },
+  og: {
+    readonly code: string;
+    readonly optionIds: readonly string[];
+    readonly defaultChoice?: 'first_active' | 'none';
+  },
   hardware: readonly { readonly id: string; readonly active?: boolean }[] | undefined,
   optionChoices: Readonly<Record<string, string | undefined>> | undefined,
 ): string {
   const explicit = (optionChoices?.[og.code] ?? '').trim();
   if (explicit) return explicit;
+  // #1627: default del selector «ninguno» — sin elección no hay inserto.
+  if (og.defaultChoice === 'none') return ACCESSORY_CHOICE_NONE;
   for (const id of og.optionIds) {
     const trimmed = (id ?? '').trim();
     if (trimmed && (hardware ?? []).some((h) => h.id === trimmed && h.active)) return trimmed;

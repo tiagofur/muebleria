@@ -184,6 +184,10 @@
   // Insert until it settles (bounded: a lost answer never strands the
   // button) and then re-seeds ONLY what the user did not touch.
   // ------------------------------------------------------------------
+  // #1627: valor explícito «Sin inserto» de un selector de insertos (mismo
+  // contrato que el motor: domain.AccessoryChoiceNone / ACCESSORY_CHOICE_NONE).
+  var ACCESSORY_CHOICE_NONE = "none";
+
   var DESIGN_DEFAULTS_WAIT_MS = 2000;
   var designDefaultsPending = false;
   var designDefaultsGeneration = 0;
@@ -443,7 +447,7 @@
     updateLibraryInsertButton();
     var entry = hardwareEntryById(hardwareId) || agregadoEntryById(hardwareId);
     deps.showToast("success", "✓ Opción seleccionada: " +
-      (entry ? (entry.name || entry.code) : hardwareId));
+      (hardwareId === ACCESSORY_CHOICE_NONE ? "Sin inserto" : (entry ? (entry.name || entry.code) : hardwareId)));
   }
 
   // Un grupo requerido sin elección real (sin miembros activos) bloquea
@@ -616,19 +620,27 @@
           // Sin elección, la fila muestra la PRIMERA opción: es la que el
           // motor monta y cotiza por defecto (effectiveAccessoryChoice). No
           // se siembra como override — el mueble sigue el orden del catálogo.
-          var accChosenId = libMaterialChoices[acc.code] ||
-            ((acc.optionIds && acc.optionIds.length > 0) ? acc.optionIds[0] : null);
+          // #1627: el selector puede declarar default «ninguno» y el mueble
+          // puede elegir «Sin inserto» explícito (ACCESSORY_CHOICE_NONE).
+          var accExplicit = libMaterialChoices[acc.code] || null;
+          var accNone = accExplicit === ACCESSORY_CHOICE_NONE ||
+            (!accExplicit && acc.defaultChoice === "none");
+          var accChosenId = accNone ? null : (accExplicit ||
+            ((acc.optionIds && acc.optionIds.length > 0) ? acc.optionIds[0] : null));
           var accChosen = accChosenId ? hardwareEntryById(accChosenId) : null;
-          accName.textContent = accChosen ? (accChosen.name || accChosen.code) : (accChosenId || "--");
+          accName.textContent = accNone ? "Sin inserto" :
+            (accChosen ? (accChosen.name || accChosen.code) : (accChosenId || "--"));
           accInfo.appendChild(accName);
           var accMeta = document.createElement("span");
           accMeta.className = "material-selected-meta";
           // #1555: la meta muestra el código elegido (paridad con herrajes y
           // agregados), nunca un «Clic para elegir…» permanente con elección
           // activa.
-          accMeta.textContent = (acc.optionIds && acc.optionIds.length > 0)
-            ? ((accChosen && accChosen.code) ? accChosen.code : "Clic para elegir un accesorio del catálogo")
-            : "Sin miembros activos en el catálogo";
+          accMeta.textContent = accNone
+            ? (accExplicit ? "Elegido para este mueble" : "Default del juego")
+            : (acc.optionIds && acc.optionIds.length > 0)
+              ? ((accChosen && accChosen.code) ? accChosen.code : "Clic para elegir un accesorio del catálogo")
+              : "Sin miembros activos en el catálogo";
           accInfo.appendChild(accMeta);
           accPreview.appendChild(accInfo);
 
@@ -654,6 +666,36 @@
             );
           });
           accBlock.appendChild(accPreview);
+
+          // #1627: «Sin inserto» explícito, sólo si el selector no es
+          // obligatorio (en uno obligatorio el motor lo rechazaría).
+          // Review #1629: con «Sin inserto» elegido, volver al default del
+          // juego (quita la elección explícita).
+          if (accExplicit === ACCESSORY_CHOICE_NONE) {
+            var accDefaultBtn = document.createElement("button");
+            accDefaultBtn.type = "button";
+            accDefaultBtn.className = "btn btn--ghost btn--small";
+            accDefaultBtn.textContent = "Usar el default del juego";
+            accDefaultBtn.addEventListener("click", function () {
+              delete libMaterialChoices[acc.code];
+              if (libUserCustomizedRoles) delete libUserCustomizedRoles[acc.code];
+              clearCatalogIntentKey();
+              renderLibraryAgregadoRoles(activeLibDef);
+              updateLibraryInsertButton();
+            });
+            accBlock.appendChild(accDefaultBtn);
+          }
+          if (!acc.required && accExplicit !== ACCESSORY_CHOICE_NONE) {
+            var accNoneBtn = document.createElement("button");
+            accNoneBtn.type = "button";
+            accNoneBtn.className = "btn btn--ghost btn--small";
+            accNoneBtn.textContent = "Sin inserto";
+            accNoneBtn.title = "Este mueble va sin inserto en el cajón";
+            accNoneBtn.addEventListener("click", function () {
+              applyHardwareChoice(acc.code, ACCESSORY_CHOICE_NONE);
+            });
+            accBlock.appendChild(accNoneBtn);
+          }
 
           libAgregadosContainer.appendChild(accBlock);
         });
@@ -717,7 +759,9 @@
           var chosenAcc = libMaterialChoices[acc.code];
           var hasOptions = acc.optionIds && acc.optionIds.length > 0;
           var staleChoice = chosenAcc && !hardwareEntryById(chosenAcc);
-          if (acc.required && (staleChoice || (!chosenAcc && !hasOptions))) {
+          // #1627: un requerido con default «ninguno» exige elección.
+          var noDefault = !chosenAcc && (!hasOptions || acc.defaultChoice === "none");
+          if (acc.required && (staleChoice || noDefault)) {
             missing.push({ name: acc.name || acc.code });
           }
         });

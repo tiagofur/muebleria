@@ -128,3 +128,29 @@ describe('HardwareKitAccessoriesSection — orden y opción por defecto (#1627)'
     expect(onUpdateGroup).toHaveBeenCalledWith('og-galeria', expect.objectContaining({ optionIds: ['hw-gal', 'hw-cov', 'hw-cap'] }));
   });
 });
+
+describe('HardwareKitAccessoriesSection — default del selector (#1627)', () => {
+  const hardware = [{ id: 'hw-cap', code: 'CAP', name: 'Boxcap', unit: 'piece', costPerUnit: 0, active: true }];
+  it('elegir «Sin inserto» guarda defaultChoice none y quita la marca «Por defecto»', () => {
+    const onUpdateGroup = vi.fn();
+    const group: OptionGroup = { ...optionGroupFixture, required: false, optionIds: ['hw-cap'] };
+    const { rerender } = render(
+      <HardwareKitAccessoriesSection kitId="kit-1" kitCode="MBOX-E" optionGroups={[group]} hardware={hardware as never} canMutate onUpdateGroup={onUpdateGroup} />,
+    );
+    expect(screen.getByTestId('hardware-accessory-MBOX_E_GALERIA-default-CAP')).toBeTruthy();
+    fireEvent.change(screen.getByTestId('hardware-accessory-MBOX_E_GALERIA-default-choice'), { target: { value: 'none' } });
+    expect(onUpdateGroup).toHaveBeenCalledWith('og-galeria', expect.objectContaining({ defaultChoice: 'none', optionIds: ['hw-cap'] }));
+
+    rerender(
+      <HardwareKitAccessoriesSection kitId="kit-1" kitCode="MBOX-E" optionGroups={[{ ...group, defaultChoice: 'none' }]} hardware={hardware as never} canMutate onUpdateGroup={onUpdateGroup} />,
+    );
+    expect(screen.queryByTestId('hardware-accessory-MBOX_E_GALERIA-default-CAP')).toBeNull();
+  });
+
+  it('obligatorio sin default avisa que cada mueble debe elegir', () => {
+    render(
+      <HardwareKitAccessoriesSection kitId="kit-1" kitCode="MBOX-E" optionGroups={[{ ...optionGroupFixture, required: true, optionIds: ['hw-cap'], defaultChoice: 'none' }]} hardware={hardware as never} canMutate />,
+    );
+    expect(screen.getByTestId('hardware-accessory-MBOX_E_GALERIA-required-none')).toBeTruthy();
+  });
+});
