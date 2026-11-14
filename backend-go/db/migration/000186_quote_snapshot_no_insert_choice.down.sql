@@ -1,4 +1,9 @@
 -- Restaura la validación original de 000130 (choiceId siempre UUID).
+-- Atención: las revisiones de cotización ya congeladas con el par
+-- («none», «Sin inserto») quedan en la tabla; el trigger de inmutabilidad
+-- vuelve a validar el snapshot en cada UPDATE, así que tras este down
+-- cualquier cambio de estado de esas revisiones será rechazado hasta
+-- re-aplicar 000186.
 CREATE OR REPLACE FUNCTION valid_quote_commercial_snapshot_v1(payload JSONB)
 RETURNS BOOLEAN
 LANGUAGE SQL

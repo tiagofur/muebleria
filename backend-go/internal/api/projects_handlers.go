@@ -189,7 +189,9 @@ func validateProjectPayloadRequiredIDs(w http.ResponseWriter, p *domain.Project,
 			return false
 		}
 		for role, choice := range p.Items[i].OptionChoices {
-			if !isValidUUID(choice) {
+			// #1627: «Sin inserto» explícito ("none"); el motor, el gate de
+			// liberación y el congelado exigen que sea un selector opcional.
+			if !isValidUUID(choice) && choice != domain.AccessoryChoiceNone {
 				respondWithError(w, http.StatusBadRequest, "opción inválida ("+role+") en una línea de la cotización")
 				return false
 			}
@@ -199,14 +201,14 @@ func validateProjectPayloadRequiredIDs(w http.ResponseWriter, p *domain.Project,
 				respondWithError(w, http.StatusBadRequest, "acabado "+finishID+" inválido ("+role+") en una línea de la cotización")
 				return false
 			}
-			if p.Items[i].OptionChoices[role] == "" {
+			if c := p.Items[i].OptionChoices[role]; c == "" || c == domain.AccessoryChoiceNone {
 				respondWithError(w, http.StatusBadRequest, "acabado sin elección de herraje ("+role+") en una línea de la cotización")
 				return false
 			}
 		}
 	}
 	for role, choice := range p.ProjectLevelChoices {
-		if !isValidUUID(choice) {
+		if !isValidUUID(choice) && choice != domain.AccessoryChoiceNone {
 			respondWithError(w, http.StatusBadRequest, "opción global inválida ("+role+") en la cotización")
 			return false
 		}
