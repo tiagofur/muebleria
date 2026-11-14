@@ -365,10 +365,11 @@ qué lados tienen diseño y cuáles están pendientes, con acceso directo para
 corregirlos.
 
 **Inserto por defecto:** si en el mueble no se elige ninguno, el cajón
-lleva la **primera opción** del selector, en el orden en que aparecen en
-**Insertos del juego** — se dibuja y se cotiza igual que una elegida. Para
-cambiar cuál es el default, dejá primero en la lista el inserto que más
-usás (quitá y volvé a añadir los demás).
+lleva la **primera opción activa** tal como aparece en **Insertos del
+juego** (recargá la página para ver el orden guardado) — se dibuja y se
+cotiza igual que una elegida. Ese orden lo fija el catálogo y hoy **no se
+puede reordenar**: quitar y volver a añadir una opción no la mueve. Si un
+mueble necesita otro inserto, elegilo en el mueble.
 
 **Cómo saber que quedó bien:** al agregar el mueble a una cotización
 aparece el selector con las opciones; el precio del inserto — el elegido
@@ -411,8 +412,9 @@ sus insertos y con el ensamble que los módulos eligen por bahía.
    del costado (fijo y móvil, por mano — subir o elegir).
 3. **Insertos del cajón E** (opcional, podés añadirlos después): cada uno
    nace con su SKP por lado, sus offsets y su «Al abrir» — nada queda a
-   medias. El primero de la lista es el que llevan los cajones E por
-   defecto. Los **costados** nacen sin desfase (0 mm): si el diseño no
+   medias. Cuál queda como inserto por defecto se ve después en
+   **Insertos del juego** (ver 8c.3); no es necesariamente el primero que
+   cargaste aquí. Los **costados** nacen sin desfase (0 mm): si el diseño no
    está dibujado en su posición final, se ajusta después en la ficha de
    cada pieza, sección **Diseño — un SKP por lado**.
 4. **Elegibilidad:** elegís en qué grupo queda disponible el sistema para
