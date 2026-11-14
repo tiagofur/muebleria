@@ -3502,6 +3502,26 @@ type HardwareKitSystemVariantSet struct {
 	Variants  []HardwareKitSystemVariant `json:"variants"`
 }
 
+type HardwareKitSystemHeightAddRequest struct {
+	Hardware         []HardwareKitSystemHardwareRow        `json:"hardware"`
+	Variant          HardwareKitSystemHeightVariant        `json:"variant"`
+	OptionGroup      *HardwareKitSystemOptionGroupRow      `json:"option_group,omitempty"`
+	EligibilityGroup *HardwareKitSystemEligibilityGroupRow `json:"eligibility_group,omitempty"`
+}
+
+type HardwareKitSystemHeightVariant struct {
+	NominalDimensionMm float64 `json:"nominalDimensionMm"`
+	KitHardwareID      string  `json:"kit_hardware_id"`
+}
+
+type HardwareKitSystemHeightAdded struct {
+	CreatedCodes    []string `json:"created_codes"`
+	AgregadoID      string   `json:"agregado_id"`
+	AgregadoVersion int64    `json:"agregado_version"`
+	VariantSetID    string   `json:"variant_set_id"`
+	HeightMm        int64    `json:"height_mm"`
+}
+
 type HardwareKitSystemVariant struct {
 	NominalDimensionMm      float64 `json:"nominalDimensionMm"`
 	HardwareId              string  `json:"hardwareId"`
@@ -3527,10 +3547,11 @@ type HardwareKitSystemCreated struct {
 }
 
 type WorkshopHardwareRole struct {
-	Code      string   `json:"code"`
-	Name      string   `json:"name"`
-	Required  bool     `json:"required"`
-	OptionIds []string `json:"optionIds"`
+	Code          string   `json:"code"`
+	Name          string   `json:"name"`
+	Required      bool     `json:"required"`
+	OptionIds     []string `json:"optionIds"`
+	DefaultChoice *string  `json:"defaultChoice,omitempty"`
 }
 
 type WorkshopMaterial struct {

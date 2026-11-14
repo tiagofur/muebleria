@@ -1121,3 +1121,74 @@ func TestQuoteCommercialSnapshot_Q1_RejectsFinishOutsideOffer(t *testing.T) {
 		t.Fatalf("rejection must name the hardware and the finish, got: %v", err)
 	}
 }
+
+// #1627 s2 (review B1/M1): «Sin inserto» explícito — en la línea y como
+// default del proyecto — se guarda (project_item_choices ya no es UUID,
+// migración 000185), sobrevive el filtro de defaults del proyecto y se
+// congela en Q1 con el label «Sin inserto»; antes el congelado fallaba con
+// «la opción none no tiene label comercial».
+func TestQuoteCommercialSnapshot_ExplicitNoInsertFreezes_1627(t *testing.T) {
+	fx := setupCommercialSnapshotFixture(t)
+	const (
+		kitE     = "94000000-0000-0000-0000-0000000000e1"
+		galeria  = "94000000-0000-0000-0000-0000000000e2"
+		projectB = "42000000-0000-0000-0000-0000000000e2"
+		lineB    = "62000000-0000-0000-0000-0000000000e2"
+	)
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO hardwares (id, code, name, unit, cost_per_unit, organization_id) VALUES
+		 ('`+kitE+`', 'CS-KIT-E', 'Kit E', 'set', 300, '`+rlsOrgA+`'),
+		 ('`+galeria+`', 'CS-GAL', 'Galería', 'set', 50, '`+rlsOrgA+`');
+		INSERT INTO option_groups (id, code, name, kind, required, organization_id, kit_hardware_id)
+		VALUES ('93000000-0000-0000-0000-0000000000e3', 'INSERTO_E', 'Inserto E', 'hardware', FALSE, '`+rlsOrgA+`', '`+kitE+`');
+		INSERT INTO option_group_members (option_group_id, entity_id, organization_id)
+		VALUES ('93000000-0000-0000-0000-0000000000e3', '`+galeria+`', '`+rlsOrgA+`');
+		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+		VALUES ('`+csLine+`', 'INSERTO_E', 'none', '`+rlsOrgA+`');
+		INSERT INTO projects (id, name, customer_id, status, currency, margin_factor, labor_fixed_cost, organization_id, sales_organization_id, manufacturing_organization_id)
+		VALUES ('`+projectB+`', 'Obra Sin Inserto', '`+csCustomerA+`', 'draft', 'MXN', 1.5, 100, '`+rlsOrgA+`', '`+rlsOrgA+`', '`+rlsOrgA+`');
+		INSERT INTO project_items (id, project_id, module_id, quantity, organization_id)
+		VALUES ('`+lineB+`', '`+projectB+`', '`+csModule+`', 1, '`+rlsOrgA+`');
+		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+		VALUES ('`+lineB+`', 'INTERIOR', '`+csMaterial+`', '`+rlsOrgA+`');
+		INSERT INTO project_level_choices (project_id, option_group_code, choice_entity_id, organization_id)
+		VALUES ('`+projectB+`', 'INSERTO_E', 'none', '`+rlsOrgA+`');`)
+
+	createInitialRevision(t, fx)
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, txErr := fx.store.CreateInitialQuoteRevision(ctx, storage.CreateInitialQuoteRevisionCommand{
+			ProjectID: projectB, ActorUserID: rlsUserA, RequestID: "quote-1627-project-none",
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("Q1 with a project-level «Sin inserto» must freeze: %v", err)
+	}
+
+	for _, projectID := range []string{csProject, projectB} {
+		var details []domain.QuoteRevisionDetail
+		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			var txErr error
+			details, txErr = fx.store.ListQuoteRevisionsByProject(ctx, projectID)
+			return txErr
+		}); err != nil {
+			t.Fatalf("list revisions: %v", err)
+		}
+		if len(details) != 1 || details[0].CommercialSnapshot == nil {
+			t.Fatalf("project %s must have exactly a frozen Q1, got %d", projectID, len(details))
+		}
+		for _, unit := range details[0].CommercialSnapshot.Units {
+			found := false
+			for _, option := range unit.Options {
+				if option.GroupCode == "INSERTO_E" {
+					found = true
+					if option.ChoiceID != domain.AccessoryChoiceNone || option.ChoiceLabel != domain.AccessoryNoneLabel {
+						t.Fatalf("project %s: INSERTO_E frozen as %s/%s, want none/«Sin inserto»", projectID, option.ChoiceID, option.ChoiceLabel)
+					}
+				}
+			}
+			if !found {
+				t.Fatalf("project %s: the «Sin inserto» choice must be frozen, never dropped: %+v", projectID, unit.Options)
+			}
+		}
+	}
+}

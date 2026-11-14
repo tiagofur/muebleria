@@ -162,7 +162,16 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 			knownOptionChoices[group.Code][choiceID] = true
 		}
 	}
+	groupByCode := make(map[string]domain.OptionGroup, len(catalog.OptionGroups))
+	for _, group := range catalog.OptionGroups {
+		groupByCode[group.Code] = group
+	}
 	for groupCode, choiceID := range levelChoices {
+		// #1627: a project-level «Sin inserto» on an optional insert group is
+		// a real default — never silently dropped (the web prices it).
+		if group, ok := groupByCode[groupCode]; ok && domain.IsExplicitNoAccessory(group, choiceID) {
+			continue
+		}
 		if !knownOptionChoices[groupCode][choiceID] {
 			delete(levelChoices, groupCode)
 		}
@@ -604,6 +613,10 @@ func buildQuoteCommercialLines(pricingProject domain.Project, catalog domain.Cat
 // the owning organization's catalog at capture time. Missing customer-facing
 // labels fail typed/actionable; raw UUIDs are never frozen as presentation.
 func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []CreateQuoteRevisionItemCommand, catalog domain.Catalog) ([]domain.QuoteCommercialUnit, error) {
+	groupsByCode := make(map[string]domain.OptionGroup, len(catalog.OptionGroups))
+	for _, group := range catalog.OptionGroups {
+		groupsByCode[group.Code] = group
+	}
 	orgID := OrgFromCtx(ctx)
 
 	moduleIDs := make([]string, 0, len(items))
@@ -677,6 +690,10 @@ func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []C
 				return nil, fmt.Errorf("%w: el grupo de opción %s no tiene label comercial; corregí el catálogo antes de cotizar", domain.ErrInvalidRevisionSnapshot, groupCode)
 			}
 			choiceLabel, ok := choiceLabels[choiceID]
+			// #1627: «Sin inserto» explícito se congela con su propio label.
+			if group, found := groupsByCode[groupCode]; found && domain.IsExplicitNoAccessory(group, choiceID) {
+				choiceLabel, ok = domain.AccessoryNoneLabel, true
+			}
 			if !ok || strings.TrimSpace(choiceLabel) == "" {
 				return nil, fmt.Errorf("%w: la opción %s no tiene label comercial; corregí el catálogo antes de cotizar", domain.ErrInvalidRevisionSnapshot, choiceID)
 			}

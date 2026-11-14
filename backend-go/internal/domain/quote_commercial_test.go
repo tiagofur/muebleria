@@ -63,6 +63,8 @@ func TestValidateQuoteCommercialSnapshot_RejectsInvalidCanonicalBindings(t *test
 			snapshot.Units[0].Options[0].ChoiceLabel = snapshot.Units[0].Options[0].ChoiceID
 		}},
 		{"invalid choice identity", func(snapshot *QuoteCommercialSnapshot) { snapshot.Units[0].Options[0].ChoiceID = "choice" }},
+		// #1627: "none" is only legal with the reserved «Sin inserto» label.
+		{"none choice with another label", func(snapshot *QuoteCommercialSnapshot) { snapshot.Units[0].Options[0].ChoiceID = AccessoryChoiceNone }},
 		{"duplicate option group", func(snapshot *QuoteCommercialSnapshot) {
 			snapshot.Units[0].Options = append(snapshot.Units[0].Options, QuoteCommercialOption{GroupCode: "A", GroupLabel: "Alpha", ChoiceID: "82000000-0000-0000-0000-000000000002", ChoiceLabel: "Other"})
 		}},
@@ -75,6 +77,15 @@ func TestValidateQuoteCommercialSnapshot_RejectsInvalidCanonicalBindings(t *test
 				t.Fatal("expected invalid canonical snapshot")
 			}
 		})
+	}
+}
+
+func TestValidateQuoteCommercialSnapshot_AllowsExplicitNoInsert_1627(t *testing.T) {
+	snapshot := validCommercialSnapshotForValidation()
+	snapshot.Units[0].Options[0].ChoiceID = AccessoryChoiceNone
+	snapshot.Units[0].Options[0].ChoiceLabel = AccessoryNoneLabel
+	if err := ValidateQuoteCommercialSnapshot(snapshot); err != nil {
+		t.Fatalf("the reserved «Sin inserto» pair must freeze: %v", err)
 	}
 }
 

@@ -5,6 +5,8 @@
  * mano, subir o dejar pendiente) y la variante entra al ensamble por la vía
  * de edición existente. Si el ensamble no está en ningún grupo
  * kind:agregado, el paso de elegibilidad aparece acá también (decisión 9).
+ * #1625: al añadir la E se declaran también sus insertos (misma forma que el
+ * asistente) y todo se guarda en una transacción del servidor.
  */
 
 import { useMemo, useRef, useState, type ReactNode } from 'react';
@@ -14,9 +16,15 @@ import {
   planHardwareKit,
   type Agregado,
 } from '@granete/domain';
-import type { HardwareVisualAssetBinding } from '@granete/domain';
+import type { HardwareKitSystemAccessory, HardwareVisualAssetBinding } from '@granete/domain';
 import { Modal } from '../../common';
 import { uploadKitWizardDesigns, useKitWizardRun, type KitWizardRunTask } from './useKitWizardRun';
+import {
+  duplicatedInsertoSuffix,
+  insertoDraftsToAccessories,
+  KitSystemInsertosFieldset,
+  type InsertoDraft,
+} from './KitSystemInsertosFieldset';
 
 export interface HardwareSystemHeightAddModalProps {
   readonly open: boolean;
@@ -48,6 +56,8 @@ export interface HardwareSystemHeightAddModalProps {
       readonly code?: string;
       readonly name?: string;
     };
+    /** #1625: insertos de la altura E (uploads con clave `${código}:${ancla}`). */
+    readonly insertos?: readonly HardwareKitSystemAccessory[];
   }) => Promise<unknown>;
 }
 
@@ -85,10 +95,15 @@ export function HardwareSystemHeightAddModal({
   const [eligibilityMode, setEligibilityMode] = useState<'new' | 'existing' | 'skip'>('new');
   const [eligibilityExistingId, setEligibilityExistingId] = useState('');
   const [skipConfirmed, setSkipConfirmed] = useState(false);
+  const [insertoDrafts, setInsertoDrafts] = useState<InsertoDraft[]>([]);
   const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
 
   const height = HARDWARE_KIT_SYSTEM_HEIGHTS.find((h) => h.code === heightCode);
   const kitCode = height ? `${systemCode}-${height.code}` : '';
+  // #1625: los insertos aplican a la E (igual que el asistente del sistema).
+  const insertos = height?.code === 'E' ? insertoDraftsToAccessories(insertoDrafts) : [];
+  const insertoCode = (suffix: string): string => `${kitCode}-${suffix}`;
+  const duplicatedSuffix = duplicatedInsertoSuffix(insertos);
 
   // La estructura drawer-hands de la altura nueva (misma del sistema).
   const planned = useMemo(() => {
@@ -123,6 +138,7 @@ export function HardwareSystemHeightAddModal({
       setEligibilityMode('new');
       setEligibilityExistingId('');
       setSkipConfirmed(false);
+      setInsertoDrafts([]);
       for (const input of Object.values(fileInputsRef.current)) {
         if (input) input.value = '';
       }
@@ -132,7 +148,7 @@ export function HardwareSystemHeightAddModal({
   const fileKey = (hand: string, partCode: string): string => `${kitCode}:${hand}:${partCode}`;
 
   const submit = async (): Promise<void> => {
-    if (!height || !planned || wizard.running) return;
+    if (!height || !planned || wizard.running || duplicatedSuffix) return;
     const tasks: KitWizardRunTask[] = [];
     for (const design of planned.designs) {
       for (const part of design.handsParts ?? []) {
@@ -144,6 +160,19 @@ export function HardwareSystemHeightAddModal({
           file,
           label: `${design.name} — ${part.hand === 'left' ? 'izq' : 'der'}`,
           displayName: design.name,
+        });
+      }
+    }
+    for (const acc of insertos) {
+      for (const anchor of acc.anchors) {
+        const key = `${insertoCode(acc.suffix)}:${anchor}`;
+        const file = files[key];
+        if (!file) continue;
+        tasks.push({
+          key,
+          file,
+          label: `${acc.name} — ${anchor === 'left' ? 'izq' : anchor === 'right' ? 'der' : 'centro'}`,
+          displayName: acc.name,
         });
       }
     }
@@ -176,6 +205,7 @@ export function HardwareSystemHeightAddModal({
         depthMm: num(depthMm),
         ...(designs ? { designs } : {}),
         ...(eligibilityGroup ? { eligibilityGroup } : {}),
+        ...(insertos.length > 0 ? { insertos } : {}),
       });
       wizard.complete(undefined);
     } catch (err) {
@@ -314,6 +344,58 @@ export function HardwareSystemHeightAddModal({
             </fieldset>
           ) : null}
 
+          {height?.code === 'E' ? (
+            <>
+              <KitSystemInsertosFieldset
+                drafts={insertoDrafts}
+                onChange={setInsertoDrafts}
+                legend="Insertos del cajón E (opcional)"
+                hint="Galería, boxcap, boxcover… Cada uno queda como opción del selector del juego E; el cajón E lleva el primero por defecto. Podés añadirlos después desde la ficha del juego."
+                testIdPrefix="hardware-system-height-inserto"
+              />
+              {duplicatedSuffix ? (
+                <p className="catalog-form__error" role="alert" data-testid="hardware-system-height-inserto-duplicated">
+                  Dos insertos generarían el mismo código (…-{duplicatedSuffix}): renombrá uno para diferenciarlos.
+                </p>
+              ) : null}
+              {insertos.length > 0 ? (
+                <fieldset className="catalog-form__section" data-testid="hardware-system-height-inserto-designs">
+                  <legend className="catalog-form__section-title">Diseños 3D de los insertos (opcionales)</legend>
+                  {insertos.map((acc) =>
+                    acc.anchors.map((anchor) => {
+                      const key = `${insertoCode(acc.suffix)}:${anchor}`;
+                      const slotId = `sys-height-inserto-${key}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+                      return (
+                        <div className="catalog-form__field" key={key}>
+                          <label htmlFor={slotId}>
+                            {insertoCode(acc.suffix)} ({anchor === 'left' ? 'izq' : anchor === 'right' ? 'der' : 'centro'})
+                          </label>
+                          <input
+                            id={slotId}
+                            type="file"
+                            accept=".skp,.glb"
+                            ref={(el) => {
+                              fileInputsRef.current[key] = el;
+                            }}
+                            onChange={(e) =>
+                              setFiles((prev) => {
+                                const next = { ...prev };
+                                if (e.target.files?.[0]) next[key] = e.target.files[0];
+                                else delete next[key];
+                                return next;
+                              })
+                            }
+                            data-testid={`hardware-system-height-file-${key}`}
+                          />
+                        </div>
+                      );
+                    }),
+                  )}
+                </fieldset>
+              ) : null}
+            </>
+          ) : null}
+
           {!hasEligibilityGroup ? (
             <fieldset className="catalog-form__section" data-testid="hardware-system-height-eligibility">
               <legend className="catalog-form__section-title">Elegibilidad</legend>
@@ -364,7 +446,7 @@ export function HardwareSystemHeightAddModal({
             <button
               type="submit"
               className="btn btn--primary"
-              disabled={!height || !planned || wizard.running}
+              disabled={!height || !planned || wizard.running || duplicatedSuffix !== null}
               data-testid="hardware-system-height-submit"
             >
               {wizard.phase === 'running' ? (wizard.progress ?? 'Añadiendo…') : 'Añadir altura'}

@@ -201,6 +201,11 @@ func defaultHardwareChoices(catalog domain.Catalog) map[string]string {
 		if g.Kind != "hardware" {
 			continue
 		}
+		// #1627: an insert group whose default is «ninguno» mounts nothing
+		// without a choice — validate the same thing the engine mounts.
+		if g.KitHardwareID != nil && g.DefaultChoice == domain.OptionGroupDefaultNone {
+			continue
+		}
 		for _, optionID := range g.OptionIDs {
 			if active[optionID] {
 				choices[g.Code] = optionID

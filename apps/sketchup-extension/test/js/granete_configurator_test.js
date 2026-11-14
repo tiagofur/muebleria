@@ -1347,11 +1347,28 @@ test('accessories #1627: «Sin inserto» button on an optional group rides as an
   noneBtn.click();
   const rowAfter = el(sandbox, 'library-agregados-container').children[1];
   assert.strictEqual(rowAfter.children[1].children[1].children[0].textContent, 'Sin inserto');
-  assert.strictEqual(rowAfter.children[2], undefined, 'the button disappears once chosen');
+  assert.strictEqual(rowAfter.children[2].textContent, 'Usar el default del juego',
+    'once chosen, «Sin inserto» is replaced by a way back to the default');
   sandbox.__calls.bridge.length = 0;
   el(sandbox, 'btn-insert').click();
   const sent = sandbox.__calls.bridge.filter((c) => c.fn === 'begin_catalog_placement_preview').pop();
   assert.strictEqual(sent.payload.materialOverrides.LATERAL_E, 'none');
+});
+
+test('accessories #1627: «Usar el default del juego» removes the explicit «Sin inserto»', () => {
+  const sandbox = runModule();
+  const def = accessoryFixture(sandbox);
+  def.agregadoRoles[0].options[0].accessoryGroups[0].required = false;
+  sandbox.__state.connected = true;
+  sandbox.window.GraneteUI.configurator.open(def);
+  el(sandbox, 'library-agregados-container').children[1].children[2].click();
+  el(sandbox, 'library-agregados-container').children[1].children[2].click();
+  const row = el(sandbox, 'library-agregados-container').children[1];
+  assert.strictEqual(row.children[1].children[1].children[0].textContent, 'Galería E', 'back to the default first option');
+  sandbox.__calls.bridge.length = 0;
+  el(sandbox, 'btn-insert').click();
+  const sent = sandbox.__calls.bridge.filter((c) => c.fn === 'begin_catalog_placement_preview').pop();
+  assert.strictEqual(sent.payload.materialOverrides.LATERAL_E, undefined, 'no override travels after going back to the default');
 });
 
 test('accessories #1627: a required group offers no «Sin inserto» button', () => {
