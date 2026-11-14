@@ -66,6 +66,12 @@ func ResolveConsumedOptionRoles(item domain.DesignRevisionItem, catalog domain.C
 // unit for zero demand. A hardware-only BOM (fixed-ID lines, zero consumed
 // roles) IS valid demand, so surplus roles converge there.
 //
+// Accessory groups linked to a kit the module mounts (#1620) are NEVER
+// dropped either: without a key the engine mounts the group's first active
+// option, so dropping a stale (invalid) explicit pick would silently swap
+// "no accessory, visible rejection" for a drawn and quoted default. The
+// stale value is kept and the strict release gate rejects it by name.
+//
 // Base-treatment roles (ZOCLO, ZOCLO_PERFIL, PATAS) are NEVER dropped: their
 // consumption depends on the effective base context (project/line/preset),
 // which this module-default resolve cannot see. Dropping them could desync
@@ -78,9 +84,10 @@ func IntersectConsumedOptionChoices(item domain.DesignRevisionItem, catalog doma
 	if len(resolved.unit.BOM.BoardParts) == 0 && len(resolved.unit.BOM.HardwareLines) == 0 {
 		return item.MaterialChoices, false
 	}
+	mountedAccessories := mountedAccessoryGroupCodes(resolved.module, catalog, item.MaterialChoices)
 	filtered := make(map[string]string, len(item.MaterialChoices))
 	for role, id := range item.MaterialChoices {
-		if _, consumedRole := resolved.consumed[role]; consumedRole || baseTreatmentRoles[role] {
+		if _, consumedRole := resolved.consumed[role]; consumedRole || baseTreatmentRoles[role] || mountedAccessories[role] {
 			filtered[role] = id
 		}
 	}

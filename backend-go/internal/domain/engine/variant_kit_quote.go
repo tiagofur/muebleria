@@ -118,8 +118,8 @@ func collectVariantKitHardwareLines(
 			// #1502: los accesorios elegidos para ESTE kit se cotizan por
 			// bahía — demanda adicional que NO participa del dedupe contra
 			// bulk del kit principal (ese dedupe sólo evita duplicar el kit,
-			// nunca sus accesorios). Sin elección: nada — la cotización no
-			// inventa demanda por un accesorio que no se dibuja.
+			// nunca sus accesorios). Sin elección cotiza la primera opción
+			// activa, la misma que el layout dibuja (effectiveAccessoryChoice).
 			lines = append(lines, collectAccessoryKitHardwareLines(catalog, optionChoices, kit, instanceKey, unit.index)...)
 			if agregadoBulkLinesReferenceKit(agr, optionChoices, kit) {
 				continue
