@@ -550,7 +550,7 @@ func (s *PostgresStore) ListOptionGroups(ctx context.Context) ([]domain.OptionGr
 	}
 	rows.Close()
 	for i := range list {
-		mRows, err := s.db(ctx).Query(ctx, `SELECT entity_id FROM option_group_members WHERE option_group_id = $1 ORDER BY entity_id ASC`, list[i].ID)
+		mRows, err := s.db(ctx).Query(ctx, `SELECT entity_id FROM option_group_members WHERE option_group_id = $1 ORDER BY position ASC, entity_id ASC`, list[i].ID)
 		if err != nil {
 			return nil, err
 		}
@@ -960,7 +960,7 @@ func (s *PostgresStore) GetOptionGroupByID(ctx context.Context, id string) (*dom
 		return nil, err
 	}
 
-	memberQuery := `SELECT entity_id FROM option_group_members WHERE option_group_id = $1`
+	memberQuery := `SELECT entity_id FROM option_group_members WHERE option_group_id = $1 ORDER BY position ASC, entity_id ASC`
 	rows, err := s.db(ctx).Query(ctx, memberQuery, og.ID)
 	if err != nil {
 		return nil, err
@@ -1001,9 +1001,11 @@ func (s *PostgresStore) CreateOptionGroup(ctx context.Context, og *domain.Option
 		return fmt.Errorf("error creating option group: %w", err)
 	}
 
-	for _, eid := range og.OptionIDs {
-		memberQuery := `INSERT INTO option_group_members (option_group_id, entity_id, organization_id) VALUES ($1, $2, $3)`
-		_, err = tx.Exec(ctx, memberQuery, og.ID, eid, OrgFromCtx(ctx))
+	// #1627: position = índice en el orden recibido (la primera opción activa
+	// es el inserto por defecto).
+	for i, eid := range og.OptionIDs {
+		memberQuery := `INSERT INTO option_group_members (option_group_id, entity_id, organization_id, position) VALUES ($1, $2, $3, $4)`
+		_, err = tx.Exec(ctx, memberQuery, og.ID, eid, OrgFromCtx(ctx), i)
 		if err != nil {
 			return fmt.Errorf("error inserting option group member: %w", err)
 		}
@@ -1040,9 +1042,9 @@ func (s *PostgresStore) UpdateOptionGroup(ctx context.Context, id string, expect
 	}
 
 	// Insertar nuevos miembros
-	for _, eid := range og.OptionIDs {
-		memberQuery := `INSERT INTO option_group_members (option_group_id, entity_id, organization_id) VALUES ($1, $2, $3)`
-		_, err = tx.Exec(ctx, memberQuery, id, eid, OrgFromCtx(ctx))
+	for i, eid := range og.OptionIDs {
+		memberQuery := `INSERT INTO option_group_members (option_group_id, entity_id, organization_id, position) VALUES ($1, $2, $3, $4)`
+		_, err = tx.Exec(ctx, memberQuery, id, eid, OrgFromCtx(ctx), i)
 		if err != nil {
 			return fmt.Errorf("error inserting option group member: %w", err)
 		}

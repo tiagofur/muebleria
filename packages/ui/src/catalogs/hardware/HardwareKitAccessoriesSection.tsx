@@ -7,7 +7,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { isHardwareKitPart, type OptionGroup } from '@granete/domain';
-import { PackagePlus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, PackagePlus, X } from 'lucide-react';
 import type { Hardware } from '@granete/domain';
 import { CatalogPicker } from '../CatalogPicker';
 
@@ -88,6 +88,24 @@ export function HardwareKitAccessoriesSection({
     setCreating(false);
   };
 
+  // #1627: el orden de las opciones es el orden guardado; la primera activa
+  // es el inserto que lleva el cajón cuando el mueble no elige.
+  const moveMember = (group: OptionGroup, idx: number, delta: -1 | 1) => {
+    const target = idx + delta;
+    if (target < 0 || target >= group.optionIds.length) return;
+    const next = [...group.optionIds];
+    [next[idx], next[target]] = [next[target]!, next[idx]!];
+    onUpdateGroup?.(group.id, {
+      code: group.code,
+      name: group.name,
+      required: group.required,
+      optionIds: next,
+      kitHardwareId: group.kitHardwareId ?? '',
+    });
+  };
+  const defaultOptionId = (group: OptionGroup): string | undefined =>
+    group.optionIds.find((id) => (hardware ?? []).some((h) => h.id === id && h.active));
+
   const removeMember = (group: OptionGroup, optionId: string) => {
     onUpdateGroup?.(group.id, {
       code: group.code,
@@ -126,8 +144,9 @@ export function HardwareKitAccessoriesSection({
       </legend>
       <p className="catalog-form__hint">
         Cada selector (galería, boxcap, boxcover…) ofrece opciones que se eligen por
-        cajón y el motor monta sobre este juego. Quien cotiza ve el selector con sus
-        opciones.
+        cajón y el motor monta sobre este juego. Si el mueble no elige, el cajón lleva
+        la opción marcada «Por defecto»: la primera activa de la lista. Usá las flechas
+        para cambiar cuál es.
       </p>
       {accessoryGroups.length > 0 ? (
         <div className="catalog-hw-part" data-testid="hardware-accessories-rows">
@@ -142,8 +161,9 @@ export function HardwareKitAccessoriesSection({
                 </span>
                 {og.optionIds.length > 0 ? (
                   <div className="catalog-hw-part__actions" style={{ flexWrap: 'wrap', gap: 4 }}>
-                    {og.optionIds.map((id) => {
+                    {og.optionIds.map((id, idx) => {
                       const hw = (hardware ?? []).find((h) => h.id === id);
+                      const isDefault = defaultOptionId(og) === id;
                       return (
                         <span
                           key={id}
@@ -152,6 +172,37 @@ export function HardwareKitAccessoriesSection({
                           data-testid={`hardware-accessory-${og.code}-member-${hw?.code ?? id}`}
                         >
                           {hw ? `${hw.code} — ${hw.name}` : id}
+                          {isDefault ? (
+                            <strong data-testid={`hardware-accessory-${og.code}-default-${hw?.code ?? id}`}>
+                              · Por defecto
+                            </strong>
+                          ) : null}
+                          {canMutate && onUpdateGroup && og.optionIds.length > 1 ? (
+                            <>
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--small"
+                                style={{ padding: '0 2px' }}
+                                disabled={idx === 0}
+                                aria-label={`Subir ${hw?.name ?? id} en ${og.name}`}
+                                onClick={() => moveMember(og, idx, -1)}
+                                data-testid={`hardware-accessory-${og.code}-up-${hw?.code ?? id}`}
+                              >
+                                <ArrowUp size={12} strokeWidth={1.5} aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--small"
+                                style={{ padding: '0 2px' }}
+                                disabled={idx === og.optionIds.length - 1}
+                                aria-label={`Bajar ${hw?.name ?? id} en ${og.name}`}
+                                onClick={() => moveMember(og, idx, 1)}
+                                data-testid={`hardware-accessory-${og.code}-down-${hw?.code ?? id}`}
+                              >
+                                <ArrowDown size={12} strokeWidth={1.5} aria-hidden />
+                              </button>
+                            </>
+                          ) : null}
                           {canMutate && onUpdateGroup ? (
                             <button
                               type="button"

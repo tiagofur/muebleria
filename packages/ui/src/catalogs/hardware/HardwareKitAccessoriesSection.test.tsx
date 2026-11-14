@@ -91,3 +91,40 @@ describe('HardwareKitAccessoriesSection — eliminar selector (#1606)', () => {
     });
   });
 });
+
+describe('HardwareKitAccessoriesSection — orden y opción por defecto (#1627)', () => {
+  const hardware = [
+    { id: 'hw-gal', code: 'GAL', name: 'Galería', unit: 'piece', costPerUnit: 0, active: false },
+    { id: 'hw-cap', code: 'CAP', name: 'Boxcap', unit: 'piece', costPerUnit: 0, active: true },
+    { id: 'hw-cov', code: 'COV', name: 'Boxcover', unit: 'piece', costPerUnit: 0, active: true },
+  ] as const;
+  const group: OptionGroup = { ...optionGroupFixture, optionIds: ['hw-gal', 'hw-cap', 'hw-cov'] };
+
+  it('marca «Por defecto» la primera opción ACTIVA (salta la inactiva)', () => {
+    render(
+      <HardwareKitAccessoriesSection kitId="kit-1" kitCode="MBOX-E" optionGroups={[group]} hardware={hardware as never} canMutate />,
+    );
+    expect(screen.queryByTestId('hardware-accessory-MBOX_E_GALERIA-default-GAL')).toBeNull();
+    expect(screen.getByTestId('hardware-accessory-MBOX_E_GALERIA-default-CAP')).toBeTruthy();
+    expect(screen.queryByTestId('hardware-accessory-MBOX_E_GALERIA-default-COV')).toBeNull();
+  });
+
+  it('las flechas guardan el orden nuevo; los extremos no se mueven', () => {
+    const onUpdateGroup = vi.fn();
+    render(
+      <HardwareKitAccessoriesSection
+        kitId="kit-1"
+        kitCode="MBOX-E"
+        optionGroups={[group]}
+        hardware={hardware as never}
+        canMutate
+        onUpdateGroup={onUpdateGroup}
+      />,
+    );
+    expect((screen.getByTestId('hardware-accessory-MBOX_E_GALERIA-up-GAL') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('hardware-accessory-MBOX_E_GALERIA-down-COV') as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByTestId('hardware-accessory-MBOX_E_GALERIA-up-COV'));
+    expect(onUpdateGroup).toHaveBeenCalledWith('og-galeria', expect.objectContaining({ optionIds: ['hw-gal', 'hw-cov', 'hw-cap'] }));
+  });
+});
