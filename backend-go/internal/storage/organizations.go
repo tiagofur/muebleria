@@ -395,9 +395,9 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 		{"option_groups", 1, `INSERT INTO option_groups (id, organization_id, code, name, kind, required)
 			SELECT m.new_id, $2, s.code, s.name, s.kind, s.required
 			FROM option_groups s JOIN tmp_optgrp m ON m.old_id = s.id`},
-		{"option_group_members", 1, `INSERT INTO option_group_members (option_group_id, entity_id, organization_id)
+		{"option_group_members", 1, `INSERT INTO option_group_members (option_group_id, entity_id, organization_id, position)
 			SELECT gm.new_id,
-				COALESCE(b.new_id, h.new_id, e.new_id, om.entity_id), $2
+				COALESCE(b.new_id, h.new_id, e.new_id, om.entity_id), $2, om.position
 			FROM option_group_members om
 			JOIN option_groups s ON s.id = om.option_group_id AND s.organization_id = $1
 			JOIN tmp_optgrp gm ON gm.old_id = om.option_group_id
