@@ -464,4 +464,3 @@ const AccessoryNoneLabel = "Sin inserto"
 func IsExplicitNoAccessory(og OptionGroup, choice string) bool {
 	return choice == AccessoryChoiceNone && og.Kind == "hardware" && og.KitHardwareID != nil && !og.Required
 }
-
