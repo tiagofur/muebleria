@@ -2,8 +2,8 @@
  * Diseño del herraje (#1518 F1 → rework #1596): una fila por lado
  * (izquierda/derecha, centro sólo si ya existe) con SU diseño — subir o
  * elegir en el mismo lugar — y sus offsets X/Y/Z SIEMPRE visibles: lo
- * mostrado es lo que se guarda (#1596 alcance 5; el default 10/35 del motor
- * se materializa al editar un herraje legacy, nunca queda invisible).
+ * mostrado es lo que se guarda (#1596 alcance 5). Una pieza legacy sin
+ * desfase se muestra en 0, que es donde el motor la dibuja desde #1613.
  * «Copiar al otro lado» es explícito (decisión 3: nunca espejo automático).
  * «Al abrir» (decisión 4) se guarda en la declaración que el motor ya lee
  * (DesignParts[0].actorMembership vía kitPieceMember).
@@ -17,7 +17,7 @@ import {
   type SetStateAction,
 } from 'react';
 import type { HardwarePiece, HardwarePieceOffset } from '@granete/domain';
-import { defaultPieceOffsetMm, hardwareNameSuggestsMotion } from '@granete/domain';
+import { hardwareNameSuggestsMotion } from '@granete/domain';
 import { Copy, Layers } from 'lucide-react';
 import type { HardwareAssetService } from '@granete/storage';
 import type { HardwareVisualAssetBinding } from '@granete/domain';
@@ -70,13 +70,12 @@ export function HardwarePiecesSection({
   const [uploadingAnchor, setUploadingAnchor] = useState<'left' | 'right' | 'center' | null>(null);
 
   // #1596 alcance 5: al abrir un PAR/INSERTO, ambos lados existen desde ya
-  // con offsets explícitos. Un herraje legacy sin offsetMm materializa el
-  // default que el motor le estaba aplicando en silencio (10/35 mm) — se
-  // muestra, y si se guarda, queda guardado.
+  // con offsets explícitos. Un herraje legacy sin offsetMm materializa 0:
+  // el motor ya no aplica ningún desfase por defecto (#1613), así que
+  // cualquier otro valor movería la pieza con sólo abrir y guardar.
   useEffect(() => {
     if (!isPairLike) return;
     setDraft((prev) => {
-      const legacy = { code: prev.code, name: prev.name };
       let changed = false;
       const pieces: HardwarePiece[] = [...(prev.pieces ?? [])];
       for (const anchor of BASE_ANCHORS) {
@@ -87,7 +86,7 @@ export function HardwarePiecesSection({
         } else {
           const current = pieces[idx]!;
           if (!current.offsetMm) {
-            pieces[idx] = { ...current, offsetMm: defaultPieceOffsetMm(legacy, anchor) };
+            pieces[idx] = { ...current, offsetMm: { x: 0, y: 0, z: 0 } };
             changed = true;
           }
         }
@@ -102,8 +101,8 @@ export function HardwarePiecesSection({
               // declared by name (-MOV/móvil) keeps actor:drawer on
               // open+save instead of being silently pinned to the body
               // (kitPieceMember lets a non-empty DesignParts[0] override
-              // the name). Same container limit as defaultPieceOffsetMm:
-              // a moving piece inside a door ensemble would infer
+              // the name). Container limit: this seed cannot see the
+              // ensemble — a moving piece inside a door ensemble would infer
               // actor:door — corrected by hand before saving.
               actorMembership:
                 prev.itemType === 'inserto' || hardwareNameSuggestsMotion(prev)

@@ -123,8 +123,9 @@ export function canShowProjectPricePreview(
   // el motor (TS/Go ResolveEffectiveAgregadoID) cae al agregado default de
   // la instancia y cotiza igual; exigirlos acá bloquearía ítems legacy que
   // el motor sí cotiza. La elección explícita del cajón se exige en el ALTA
-  // (ProjectAddItemModal), no en el gate del presupuesto. Los accesorios del
-  // kit SÍ bloquean: el motor falla cerrado (accessory_choice_required).
+  // (ProjectAddItemModal), no en el gate del presupuesto. Los insertos del
+  // juego sólo bloquean cuando el grupo requerido no ofrece ninguna opción
+  // (requiredGroupCodesForModule): con opciones, el motor monta la primera.
   const agregadoRoleCodes = new Set(
     optionGroups.filter((g) => g.kind === 'agregado').map((g) => g.code),
   );
@@ -367,9 +368,9 @@ export function defaultChoicesForNewItem(
   const choices: Record<string, string> = {};
   for (const code of required) {
     const group = byCode.get(code);
-    // #1502: los accesorios de kit NO se siembran por default — la elección
-    // es explícita; sin elección el motor rechaza visible (nunca un
-    // accesorio silencioso ni cotizado de más).
+    // Los insertos de un juego no se siembran como elección explícita: sin
+    // elección el motor monta la primera opción activa, así el mueble sigue
+    // el orden del catálogo si el taller lo cambia.
     if (group?.kitHardwareId) continue;
     const first = group?.optionIds[0];
     if (first) {

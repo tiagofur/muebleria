@@ -28,7 +28,7 @@ import type {
   Structure,
 } from './types';
 import { calculateAgregadoSubspaceUnits, resolveEffectiveAgregadoId, type SubspaceUnit } from './agregados';
-import { accessoryKitMemberHardwareIds, ensureAgregadoKitParts } from './hardwareKit';
+import { accessoryKitMemberHardwareIds, effectiveAccessoryChoice, ensureAgregadoKitParts } from './hardwareKit';
 import type { HardwareDesignPart } from './hardwareDesignParts';
 import { resolveHardwareDimensions, type EffectiveHardwareDimensions } from './hardwarePlacement';
 import { evaluatePartFormula } from './engine/shared';
@@ -1980,8 +1980,9 @@ export function accessoryRigidMembers(
 
 /**
  * #1502: accesorios elegibles del kit que UNA bahía monta — ensambles
- * SEPARADOS del SKP del cajón (el grupo de apertura no cambia) + rejections
- * fail-closed de grupos requeridos sin elección. Espejo exacto de
+ * SEPARADOS del SKP del cajón (el grupo de apertura no cambia). Sin elección
+ * monta la primera opción activa (effectiveAccessoryChoice); el fail-closed
+ * queda para grupos requeridos sin ninguna opción activa. Espejo exacto de
  * resolveAccessoryAssemblies en accessory_kit.go. Legacy sin grupos
  * vinculados: nada (byte-idéntico).
  */
@@ -2015,7 +2016,7 @@ function resolveAccessoryAssembliesForUnit(
   const rejections: ModuleAssemblyRejection[] = [];
   for (const og of groups) {
     const accInstanceId = `${accBaseInstanceId}-acc-${og.code.toLowerCase()}`;
-    const choice = (optionChoices?.[og.code] ?? '').trim();
+    const choice = effectiveAccessoryChoice(og, catalog.hardware, optionChoices);
     if (!choice) {
       if (og.required) {
         rejections.push({
@@ -2024,7 +2025,7 @@ function resolveAccessoryAssembliesForUnit(
           agregadoCode: agregado.code ?? '',
           reason: 'accessory_choice_required',
           bayHeightMm: unit.height,
-          detail: `el grupo «${og.code}» declara accesorios para el kit montado en esta bahía y es obligatorio`,
+          detail: `el grupo «${og.code}» es obligatorio para el kit montado en esta bahía y no tiene ninguna opción activa`,
         });
       }
       continue;

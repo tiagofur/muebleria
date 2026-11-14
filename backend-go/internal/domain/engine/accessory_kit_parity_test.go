@@ -297,68 +297,36 @@ func TestAccessoryKitLegacyGroupByteIdentical_1502(t *testing.T) {
 	}
 }
 
-// Sin elección y grupo OPCIONAL: base sin accesorio ni línea (patrón
-// ZOCLO_PERFIL), cero rechazos — la bahía se dibuja normal.
-func TestAccessoryKitOptionalWithoutChoice_1502(t *testing.T) {
-	f := loadAccessoryKitFixture(t)
-	catalog, mod := buildAccessoryKitScenario(f, false, true)
+// assertDefaultAccessoryMounted: sin elección, la bahía monta y cotiza la
+// PRIMERA opción activa del grupo (decisión del owner 2026-11-13, sustituye
+// «sólo elección explícita» de #1555) — idéntico para opcional y requerido.
+func assertDefaultAccessoryMounted(t *testing.T, f accessoryKitFixture, required bool) {
+	t.Helper()
+	catalog, mod := buildAccessoryKitScenario(f, required, true)
+	wantID := f.AccessoryGroup.Accessories[0].ID
 
 	layout, err := engine.ResolveFurnitureLayout(mod, catalog, nil, accessoryTestChoices(f, nil))
 	if err != nil {
 		t.Fatalf("ResolveFurnitureLayout unexpected error: %v", err)
-	}
-	if acc := accessoryAssembliesOf(layout); len(acc) != 0 {
-		t.Fatalf("optional group without choice must not emit accessories, got %+v", acc)
 	}
 	if len(layout.AssemblyRejections) != 0 {
-		t.Fatalf("optional group without choice must not reject, got %+v", layout.AssemblyRejections)
+		t.Fatalf("default accessory must not reject, got %+v", layout.AssemblyRejections)
 	}
-	if len(layout.Assemblies) != 1 {
-		t.Fatalf("the main bay assembly must still be emitted, got %d", len(layout.Assemblies))
+	acc := accessoryAssembliesOf(layout)
+	if len(acc) != 1 {
+		t.Fatalf("expected exactly the default accessory assembly, got %d", len(acc))
 	}
-
-	bom, err := engine.ResolveBomWithContext(mod, accessoryTestChoices(f, nil), catalog, nil, "", nil, nil)
-	if err != nil {
-		t.Fatalf("ResolveBomWithContext unexpected error: %v", err)
-	}
-	if acc := accessoryKitLinesOf(bom); len(acc) != 0 {
-		t.Fatalf("optional group without choice must not quote accessories, got %+v", acc)
-	}
-}
-
-// Grupo REQUERIDO sin elección: fail-closed visible — rejection
-// accessory_choice_required por bahía, issue ACCESSORY_CHOICE_REQUIRED en el
-// authoring resolve (status blocked CON layout presente), y la cotización no
-// inventa demanda. El cajón se dibuja igual.
-func TestAccessoryKitRequiredWithoutChoice_1502(t *testing.T) {
-	f := loadAccessoryKitFixture(t)
-	catalog, mod := buildAccessoryKitScenario(f, true, true)
-
-	layout, err := engine.ResolveFurnitureLayout(mod, catalog, nil, accessoryTestChoices(f, nil))
-	if err != nil {
-		t.Fatalf("ResolveFurnitureLayout unexpected error: %v", err)
-	}
-	if len(layout.Assemblies) != 1 {
-		t.Fatalf("the main bay assembly must still be emitted, got %d", len(layout.Assemblies))
-	}
-	if len(layout.AssemblyRejections) != 1 {
-		t.Fatalf("expected 1 rejection, got %d: %+v", len(layout.AssemblyRejections), layout.AssemblyRejections)
-	}
-	rej := layout.AssemblyRejections[0]
-	if rej.Reason != "accessory_choice_required" {
-		t.Errorf("reason = %q, want accessory_choice_required", rej.Reason)
-	}
-	wantID := fmt.Sprintf("%s-acc-%s", "inst-bajo", strings.ToLower(f.AccessoryGroup.Code))
-	if rej.AssemblyInstanceID != wantID {
-		t.Errorf("rejection assemblyInstanceId = %q, want %q", rej.AssemblyInstanceID, wantID)
+	if len(layout.Assemblies) != 2 {
+		t.Fatalf("expected main bay + default accessory, got %d assemblies", len(layout.Assemblies))
 	}
 
 	bom, err := engine.ResolveBomWithContext(mod, accessoryTestChoices(f, nil), catalog, nil, "", nil, nil)
 	if err != nil {
 		t.Fatalf("ResolveBomWithContext unexpected error: %v", err)
 	}
-	if acc := accessoryKitLinesOf(bom); len(acc) != 0 {
-		t.Fatalf("required group without choice must not quote accessories, got %+v", acc)
+	lines := accessoryKitLinesOf(bom)
+	if len(lines) != 1 || lines[0].HardwareID != wantID {
+		t.Fatalf("default accessory must quote %q once, got %+v", wantID, lines)
 	}
 
 	result, err := engine.ResolveAuthoringLayout(engine.AuthoringResolveInput{
@@ -370,18 +338,107 @@ func TestAccessoryKitRequiredWithoutChoice_1502(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveAuthoringLayout unexpected error: %v", err)
 	}
-	found := false
 	for _, issue := range result.ValidationIssues {
 		if issue.Code == "ACCESSORY_CHOICE_REQUIRED" {
-			found = true
-			break
+			t.Fatalf("default accessory must not raise ACCESSORY_CHOICE_REQUIRED: %+v", issue)
 		}
 	}
-	if !found {
-		t.Fatalf("expected ACCESSORY_CHOICE_REQUIRED in validation issues, got %+v", result.ValidationIssues)
+}
+
+func TestAccessoryKitOptionalWithoutChoiceMountsFirstOption(t *testing.T) {
+	assertDefaultAccessoryMounted(t, loadAccessoryKitFixture(t), false)
+}
+
+func TestAccessoryKitRequiredWithoutChoiceMountsFirstOption(t *testing.T) {
+	assertDefaultAccessoryMounted(t, loadAccessoryKitFixture(t), true)
+}
+
+// El default salta las opciones INACTIVAS: con la primera desactivada, la
+// bahía monta la siguiente activa en el orden declarado.
+func TestAccessoryKitDefaultSkipsInactiveOption(t *testing.T) {
+	f := loadAccessoryKitFixture(t)
+	catalog, mod := buildAccessoryKitScenario(f, false, true)
+	firstID, secondID := f.AccessoryGroup.Accessories[0].ID, f.AccessoryGroup.Accessories[1].ID
+	for i := range catalog.Hardware {
+		if catalog.Hardware[i].ID == firstID {
+			catalog.Hardware[i].Active = false
+		}
 	}
-	if result.ValidationStatus != "blocked" {
-		t.Errorf("validation status = %q, want blocked", result.ValidationStatus)
+	bom, err := engine.ResolveBomWithContext(mod, accessoryTestChoices(f, nil), catalog, nil, "", nil, nil)
+	if err != nil {
+		t.Fatalf("ResolveBomWithContext unexpected error: %v", err)
+	}
+	lines := accessoryKitLinesOf(bom)
+	if len(lines) != 1 || lines[0].HardwareID != secondID {
+		t.Fatalf("default must be the first ACTIVE option %q, got %+v", secondID, lines)
+	}
+}
+
+// Sin NINGUNA opción activa: el grupo opcional no aporta nada; el REQUERIDO
+// conserva el fail-closed visible — rejection accessory_choice_required por
+// bahía, issue ACCESSORY_CHOICE_REQUIRED (status blocked CON layout
+// presente) y la cotización no inventa demanda. El cajón se dibuja igual.
+func TestAccessoryKitWithoutActiveOptions_1502(t *testing.T) {
+	f := loadAccessoryKitFixture(t)
+	for _, required := range []bool{false, true} {
+		catalog, mod := buildAccessoryKitScenario(f, required, true)
+		accessoryIDs := map[string]bool{}
+		for _, acc := range f.AccessoryGroup.Accessories {
+			accessoryIDs[acc.ID] = true
+		}
+		for i := range catalog.Hardware {
+			if accessoryIDs[catalog.Hardware[i].ID] {
+				catalog.Hardware[i].Active = false
+			}
+		}
+
+		layout, err := engine.ResolveFurnitureLayout(mod, catalog, nil, accessoryTestChoices(f, nil))
+		if err != nil {
+			t.Fatalf("required=%v: ResolveFurnitureLayout unexpected error: %v", required, err)
+		}
+		if len(layout.Assemblies) != 1 {
+			t.Fatalf("required=%v: the main bay assembly must still be emitted alone, got %d", required, len(layout.Assemblies))
+		}
+		bom, err := engine.ResolveBomWithContext(mod, accessoryTestChoices(f, nil), catalog, nil, "", nil, nil)
+		if err != nil {
+			t.Fatalf("required=%v: ResolveBomWithContext unexpected error: %v", required, err)
+		}
+		if acc := accessoryKitLinesOf(bom); len(acc) != 0 {
+			t.Fatalf("required=%v: no active option must not quote accessories, got %+v", required, acc)
+		}
+
+		result, err := engine.ResolveAuthoringLayout(engine.AuthoringResolveInput{
+			Module:        mod,
+			Catalog:       catalog,
+			Dims:          &engine.LayoutDims{WidthMm: f.Module.WidthMm, HeightMm: f.Module.HeightMm, DepthMm: f.Module.DepthMm},
+			OptionChoices: accessoryTestChoices(f, nil),
+		})
+		if err != nil {
+			t.Fatalf("required=%v: ResolveAuthoringLayout unexpected error: %v", required, err)
+		}
+		blocked := false
+		for _, issue := range result.ValidationIssues {
+			if issue.Code == "ACCESSORY_CHOICE_REQUIRED" {
+				blocked = true
+			}
+		}
+
+		if !required {
+			if len(layout.AssemblyRejections) != 0 || blocked {
+				t.Fatalf("optional group without active options must stay silent, got rejections=%+v blocked=%v", layout.AssemblyRejections, blocked)
+			}
+			continue
+		}
+		if len(layout.AssemblyRejections) != 1 || layout.AssemblyRejections[0].Reason != "accessory_choice_required" {
+			t.Fatalf("required group without active options must reject once, got %+v", layout.AssemblyRejections)
+		}
+		wantID := fmt.Sprintf("%s-acc-%s", "inst-bajo", strings.ToLower(f.AccessoryGroup.Code))
+		if layout.AssemblyRejections[0].AssemblyInstanceID != wantID {
+			t.Errorf("rejection assemblyInstanceId = %q, want %q", layout.AssemblyRejections[0].AssemblyInstanceID, wantID)
+		}
+		if !blocked || result.ValidationStatus != "blocked" {
+			t.Fatalf("expected ACCESSORY_CHOICE_REQUIRED + blocked, got status=%q issues=%+v", result.ValidationStatus, result.ValidationIssues)
+		}
 	}
 }
 

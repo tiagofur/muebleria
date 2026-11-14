@@ -713,12 +713,16 @@
     var accChosenId = inChoices
       ? (inspectorMaterialChoices[acc.code] || null)
       : ((allowScanFallback && scannedAcc && scannedAcc.chosenHardwareId) || null);
-    var accChosen = accChosenId ? hardwareDefinitionById(accChosenId) : null;
     var accOverridden = !!accChosenId && accChosenId !== accConfirmedId;
     var accOptionIds = (Array.isArray(acc.optionIds) && acc.optionIds.length > 0)
       ? acc.optionIds
       : (accCatalogDef && Array.isArray(accCatalogDef.optionIds) ? accCatalogDef.optionIds : []);
     var hasOptions = accOptionIds.length > 0;
+    // Sin elección, la fila muestra la PRIMERA opción: es la que el motor
+    // monta y cotiza por defecto. Sólo es visual — no entra al draft ni
+    // cuenta como «Personalizado».
+    if (!accChosenId && hasOptions) accChosenId = accOptionIds[0];
+    var accChosen = accChosenId ? hardwareDefinitionById(accChosenId) : null;
     var accLabel = acc.name || (accCatalogDef && accCatalogDef.name) || acc.code;
 
     var accBlock = document.createElement("div");

@@ -174,13 +174,13 @@ describe('#1596 review B1 — par legacy con movimiento por nombre', () => {
     return onUpdate.mock.calls[0]![1] as HardwareDraft;
   }
 
-  it('abrir+guardar un par -MOV mantiene actor:drawer y materializa sus 35 mm', async () => {
+  it('abrir+guardar un par -MOV mantiene actor:drawer y NO le inventa desfase (el motor dibuja en 0)', async () => {
     const onUpdate = vi.fn();
     const draft = await roundTrip(legacyMovingPar, onUpdate);
     expect(draft.itemType).toBe('pair');
     expect(draft.designParts?.[0]?.actorMembership).toBe('actor:drawer');
-    expect(draft.pieces?.find((p) => p.anchor === 'left')?.offsetMm).toEqual({ x: 35, y: 0, z: 0 });
-    expect(draft.pieces?.find((p) => p.anchor === 'right')?.offsetMm).toEqual({ x: -35, y: 0, z: 0 });
+    expect(draft.pieces?.find((p) => p.anchor === 'left')?.offsetMm).toEqual({ x: 0, y: 0, z: 0 });
+    expect(draft.pieces?.find((p) => p.anchor === 'right')?.offsetMm).toEqual({ x: 0, y: 0, z: 0 });
   });
 
   it('abrir+guardar un par sin nombre móvil sigue sembrando fija al cuerpo', async () => {

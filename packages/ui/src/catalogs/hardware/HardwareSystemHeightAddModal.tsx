@@ -274,8 +274,9 @@ export function HardwareSystemHeightAddModal({
               <p className="catalog-form__hint">
                 Un archivo por mano del costado (.skp). Lo que queda sin diseño se ve con
                 la representación genérica y se sube después desde su ficha. Los costados
-                nacen en su posición canónica Blum: 10 mm el fijo, 35 mm el móvil, medidos
-                del ancho del cajón.
+                nacen sin desfase (0 mm): si tu diseño no está dibujado en su posición
+                final, ajustá el desfase de cada lado en la ficha de la pieza, sección
+                «Diseño — un SKP por lado».
               </p>
               {planned.designs.map((design) =>
                 (design.handsParts ?? []).map((part) => {

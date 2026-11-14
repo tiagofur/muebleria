@@ -180,41 +180,72 @@ describe('#1502 — kit accesorio elegible (paridad con Go)', () => {
     expect(bom.hardwareLines.filter((line) => line.id.startsWith('kit-acc-'))).toHaveLength(0);
   });
 
-  it('sin elección y grupo opcional: base sin accesorio ni línea, bahía dibujada', () => {
+  // Decisión del owner 2026-11-13 (sustituye «sólo elección explícita» de
+  // #1555): sin elección, la bahía monta y cotiza la PRIMERA opción activa.
+  for (const required of [false, true]) {
+    it(`sin elección (${required ? 'requerido' : 'opcional'}): monta y cotiza la primera opción`, () => {
+      const { catalog, module } = buildScenario(required, true);
+      const first = f.accessoryGroup.accessories[0]!;
+
+      const detailed = resolveModuleAgregadoAssembliesDetailed(
+        module,
+        { width: f.module.widthMm, height: f.module.heightMm, depth: f.module.depthMm },
+        catalog,
+        { optionChoices: {} },
+      );
+      expect(detailed.rejections).toHaveLength(0);
+      expect(accAssembliesOf(detailed.assemblies)).toHaveLength(1);
+      expect(detailed.assemblies).toHaveLength(2); // principal + inserto por defecto
+
+      const bom = resolveBom(module, {}, catalog);
+      const lines = bom.hardwareLines.filter((line) => line.id.startsWith('kit-acc-'));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]!.hardwareId).toBe(first.id);
+    });
+  }
+
+  it('el default salta las opciones inactivas', () => {
     const { catalog, module } = buildScenario(false, true);
-
-    const detailed = resolveModuleAgregadoAssembliesDetailed(
-      module,
-      { width: f.module.widthMm, height: f.module.heightMm, depth: f.module.depthMm },
-      catalog,
-      { optionChoices: {} },
-    );
-    expect(accAssembliesOf(detailed.assemblies)).toHaveLength(0);
-    expect(detailed.rejections).toHaveLength(0);
-    expect(detailed.assemblies).toHaveLength(1); // el ensamble principal sigue
-
-    const bom = resolveBom(module, {}, catalog);
-    expect(bom.hardwareLines.filter((line) => line.id.startsWith('kit-acc-'))).toHaveLength(0);
+    const [first, second] = f.accessoryGroup.accessories;
+    const withInactiveFirst = {
+      ...catalog,
+      hardware: (catalog.hardware ?? []).map((h) => (h.id === first!.id ? { ...h, active: false } : h)),
+    };
+    const bom = resolveBom(module, {}, withInactiveFirst);
+    const lines = bom.hardwareLines.filter((line) => line.id.startsWith('kit-acc-'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.hardwareId).toBe(second!.id);
   });
 
-  it('grupo requerido sin elección: rechazo accessory_choice_required y sin línea', () => {
-    const { catalog, module, groupCode } = buildScenario(true, true);
-
-    const detailed = resolveModuleAgregadoAssembliesDetailed(
-      module,
-      { width: f.module.widthMm, height: f.module.heightMm, depth: f.module.depthMm },
-      catalog,
-      { optionChoices: {} },
-    );
-    expect(detailed.assemblies).toHaveLength(1); // el cajón se dibuja igual
-    expect(detailed.rejections).toHaveLength(1);
-    expect(detailed.rejections[0]!.reason).toBe('accessory_choice_required');
-    expect(detailed.rejections[0]!.assemblyInstanceId).toBe(
-      `${'inst-bajo'}-acc-${groupCode.toLowerCase()}`,
-    );
-
-    const bom = resolveBom(module, {}, catalog);
-    expect(bom.hardwareLines.filter((line) => line.id.startsWith('kit-acc-'))).toHaveLength(0);
+  it('sin ninguna opción activa: opcional calla, requerido rechaza accessory_choice_required', () => {
+    const accessoryIds = new Set(f.accessoryGroup.accessories.map((a) => a.id));
+    for (const required of [false, true]) {
+      const { catalog, module, groupCode } = buildScenario(required, true);
+      const withoutActive = {
+        ...catalog,
+        hardware: (catalog.hardware ?? []).map((h) =>
+          accessoryIds.has(h.id) ? { ...h, active: false } : h,
+        ),
+      };
+      const detailed = resolveModuleAgregadoAssembliesDetailed(
+        module,
+        { width: f.module.widthMm, height: f.module.heightMm, depth: f.module.depthMm },
+        withoutActive,
+        { optionChoices: {} },
+      );
+      expect(detailed.assemblies).toHaveLength(1); // el cajón se dibuja igual
+      const bom = resolveBom(module, {}, withoutActive);
+      expect(bom.hardwareLines.filter((line) => line.id.startsWith('kit-acc-'))).toHaveLength(0);
+      if (!required) {
+        expect(detailed.rejections).toHaveLength(0);
+        continue;
+      }
+      expect(detailed.rejections).toHaveLength(1);
+      expect(detailed.rejections[0]!.reason).toBe('accessory_choice_required');
+      expect(detailed.rejections[0]!.assemblyInstanceId).toBe(
+        `${'inst-bajo'}-acc-${groupCode.toLowerCase()}`,
+      );
+    }
   });
 
   it('accesorio monolítico (sin partes): un miembro con el herraje elegido', () => {

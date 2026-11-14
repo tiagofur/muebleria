@@ -22,6 +22,7 @@ import {
   selectAgregadoVariants,
   type AgregadoAssemblyInput,
 } from '../agregadoAssembly';
+import { effectiveAccessoryChoice } from '../hardwareKit';
 import {
   applyBaseTreatment,
   filterComponentInstancesForBaseMode,
@@ -942,9 +943,9 @@ export function resolveComposedModule(
       // #1502: los accesorios elegidos para ESTE kit se cotizan por bahía —
       // demanda adicional que NO participa del dedupe contra bulk del kit
       // principal (cotiza lo dibujado, mismo criterio del layout; espejo de
-      // collectAccessoryKitHardwareLines en accessory_kit.go). Sin elección:
-      // nada — la cotización no inventa demanda por un accesorio que no se
-      // dibuja.
+      // collectAccessoryKitHardwareLines en accessory_kit.go). Sin elección
+      // cotiza la primera opción activa, la misma que el layout dibuja
+      // (effectiveAccessoryChoice).
       const accInstanceKey = (agrInst.id ?? '').trim() || effectiveAgregadoId;
       const accessoryGroups = (catalog.optionGroups ?? [])
         .filter(
@@ -952,7 +953,7 @@ export function resolveComposedModule(
         )
         .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
       for (const og of accessoryGroups) {
-        const choice = (optionChoices?.[og.code] ?? '').trim();
+        const choice = effectiveAccessoryChoice(og, catalog.hardware, optionChoices);
         if (!choice) continue;
         const isActiveMember =
           og.optionIds.includes(choice) &&

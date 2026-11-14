@@ -12,10 +12,10 @@ type DefinitionRoleOptionSpec struct {
 	// ExplicitChoiceOnly (#1555): the role only ever carries an EXPLICIT
 	// choice — an override or a compatible Design default — and never the
 	// curated first-option fallback. Kit accessory groups (galería/boxcap)
-	// are a deliberate per-furniture decision: silently seeding the first
-	// accessory would quote and draw something the user never chose. An
-	// absent statement is honest (optional → nothing; required → the engine
-	// fails closed with accessory_choice_required).
+	// never get a seeded statement here: an absent statement means "follow
+	// the group", and the engine mounts and quotes the group's first active
+	// option (engine.effectiveAccessoryChoice). Seeding it as a choice would
+	// pin the furniture to today's first option.
 	ExplicitChoiceOnly bool `json:"explicitChoiceOnly,omitempty"`
 }
 

@@ -102,8 +102,9 @@ func (s *Server) HandleDesignEffectiveMaterials(w http.ResponseWriter, r *http.R
 	// composition silently drops the plugin's accessory override and the
 	// connected resolve never sees the choice (optional: lost quote line;
 	// required: accessory_choice_required despite the user's pick). They are
-	// ExplicitChoiceOnly: an override or a compatible Design default passes,
-	// the curated first-option fallback never seeds an accessory. Deduped by
+	// ExplicitChoiceOnly: an override or a compatible Design default passes;
+	// without one no statement travels and the engine mounts the group's
+	// first active option (engine.effectiveAccessoryChoice). Deduped by
 	// code (the same group can surface under several agregado options).
 	seenAccessory := make(map[string]bool)
 	for _, ar := range def.AgregadoRoles {

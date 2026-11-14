@@ -663,6 +663,9 @@ describe('selectableGroupCodesForModule (F087)', () => {
     expect(codes).toContain('LATERAL_E');
     expect(codes).not.toContain('LATERAL_OTRO');
 
+    // El grupo es elegible pero no EXIGIBLE mientras ofrezca opciones: sin
+    // elección el motor monta la primera. Sin opciones, el requerido sí
+    // bloquea (el motor lo rechaza visible).
     expect(
       requiredGroupCodesForModule(
         moduleConAgregado,
@@ -671,6 +674,19 @@ describe('selectableGroupCodesForModule (F087)', () => {
         [],
         [agrConKit],
         kitGroups,
+      ),
+    ).not.toContain('LATERAL_E');
+    const sinOpciones = kitGroups.map((g) =>
+      g.code === 'LATERAL_E' ? { ...g, optionIds: [] } : g,
+    );
+    expect(
+      requiredGroupCodesForModule(
+        moduleConAgregado,
+        sinOpciones,
+        [],
+        [],
+        [agrConKit],
+        sinOpciones,
       ),
     ).toContain('LATERAL_E');
 

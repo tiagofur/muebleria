@@ -19,11 +19,15 @@ import (
 // Contrato por grupo, por bahía (espejo exacto en el resolve TS de previews):
 //   - elección válida → ensamble accesorio propio `<bahía>-acc-<grupo>` +
 //     línea de cotización `kit-acc-<inst>-u<n>-<grupo>` (cotiza lo dibujado).
-//   - sin elección y grupo OPCIONAL → nada (patrón ZOCLO_PERFIL).
-//   - sin elección y grupo REQUERIDO → fail-closed visible: rejection
-//     `accessory_choice_required` + ContractIssue ACCESSORY_CHOICE_REQUIRED
-//     en el authoring resolve (status blocked); la cotización no inventa
-//     demanda por el accesorio faltante.
+//   - sin elección → la PRIMERA opción activa del grupo, en el orden en que
+//     el taller las declaró (decisión del owner 2026-11-13, sustituye la
+//     regla «sólo elección explícita» de #1555): el inserto por defecto se
+//     dibuja y se cotiza igual que uno elegido. Vale para grupos opcionales
+//     y requeridos.
+//   - sin elección y SIN opciones activas → opcional: nada; REQUERIDO:
+//     fail-closed visible: rejection `accessory_choice_required` +
+//     ContractIssue ACCESSORY_CHOICE_REQUIRED en el authoring resolve
+//     (status blocked); la cotización no inventa demanda.
 //   - elección inválida (no es miembro activo del grupo) → rejection
 //     `resolve_failed` con el detalle; nunca un accesorio dibujado de más.
 
@@ -121,6 +125,23 @@ func accessoryMemberForChoice(catalog domain.Catalog, og domain.OptionGroup, cho
 	return hw, true
 }
 
+// effectiveAccessoryChoice is the ONE rule every consumer (layout, quote)
+// runs to decide which accessory a bay mounts for a linked group: the explicit
+// choice when there is one — returned as-is, the caller validates membership
+// and reports an invalid one — otherwise the group's first ACTIVE member in
+// declared order. Empty only when the group has no active member at all.
+func effectiveAccessoryChoice(catalog domain.Catalog, og domain.OptionGroup, optionChoices map[string]string) string {
+	if choice := strings.TrimSpace(optionChoices[og.Code]); choice != "" {
+		return choice
+	}
+	for _, id := range og.OptionIDs {
+		if hw, ok := accessoryMemberForChoice(catalog, og, id); ok {
+			return hw.ID
+		}
+	}
+	return ""
+}
+
 // resolveAccessoryAssemblies resolves the accessory assemblies one bay
 // contributes for the kit it mounts. Legacy bays (kit without linked groups)
 // produce nothing.
@@ -141,7 +162,7 @@ func resolveAccessoryAssemblies(
 	var rejections []LayoutAssemblyRejection
 	for _, og := range groups {
 		accInstanceID := fmt.Sprintf("%s-acc-%s", bayInstanceID, strings.ToLower(og.Code))
-		choice := strings.TrimSpace(optionChoices[og.Code])
+		choice := effectiveAccessoryChoice(catalog, og, optionChoices)
 		if choice == "" {
 			if og.Required {
 				rejections = append(rejections, LayoutAssemblyRejection{
@@ -150,7 +171,7 @@ func resolveAccessoryAssemblies(
 					AgregadoCode:       baseAgr.Code,
 					Reason:             accessoryChoiceRequiredReason,
 					BayHeightMm:        unit.h,
-					Detail:             fmt.Sprintf("el grupo «%s» declara accesorios para el kit montado en esta bahía y es obligatorio", og.Code),
+					Detail:             fmt.Sprintf("el grupo «%s» es obligatorio para el kit montado en esta bahía y no tiene ninguna opción activa", og.Code),
 				})
 			}
 			continue
@@ -218,8 +239,9 @@ func resolveAccessoryAssemblies(
 
 // collectAccessoryKitHardwareLines quotes the accessories a bay chose for
 // the kit it mounts (cotiza lo dibujado: same decision as the layout —
-// valid choice only; optional-without-choice and required-without-choice
-// contribute nothing).
+// effectiveAccessoryChoice, so the default first option quotes too; an
+// invalid explicit choice and a group without active members contribute
+// nothing).
 func collectAccessoryKitHardwareLines(
 	catalog domain.Catalog,
 	optionChoices map[string]string,
@@ -233,7 +255,7 @@ func collectAccessoryKitHardwareLines(
 	}
 	lines := make([]domain.HardwareLine, 0, len(groups))
 	for _, og := range groups {
-		choice := strings.TrimSpace(optionChoices[og.Code])
+		choice := effectiveAccessoryChoice(catalog, og, optionChoices)
 		if choice == "" {
 			continue
 		}
@@ -262,11 +284,11 @@ func accessoryChoiceContractIssues(rejections []LayoutAssemblyRejection) []domai
 		}
 		issues = append(issues, domain.ContractIssue{
 			Code:        "ACCESSORY_CHOICE_REQUIRED",
-			Message:     fmt.Sprintf("la bahía %s monta un kit con accesorio obligatorio sin elegir", rej.AssemblyInstanceID),
+			Message:     fmt.Sprintf("la bahía %s monta un kit con accesorio obligatorio sin opciones activas", rej.AssemblyInstanceID),
 			Severity:    domain.IssueSeverityError,
 			EntityID:    rej.AssemblyInstanceID,
 			Path:        "furniture.layout.assemblies",
-			Remediation: "Elegí el accesorio del grupo vinculado al kit (alta del ítem o elección a nivel proyecto).",
+			Remediation: "Añadí o activá al menos una opción en el grupo de insertos vinculado al kit (Catálogo › Herrajes › el juego).",
 			Details:     map[string]any{"agregadoId": rej.AgregadoID, "agregadoCode": rej.AgregadoCode, "bayHeightMm": rej.BayHeightMm, "detail": rej.Detail},
 		})
 	}
