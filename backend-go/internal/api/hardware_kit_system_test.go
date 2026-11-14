@@ -34,6 +34,9 @@ type kitSysE2E struct {
 	store  *storage.PostgresStore
 	pool   *pgxpool.Pool
 	org    string
+	// migrationPool (#1625) carries the owner role for seed-level changes the
+	// runtime role cannot make (e.g. the org's library type).
+	migrationPool *pgxpool.Pool
 }
 
 func kitSystemE2EStore(t *testing.T) *kitSysE2E {
@@ -116,7 +119,7 @@ func kitSystemE2EStore(t *testing.T) *kitSysE2E {
 	}
 	t.Cleanup(runtimePool.Close)
 	store := &storage.PostgresStore{Pool: runtimePool}
-	return &kitSysE2E{server: &Server{Store: store}, store: store, pool: runtimePool, org: org}
+	return &kitSysE2E{server: &Server{Store: store}, store: store, pool: runtimePool, org: org, migrationPool: migrationPool}
 }
 
 // runKitSystemRequest replicates the auth middleware's envelope: the handler

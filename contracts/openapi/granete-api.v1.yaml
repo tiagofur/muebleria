@@ -6338,6 +6338,63 @@
         }
       }
     },
+    "/catalog/hardware-kit-systems/{agregadoId}/heights": {
+      "post": {
+        "operationId": "addHardwareKitSystemHeight",
+        "summary": "Añadir una altura a un sistema de cajones existente, en una transacción (#1625)",
+        "description": "Crea el juego de la altura con sus diseños, añade la variante al conjunto de alturas del ensamble (control de versión por If-Match, la altura externa sube al máximo) y, opcionalmente, los insertos con su selector vinculado al juego nuevo y la elegibilidad del ensamble. Todo o nada: los códigos nuevos no deben existir (409 HARDWARE_KIT_SYSTEM_CODE_TAKEN), la altura no debe estar ya en el ensamble (422 HARDWARE_KIT_SYSTEM_HEIGHT_EXISTS) y la versión debe coincidir (412). La identidad de las filas es del cliente (#1398); el id del conjunto de alturas, si hay que crearlo, lo asigna el servidor.",
+        "parameters": [
+          {
+            "name": "agregadoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HardwareKitSystemHeightAddRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Altura añadida atómicamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareKitSystemHeightAdded"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/catalog/hardware": {
       "get": {
         "operationId": "listHardware",
@@ -21208,6 +21265,99 @@
             "type": "array",
             "minItems": 1,
             "items": { "$ref": "#/components/schemas/HardwareKitSystemVariant" }
+          }
+        }
+      },
+      "HardwareKitSystemHeightAddRequest": {
+        "type": "object",
+        "description": "#1625: plan de una altura nueva para un sistema existente. Exactamente una fila kit (unit=set); las filas de diseño (unit=piece) se vinculan a ese kit; las filas de inserto (unit=piece, sin kit) sólo con option_group.",
+        "required": [
+          "hardware",
+          "variant"
+        ],
+        "properties": {
+          "hardware": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/HardwareKitSystemHardwareRow"
+            }
+          },
+          "variant": {
+            "$ref": "#/components/schemas/HardwareKitSystemHeightVariant"
+          },
+          "option_group": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HardwareKitSystemOptionGroupRow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Selector de insertos vinculado al juego nuevo; sus opciones son filas de inserto del payload."
+          },
+          "eligibility_group": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HardwareKitSystemEligibilityGroupRow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Elegibilidad del ensamble en la misma transacción (igual que el alta del sistema)."
+          }
+        }
+      },
+      "HardwareKitSystemHeightVariant": {
+        "type": "object",
+        "required": [
+          "nominalDimensionMm",
+          "kit_hardware_id"
+        ],
+        "properties": {
+          "nominalDimensionMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "KH mínimo de la altura; no debe existir ya en el ensamble."
+          },
+          "kit_hardware_id": {
+            "type": "string",
+            "description": "La fila kit del payload."
+          }
+        }
+      },
+      "HardwareKitSystemHeightAdded": {
+        "type": "object",
+        "required": [
+          "created_codes",
+          "agregado_id",
+          "agregado_version",
+          "variant_set_id",
+          "height_mm"
+        ],
+        "properties": {
+          "created_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "agregado_id": {
+            "type": "string"
+          },
+          "agregado_version": {
+            "type": "integer",
+            "description": "Versión del ensamble tras el cambio (para el próximo If-Match)."
+          },
+          "variant_set_id": {
+            "type": "string",
+            "description": "Id del conjunto de alturas (existente o asignado por el servidor)."
+          },
+          "height_mm": {
+            "type": "integer",
+            "description": "Altura externa del ensamble tras el cambio."
           }
         }
       },

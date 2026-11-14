@@ -303,6 +303,24 @@ export function AppContent({
       }
       return repo.createHardwareKitSystem(req);
     },
+    // #1625: añadir altura transaccional; en guest el dep falla y la acción
+    // no lo llama (usa su camino local).
+    addHardwareKitSystemHeight: (agregadoId, req) => {
+      const repo = getRepository();
+      if (typeof repo.addHardwareKitSystemHeight !== 'function') {
+        return Promise.reject(
+          new GraneteApiError(501, {
+            code: 'METHOD_NOT_ALLOWED',
+            message: 'Añadir una altura requiere una sesión con servidor.',
+            fieldErrors: {},
+            requestId: '',
+            retryable: false,
+            details: {},
+          }),
+        );
+      }
+      return repo.addHardwareKitSystemHeight(agregadoId, req);
+    },
     // #1369: en guest (LocalStorageRepository) no hay backend: el store
     // responde 'invalid' con el mensaje y la UI lo explica.
     simulateAgregadoRecipeChange: (id, req) => {

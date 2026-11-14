@@ -425,46 +425,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         // en una tx — un fallo a mitad no deja sistema a medias.
         const created = await serverApply({
           expected_existing_codes: reusedCodes,
-          hardware: newHardware.map((h) => ({
-            id: h.id,
-            code: h.code,
-            name: h.name,
-            unit: h.unit === 'set' ? ('set' as const) : ('piece' as const),
-            cost_per_unit: h.costPerUnit,
-            active: h.active !== false,
-            preview_shape: h.previewShape ?? null,
-            notes: h.notes ?? null,
-            kit_hardware_id: h.kitHardwareId ?? null,
-            pieces: h.pieces?.map((p) => ({
-              anchor: p.anchor,
-              asset: p.asset
-                ? { assetId: p.asset.assetId, assetRevisionId: p.asset.assetRevisionId }
-                : undefined,
-              // #1596: offsets explícitos — lo mostrado es lo que se guarda.
-              offsetMm: p.offsetMm
-                ? { x: p.offsetMm.x, y: p.offsetMm.y, z: p.offsetMm.z }
-                : undefined,
-            })),
-            // #1596: la declaración de movimiento que el motor ya lee. El
-            // vocabulario está cerrado en el contrato — un valor fuera de él
-            // aborta el alta (fail-loud), nunca viaja ni se silencia.
-            design_parts: h.designParts?.length
-              ? h.designParts.map((dp) => {
-                  const actor = dp.actorMembership;
-                  if (actor !== 'body' && actor !== 'actor:drawer' && actor !== 'actor:door') {
-                    throw new Error(
-                      `«${h.code}» declara «Al abrir» inválido (${actor}): el alta usa Fija al mueble, viaja con el cajón o viaja con la puerta.`,
-                    );
-                  }
-                  return {
-                    component_name: dp.componentName,
-                    actor_membership: actor,
-                    label: dp.label || null,
-                    finish_key: dp.finishKey || null,
-                  };
-                })
-              : undefined,
-          })),
+          hardware: newHardware.map(kitSystemHardwareRow),
           agregado: {
             id: agregado.id,
             code: agregado.code,
@@ -712,40 +673,154 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         });
       }
 
+      // #1625: insertos de la altura E con su selector vinculado al juego
+      // nuevo — misma forma que el asistente del sistema (#1596).
+      const insertoIds: string[] = [];
+      for (const acc of req.heightCode === 'E' ? (req.insertos ?? []) : []) {
+        const code = `${systemCode}-${req.heightCode}-${acc.suffix}`;
+        if (existing.hardwareCodes.has(code)) {
+          throw new Error(`El inserto «${code}» ya existe en el catálogo.`);
+        }
+        const id = idFor(code);
+        insertoIds.push(id);
+        newHardware.push({
+          id,
+          code,
+          name: `${systemName} ${req.heightCode} — ${acc.name}`,
+          unit: 'piece',
+          costPerUnit: 0,
+          active: true,
+          notes: `Inserto del cajón ${req.heightCode} del sistema ${systemCode} (#1625): se elige por mueble y el motor lo monta por cajón.`,
+          pieces: acc.anchors.map((anchor) => {
+            const binding = req.designs?.[`${code}:${anchor}`];
+            const offset = acc.pieceOffsets?.[anchor] ?? { x: 0, y: 0, z: 0 };
+            return {
+              anchor,
+              ...(binding ? { asset: binding } : {}),
+              offsetMm: { x: offset.x, y: offset.y, z: offset.z },
+            } as HardwarePiece;
+          }),
+          designParts: [
+            { componentName: code, actorMembership: acc.actorMembership ?? 'actor:drawer', label: '', finishKey: '' },
+          ],
+        });
+      }
+      const insertoGroup: OptionGroup | null =
+        insertoIds.length > 0
+          ? {
+              id: ctx.newId(),
+              code: `${systemCode}_LATERAL_${req.heightCode}`,
+              name: `Lateral superior ${req.heightCode}`,
+              kind: 'hardware',
+              required: false,
+              optionIds: insertoIds,
+              kitHardwareId: kitId,
+            }
+          : null;
+      if (insertoGroup && (catalog.optionGroups ?? []).some((g) => g.code === insertoGroup.code)) {
+        throw new Error(`Ya existe un selector «${insertoGroup.code}»: renombralo antes de añadir los insertos.`);
+      }
+
+      const newVariant = {
+        nominalDimensionMm: height.khMinMm,
+        hardwareId: kitId,
+        commercialKitHardwareId: kitId,
+      };
       // La variante nueva entra en el variant set height EXISTENTE; la
       // altura externa del ensamble sube al máximo de sus variantes.
-      const baseVs = heightVs ?? { id: ctx.newId(), dimension: 'height' as const, variants: [] };
-      const nextVariantSets = (agregado.variantSets ?? []).some((vs) => vs.dimension === 'height')
-        ? (agregado.variantSets ?? []).map((vs) =>
-            vs.dimension === 'height'
+      const withVariant = (variantSetId: string): Agregado['variantSets'] =>
+        (agregado.variantSets ?? []).some((vs) => vs.dimension === 'height')
+          ? (agregado.variantSets ?? []).map((vs) =>
+              vs.dimension === 'height' ? { ...vs, variants: [...vs.variants, newVariant] } : vs,
+            )
+          : [...(agregado.variantSets ?? []), { id: variantSetId, dimension: 'height' as const, variants: [newVariant] }];
+
+      const eligibilityDraft = (): OptionGroup | null =>
+        req.eligibilityGroup && !req.eligibilityGroup.existingGroupId
+          ? {
+              id: req.eligibilityGroup.id ?? ctx.newId(),
+              code: req.eligibilityGroup.code ?? '',
+              name: req.eligibilityGroup.name ?? '',
+              kind: 'agregado',
+              required: false,
+              optionIds: [agregado.id],
+            }
+          : null;
+      const withEligibility = (groups: readonly OptionGroup[]): OptionGroup[] => {
+        const next = [...groups];
+        if (!req.eligibilityGroup) return next;
+        if (req.eligibilityGroup.existingGroupId) {
+          const idx = next.findIndex((g) => g.id === req.eligibilityGroup!.existingGroupId);
+          const target = idx === -1 ? undefined : next[idx];
+          if (!target) throw new Error('El grupo de elegibilidad elegido ya no existe.');
+          if (!target.optionIds.includes(agregado.id)) {
+            next[idx] = { ...target, optionIds: [...target.optionIds, agregado.id] };
+          }
+          return next;
+        }
+        const draft = eligibilityDraft();
+        if (draft) next.push(draft);
+        return next;
+      };
+
+      const serverApply = ctx.deps.addHardwareKitSystemHeight;
+      if (serverApply && ctx.deps.getSession() === 'auth') {
+        // #1625: camino transaccional — juego, diseños, variante, insertos y
+        // elegibilidad en UNA transacción del servidor; un fallo no deja
+        // nada a medias (antes: una petición por registro).
+        const eligibility = req.eligibilityGroup;
+        const added = await serverApply(agregado.id, {
+          hardware: newHardware.map(kitSystemHardwareRow),
+          variant: { nominalDimensionMm: height.khMinMm, kit_hardware_id: kitId },
+          option_group: insertoGroup
+            ? {
+                id: insertoGroup.id,
+                code: insertoGroup.code,
+                name: insertoGroup.name,
+                kind: 'hardware',
+                required: insertoGroup.required,
+                option_ids: [...insertoGroup.optionIds],
+                kit_hardware_id: kitId,
+              }
+            : null,
+          eligibility_group: eligibility
+            ? eligibility.existingGroupId
+              ? { existing_group_id: eligibility.existingGroupId }
+              : { id: eligibility.id ?? '', code: eligibility.code ?? '', name: eligibility.name ?? '' }
+            : null,
+        });
+        // El estado local adopta la verdad del servidor (persistencia ya
+        // ocurrida): id del variant set y altura externa resultantes.
+        const merged: Catalog = {
+          ...catalog,
+          hardware: [...hardwareList, ...newHardware],
+          agregados: (catalog.agregados ?? []).map((a) =>
+            a.id === agregado.id
               ? {
-                  ...vs,
-                  variants: [
-                    ...vs.variants,
-                    {
-                      nominalDimensionMm: height.khMinMm,
-                      hardwareId: kitId,
-                      commercialKitHardwareId: kitId,
-                    },
-                  ],
+                  ...agregado,
+                  externalDims: {
+                    width: agregado.externalDims?.width ?? 0,
+                    height: added.height_mm,
+                    depth: agregado.externalDims?.depth ?? 0,
+                  },
+                  variantSets: withVariant(added.variant_set_id),
                 }
-              : vs,
-          )
-        : [
-            ...(agregado.variantSets ?? []),
-            {
-              ...baseVs,
-              variants: [
-                {
-                  nominalDimensionMm: height.khMinMm,
-                  hardwareId: kitId,
-                  commercialKitHardwareId: kitId,
-                },
-              ],
-            },
-          ];
+              : a,
+          ),
+          optionGroups: withEligibility([
+            ...(catalog.optionGroups ?? []),
+            ...(insertoGroup ? [insertoGroup] : []),
+          ]),
+        };
+        ctx.set({ catalog: merged });
+        ctx.toast({ type: 'success', message: `✓ Altura ${req.heightCode} añadida a ${systemCode} (${kitCode})` });
+        return { kitCode, agregadoCode: agregado.code };
+      }
+
+      // Guest (sin servidor): la misma mutación, local.
+      const nextVariantSets = withVariant(heightVs?.id ?? ctx.newId());
       const nextHeight = Math.max(
-        ...nextVariantSets
+        ...(nextVariantSets ?? [])
           .find((vs) => vs.dimension === 'height')!
           .variants.map((v) => v.nominalDimensionMm),
       );
@@ -758,44 +833,74 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         },
         variantSets: nextVariantSets,
       };
-
-      // Elegibilidad en la misma mutación (decisión 9).
-      const nextOptionGroups = [...(catalog.optionGroups ?? [])];
-      if (req.eligibilityGroup) {
-        if (req.eligibilityGroup.existingGroupId) {
-          const idx = nextOptionGroups.findIndex(
-            (g) => g.id === req.eligibilityGroup!.existingGroupId,
-          );
-          const target = idx === -1 ? undefined : nextOptionGroups[idx];
-          if (!target) {
-            throw new Error('El grupo de elegibilidad elegido ya no existe.');
-          }
-          if (!target.optionIds.includes(agregado.id)) {
-            nextOptionGroups[idx] = { ...target, optionIds: [...target.optionIds, agregado.id] };
-          }
-        } else {
-          nextOptionGroups.push({
-            id: req.eligibilityGroup.id ?? ctx.newId(),
-            code: req.eligibilityGroup.code ?? '',
-            name: req.eligibilityGroup.name ?? '',
-            kind: 'agregado',
-            required: false,
-            optionIds: [agregado.id],
-          });
-        }
-      }
-
+      const nextOptionGroups = withEligibility([
+        ...(catalog.optionGroups ?? []),
+        ...(insertoGroup ? [insertoGroup] : []),
+      ]);
       await ctx.saveAndToast(
         (c) => ({
           ...c,
           hardware: [...(c.hardware ?? []), ...newHardware],
           agregados: (c.agregados ?? []).map((a) => (a.id === nextAgregado.id ? nextAgregado : a)),
-          optionGroups: req.eligibilityGroup ? nextOptionGroups : c.optionGroups,
+          optionGroups: req.eligibilityGroup || insertoGroup ? nextOptionGroups : c.optionGroups,
         }),
         `✓ Altura ${req.heightCode} añadida a ${systemCode} (${kitCode})`,
       );
       return { kitCode, agregadoCode: agregado.code };
     },
+  };
+}
+
+/**
+ * #1553/#1625: fila de herraje del contrato de los endpoints transaccionales
+ * del sistema de cajones (alta del sistema y añadir altura). El vocabulario
+ * de «Al abrir» está cerrado en el contrato: un valor fuera de él aborta
+ * (fail-loud), nunca viaja ni se silencia.
+ */
+function isKitSystemActor(actor: string): actor is 'body' | 'actor:drawer' | 'actor:door' {
+  return actor === 'body' || actor === 'actor:drawer' || actor === 'actor:door';
+}
+
+function kitSystemHardwareRow(h: Hardware) {
+  return {
+    id: h.id,
+    code: h.code,
+    name: h.name,
+    unit: h.unit === 'set' ? ('set' as const) : ('piece' as const),
+    cost_per_unit: h.costPerUnit,
+    active: h.active !== false,
+    preview_shape: h.previewShape ?? null,
+    notes: h.notes ?? null,
+    kit_hardware_id: h.kitHardwareId ?? null,
+    pieces: h.pieces?.map((p) => ({
+      anchor: p.anchor,
+      asset: p.asset
+        ? { assetId: p.asset.assetId, assetRevisionId: p.asset.assetRevisionId }
+        : undefined,
+      // #1596: offsets explícitos — lo mostrado es lo que se guarda.
+      offsetMm: p.offsetMm
+        ? { x: p.offsetMm.x, y: p.offsetMm.y, z: p.offsetMm.z }
+        : undefined,
+    })),
+    // #1596: la declaración de movimiento que el motor ya lee. El
+    // vocabulario está cerrado en el contrato — un valor fuera de él
+    // aborta el alta (fail-loud), nunca viaja ni se silencia.
+    design_parts: h.designParts?.length
+      ? h.designParts.map((dp) => {
+          const actor = dp.actorMembership;
+          if (!isKitSystemActor(actor)) {
+            throw new Error(
+              `«${h.code}» declara «Al abrir» inválido (${actor}): el alta usa Fija al mueble, viaja con el cajón o viaja con la puerta.`,
+            );
+          }
+          return {
+            component_name: dp.componentName,
+            actor_membership: actor,
+            label: dp.label || null,
+            finish_key: dp.finishKey || null,
+          };
+        })
+      : undefined,
   };
 }
 
