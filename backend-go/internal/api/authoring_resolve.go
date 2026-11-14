@@ -762,6 +762,12 @@ func validateMaterialChoices(choices map[string]string, catalog domain.Catalog) 
 				continue
 			}
 			groupCount++
+			// #1627: «Sin inserto» explícito en un selector de insertos
+			// opcional es una elección legal (no es un id del catálogo).
+			if domain.IsExplicitNoAccessory(group, choiceID) {
+				valid = true
+				continue
+			}
 			member := false
 			for _, id := range group.OptionIDs {
 				if id == choiceID {

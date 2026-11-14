@@ -669,6 +669,22 @@
 
           // #1627: «Sin inserto» explícito, sólo si el selector no es
           // obligatorio (en uno obligatorio el motor lo rechazaría).
+          // Review #1629: con «Sin inserto» elegido, volver al default del
+          // juego (quita la elección explícita).
+          if (accExplicit === ACCESSORY_CHOICE_NONE) {
+            var accDefaultBtn = document.createElement("button");
+            accDefaultBtn.type = "button";
+            accDefaultBtn.className = "btn btn--ghost btn--small";
+            accDefaultBtn.textContent = "Usar el default del juego";
+            accDefaultBtn.addEventListener("click", function () {
+              delete libMaterialChoices[acc.code];
+              if (libUserCustomizedRoles) delete libUserCustomizedRoles[acc.code];
+              clearCatalogIntentKey();
+              renderLibraryAgregadoRoles(activeLibDef);
+              updateLibraryInsertButton();
+            });
+            accBlock.appendChild(accDefaultBtn);
+          }
           if (!acc.required && accExplicit !== ACCESSORY_CHOICE_NONE) {
             var accNoneBtn = document.createElement("button");
             accNoneBtn.type = "button";

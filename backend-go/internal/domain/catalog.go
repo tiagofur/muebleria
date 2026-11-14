@@ -453,3 +453,15 @@ func ValidOptionGroupDefaultChoice(v string) bool {
 	return v == "" || v == OptionGroupDefaultFirstActive || v == OptionGroupDefaultNone
 }
 
+// AccessoryNoneLabel (#1627) is the customer-facing label frozen for an
+// explicit «Sin inserto» choice.
+const AccessoryNoneLabel = "Sin inserto"
+
+// IsExplicitNoAccessory (#1627) reports whether choice is the legal explicit
+// «Sin inserto» for this group: a kit-linked insert group that is NOT
+// required. Every consumer outside the engine (choice validation, quote
+// labels, project defaults) accepts the sentinel only through this rule.
+func IsExplicitNoAccessory(og OptionGroup, choice string) bool {
+	return choice == AccessoryChoiceNone && og.Kind == "hardware" && og.KitHardwareID != nil && !og.Required
+}
+

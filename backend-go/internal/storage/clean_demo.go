@@ -243,7 +243,7 @@ func (s *PostgresStore) CleanDemoData(ctx context.Context, orgID string, apply b
 	}
 
 	// --- 6. Herrajes y tableros demo (misma forma de referencias) ----------
-	// Nota: choice_entity_id vive como UUID en project_item_choices y como
+	// Nota: choice_entity_id vive como VARCHAR en project_item_choices (#1627, antes UUID) y como
 	// VARCHAR en project_level_choices — se compara casteando la COLUMNA a
 	// text para que $1 resuelva a un único tipo.
 	for _, table := range []struct {
