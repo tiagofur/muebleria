@@ -23,7 +23,9 @@ import {
 } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
+import { agregadoKitHardwareIds, catalogMemberPlacement, memberPlacementAuthority } from '@granete/domain';
 import { isKitDerivedMember, kitPartsOf } from './KitCommercialPicker';
+import { PlacementAuthorityNote } from './PlacementAuthorityNote';
 import type { AgregadoDraft } from '../agregadoDraft';
 import { AgregadoRecipePanel } from './AgregadoRecipePanel';
 // #1451: vocabulario compartido con el nivel «Del cajón» de Herrajes — una
@@ -69,8 +71,11 @@ export function AgregadoRecipeAuthoringPanel({
   const kitId = draft.commercialKitHardwareId ?? '';
   // #1460: los miembros derivados del kit se muestran read-only — el sync del
   // catálogo los re-deriva y editarlos acá sería pisado en silencio.
+  // #1625: también las partes de los juegos por altura (variantes #1493).
   const kitPartIds = new Set(
-    kitPartsOf(catalogHardware, kitId).map((h) => h.id),
+    agregadoKitHardwareIds(draft).flatMap((id) =>
+      kitPartsOf(catalogHardware, id).map((h) => h.id),
+    ),
   );
 
   const patchDraft = (patch: Partial<AgregadoDraft>) =>
@@ -555,7 +560,12 @@ export function AgregadoRecipeAuthoringPanel({
                     ) : null}
                   </div>
 
-                  {/* Anclaje */}
+                  {/* Anclaje — #1625: solo lectura cuando lo manda el catálogo. */}
+                  <PlacementAuthorityNote
+                    authority={memberPlacementAuthority(m, catalogHardware)}
+                    catalogHardware={catalogHardware}
+                    testId={`${testId}-member-${idx}-placement-locked`}
+                  />
                   <div className="agregado-editor__item-fields agregado-editor__item-fields--grid">
                     {AXIS_NAMES.map((axis) => (
                       <div className="catalog-form__field" key={axis}>
@@ -563,7 +573,7 @@ export function AgregadoRecipeAuthoringPanel({
                         <div className="agregado-recipe__axis">
                           <select
                             className="catalog-form__select"
-                            value={m.placement[axis].ref}
+                            value={(catalogMemberPlacement(m, catalogHardware) ?? m.placement)[axis].ref}
                             onChange={(e) =>
                               updateMember(idx, {
                                 placement: {
@@ -575,6 +585,7 @@ export function AgregadoRecipeAuthoringPanel({
                                 },
                               })
                             }
+                            disabled={memberPlacementAuthority(m, catalogHardware) !== null}
                             aria-label={`${axisLabel(axis)} referencia`}
                             data-testid={`${testId}-member-${idx}-anchor-${axis}-ref`}
                           >
@@ -587,7 +598,11 @@ export function AgregadoRecipeAuthoringPanel({
                           <input
                             type="text"
                             className="catalog-form__input"
-                            value={m.placement[axis].offsetFormula ?? String(m.placement[axis].offsetMm)}
+                            value={
+                              catalogMemberPlacement(m, catalogHardware)
+                                ? String(catalogMemberPlacement(m, catalogHardware)![axis].offsetMm)
+                                : (m.placement[axis].offsetFormula ?? String(m.placement[axis].offsetMm))
+                            }
                             onChange={(e) => {
                               const raw = e.target.value;
                               // Vacío → sin offset (0 numérico, sin fórmula):
@@ -612,6 +627,7 @@ export function AgregadoRecipeAuthoringPanel({
                                 },
                               });
                             }}
+                            readOnly={memberPlacementAuthority(m, catalogHardware) !== null}
                             placeholder="ej. -10 o PW/2 - 100"
                             aria-label={`${axisLabel(axis)} offset mm o fórmula`}
                             data-testid={`${testId}-member-${idx}-anchor-${axis}-offset`}

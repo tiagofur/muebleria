@@ -427,11 +427,37 @@ sus insertos y con el ensamble que los módulos eligen por bahía.
 
 **Añadir una altura después** (el sistema ya existe): abrí cualquier juego
 del sistema → sección **Sistema de cajones** → **Añadir altura**. Sólo
-ofrece las alturas que faltan y agrega la variante al ensamble.
+ofrece las alturas que faltan y agrega la variante al ensamble. Si la
+altura es la **E**, ahí mismo podés declarar sus **insertos** (galería,
+BOXCAP, BOXCOVER…) igual que en el asistente: quedan como opciones del
+selector del juego E. Con sesión, todo se guarda de una vez: si algo falla
+(un código que ya existe, otra persona cambió el ensamble mientras tanto),
+no queda nada a medias y la app dice qué corregir.
 
 **Cómo saber que quedó bien:** en la cotización, cada bahía resuelve su
 altura automáticamente (una bahía baja de 209 mm sale con el juego E; una
 de 108 mm, con el M) y la cotización trae un juego por bahía.
+
+### 8c.5b Posición de los herrajes en la receta del ensamble
+
+**Para qué sirve:** saber dónde se cambia la posición de cada herraje de un
+ensamble (cajón, puerta) sin perder lo que escribís.
+
+**Cuándo la manda el herraje:** si el herraje tiene un diseño por lado
+(par izquierda/derecha) y el miembro de la receta dice de qué lado es, o si
+el herraje tiene una etiqueta de posición en **Partes del diseño**, la
+posición X/Y/Z sale del herraje cada vez que se usa el ensamble. En la
+receta esos campos aparecen **en solo lectura**, con un aviso que dice de
+qué herraje y lado salen. Las piezas de los juegos por altura (M, E…) se
+muestran como **incluidas en el juego**, igual que las del juego principal.
+
+**Pasos para cambiarla:** abrí la ficha del herraje que nombra el aviso →
+sección **Diseño — un SKP por lado** (o **Partes del diseño** si es una
+etiqueta) → ajustá el desfase del lado. La **rotación** sí se edita en la
+receta.
+
+**Cómo saber que quedó bien:** al volver a la receta, los campos en solo
+lectura muestran el valor nuevo y el 3D del cajón lo refleja.
 
 ### 8c.6 Agarres: estilos del taller y del proyecto
 

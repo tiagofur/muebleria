@@ -27,11 +27,18 @@ import type {
   Hardware,
   RigidMemberBOMRole,
 } from '@granete/domain';
-import { evaluatePartFormula, resolveHardwareDimensions } from '@granete/domain';
+import {
+  agregadoKitHardwareIds,
+  evaluatePartFormula,
+  catalogMemberPlacement,
+  memberPlacementAuthority,
+  resolveHardwareDimensions,
+} from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import { DropdownMenu } from '../../common/DropdownMenu';
 import { isKitDerivedMember, KitCommercialPicker, kitPartsOf } from './KitCommercialPicker';
+import { PlacementAuthorityNote } from './PlacementAuthorityNote';
 import type { AgregadoDraft } from '../agregadoDraft';
 
 export type AgregadoCajonHardwareSectionProps = {
@@ -143,8 +150,12 @@ export function AgregadoCajonHardwareSection({
   const kitEntity = kitId
     ? catalogHardware.find((h) => h.id === kitId)
     : undefined;
+  // #1625: también las partes de los juegos por altura (variantes #1493): el
+  // sync del motor las administra igual que las del juego principal.
   const kitPartIds = new Set(
-    kitPartsOf(catalogHardware, kitId).map((h) => h.id),
+    agregadoKitHardwareIds(draft).flatMap((id) =>
+      kitPartsOf(catalogHardware, id).map((h) => h.id),
+    ),
   );
   const memberEntries = members.map((m, idx) => ({ m, idx }));
   const ownEntries = memberEntries.filter(
@@ -453,6 +464,29 @@ export function AgregadoCajonHardwareSection({
             ) : null}
           </>
         ) : null}
+        {/* #1625: sin juego principal, las partes de los juegos por altura
+            (variantes) siguen visibles aquí en solo lectura — nunca ocultas. */}
+        {!kitId && kitEntries.length > 0 ? (
+          <div className="agregado-editor__item-fields" data-testid={`${testId}-variant-kit-members`}>
+            <p className="catalog-form__hint">
+              {kitEntries.length} herraje(s) de los juegos por altura · se
+              administran en Catálogos: cada altura monta las piezas de su juego.
+            </p>
+            {kitEntries.map(({ m, idx }) => (
+              <p
+                key={m.memberId}
+                className="catalog-form__hint"
+                data-testid={`${testId}-kit-member-${idx}`}
+              >
+                <span className="eng-detail__mono">{m.memberId}</span>
+                {' · '}
+                {hardwareCode(m.source.fixed?.hardwareId ?? '')}
+                {' · '}
+                {memberSide(m)}
+              </p>
+            ))}
+          </div>
+        ) : null}
         {kitId && !kitEntity ? (
           <p
             className="catalog-form__error"
@@ -563,7 +597,14 @@ export function AgregadoCajonHardwareSection({
                     ) : null}
                   </div>
                   {/* #1460 F2: posición SIEMPRE visible — X/Y/Z «desde» +
-                      desplazamiento mm|fórmula. Sin excavar en colapsables. */}
+                      desplazamiento mm|fórmula. Sin excavar en colapsables.
+                      #1625: si la posición la manda el catálogo, se muestra
+                      en solo lectura (el motor la reescribe en cada resolve). */}
+                  <PlacementAuthorityNote
+                    authority={memberPlacementAuthority(m, catalogHardware)}
+                    catalogHardware={catalogHardware}
+                    testId={`${testId}-member-${idx}-placement-locked`}
+                  />
                   {(['x', 'y', 'z'] as const).map((axis) => (
                     <div className="catalog-form__field" key={axis}>
                       <label
@@ -575,7 +616,7 @@ export function AgregadoCajonHardwareSection({
                       <div className="agregado-recipe__axis">
                         <select
                           className="catalog-form__select"
-                          value={m.placement[axis].ref}
+                          value={(catalogMemberPlacement(m, catalogHardware) ?? m.placement)[axis].ref}
                           onChange={(e) =>
                             updateMember(idx, {
                               placement: {
@@ -587,6 +628,7 @@ export function AgregadoCajonHardwareSection({
                               },
                             })
                           }
+                          disabled={memberPlacementAuthority(m, catalogHardware) !== null}
                           aria-label={`${axisLabel(axis)} referencia`}
                           data-testid={`${testId}-member-${idx}-anchor-${axis}-ref`}
                         >
@@ -601,8 +643,10 @@ export function AgregadoCajonHardwareSection({
                           type="text"
                           className="catalog-form__input"
                           value={
-                            m.placement[axis].offsetFormula ??
-                            String(m.placement[axis].offsetMm)
+                            catalogMemberPlacement(m, catalogHardware)
+                              ? String(catalogMemberPlacement(m, catalogHardware)![axis].offsetMm)
+                              : (m.placement[axis].offsetFormula ??
+                                String(m.placement[axis].offsetMm))
                           }
                           onChange={(e) =>
                             updateMember(idx, {
@@ -615,11 +659,12 @@ export function AgregadoCajonHardwareSection({
                               },
                             })
                           }
+                          readOnly={memberPlacementAuthority(m, catalogHardware) !== null}
                           placeholder="mm ó fórmula"
                           aria-label={`${axisLabel(axis)} offset mm o fórmula`}
                           data-testid={`${testId}-member-${idx}-anchor-${axis}-offset`}
                         />
-                        {axis === 'x' ? (
+                        {axis === 'x' && memberPlacementAuthority(m, catalogHardware) === null ? (
                           <button
                             type="button"
                             className="btn btn--ghost btn--small"

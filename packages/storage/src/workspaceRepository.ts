@@ -168,6 +168,15 @@ export interface WorkspaceRepository {
     agregado: import('@granete/domain').Agregado,
   ): Promise<import('@granete/domain').Agregado>;
   /**
+   * #1625 — añade una altura a un sistema de cajones existente en una
+   * transacción (server mode only).
+   */
+  addHardwareKitSystemHeight?(
+    agregadoId: string,
+    req: import('./openapi/generated/types').HardwareKitSystemHeightAddRequest,
+  ): Promise<import('./openapi/generated/types').HardwareKitSystemHeightAdded>;
+
+  /**
    * #1553 — alta transaccional del sistema generador de cajones
    * (server mode only). Shape estructural espejo del contrato OpenAPI
    * (HardwareKitSystemCreateRequest / HardwareKitSystemCreated).

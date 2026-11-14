@@ -17,6 +17,12 @@ import {
   type HardwareVisualAssetBinding,
 } from '@granete/domain';
 import { Modal } from '../../common';
+import {
+  duplicatedInsertoSuffix,
+  insertoDraftsToAccessories,
+  KitSystemInsertosFieldset,
+  type InsertoDraft,
+} from './KitSystemInsertosFieldset';
 import { uploadKitWizardDesigns, useKitWizardRun, type KitWizardRunTask } from './useKitWizardRun';
 
 export type SystemFileBuckets = Record<string, File>;
@@ -65,9 +71,7 @@ export function HardwareKitSystemWizardModal({
   );
   // Insertos del E con la forma COMPLETA (#1596: nada a medias): nombre +
   // «Al abrir» (default: viaja con el cajón) + offsets explícitos por lado.
-  const [accessories, setAccessories] = useState<
-    { name: string; actor: 'body' | 'actor:drawer' | 'actor:door'; offsets: { left: { x: string; y: string; z: string }; right: { x: string; y: string; z: string } } }[]
-  >([]);
+  const [accessories, setAccessories] = useState<InsertoDraft[]>([]);
   // #1596 decisión 9: elegibilidad del ensamble — grupo existente, grupo
   // nuevo (default SISTEMA_CAJON) u omisión confirmada.
   const [eligibilityMode, setEligibilityMode] = useState<'new' | 'existing' | 'skip'>('new');
@@ -128,32 +132,7 @@ export function HardwareKitSystemWizardModal({
         khMinMm: h.khMinMm,
         include: heights[h.code] ?? false,
       })),
-      accessoriesE: accessories
-        .filter((a) => a.name.trim())
-        .map((a) => {
-          const offsetOf = (side: 'left' | 'right') => ({
-            x: Number(a.offsets[side].x) || 0,
-            y: Number(a.offsets[side].y) || 0,
-            z: Number(a.offsets[side].z) || 0,
-          });
-          return {
-            suffix: a.name
-              .trim()
-              .toUpperCase()
-              .normalize('NFD')
-              .replace(/[\u0300-\u036f]/g, '')
-              .replace(/[^A-Z0-9]+/g, '-')
-              .replace(/^-|-$/g, '')
-              .slice(0, 24),
-            name: a.name.trim(),
-            anchors: ['left', 'right'] as const,
-            // #1596: offsets explícitos y «Al abrir» declarado — nunca el
-            // default invisible del motor ni la inferencia por nombre.
-            pieceOffsets: { left: offsetOf('left'), right: offsetOf('right') },
-            actorMembership: a.actor,
-          };
-        })
-        .filter((a) => a.suffix !== ''),
+      accessoriesE: insertoDraftsToAccessories(accessories),
     };
   }, [code, name, price, widthMm, depthMm, heights, accessories]);
 
@@ -164,15 +143,11 @@ export function HardwareKitSystemWizardModal({
     if (!systemInput) return { plan: null, problem: null };
     // Dos accesorios con el mismo sufijo generan el mismo código → 409 crudo
     // del servidor; se detecta acá con mensaje amable.
-    const suffixCounts = new Map<string, number>();
-    for (const acc of systemInput.accessoriesE ?? []) {
-      suffixCounts.set(acc.suffix, (suffixCounts.get(acc.suffix) ?? 0) + 1);
-    }
-    const duplicated = [...suffixCounts.entries()].find(([, count]) => count > 1);
+    const duplicated = duplicatedInsertoSuffix(systemInput.accessoriesE ?? []);
     if (duplicated) {
       return {
         plan: null,
-        problem: `Dos accesorios generarían el mismo código (…-${duplicated[0]}): renombrá uno para diferenciarlos.`,
+        problem: `Dos accesorios generarían el mismo código (…-${duplicated}): renombrá uno para diferenciarlos.`,
       };
     }
     try {
@@ -467,114 +442,13 @@ export function HardwareKitSystemWizardModal({
             )}
           </fieldset>
 
-          <fieldset className="catalog-form__section">
-            <legend className="catalog-form__section-title">Insertos del cajón E</legend>
-            <p className="catalog-form__hint">
-              Cada inserto (galería, boxcap, boxcover…) nace como un par con su SKP por
-              lado, su posición y su «Al abrir»; queda como opción del selector del cajón E.
-            </p>
-            {accessories.map((acc, idx) => (
-              <div
-                key={idx}
-                style={{ border: '1px solid var(--border-subtle, #ddd)', borderRadius: 6, padding: 8, marginBottom: 8 }}
-                data-testid={`hardware-system-accessory-${idx}`}
-              >
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-                  <input
-                    value={acc.name}
-                    onChange={(e) =>
-                      setAccessories((prev) =>
-                        prev.map((a, i) => (i === idx ? { ...a, name: e.target.value } : a)),
-                      )
-                    }
-                    placeholder="Ej: Galería Gris Iridium"
-                    data-testid={`hardware-system-accessory-${idx}-name`}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn--small btn--ghost"
-                    onClick={() => setAccessories((prev) => prev.filter((_, i) => i !== idx))}
-                    data-testid={`hardware-system-accessory-${idx}-remove`}
-                  >
-                    Quitar
-                  </button>
-                </div>
-                <label className="catalog-form__field">
-                  <span>Al abrir</span>
-                  <select
-                    value={acc.actor}
-                    onChange={(e) =>
-                      setAccessories((prev) =>
-                        prev.map((a, i) =>
-                          i === idx ? { ...a, actor: e.target.value as typeof a.actor } : a,
-                        ),
-                      )
-                    }
-                    data-testid={`hardware-system-accessory-${idx}-actor`}
-                  >
-                    <option value="actor:drawer">Viaja con el cajón al abrir</option>
-                    <option value="body">Fija al mueble (no se mueve)</option>
-                    <option value="actor:door">Viaja con la puerta al abrir</option>
-                  </select>
-                </label>
-                {(['left', 'right'] as const).map((side) => (
-                  <div key={side} style={{ marginBottom: 4 }}>
-                    <span className="catalog-form__label">
-                      Offsets {side === 'left' ? 'izquierda' : 'derecha'} (mm)
-                    </span>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {(['x', 'y', 'z'] as const).map((axis) => (
-                        <input
-                          key={axis}
-                          type="number"
-                          step="0.5"
-                          aria-label={`Offset ${axis.toUpperCase()} ${side === 'left' ? 'izq' : 'der'} del inserto ${idx + 1}`}
-                          placeholder={axis.toUpperCase()}
-                          value={acc.offsets[side][axis]}
-                          onChange={(e) =>
-                            setAccessories((prev) =>
-                              prev.map((a, i) =>
-                                i === idx
-                                  ? {
-                                      ...a,
-                                      offsets: {
-                                        ...a.offsets,
-                                        [side]: { ...a.offsets[side], [axis]: e.target.value },
-                                      },
-                                    }
-                                  : a,
-                              ),
-                            )
-                          }
-                          data-testid={`hardware-system-accessory-${idx}-${side}-${axis}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ))}
-            <button
-              type="button"
-              className="btn btn--ghost btn--small"
-              onClick={() =>
-                setAccessories((prev) => [
-                  ...prev,
-                  {
-                    name: '',
-                    actor: 'actor:drawer',
-                    offsets: {
-                      left: { x: '', y: '', z: '' },
-                      right: { x: '', y: '', z: '' },
-                    },
-                  },
-                ])
-              }
-              data-testid="hardware-system-accessory-add"
-            >
-              Añadir inserto
-            </button>
-          </fieldset>
+          <KitSystemInsertosFieldset
+            drafts={accessories}
+            onChange={setAccessories}
+            legend="Insertos del cajón E"
+            hint="Cada inserto (galería, boxcap, boxcover…) nace como un par con su SKP por lado, su posición y su «Al abrir»; queda como opción del selector del cajón E."
+            testIdPrefix="hardware-system-accessory"
+          />
 
           <fieldset className="catalog-form__section" data-testid="hardware-system-eligibility">
             <legend className="catalog-form__section-title">Elegibilidad del sistema</legend>

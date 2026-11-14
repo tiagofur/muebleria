@@ -137,6 +137,8 @@ export interface HardwareCatalogProps {
     readonly depthMm: number;
     readonly designs?: Record<string, import('@granete/domain').HardwareVisualAssetBinding>;
     readonly eligibilityGroup?: import('@granete/domain').HardwareKitSystemEligibilityRequest;
+    /** #1625: insertos de la altura E. */
+    readonly insertos?: readonly import('@granete/domain').HardwareKitSystemAccessory[];
   }) => Promise<unknown>;
 }
 

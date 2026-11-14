@@ -79,6 +79,11 @@ export interface ApiCatalogDeps {
    * HardwareKitSystemCreated); la respuesta llega validada por el parser
    * fail-closed del repositorio.
    */
+  /** #1625: añadir una altura a un sistema de cajones existente (contrato generado). */
+  readonly addHardwareKitSystemHeight?: (
+    agregadoId: string,
+    req: import('@granete/storage').HardwareKitSystemHeightAddRequest,
+  ) => Promise<import('@granete/storage').HardwareKitSystemHeightAdded>;
   readonly createHardwareKitSystem?: (req: {
     readonly expected_existing_codes: readonly string[];
     readonly hardware: readonly {
@@ -162,6 +167,12 @@ export interface AddSystemHeightRequest {
   readonly designs?: Record<string, HardwareVisualAssetBinding>;
   /** #1596 decisión 9: por si el ensamble aún no está en ningún grupo. */
   readonly eligibilityGroup?: import('@granete/domain').HardwareKitSystemEligibilityRequest;
+  /**
+   * #1625: insertos de la altura (sólo E, igual que el asistente): cada uno
+   * nace como par con «Al abrir» y desfases explícitos, y entra al selector
+   * vinculado al juego nuevo. Uploads: clave `${insertoCode}:${anchor}`.
+   */
+  readonly insertos?: readonly import('@granete/domain').HardwareKitSystemAccessory[];
 }
 
 export interface RecipeChangeActions {
@@ -195,6 +206,8 @@ export interface CatalogStoreDeps {
   readonly applyAgregadoRecipe?: ApiCatalogDeps['applyAgregadoRecipe'];
   /** #1553: alta transaccional del sistema generador en el servidor. */
   readonly createHardwareKitSystem?: ApiCatalogDeps['createHardwareKitSystem'];
+  /** #1625: añadir una altura a un sistema, en una transacción del servidor. */
+  readonly addHardwareKitSystemHeight?: ApiCatalogDeps['addHardwareKitSystemHeight'];
 }
 
 export interface CatalogState {
