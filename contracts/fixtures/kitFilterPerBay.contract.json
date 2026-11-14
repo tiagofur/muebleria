@@ -1,0 +1,42 @@
+{
+  "scenario": "#1613 ronda 4 — la receta persiste la UNIÓN de dos kits por variante (patrón rev 14-17 del sync aditivo web: E+M como miembros fijos). Cada bahía debe dibujar SÓLO las piezas de su kit efectivo + el herraje suelto sin kit (tornillo de perforación). Sin el filtro por kit efectivo cada bahía dibujaba el cajón del otro kit encima del suyo (fijador E, más alto, sobre la bahía M).",
+  "kits": [
+    {
+      "id": "kit-m-gray",
+      "code": "MBOX-IRIDIUM-GRAY-M",
+      "variantHardwareId": "hw-alt-m",
+      "nominalDimensionMm": 108,
+      "parts": [
+        { "id": "hw-m-fij", "code": "MBOX-IRIDIUM-GRAY-M-FIJ" },
+        { "id": "hw-m-mov", "code": "MBOX-IRIDIUM-GRAY-M-MOV" }
+      ]
+    },
+    {
+      "id": "kit-e-gray",
+      "code": "MBOX-IRIDIUM-GRAY-E",
+      "variantHardwareId": "hw-alt-e",
+      "nominalDimensionMm": 209,
+      "parts": [
+        { "id": "hw-e-fij", "code": "MBOX-IRIDIUM-GRAY-E-FIJ" },
+        { "id": "hw-e-mov", "code": "MBOX-IRIDIUM-GRAY-E-MOV" }
+      ]
+    }
+  ],
+  "looseHardware": [
+    { "id": "hw-tor-fondo", "code": "MBOX-TOR-FONDO", "memberId": "tor-fondo" }
+  ],
+  "agregado": { "id": "agr-gray-cajon", "code": "MBOX-IRIDIUM-GRAY-CAJON", "variantSetId": "height-variants" },
+  "module": { "widthMm": 600, "heightMm": 400, "depthMm": 500 },
+  "bays": [
+    {
+      "id": "bay-e",
+      "heightFormula": "209",
+      "expectedHardwareCounts": { "hw-e-fij": 2, "hw-e-mov": 2, "hw-tor-fondo": 1 }
+    },
+    {
+      "id": "bay-m",
+      "heightFormula": "108",
+      "expectedHardwareCounts": { "hw-m-fij": 2, "hw-m-mov": 2, "hw-tor-fondo": 1 }
+    }
+  ]
+}
