@@ -142,6 +142,8 @@
   var inspectorMaterialsContainer = document.getElementById("inspector-materials-container");
   // #1261: card Apertura del diseño (resumen visible al seleccionar mueble).
   // #529: card Apertura y Accesorios (solo definiciones con doorSwing).
+  // #1627: valor explícito «Sin inserto» (contrato del motor).
+  var ACCESSORY_CHOICE_NONE = "none";
   var inspectorOpeningAccessoriesCard = document.getElementById("inspector-opening-accessories-card");
   var inspectorOpeningAccessoriesContainer = document.getElementById("inspector-opening-accessories-container");
   var openingAccessoriesSummary = document.getElementById("opening-accessories-summary");
@@ -714,14 +716,26 @@
       ? (inspectorMaterialChoices[acc.code] || null)
       : ((allowScanFallback && scannedAcc && scannedAcc.chosenHardwareId) || null);
     var accOverridden = !!accChosenId && accChosenId !== accConfirmedId;
+    // #1627: el fallback al grupo del catálogo trae TODOS sus miembros;
+    // sólo cuentan los activos (el motor nunca monta uno inactivo).
     var accOptionIds = (Array.isArray(acc.optionIds) && acc.optionIds.length > 0)
       ? acc.optionIds
-      : (accCatalogDef && Array.isArray(accCatalogDef.optionIds) ? accCatalogDef.optionIds : []);
+      : (accCatalogDef && Array.isArray(accCatalogDef.optionIds)
+        ? accCatalogDef.optionIds.filter(function (id) {
+            var entry = hardwareDefinitionById(id);
+            return entry && entry.active !== false;
+          })
+        : []);
     var hasOptions = accOptionIds.length > 0;
+    // #1627: «Sin inserto» explícito o default del selector «ninguno».
+    var accNone = accChosenId === ACCESSORY_CHOICE_NONE ||
+      (!accChosenId && acc.defaultChoice === "none");
+    var accExplicitNone = accChosenId === ACCESSORY_CHOICE_NONE;
     // Sin elección, la fila muestra la PRIMERA opción: es la que el motor
     // monta y cotiza por defecto. Sólo es visual — no entra al draft ni
     // cuenta como «Personalizado».
-    if (!accChosenId && hasOptions) accChosenId = accOptionIds[0];
+    if (accNone) accChosenId = null;
+    else if (!accChosenId && hasOptions) accChosenId = accOptionIds[0];
     var accChosen = accChosenId ? hardwareDefinitionById(accChosenId) : null;
     var accLabel = acc.name || (accCatalogDef && accCatalogDef.name) || acc.code;
 
@@ -778,13 +792,16 @@
     accInfo.className = "material-selected-info";
     var accName = document.createElement("span");
     accName.className = "material-selected-name";
-    accName.textContent = accChosen ? (accChosen.name || accChosen.code) : (accChosenId || "--");
+    accName.textContent = accNone ? "Sin inserto" :
+      (accChosen ? (accChosen.name || accChosen.code) : (accChosenId || "--"));
     accInfo.appendChild(accName);
     var accMeta = document.createElement("span");
     accMeta.className = "material-selected-meta";
-    accMeta.textContent = hasOptions
-      ? ((accChosen && accChosen.code) ? accChosen.code : "Clic para elegir un accesorio del catálogo")
-      : "Sin miembros activos en el catálogo";
+    accMeta.textContent = accNone
+      ? (accExplicitNone ? "Elegido para este mueble" : "Default del juego")
+      : hasOptions
+        ? ((accChosen && accChosen.code) ? accChosen.code : "Clic para elegir un accesorio del catálogo")
+        : "Sin miembros activos en el catálogo";
     accInfo.appendChild(accMeta);
     accPreview.appendChild(accInfo);
 
@@ -798,6 +815,19 @@
       openHardwareGroupSelector(acc.code, accLabel, accChosenId, accOptionIds);
     });
     accBlock.appendChild(accPreview);
+
+    // #1627: «Sin inserto» explícito, sólo si el selector no es obligatorio.
+    if (!acc.required && !accExplicitNone) {
+      var accNoneBtn = document.createElement("button");
+      accNoneBtn.type = "button";
+      accNoneBtn.className = "btn btn--ghost btn--small";
+      accNoneBtn.textContent = "Sin inserto";
+      accNoneBtn.title = "Este mueble va sin inserto en el cajón";
+      accNoneBtn.addEventListener("click", function () {
+        selectInspectorHardwarePick(acc.code, ACCESSORY_CHOICE_NONE);
+      });
+      accBlock.appendChild(accNoneBtn);
+    }
 
     return accBlock;
   }

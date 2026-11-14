@@ -45,6 +45,11 @@ export type OptionGroupDraft = {
   optionIds: string[];
   /** #1502: kit accesorio asociado ('' = sin kit, grupo legacy). */
   kitHardwareId: string;
+  /**
+   * #1627: default de un selector de insertos. Ausente = no cambia el valor
+   * guardado (la pantalla de Grupos no lo edita).
+   */
+  defaultChoice?: 'first_active' | 'none';
 };
 
 const emptyDraft = (): OptionGroupDraft => ({

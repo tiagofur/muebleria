@@ -559,6 +559,11 @@ func respondOptionGroupKitLinkGuard(w http.ResponseWriter, message string) {
 // #1436 guard above (a part is never an option at all), which covers the
 // same-kit double-materialization case.
 func (s *Server) validateOptionGroupKitLink(w http.ResponseWriter, r *http.Request, og *domain.OptionGroup) bool {
+	// #1627: the insert default is a closed vocabulary.
+	if !domain.ValidOptionGroupDefaultChoice(og.DefaultChoice) {
+		respondOptionGroupKitLinkGuard(w, fmt.Sprintf("default_choice «%s» inválido: usá first_active o none", og.DefaultChoice))
+		return false
+	}
 	if og.KitHardwareID == nil {
 		return true
 	}

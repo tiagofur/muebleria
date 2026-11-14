@@ -46,6 +46,8 @@ import {
   emptyAddItemDraft,
   groupsForModuleItem,
   optionLabelForId,
+  accessoryInheritLabel,
+  optionDisplayLabel,
   optionsForGroup,
   setItemOptionChoice,
   validateItemQuantity,
@@ -532,7 +534,7 @@ export function ProjectAddItemModal({
                 projectLevelChoices?.[group.code]?.trim() ?? '';
               const inheritLabel = projectDefault
                 ? `Usar default del proyecto (${optionLabelForId(projectDefault, group, catalogs)})`
-                : 'Usar default del proyecto';
+                : (accessoryInheritLabel(group, catalogs) ?? 'Usar default del proyecto');
               return (
                 <div key={group.id} className="catalog-form__field">
                   <label htmlFor={`add-choice-${group.code}`}>
@@ -555,7 +557,7 @@ export function ProjectAddItemModal({
                     <option value="">{inheritLabel}</option>
                     {options.map((opt) => (
                       <option key={opt.id} value={opt.id}>
-                        {opt.name} — {opt.code}
+                        {optionDisplayLabel(opt)}
                       </option>
                     ))}
                   </select>

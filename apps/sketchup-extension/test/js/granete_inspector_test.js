@@ -2125,4 +2125,51 @@ test('#1609 accessory groups: switching drawer prunes orphan accessory, restores
   assert(!visible(el(sandbox, 'inspector-hardware-groups-card')), 'child selection ignores furniture hardware picks');
 });
 
+test('#1627 accessory groups: default «ninguno» shows «Sin inserto»; the button routes an explicit none to the draft', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false, applyMaterialChoice: () => {} }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.setAgregadosCatalog([{ id: 'agr-mbox', code: 'MBOX-GRAY', name: 'Cajón Merivobox Gray' }]);
+  api.setHardwareCatalog([
+    { id: 'hw-gal', code: 'MBOX-E-GAL', name: 'Galería Merivobox', category: 'drawer_system', unit: 'piece' }
+  ]);
+  api.setOptionGroups([
+    { id: 'og-caj', code: 'CAJON', name: 'Cajones', kind: 'agregado', required: true, optionIds: ['agr-mbox'] }
+  ]);
+  const def = {
+    furnitureDefinitionId: 'def-caj',
+    name: 'Bajo 3 cajones',
+    parameters: [{ name: 'widthMm', label: 'Ancho', type: 'number', defaultValue: 600 }],
+    materialRoles: [],
+    agregadoRoles: [{
+      code: 'CAJON', name: 'Cajones', required: true, optionIds: ['agr-mbox'],
+      options: [{ agregadoId: 'agr-mbox', accessoryGroups: [
+        { code: 'MBOX_INSERTO', name: 'Inserto', required: false, optionIds: ['hw-gal'], defaultChoice: 'none' }
+      ] }]
+    }]
+  };
+  api.onSelectionChange(furnitureContext({
+    definition: def,
+    materialChoices: { CAJON: 'agr-mbox' },
+    hardwareGroups: [{ code: 'CAJON', chosenHardwareId: 'agr-mbox', count: 3 }]
+  }));
+  const accRow = el(sandbox, 'inspector-hardware-groups-container').children[1];
+  assert.strictEqual(accRow.children[1].children[1].children[0].textContent, 'Sin inserto');
+  assert.strictEqual(accRow.children[1].children[1].children[1].textContent, 'Default del juego');
+  // Explicit «Sin inserto» on top of a default-none group is still offered (it pins the piece).
+  const noneBtn = accRow.children[2];
+  assert.strictEqual(noneBtn.textContent, 'Sin inserto');
+  noneBtn.click();
+  el(sandbox, 'btn-apply').click();
+  const submit = sandbox.__mutation.filter((c) => c.action === 'submitUpdate').pop();
+  assert.strictEqual(submit.payload.materialChoices.MBOX_INSERTO, 'none');
+});
+
 console.log(JSON.stringify({ success: true, testsPassed: testsPassed, module: 'granete-inspector.js' }));

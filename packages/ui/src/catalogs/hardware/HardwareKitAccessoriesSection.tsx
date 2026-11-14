@@ -37,7 +37,18 @@ export function HardwareKitAccessoriesSection({
   readonly hardware: readonly Hardware[];
   readonly canMutate: boolean;
   readonly onCreateGroup?: (draft: { code: string; name: string; required: boolean; kitHardwareId: string }) => void;
-  readonly onUpdateGroup?: (id: string, draft: { code: string; name: string; required: boolean; optionIds: string[]; kitHardwareId: string }) => void;
+  readonly onUpdateGroup?: (
+    id: string,
+    draft: {
+      code: string;
+      name: string;
+      required: boolean;
+      optionIds: string[];
+      kitHardwareId: string;
+      /** #1627: ausente = conserva el default guardado. */
+      defaultChoice?: 'first_active' | 'none';
+    },
+  ) => void;
   readonly onDeleteGroup?: (id: string) => Promise<void> | void;
   /** #1596 alcance 3: alta de inserto nuevo que cae en ESTE selector. */
   readonly onAddInserto?: () => void;
@@ -104,7 +115,19 @@ export function HardwareKitAccessoriesSection({
     });
   };
   const defaultOptionId = (group: OptionGroup): string | undefined =>
-    group.optionIds.find((id) => (hardware ?? []).some((h) => h.id === id && h.active));
+    group.defaultChoice === 'none'
+      ? undefined
+      : group.optionIds.find((id) => (hardware ?? []).some((h) => h.id === id && h.active));
+  const setDefaultChoice = (group: OptionGroup, value: 'first_active' | 'none') => {
+    onUpdateGroup?.(group.id, {
+      code: group.code,
+      name: group.name,
+      required: group.required,
+      optionIds: [...group.optionIds],
+      kitHardwareId: group.kitHardwareId ?? '',
+      defaultChoice: value,
+    });
+  };
 
   const removeMember = (group: OptionGroup, optionId: string) => {
     onUpdateGroup?.(group.id, {
@@ -145,8 +168,9 @@ export function HardwareKitAccessoriesSection({
       <p className="catalog-form__hint">
         Cada selector (galería, boxcap, boxcover…) ofrece opciones que se eligen por
         cajón y el motor monta sobre este juego. Si el mueble no elige, el cajón lleva
-        la opción marcada «Por defecto»: la primera activa de la lista. Usá las flechas
-        para cambiar cuál es.
+        la opción marcada «Por defecto» (la primera activa de la lista; cambiala con las
+        flechas) o ninguna, según lo que elijas en «Si el mueble no elige». En cada
+        mueble también se puede elegir «Sin inserto» si el selector no es obligatorio.
       </p>
       {accessoryGroups.length > 0 ? (
         <div className="catalog-hw-part" data-testid="hardware-accessories-rows">
@@ -159,6 +183,24 @@ export function HardwareKitAccessoriesSection({
                   {og.required ? ' · requerido' : ' · opcional'} ·{' '}
                   {og.optionIds.length} {og.optionIds.length === 1 ? 'opción' : 'opciones'}
                 </span>
+                <label className="catalog-hw-part__meta" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>Si el mueble no elige:</span>
+                  <select
+                    value={og.defaultChoice === 'none' ? 'none' : 'first_active'}
+                    disabled={!canMutate || !onUpdateGroup}
+                    onChange={(e) => setDefaultChoice(og, e.target.value as 'first_active' | 'none')}
+                    aria-label={`Qué lleva el cajón sin elección en ${og.name}`}
+                    data-testid={`hardware-accessory-${og.code}-default-choice`}
+                  >
+                    <option value="first_active">Primera opción activa</option>
+                    <option value="none">Sin inserto</option>
+                  </select>
+                </label>
+                {og.defaultChoice === 'none' && og.required ? (
+                  <span className="catalog-hw-part__meta" role="note" data-testid={`hardware-accessory-${og.code}-required-none`}>
+                    Es obligatorio y no tiene default: cada mueble tiene que elegir un inserto.
+                  </span>
+                ) : null}
                 {og.optionIds.length > 0 ? (
                   <div className="catalog-hw-part__actions" style={{ flexWrap: 'wrap', gap: 4 }}>
                     {og.optionIds.map((id, idx) => {

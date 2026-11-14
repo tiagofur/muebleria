@@ -304,6 +304,9 @@ export function requiredGroupCodesForModule(
   // #1519 F2: elecciones del mueble — los accesorios siguen la elección de
   // CAJÓN (paridad con el motor).
   optionChoices?: OptionChoices | null,
+  // #1627: herrajes del catálogo para saber qué opciones de insertos están
+  // activas (el motor sólo monta activas). Ausente = se cuentan todas.
+  catalogHardware?: readonly { readonly id: string; readonly active?: boolean }[],
 ): string[] {
   const usedRoles = collectUsedOptionRoles(
     module,
@@ -314,17 +317,19 @@ export function requiredGroupCodesForModule(
     optionChoices,
   );
 
-  // Un grupo de insertos vinculado a un juego (kitHardwareId) con opciones
-  // nunca bloquea: sin elección el motor monta y cotiza la primera opción
-  // activa (effectiveAccessoryChoice). Sólo sigue siendo exigible el grupo
-  // requerido que no ofrece ninguna opción — el motor lo rechaza visible.
+  // Un grupo de insertos vinculado a un juego (kitHardwareId) no bloquea
+  // mientras el motor pueda montar su default: sin elección monta la primera
+  // opción ACTIVA (effectiveAccessoryChoice). Sigue exigible el requerido sin
+  // opciones activas y el que declara default «ninguno» (#1627) — el motor
+  // los rechaza visibles hasta que el mueble elija.
+  const hasActiveOption = (g: OptionGroup): boolean =>
+    catalogHardware
+      ? g.optionIds.some((id) => catalogHardware.some((h) => h.id === id && h.active !== false))
+      : g.optionIds.length > 0;
+  const mountsDefault = (g: OptionGroup): boolean =>
+    Boolean(g.kitHardwareId) && g.defaultChoice !== 'none' && hasActiveOption(g);
   const required = optionGroups
-    .filter(
-      (g) =>
-        g.required &&
-        usedRoles.has(g.code) &&
-        !(g.kitHardwareId && g.optionIds.length > 0),
-    )
+    .filter((g) => g.required && usedRoles.has(g.code) && !mountsDefault(g))
     .map((g) => g.code);
 
   return [...new Set(required)];

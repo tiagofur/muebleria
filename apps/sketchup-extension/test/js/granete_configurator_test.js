@@ -1322,4 +1322,43 @@ test('insert: gate re-render mid-flight keeps Insert disabled until rearm', () =
   assert.strictEqual(el(sandbox, 'btn-insert').disabled, false, 'rearm re-enables Insert');
 });
 
+// #1627 — default del selector «ninguno» y «Sin inserto» explícito.
+test('accessories #1627: default «ninguno» shows «Sin inserto»; required without default blocks insert', () => {
+  const sandbox = runModule();
+  const def = accessoryFixture(sandbox);
+  def.agregadoRoles[0].options[0].accessoryGroups[0].defaultChoice = 'none';
+  sandbox.window.GraneteUI.configurator.open(def);
+  const accRow = el(sandbox, 'library-agregados-container').children[1];
+  assert.strictEqual(accRow.children[1].children[1].children[0].textContent, 'Sin inserto');
+  assert.strictEqual(accRow.children[1].children[1].children[1].textContent, 'Default del juego');
+  // LATERAL_E is required in the fixture: without a default the user must choose.
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, true, 'required + default none blocks insert');
+});
+
+test('accessories #1627: «Sin inserto» button on an optional group rides as an explicit override', () => {
+  const sandbox = runModule();
+  const def = accessoryFixture(sandbox);
+  def.agregadoRoles[0].options[0].accessoryGroups[0].required = false;
+  sandbox.__state.connected = true;
+  sandbox.window.GraneteUI.configurator.open(def);
+  const accRow = el(sandbox, 'library-agregados-container').children[1];
+  const noneBtn = accRow.children[2];
+  assert.strictEqual(noneBtn.textContent, 'Sin inserto');
+  noneBtn.click();
+  const rowAfter = el(sandbox, 'library-agregados-container').children[1];
+  assert.strictEqual(rowAfter.children[1].children[1].children[0].textContent, 'Sin inserto');
+  assert.strictEqual(rowAfter.children[2], undefined, 'the button disappears once chosen');
+  sandbox.__calls.bridge.length = 0;
+  el(sandbox, 'btn-insert').click();
+  const sent = sandbox.__calls.bridge.filter((c) => c.fn === 'begin_catalog_placement_preview').pop();
+  assert.strictEqual(sent.payload.materialOverrides.LATERAL_E, 'none');
+});
+
+test('accessories #1627: a required group offers no «Sin inserto» button', () => {
+  const sandbox = runModule();
+  sandbox.window.GraneteUI.configurator.open(accessoryFixture(sandbox));
+  const accRow = el(sandbox, 'library-agregados-container').children[1];
+  assert.strictEqual(accRow.children[2], undefined);
+});
+
 console.log(JSON.stringify({ success: true, testsPassed }));

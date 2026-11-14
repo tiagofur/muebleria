@@ -499,6 +499,13 @@ export interface OptionGroup {
    * Ausente = grupo legacy (comportamiento byte-idéntico).
    */
   readonly kitHardwareId?: string;
+  /**
+   * #1627: qué monta un cajón cuando el mueble no elige inserto de este grupo
+   * (sólo grupos con kitHardwareId): 'first_active' (la primera opción
+   * activa en el orden guardado; también el significado de ausente) o
+   * 'none' (sin inserto).
+   */
+  readonly defaultChoice?: 'first_active' | 'none';
   /** Server-owned optimistic-concurrency token (strong ETag "v<N>", #443/#1091/#1606). */
   readonly version?: number;
 }

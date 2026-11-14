@@ -18,7 +18,8 @@ import (
 // vive en packages/domain/src/accessoryKitParity.test.ts.
 
 type accessoryKitFixture struct {
-	Heights []struct {
+	ChoiceNone string `json:"choiceNone"`
+	Heights    []struct {
 		Code               string  `json:"code"`
 		NominalDimensionMm float64 `json:"nominalDimensionMm"`
 		HardwareID         string  `json:"hardwareId"`
@@ -673,5 +674,95 @@ func TestIntersectKeepsStaleMountedAccessoryChoice_1620(t *testing.T) {
 	item.MaterialChoices = filtered
 	if _, err := engine.ResolveReleaseUnit(item, catalog); err == nil || !strings.Contains(err.Error(), f.AccessoryGroup.Code) {
 		t.Fatalf("release gate must reject the stale accessory pick by name, got %v", err)
+	}
+}
+
+// #1627 slice 2 — default del selector y «Sin inserto» explícito. En todos
+// los casos sin inserto: ni ensamble accesorio ni línea de cotización; en un
+// grupo requerido, el rechazo visible accessory_choice_required.
+func TestAccessoryKitDefaultNoneAndExplicitNone_1627(t *testing.T) {
+	f := loadAccessoryKitFixture(t)
+	if f.ChoiceNone != domain.AccessoryChoiceNone {
+		t.Fatalf("shared «Sin inserto» value drifted: fixture %q, Go %q", f.ChoiceNone, domain.AccessoryChoiceNone)
+	}
+	cases := []struct {
+		name        string
+		required    bool
+		defaultNone bool
+		choice      string
+		wantReject  bool
+	}{
+		{"default ninguno, opcional, sin elección", false, true, "", false},
+		{"default ninguno, requerido, sin elección", true, true, "", true},
+		{"«Sin inserto» explícito, opcional", false, false, f.ChoiceNone, false},
+		{"«Sin inserto» explícito, requerido", true, false, f.ChoiceNone, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			catalog, mod := buildAccessoryKitScenario(f, c.required, true)
+			if c.defaultNone {
+				for i := range catalog.OptionGroups {
+					if catalog.OptionGroups[i].Code == f.AccessoryGroup.Code {
+						catalog.OptionGroups[i].DefaultChoice = domain.OptionGroupDefaultNone
+					}
+				}
+			}
+			extra := map[string]string{}
+			if c.choice != "" {
+				extra[f.AccessoryGroup.Code] = c.choice
+			}
+			choices := accessoryTestChoices(f, extra)
+			layout, err := engine.ResolveFurnitureLayout(mod, catalog, nil, choices)
+			if err != nil {
+				t.Fatalf("layout: %v", err)
+			}
+			if acc := accessoryAssembliesOf(layout); len(acc) != 0 {
+				t.Fatalf("no insert must be mounted, got %d", len(acc))
+			}
+			rejected := len(layout.AssemblyRejections) == 1 && layout.AssemblyRejections[0].Reason == "accessory_choice_required"
+			if rejected != c.wantReject || (!c.wantReject && len(layout.AssemblyRejections) != 0) {
+				t.Fatalf("rejections = %+v, want reject=%v", layout.AssemblyRejections, c.wantReject)
+			}
+			bom, err := engine.ResolveBomWithContext(mod, choices, catalog, nil, "", nil, nil)
+			if err != nil {
+				t.Fatalf("bom: %v", err)
+			}
+			if acc := accessoryKitLinesOf(bom); len(acc) != 0 {
+				t.Fatalf("no insert line must be quoted, got %+v", acc)
+			}
+		})
+	}
+}
+
+// #1627: un «Sin inserto» explícito en un grupo OPCIONAL es una elección que
+// el resolve consulta — sobrevive la intersección y el gate de liberación la
+// acepta; en un grupo REQUERIDO no es legal y el gate la rechaza por nombre.
+func TestAccessoryKitExplicitNoneReleaseGate_1627(t *testing.T) {
+	f := loadAccessoryKitFixture(t)
+	for _, required := range []bool{false, true} {
+		catalog, mod := buildAccessoryKitScenario(f, required, true)
+		catalog.Structures = append(catalog.Structures, domain.Structure{ID: "st-acc", Code: "ST-ACC", Name: "Cuerpo", Active: true})
+		mod.StructureID = "st-acc"
+		catalog.Modules = append(catalog.Modules, mod)
+		item := domain.DesignRevisionItem{
+			FurnitureInstanceID:   "fi-none",
+			FurnitureDefinitionID: mod.ID,
+			Parameters: map[string]any{
+				"widthMm": float64(f.Module.WidthMm), "heightMm": float64(f.Module.HeightMm), "depthMm": float64(f.Module.DepthMm),
+			},
+			MaterialChoices: map[string]string{f.AccessoryGroup.Code: domain.AccessoryChoiceNone},
+		}
+		filtered, ok := engine.IntersectConsumedOptionChoices(item, catalog)
+		if !ok || filtered[f.AccessoryGroup.Code] != domain.AccessoryChoiceNone {
+			t.Fatalf("required=%v: «Sin inserto» must survive the intersection, got %+v (ok %v)", required, filtered, ok)
+		}
+		item.MaterialChoices = filtered
+		_, err := engine.ResolveReleaseUnit(item, catalog)
+		if !required && err != nil {
+			t.Fatalf("optional group: the release gate must accept «Sin inserto», got %v", err)
+		}
+		if required && (err == nil || !strings.Contains(err.Error(), f.AccessoryGroup.Code)) {
+			t.Fatalf("required group: the release gate must reject «Sin inserto» by name, got %v", err)
+		}
 	}
 }

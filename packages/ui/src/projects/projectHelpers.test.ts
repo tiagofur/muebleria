@@ -20,6 +20,7 @@ import {
   filterProjectsList,
   formatProjectMoney,
   groupsForModuleItem,
+  accessoryInheritLabel,
   optionsForGroup,
   projectStatusBadgeClass,
   projectStatusLabel,
@@ -1106,5 +1107,31 @@ describe('optionSwatchForId', () => {
     expect(optionSwatchForId('mat-a', group, catalogs)).toEqual({
       kind: 'color', color: '#ffffff',
     });
+  });
+});
+
+describe('#1627 — opciones de un selector de insertos en el ítem', () => {
+  const catalogs = {
+    materials: [],
+    edges: [],
+    hardware: [
+      { id: 'hw-gal', code: 'GAL', name: 'Galería', unit: 'piece', costPerUnit: 0, active: true },
+      { id: 'hw-cap', code: 'CAP', name: 'Boxcap', unit: 'piece', costPerUnit: 0, active: true },
+    ],
+  } as unknown as Parameters<typeof optionsForGroup>[1];
+  const group: OptionGroup = {
+    id: 'og', code: 'INS', name: 'Insertos', kind: 'hardware', required: false,
+    optionIds: ['hw-cap', 'hw-gal'], kitHardwareId: 'kit-e',
+  };
+
+  it('lista en el orden guardado y agrega «Sin inserto» si no es obligatorio', () => {
+    expect(optionsForGroup(group, catalogs).map((o) => o.id)).toEqual(['hw-cap', 'hw-gal', 'none']);
+    expect(optionsForGroup({ ...group, required: true }, catalogs).map((o) => o.id)).toEqual(['hw-cap', 'hw-gal']);
+  });
+
+  it('la opción de heredar dice qué monta el cajón', () => {
+    expect(accessoryInheritLabel(group, catalogs)).toBe('Por defecto del juego (Boxcap — CAP)');
+    expect(accessoryInheritLabel({ ...group, defaultChoice: 'none' }, catalogs)).toBe('Por defecto del juego (Sin inserto)');
+    expect(accessoryInheritLabel({ ...group, kitHardwareId: undefined }, catalogs)).toBeNull();
   });
 });

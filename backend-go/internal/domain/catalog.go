@@ -271,6 +271,11 @@ type OptionGroup struct {
 	// top of the kit. Server-validated: kind hardware, kit exists and is
 	// active. Nil = legacy group (byte-identical behavior).
 	KitHardwareID *string `json:"kit_hardware_id,omitempty"`
+	// DefaultChoice (#1627): what a bay mounts when the furniture makes no
+	// choice for this kit-linked insert group — "first_active" (the first
+	// active option in saved order; also the meaning of an absent value) or
+	// "none" (no insert). Only meaningful for groups with KitHardwareID.
+	DefaultChoice string `json:"default_choice,omitempty"`
 	// Version is server-owned optimistic-concurrency state (#443/#448):
 	// writes carry the expected version as If-Match and the server bumps it.
 	Version int64 `json:"version"`
@@ -426,3 +431,25 @@ var hardwareFinishLabelsES = map[string]string{
 func HardwareFinishLabelES(id string) string {
 	return hardwareFinishLabelsES[id]
 }
+
+// #1627: insert group defaults and the explicit «Sin inserto» choice.
+const (
+	// OptionGroupDefaultFirstActive mounts the group's first active option
+	// when the furniture does not choose (the default since #1620).
+	OptionGroupDefaultFirstActive = "first_active"
+	// OptionGroupDefaultNone mounts no insert when the furniture does not
+	// choose.
+	OptionGroupDefaultNone = "none"
+	// AccessoryChoiceNone is the explicit per-furniture «Sin inserto» value
+	// of a kit-linked insert group in the option choices map. Catalog ids
+	// are UUIDs, so it can never collide with a real option. Shared with the
+	// TS engine (ACCESSORY_CHOICE_NONE) through the accessoryKitParity fixture.
+	AccessoryChoiceNone = "none"
+)
+
+// ValidOptionGroupDefaultChoice reports whether v is an accepted
+// DefaultChoice ("" keeps the first-active default).
+func ValidOptionGroupDefaultChoice(v string) bool {
+	return v == "" || v == OptionGroupDefaultFirstActive || v == OptionGroupDefaultNone
+}
+

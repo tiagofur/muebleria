@@ -719,6 +719,8 @@ export function optionGroupToApi(g: OptionGroup): Record<string, unknown> {
     // #1502 kit accesorio elegible: null elimina el link (mismo convenio que
     // hardwares.kit_hardware_id); undefined omite la clave.
     ...(g.kitHardwareId !== undefined ? { kit_hardware_id: g.kitHardwareId || null } : {}),
+    // #1627: default del selector de insertos (ausente = primera activa).
+    ...(g.defaultChoice ? { default_choice: g.defaultChoice } : {}),
   };
 }
 
@@ -735,6 +737,8 @@ export function optionGroupFromApi(raw: Record<string, unknown>): OptionGroup {
     optionIds: Array.isArray(ids) ? ids.map(String) : [],
     // #1502: grupo vinculado a un kit accesorio; null/vacío = grupo legacy.
     ...(typeof kitHardwareId === 'string' && kitHardwareId ? { kitHardwareId } : {}),
+    // #1627: sólo «none» viaja; first_active es el default implícito.
+    ...((raw.default_choice ?? raw.defaultChoice) === 'none' ? { defaultChoice: 'none' as const } : {}),
     ...(version !== undefined ? { version } : {}),
   };
 }

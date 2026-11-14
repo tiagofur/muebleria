@@ -25,6 +25,8 @@ export function createOptionGroupsActions(ctx: CatalogStoreCtx): OptionGroupsSli
         optionIds: [...draft.optionIds],
         // #1502: kit accesorio elegible; '' = sin link (grupo legacy).
         ...(draft.kitHardwareId ? { kitHardwareId: draft.kitHardwareId } : {}),
+        // #1627: sólo «ninguno» se guarda explícito (primera activa = ausente).
+        ...(draft.defaultChoice === 'none' ? { defaultChoice: 'none' as const } : {}),
       };
       ctx.saveAndToast(
         (c) => ({ ...c, optionGroups: [...c.optionGroups, item] }),
@@ -49,6 +51,10 @@ export function createOptionGroupsActions(ctx: CatalogStoreCtx): OptionGroupsSli
                   ...(draft.kitHardwareId
                     ? { kitHardwareId: draft.kitHardwareId }
                     : { kitHardwareId: undefined }),
+                  // #1627: un draft sin defaultChoice conserva el guardado.
+                  ...(draft.defaultChoice !== undefined
+                    ? { defaultChoice: draft.defaultChoice === 'none' ? ('none' as const) : undefined }
+                    : {}),
                 }
               : g,
           ),

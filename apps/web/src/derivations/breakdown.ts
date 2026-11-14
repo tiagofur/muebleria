@@ -158,6 +158,8 @@ export function computeSelectedProjectBreakdown(
     // que en el resolve conectado (fail-closed simétrico).
     catalog.agregados,
     catalog.optionGroups,
+    // #1627: sólo las opciones activas de un selector de insertos cuentan.
+    catalog.hardware,
   );
   if (!gate.ok) {
     return {

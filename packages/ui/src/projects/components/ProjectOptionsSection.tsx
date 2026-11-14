@@ -7,7 +7,7 @@
 
 import { memo, type ReactNode } from 'react';
 import { useProjectDetail } from './projectDetailContext';
-import { optionsForGroup } from '../projectHelpers';
+import { optionDisplayLabel, optionsForGroup } from '../projectHelpers';
 
 export const ProjectOptionsSection = memo(function ProjectOptionsSection(): ReactNode {
   const {
@@ -61,7 +61,7 @@ export const ProjectOptionsSection = memo(function ProjectOptionsSection(): Reac
                 <option value="">Sin default</option>
                 {options.map((opt) => (
                   <option key={opt.id} value={opt.id}>
-                    {opt.name} — {opt.code}
+                    {optionDisplayLabel(opt)}
                   </option>
                 ))}
               </select>

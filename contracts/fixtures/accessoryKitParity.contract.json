@@ -2,6 +2,8 @@
   "schemaVersion": 1,
   "schemaId": "granete.accessoryKitParity.v1",
   "comment": "#1502 — kit accesorio elegible: la bahía que monta el kit vinculado (grupo con kit_hardware_id) materializa el accesorio elegido como ensamble SEPARADO del SKP del cajón (miembros = partes del kit accesorio, placements desde DesignParts[0].Label) y aporta su línea de cotización. Autoridad numérica única para Go (ResolveFurnitureLayout + ResolveBomWithContext) y TS (resolveModuleAgregadoAssembliesDetailed + resolveBom): ambos lados CONSTRUYEN catálogo y receta desde ESTOS números. Sin elección y grupo opcional → base sin accesorio ni línea; requerido sin elección → rechazo accessory_choice_required / issue ACCESSORY_CHOICE_REQUIRED y sin línea (la cotización no inventa demanda).",
+  "choiceNone": "none",
+  "choiceNoneComment": "#1627: valor explícito «Sin inserto» de un grupo de insertos en el mapa de elecciones (Go domain.AccessoryChoiceNone, TS ACCESSORY_CHOICE_NONE). Los ids del catálogo son UUID: nunca colisiona.",
   "heights": [
     { "code": "N", "nominalDimensionMm": 85.5, "hardwareId": "hw-mbox-n", "kitHardwareId": "kit-mbox-n" },
     { "code": "E", "nominalDimensionMm": 209, "hardwareId": "hw-mbox-e", "kitHardwareId": "kit-mbox-e" }

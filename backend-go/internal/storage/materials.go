@@ -522,9 +522,18 @@ func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, e
 
 // --- OPTION GROUPS ---
 
+// storedDefaultChoice (#1627) maps the domain DefaultChoice onto the column:
+// an absent value keeps the historical first-active default.
+func storedDefaultChoice(v string) string {
+	if v == domain.OptionGroupDefaultNone {
+		return domain.OptionGroupDefaultNone
+	}
+	return domain.OptionGroupDefaultFirstActive
+}
+
 func (s *PostgresStore) ListOptionGroups(ctx context.Context) ([]domain.OptionGroup, error) {
 	query := `
-		SELECT id, code, name, kind, required, version, kit_hardware_id
+		SELECT id, code, name, kind, required, version, kit_hardware_id, default_choice
 		FROM option_groups
 		WHERE organization_id = $1
 		ORDER BY name ASC, id ASC;
@@ -538,7 +547,7 @@ func (s *PostgresStore) ListOptionGroups(ctx context.Context) ([]domain.OptionGr
 	var list []domain.OptionGroup
 	for rows.Next() {
 		var og domain.OptionGroup
-		err := rows.Scan(&og.ID, &og.Code, &og.Name, &og.Kind, &og.Required, &og.Version, &og.KitHardwareID)
+		err := rows.Scan(&og.ID, &og.Code, &og.Name, &og.Kind, &og.Required, &og.Version, &og.KitHardwareID, &og.DefaultChoice)
 		if err != nil {
 			return nil, err
 		}
@@ -949,13 +958,13 @@ func (s *PostgresStore) ReactivateHardware(ctx context.Context, id string) error
 
 func (s *PostgresStore) GetOptionGroupByID(ctx context.Context, id string) (*domain.OptionGroup, error) {
 	query := `
-		SELECT id, code, name, kind, required, version, kit_hardware_id
+		SELECT id, code, name, kind, required, version, kit_hardware_id, default_choice
 		FROM option_groups
 		WHERE id = $1 AND organization_id = $2;
 	`
 	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var og domain.OptionGroup
-	err := row.Scan(&og.ID, &og.Code, &og.Name, &og.Kind, &og.Required, &og.Version, &og.KitHardwareID)
+	err := row.Scan(&og.ID, &og.Code, &og.Name, &og.Kind, &og.Required, &og.Version, &og.KitHardwareID, &og.DefaultChoice)
 	if err != nil {
 		return nil, err
 	}
@@ -985,17 +994,17 @@ func (s *PostgresStore) CreateOptionGroup(ctx context.Context, og *domain.Option
 
 	if og.ID != "" {
 		query := `
-			INSERT INTO option_groups (id, code, name, kind, required, organization_id, kit_hardware_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7);
+			INSERT INTO option_groups (id, code, name, kind, required, organization_id, kit_hardware_id, default_choice)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 		`
-		_, err = tx.Exec(ctx, query, og.ID, og.Code, og.Name, og.Kind, og.Required, OrgFromCtx(ctx), og.KitHardwareID)
+		_, err = tx.Exec(ctx, query, og.ID, og.Code, og.Name, og.Kind, og.Required, OrgFromCtx(ctx), og.KitHardwareID, storedDefaultChoice(og.DefaultChoice))
 	} else {
 		query := `
-			INSERT INTO option_groups (code, name, kind, required, organization_id, kit_hardware_id)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO option_groups (code, name, kind, required, organization_id, kit_hardware_id, default_choice)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			RETURNING id, version;
 		`
-		err = tx.QueryRow(ctx, query, og.Code, og.Name, og.Kind, og.Required, OrgFromCtx(ctx), og.KitHardwareID).Scan(&og.ID, &og.Version)
+		err = tx.QueryRow(ctx, query, og.Code, og.Name, og.Kind, og.Required, OrgFromCtx(ctx), og.KitHardwareID, storedDefaultChoice(og.DefaultChoice)).Scan(&og.ID, &og.Version)
 	}
 	if err != nil {
 		return fmt.Errorf("error creating option group: %w", err)
@@ -1023,11 +1032,11 @@ func (s *PostgresStore) UpdateOptionGroup(ctx context.Context, id string, expect
 
 	query := `
 		UPDATE option_groups
-		SET code = $1, name = $2, kind = $3, required = $4, kit_hardware_id = $5, version = version + 1
+		SET code = $1, name = $2, kind = $3, required = $4, kit_hardware_id = $5, default_choice = $9, version = version + 1
 		WHERE id = $6 AND organization_id = $7 AND version = $8
 		RETURNING id, version;
 	`
-	err = tx.QueryRow(ctx, query, og.Code, og.Name, og.Kind, og.Required, og.KitHardwareID, id, OrgFromCtx(ctx), expectedVersion).Scan(&og.ID, &og.Version)
+	err = tx.QueryRow(ctx, query, og.Code, og.Name, og.Kind, og.Required, og.KitHardwareID, id, OrgFromCtx(ctx), expectedVersion, storedDefaultChoice(og.DefaultChoice)).Scan(&og.ID, &og.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return s.disambiguateRowNotFound(ctx, "option_groups", id, fmt.Errorf("option group not found"))
