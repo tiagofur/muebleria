@@ -49,6 +49,14 @@ func (s *Server) HandleHardwareKitSystemHeightAdd(w http.ResponseWriter, r *http
 	}
 
 	sortedCodes := append([]string{}, plan.allCodes...)
+	// #1633: the selector and a new eligibility group serialize on the same
+	// "option_group:" namespace as the system create (review #1635).
+	if plan.optionGroup != nil {
+		sortedCodes = append(sortedCodes, "option_group:"+plan.optionGroup.Code)
+	}
+	if plan.eligibility != nil && plan.eligibility.newGroup != nil {
+		sortedCodes = append(sortedCodes, "option_group:"+plan.eligibility.newGroup.Code)
+	}
 	sort.Strings(sortedCodes)
 	if err := s.Store.LockCatalogCodes(r.Context(), sortedCodes); err != nil {
 		respondWithInternalError(w, err, "kit system height code locks")

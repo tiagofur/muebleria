@@ -79,7 +79,7 @@ describe('#1625 addSystemHeight — con sesión: una transacción del servidor',
     const { store, saved } = setup('auth', { addHardwareKitSystemHeight: server });
 
     await store.getState().addSystemHeight({
-      agregadoId: 'agr-sys', heightCode: 'E', kitCostPerUnit: 300, widthMm: 570, depthMm: 530, insertos: [galeria],
+      agregadoId: 'agr-sys', heightCode: 'E', khMinMm: 209, kitCostPerUnit: 300, widthMm: 570, depthMm: 530, insertos: [galeria],
     });
 
     expect(server).toHaveBeenCalledTimes(1);
@@ -112,23 +112,44 @@ describe('#1625 addSystemHeight — con sesión: una transacción del servidor',
     const before = store.getState().catalog;
 
     await expect(
-      store.getState().addSystemHeight({ agregadoId: 'agr-sys', heightCode: 'E', kitCostPerUnit: 300, widthMm: 570, depthMm: 530 }),
+      store.getState().addSystemHeight({ agregadoId: 'agr-sys', heightCode: 'E', khMinMm: 209, kitCostPerUnit: 300, widthMm: 570, depthMm: 530 }),
     ).rejects.toThrow('409');
     expect(saved).toHaveLength(0);
     expect(store.getState().catalog).toBe(before);
   });
 
-  it('los insertos sólo aplican a la altura E', async () => {
+  it('#1633: etiqueta libre en cualquier altura — código normalizado, insertos con precio y selector «Insertos …»', async () => {
     const server = vi.fn().mockResolvedValue({
-      created_codes: [], agregado_id: 'agr-sys', agregado_version: 7, variant_set_id: 'vs-h', height_mm: 146,
+      created_codes: [], agregado_id: 'agr-sys', agregado_version: 7, variant_set_id: 'vs-h', height_mm: 186,
     });
     const { store } = setup('auth', { addHardwareKitSystemHeight: server });
     await store.getState().addSystemHeight({
-      agregadoId: 'agr-sys', heightCode: 'K', kitCostPerUnit: 250, widthMm: 570, depthMm: 530, insertos: [galeria],
+      agregadoId: 'agr-sys', heightCode: 'Alta 186', khMinMm: 186, kitCostPerUnit: 610, widthMm: 570, depthMm: 530,
+      insertos: [{ ...galeria, costPerUnit: 120 }],
     });
     const body = server.mock.calls[0]![1];
-    expect(body.option_group).toBeNull();
-    expect(body.hardware.some((h: { code: string }) => h.code.endsWith('-GAL'))).toBe(false);
+    const kit = body.hardware.find((h: { code: string }) => h.code === 'SYS-ALTA-186');
+    expect(kit.cost_per_unit).toBe(610);
+    expect(body.variant).toEqual({ nominalDimensionMm: 186, kit_hardware_id: kit.id, label: 'Alta 186' });
+    const inserto = body.hardware.find((h: { code: string }) => h.code === 'SYS-ALTA-186-GAL');
+    expect(inserto.cost_per_unit).toBe(120);
+    expect(body.option_group).toMatchObject({ code: 'SYS_LATERAL_ALTA-186', name: 'Insertos Alta 186', kit_hardware_id: kit.id });
+  });
+
+  it('#1633: etiqueta o medida repetida (contra las efectivas) se rechaza antes de pedir nada', async () => {
+    const server = vi.fn();
+    const { store } = setup('auth', { addHardwareKitSystemHeight: server });
+    // La variante previa (108, sin etiqueta) cuenta como «M».
+    await expect(
+      store.getState().addSystemHeight({ agregadoId: 'agr-sys', heightCode: 'm', khMinMm: 120, kitCostPerUnit: 0, widthMm: 570, depthMm: 530 }),
+    ).rejects.toThrow('ya tiene la altura');
+    await expect(
+      store.getState().addSystemHeight({ agregadoId: 'agr-sys', heightCode: 'X', khMinMm: 108, kitCostPerUnit: 0, widthMm: 570, depthMm: 530 }),
+    ).rejects.toThrow('108 mm');
+    await expect(
+      store.getState().addSystemHeight({ agregadoId: 'agr-sys', heightCode: 'X', khMinMm: 0, kitCostPerUnit: 0, widthMm: 570, depthMm: 530 }),
+    ).rejects.toThrow('mayor que 0');
+    expect(server).not.toHaveBeenCalled();
   });
 });
 
@@ -137,7 +158,7 @@ describe('#1625 addSystemHeight — sin servidor (invitado)', () => {
     const server = vi.fn();
     const { store, saved } = setup('guest', { addHardwareKitSystemHeight: server });
     await store.getState().addSystemHeight({
-      agregadoId: 'agr-sys', heightCode: 'E', kitCostPerUnit: 300, widthMm: 570, depthMm: 530, insertos: [galeria],
+      agregadoId: 'agr-sys', heightCode: 'E', khMinMm: 209, kitCostPerUnit: 300, widthMm: 570, depthMm: 530, insertos: [galeria],
     });
     expect(server).not.toHaveBeenCalled();
     expect(saved).toHaveLength(1);

@@ -133,6 +133,8 @@ export interface HardwareCatalogProps {
   readonly onAddSystemHeight?: (req: {
     readonly agregadoId: string;
     readonly heightCode: string; // #1633: etiqueta de altura
+    /** #1633: altura interior mínima de la altura nueva (dato, no la tabla Blum). */
+    readonly khMinMm: number;
     readonly kitCostPerUnit: number;
     readonly widthMm: number;
     readonly depthMm: number;
@@ -1178,7 +1180,8 @@ export function HardwareCatalog({
           editingKitSystem
             ? {
                 agregadoCode: editingKitSystem.agregado.code,
-                heights: editingKitSystem.heights.length > 0 ? editingKitSystem.heights : [editingKitSystem.ownHeight],
+                ownHeight: editingKitSystem.ownHeight,
+                heights: editingKitSystem.heights,
               }
             : undefined
         }

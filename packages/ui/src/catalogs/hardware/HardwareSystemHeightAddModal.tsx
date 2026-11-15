@@ -13,12 +13,14 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   effectiveVariantLabel,
   HARDWARE_KIT_SYSTEM_HEIGHTS,
+  heightCodeSlug,
   KIT_TEMPLATE_DRAWER_HANDS_ID,
   planHardwareKit,
   type Agregado,
 } from '@granete/domain';
 import type { HardwareKitSystemAccessory, HardwareVisualAssetBinding } from '@granete/domain';
 import { Modal } from '../../common';
+import './familyWizard/familyWizard.css';
 import { uploadKitWizardDesigns, useKitWizardRun, type KitWizardRunTask } from './useKitWizardRun';
 import {
   duplicatedInsertoSuffix,
@@ -47,6 +49,8 @@ export interface HardwareSystemHeightAddModalProps {
   readonly onSubmit: (req: {
     readonly agregadoId: string;
     readonly heightCode: string; // #1633: etiqueta de altura
+    /** #1633: altura interior mínima de la altura nueva (dato, no la tabla Blum). */
+    readonly khMinMm: number;
     readonly kitCostPerUnit: number;
     readonly widthMm: number;
     readonly depthMm: number;
@@ -92,7 +96,10 @@ export function HardwareSystemHeightAddModal({
     (h) => !existingHeights.nominals.has(h.khMinMm) && !existingHeights.labels.has(h.code.toLowerCase()),
   );
 
+  // #1633: etiqueta libre + altura interior mínima (la plantilla Blum es un
+  // atajo para llenarlas, no una lista cerrada).
   const [heightCode, setHeightCode] = useState<string>('');
+  const [khMinMm, setKhMinMm] = useState('');
   const [cost, setCost] = useState('0');
   const [widthMm, setWidthMm] = useState(String(agregado.externalDims?.width ?? ''));
   const [depthMm, setDepthMm] = useState(String(agregado.externalDims?.depth ?? ''));
@@ -103,10 +110,29 @@ export function HardwareSystemHeightAddModal({
   const [insertoDrafts, setInsertoDrafts] = useState<InsertoDraft[]>([]);
   const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const height = HARDWARE_KIT_SYSTEM_HEIGHTS.find((h) => h.code === heightCode);
-  const kitCode = height ? `${systemCode}-${height.code}` : '';
-  // #1625: los insertos aplican a la E (igual que el asistente del sistema).
-  const insertos = height?.code === 'E' ? insertoDraftsToAccessories(insertoDrafts) : [];
+  const label = heightCode.trim();
+  const kh = num(khMinMm);
+  const slug = heightCodeSlug(label);
+  // Problema de la altura nueva (se muestra al editar, en palabras de taller).
+  const heightProblem: string | null = !label
+    ? null
+    : !slug
+      ? `La etiqueta «${label}» no deja un código de juego válido.`
+      : existingHeights.labels.has(label.toLowerCase())
+        ? `La familia ya tiene una altura «${label}».`
+        : khMinMm.trim() === ''
+          ? null
+          : !(kh > 0)
+            ? 'La altura interior mínima tiene que ser mayor que 0 mm.'
+            : existingHeights.nominals.has(kh)
+              ? `La familia ya tiene una altura de ${kh} mm.`
+              : !(num(cost) >= 0)
+                ? 'El precio del juego no puede ser negativo.'
+                : null;
+  const height = label && slug && kh > 0 && heightProblem === null ? { code: label, khMinMm: kh } : undefined;
+  const kitCode = height ? `${systemCode}-${slug}` : '';
+  // #1633: insertos en cualquier altura (antes sólo la E).
+  const insertos = height ? insertoDraftsToAccessories(insertoDrafts) : [];
   const insertoCode = (suffix: string): string => `${kitCode}-${suffix}`;
   const duplicatedSuffix = duplicatedInsertoSuffix(insertos);
 
@@ -118,6 +144,7 @@ export function HardwareSystemHeightAddModal({
         {
           code: kitCode,
           name: `${systemCode} ${height.code}`,
+          // (precio sólo para el plan de piezas; el store recibe el real)
           kitCostPerUnit: num(cost) || 0,
           widthMm: num(widthMm),
           heightMm: height.khMinMm,
@@ -136,6 +163,7 @@ export function HardwareSystemHeightAddModal({
     onClose,
     resetForm: () => {
       setHeightCode('');
+      setKhMinMm('');
       setCost('0');
       setWidthMm(String(agregado.externalDims?.width ?? ''));
       setDepthMm(String(agregado.externalDims?.depth ?? ''));
@@ -205,6 +233,7 @@ export function HardwareSystemHeightAddModal({
       await onSubmit({
         agregadoId: agregado.id,
         heightCode: height.code,
+        khMinMm: height.khMinMm,
         kitCostPerUnit: num(cost) || 0,
         widthMm: num(widthMm),
         depthMm: num(depthMm),
@@ -222,7 +251,7 @@ export function HardwareSystemHeightAddModal({
     <Modal
       open={open}
       onClose={wizard.handleClose}
-      title={`Añadir altura — sistema ${systemCode}`}
+      title={`Añadir altura — familia ${systemCode}`}
       size="md"
       dataTestId="hardware-system-height-modal"
     >
@@ -250,29 +279,58 @@ export function HardwareSystemHeightAddModal({
               {wizard.error}
             </p>
           ) : null}
-          <div className="catalog-form__field">
-            <label htmlFor="sys-height-select">Altura a añadir</label>
-            <select
-              id="sys-height-select"
-              value={heightCode}
-              onChange={(e) => setHeightCode(e.target.value)}
-              required
-              data-testid="hardware-system-height-select"
-            >
-              <option value="">Elegir…</option>
-              {missing.map((h) => (
-                <option key={h.code} value={h.code}>
-                  {h.labelEs}
-                </option>
-              ))}
-            </select>
-            {missing.length === 0 ? (
-              <p className="catalog-form__hint">El sistema ya tiene las cuatro alturas.</p>
-            ) : null}
-          </div>
+          {heightProblem ? (
+            <p className="catalog-form__error" role="alert" data-testid="hardware-system-height-problem">
+              {heightProblem}
+            </p>
+          ) : null}
           <div className="catalog-form__row">
             <label className="catalog-form__field">
-              <span>Costo por juego</span>
+              <span>Etiqueta de la altura</span>
+              <input
+                value={heightCode}
+                onChange={(e) => setHeightCode(e.target.value)}
+                maxLength={40}
+                placeholder="Ej: K, C, Alta 186"
+                data-testid="hardware-system-height-label"
+              />
+            </label>
+            <label className="catalog-form__field">
+              <span>Altura interior mínima (mm)</span>
+              <input
+                type="number"
+                min={0}
+                step="0.5"
+                value={khMinMm}
+                onChange={(e) => setKhMinMm(e.target.value)}
+                data-testid="hardware-system-height-kh"
+              />
+            </label>
+          </div>
+          {missing.length > 0 ? (
+            <div className="catalog-form__field">
+              <span className="catalog-form__label">Atajo: alturas Blum que le faltan</span>
+              <div className="family-heights__actions">
+                {missing.map((h) => (
+                  <button
+                    key={h.code}
+                    type="button"
+                    className="btn btn--small btn--ghost"
+                    onClick={() => {
+                      setHeightCode(h.code);
+                      setKhMinMm(String(h.khMinMm));
+                    }}
+                    data-testid={`hardware-system-height-preset-${h.code}`}
+                  >
+                    {h.labelEs}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className="catalog-form__row">
+            <label className="catalog-form__field">
+              <span>Precio del juego</span>
               <input
                 type="number"
                 min={0}
@@ -282,7 +340,7 @@ export function HardwareSystemHeightAddModal({
               />
             </label>
             <label className="catalog-form__field">
-              <span>Ancho (W mm)</span>
+              <span>Ancho de la guía (mm)</span>
               <input
                 type="number"
                 min={0}
@@ -292,7 +350,7 @@ export function HardwareSystemHeightAddModal({
               />
             </label>
             <label className="catalog-form__field">
-              <span>Fondo (D mm)</span>
+              <span>Fondo de la guía (mm)</span>
               <input
                 type="number"
                 min={0}
@@ -349,14 +407,15 @@ export function HardwareSystemHeightAddModal({
             </fieldset>
           ) : null}
 
-          {height?.code === 'E' ? (
+          {height ? (
             <>
               <KitSystemInsertosFieldset
                 drafts={insertoDrafts}
                 onChange={setInsertoDrafts}
-                legend="Insertos del cajón E (opcional)"
-                hint="Galería, boxcap, boxcover… Cada uno queda como opción del selector del juego E; el cajón E lleva el primero por defecto. Podés añadirlos después desde la ficha del juego."
+                legend={`Insertos de la altura ${height.code} (opcional)`}
+                hint={`Galería, boxcap, boxcover… Cada uno queda como opción del selector «Insertos ${height.code}»; el cajón lleva el primero por defecto. Podés añadirlos después desde la ficha del juego.`}
                 testIdPrefix="hardware-system-height-inserto"
+                showPrice
               />
               {duplicatedSuffix ? (
                 <p className="catalog-form__error" role="alert" data-testid="hardware-system-height-inserto-duplicated">

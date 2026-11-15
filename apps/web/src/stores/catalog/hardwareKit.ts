@@ -21,7 +21,8 @@ import type {
 import {
   effectiveVariantLabel,
   isDrawerSystemAgregado,
-  HARDWARE_KIT_SYSTEM_HEIGHTS,
+  heightCodeSlug,
+  MAX_VARIANT_LABEL_LENGTH,
   KIT_TEMPLATE_DRAWER_HANDS_ID,
   planHardwareKit,
   planHardwareKitSystem,
@@ -591,34 +592,48 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         throw new Error(`«${agregado.code}» no es una familia de cajón.`);
       }
       const systemCode = agregado.code.replace(/-CAJON$/, '');
-      const height = HARDWARE_KIT_SYSTEM_HEIGHTS.find((h) => h.code === req.heightCode);
-      if (!height) throw new Error(`Altura «${req.heightCode}» fuera de la lista canónica.`);
+      // #1633: etiqueta libre y altura interior mínima como DATOS (la tabla
+      // Blum es sólo un atajo de la UI). Mismas reglas que el alta.
+      const label = req.heightCode.trim();
+      if (!label) throw new Error('La altura nueva necesita una etiqueta.');
+      if ([...label].length > MAX_VARIANT_LABEL_LENGTH) {
+        throw new Error(`La etiqueta «${label}» supera ${MAX_VARIANT_LABEL_LENGTH} caracteres.`);
+      }
+      if (!Number.isFinite(req.khMinMm) || req.khMinMm <= 0) {
+        throw new Error(`La altura ${label} necesita una altura interior mínima mayor que 0.`);
+      }
+      if (!Number.isFinite(req.kitCostPerUnit) || req.kitCostPerUnit < 0) {
+        throw new Error(`El precio del juego ${label} no puede ser negativo.`);
+      }
+      const slug = heightCodeSlug(label);
+      if (!slug) throw new Error(`La etiqueta «${label}» no deja un código de juego válido.`);
+      const height = { code: label, khMinMm: req.khMinMm };
 
       const hardwareList = catalog.hardware ?? [];
-      const kitCode = `${systemCode}-${req.heightCode}`;
+      const kitCode = `${systemCode}-${slug}`;
       const existing = {
         hardwareCodes: new Set(hardwareList.map((h) => h.code)),
         agregadoCodes: new Set((catalog.agregados ?? []).map((a) => a.code)),
       };
-      if (existing.hardwareCodes.has(kitCode)) {
-        throw new Error(`El juego «${kitCode}» ya existe en el catálogo.`);
-      }
       const heightVs = (agregado.variantSets ?? []).find((vs) => vs.dimension === 'height');
       if (
         heightVs?.variants.some(
           (v) =>
             v.nominalDimensionMm === height.khMinMm ||
-            effectiveVariantLabel(v).toLowerCase() === req.heightCode.toLowerCase(),
+            effectiveVariantLabel(v).toLowerCase() === label.toLowerCase(),
         )
       ) {
-        throw new Error(`El sistema ya tiene la altura ${req.heightCode} (${height.khMinMm} mm).`);
+        throw new Error(`La familia ya tiene la altura ${label} o una de ${height.khMinMm} mm.`);
+      }
+      if (existing.hardwareCodes.has(kitCode)) {
+        throw new Error(`El juego «${kitCode}» ya existe en el catálogo.`);
       }
 
       const systemName = agregado.name.replace(/^Cajón\s+/, '') || systemCode;
       const subPlan = planHardwareKit(
         {
           code: kitCode,
-          name: `${systemName} ${req.heightCode}`,
+          name: `${systemName} ${label}`,
           kitCostPerUnit: req.kitCostPerUnit,
           widthMm: req.widthMm,
           heightMm: height.khMinMm,
@@ -642,11 +657,11 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         {
           id: kitId,
           code: kitCode,
-          name: `${systemName} ${req.heightCode}`,
+          name: `${systemName} ${label}`,
           unit: 'set',
           costPerUnit: req.kitCostPerUnit,
           active: true,
-          notes: `Juego ${req.heightCode} añadido al sistema ${systemCode} (#1596).`,
+          notes: `Juego ${label} añadido a la familia ${systemCode} (#1596/#1633).`,
         },
       ];
       for (const design of subPlan.designs) {
@@ -676,24 +691,30 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         });
       }
 
-      // #1625: insertos de la altura E con su selector vinculado al juego
-      // nuevo — misma forma que el asistente del sistema (#1596).
+      // #1625 → #1633: insertos de la altura nueva (cualquier altura) con
+      // su selector vinculado al juego — misma forma que el asistente.
       const insertoIds: string[] = [];
-      for (const acc of req.heightCode === 'E' ? (req.insertos ?? []) : []) {
-        const code = `${systemCode}-${req.heightCode}-${acc.suffix}`;
-        if (existing.hardwareCodes.has(code)) {
-          throw new Error(`El inserto «${code}» ya existe en el catálogo.`);
+      const insertoCodes = new Set<string>();
+      for (const acc of req.insertos ?? []) {
+        const code = `${systemCode}-${slug}-${acc.suffix}`;
+        if (existing.hardwareCodes.has(code) || insertoCodes.has(code) || code === kitCode) {
+          throw new Error(`El inserto «${code}» ya existe o se repite.`);
         }
+        const accPrice = acc.costPerUnit ?? 0;
+        if (!Number.isFinite(accPrice) || accPrice < 0) {
+          throw new Error(`El precio del inserto «${acc.name}» no puede ser negativo.`);
+        }
+        insertoCodes.add(code);
         const id = idFor(code);
         insertoIds.push(id);
         newHardware.push({
           id,
           code,
-          name: `${systemName} ${req.heightCode} — ${acc.name}`,
+          name: `${systemName} ${label} — ${acc.name}`,
           unit: 'piece',
-          costPerUnit: 0,
+          costPerUnit: accPrice,
           active: true,
-          notes: `Inserto del cajón ${req.heightCode} del sistema ${systemCode} (#1625): se elige por mueble y el motor lo monta por cajón.`,
+          notes: `Inserto de la altura ${label} de la familia ${systemCode} (#1625/#1633): se elige por mueble y el motor lo monta por cajón.`,
           pieces: acc.anchors.map((anchor) => {
             const binding = req.designs?.[`${code}:${anchor}`];
             const offset = acc.pieceOffsets?.[anchor] ?? { x: 0, y: 0, z: 0 };
@@ -712,8 +733,8 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         insertoIds.length > 0
           ? {
               id: ctx.newId(),
-              code: `${systemCode}_LATERAL_${req.heightCode}`,
-              name: `Lateral superior ${req.heightCode}`,
+              code: `${systemCode}_LATERAL_${slug}`,
+              name: `Insertos ${label}`, // mismo nombre que el alta (#1633)
               kind: 'hardware',
               required: false,
               optionIds: insertoIds,
@@ -728,7 +749,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         nominalDimensionMm: height.khMinMm,
         hardwareId: kitId,
         commercialKitHardwareId: kitId,
-        label: req.heightCode, // #1633: la etiqueta se persiste como dato
+        label, // #1633: la etiqueta se persiste como dato
       };
       // La variante nueva entra en el variant set height EXISTENTE; la
       // altura externa del ensamble sube al máximo de sus variantes.
@@ -775,7 +796,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         const eligibility = req.eligibilityGroup;
         const added = await serverApply(agregado.id, {
           hardware: newHardware.map(kitSystemHardwareRow),
-          variant: { nominalDimensionMm: height.khMinMm, kit_hardware_id: kitId, label: req.heightCode },
+          variant: { nominalDimensionMm: height.khMinMm, kit_hardware_id: kitId, label },
           option_group: insertoGroup
             ? {
                 id: insertoGroup.id,
@@ -817,7 +838,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           ]),
         };
         ctx.set({ catalog: merged });
-        ctx.toast({ type: 'success', message: `✓ Altura ${req.heightCode} añadida a ${systemCode} (${kitCode})` });
+        ctx.toast({ type: 'success', message: `✓ Altura ${label} añadida a ${systemCode} (${kitCode})` });
         return { kitCode, agregadoCode: agregado.code };
       }
 
@@ -848,7 +869,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           agregados: (c.agregados ?? []).map((a) => (a.id === nextAgregado.id ? nextAgregado : a)),
           optionGroups: req.eligibilityGroup || insertoGroup ? nextOptionGroups : c.optionGroups,
         }),
-        `✓ Altura ${req.heightCode} añadida a ${systemCode} (${kitCode})`,
+        `✓ Altura ${label} añadida a ${systemCode} (${kitCode})`,
       );
       return { kitCode, agregadoCode: agregado.code };
     },
