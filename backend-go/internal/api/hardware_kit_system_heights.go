@@ -49,6 +49,14 @@ func (s *Server) HandleHardwareKitSystemHeightAdd(w http.ResponseWriter, r *http
 	}
 
 	sortedCodes := append([]string{}, plan.allCodes...)
+	// #1633: the selector and a new eligibility group serialize on the same
+	// "option_group:" namespace as the system create (review #1635).
+	if plan.optionGroup != nil {
+		sortedCodes = append(sortedCodes, "option_group:"+plan.optionGroup.Code)
+	}
+	if plan.eligibility != nil && plan.eligibility.newGroup != nil {
+		sortedCodes = append(sortedCodes, "option_group:"+plan.eligibility.newGroup.Code)
+	}
 	sort.Strings(sortedCodes)
 	if err := s.Store.LockCatalogCodes(r.Context(), sortedCodes); err != nil {
 		respondWithInternalError(w, err, "kit system height code locks")
@@ -265,6 +273,9 @@ func kitSystemHeightPlanFromRequest(req *openapi.HardwareKitSystemHeightAddReque
 		if row.ID == "" || row.Code == "" || row.Name == "" {
 			return nil, invalidPayload("cada fila de herraje necesita id, code y name", map[string]any{"index": i})
 		}
+		if codeTooLong(row.Code) {
+			return nil, invalidPayload(fmt.Sprintf("el código «%s» supera %d caracteres: acortá la etiqueta o el nombre", row.Code, maxCatalogCodeLength), map[string]any{"index": i})
+		}
 		if row.Unit != "set" && row.Unit != "piece" {
 			return nil, invalidPayload(fmt.Sprintf("unidad inválida «%s» en «%s» (set|piece)", row.Unit, row.Code), nil)
 		}
@@ -363,6 +374,9 @@ func kitSystemHeightPlanFromRequest(req *openapi.HardwareKitSystemHeightAddReque
 		}
 		if og.ID == "" || og.Code == "" || og.Name == "" || len(og.OptionIds) == 0 {
 			return nil, invalidPayload("el selector necesita id, code, name y al menos una opción", nil)
+		}
+		if codeTooLong(og.Code) {
+			return nil, invalidPayload(fmt.Sprintf("el código de selector «%s» supera %d caracteres", og.Code, maxCatalogCodeLength), nil)
 		}
 		for _, id := range og.OptionIds {
 			if !allIDs[id] || id == kitID {

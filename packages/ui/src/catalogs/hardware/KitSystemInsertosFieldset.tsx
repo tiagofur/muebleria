@@ -90,6 +90,7 @@ export function KitSystemInsertosFieldset({
   hint,
   testIdPrefix,
   heightOptions,
+  showPrice = false,
   newDraft = emptyInsertoDraft,
 }: {
   readonly drafts: readonly InsertoDraft[];
@@ -104,6 +105,8 @@ export function KitSystemInsertosFieldset({
    * («Añadir altura»).
    */
   readonly heightOptions?: readonly string[];
+  /** #1633: precio por pieza también en la forma de una altura. */
+  readonly showPrice?: boolean;
   readonly newDraft?: () => InsertoDraft;
 }): ReactNode {
   const update = (idx: number, patch: (d: InsertoDraft) => InsertoDraft) =>
@@ -197,6 +200,10 @@ export function KitSystemInsertosFieldset({
                   })
                 )}
               </fieldset>
+            </>
+          ) : null}
+          {heightOptions || showPrice ? (
+            <>
               <label className="catalog-form__field">
                 <span>Precio por pieza</span>
                 <input

@@ -257,3 +257,28 @@ func TestHardwareKitSystem_SelectorFailuresBeforeWrites_1633(t *testing.T) {
 		}
 	}
 }
+
+// Review #1637: hardwares.code / option_groups.code are VARCHAR(50); a longer
+// generated code is a typed 422 from the plan, never a 500 from the insert.
+func TestKitSystemPlans_RejectCodesOverFiftyChars_1633(t *testing.T) {
+	long := strings.Repeat("X", 51)
+	height := strings.Replace(heightPayload("LEN-M", 90, 108, false, ""), `"code":"LEN-M-FIJ"`, `"code":"`+long+`"`, 1)
+	var hreq openapi.HardwareKitSystemHeightAddRequest
+	if err := json.Unmarshal([]byte(height), &hreq); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if _, problem := kitSystemHeightPlanFromRequest(&hreq); problem == nil || !strings.Contains(fmt.Sprint(problem["message"]), "supera 50") {
+		t.Fatalf("height plan must reject a 51-char code, got %v", problem)
+	}
+
+	seed := 91
+	create := twoHeightSystemPayload("LEN", seed, fmt.Sprintf(`, "option_groups": [%s]`,
+		optionGroupJSON(kitSystemUUID(seed*10+7), long, kitSystemUUID(seed*10+1), kitSystemUUID(seed*10+2))))
+	var creq openapi.HardwareKitSystemCreateRequest
+	if err := json.Unmarshal([]byte(create), &creq); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if _, problem := kitSystemPlanFromRequest(&creq); problem == nil || !strings.Contains(fmt.Sprint(problem["message"]), "supera 50") {
+		t.Fatalf("create plan must reject a 51-char selector code, got %v", problem)
+	}
+}

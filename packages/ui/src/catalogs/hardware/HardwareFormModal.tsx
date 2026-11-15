@@ -92,7 +92,13 @@ export interface HardwareFormModalProps {
   /** #1596 alcance 3: abre el alta de inserto para ESTE juego (callback cerrado). */
   readonly onAddInserto?: () => void;
   /** #1596 alcance 10: este juego pertenece a un sistema por variantes. */
-  readonly systemMembership?: { readonly agregadoCode: string; readonly heights: readonly string[] };
+  readonly systemMembership?: {
+    readonly agregadoCode: string;
+    /** #1633: etiqueta de ESTE juego («E»). */
+    readonly ownHeight: string;
+    /** Etiquetas de todas las alturas del sistema, en orden. */
+    readonly heights: readonly string[];
+  };
   /** #1596 alcance 10: abre «Añadir altura» del sistema. */
   readonly onAddSystemHeight?: () => void;
 }
@@ -750,12 +756,17 @@ export function HardwareFormModal({
         {/* #1596 alcance 10: el juego pertenece a un sistema por variantes. */}
         {isKit && editingId && systemMembership && onAddSystemHeight ? (
           <fieldset className="catalog-form__section" data-testid="hardware-form-system">
-            <legend className="catalog-form__section-title">Sistema de cajones</legend>
+            <legend className="catalog-form__section-title">Familia de cajón</legend>
             <p className="catalog-form__hint">
-              Este juego es la altura {systemMembership.heights.join('/')} del sistema{' '}
-              <strong>{systemMembership.agregadoCode}</strong>. Las otras alturas se
-              añaden desde cualquier juego del sistema; los módulos eligen la altura
-              por bahía.
+              {systemMembership.ownHeight
+                ? <>Este juego es la altura <strong>{systemMembership.ownHeight}</strong> de la familia </>
+                : <>Este juego pertenece a la familia </>}
+              <strong>{systemMembership.agregadoCode}</strong>
+              {systemMembership.heights.length > 0
+                ? ` (alturas: ${systemMembership.heights.join(' / ')})`
+                : ''}
+              . Las otras alturas se añaden desde cualquier juego de la familia; los
+              muebles eligen la altura por bahía.
             </p>
             <button
               type="button"
@@ -763,7 +774,7 @@ export function HardwareFormModal({
               onClick={onAddSystemHeight}
               data-testid="hardware-form-add-system-height"
             >
-              Añadir altura del sistema
+              Añadir altura a la familia
             </button>
           </fieldset>
         ) : null}

@@ -1662,6 +1662,9 @@ export function planHardwareKitSystem(
   // la E). El plan lo rechaza aquí, no recién en el envío.
   const planCodes = new Map<string, string>();
   const claim = (code: string, what: string): void => {
+    if ([...code].length > MAX_CATALOG_CODE_LENGTH) {
+      throw new Error(`El código ${code} (${what}) supera ${MAX_CATALOG_CODE_LENGTH} caracteres: acortá el código de la familia, la etiqueta o el nombre.`);
+    }
     const prev = planCodes.get(code);
     if (prev) throw new Error(`El código ${code} se repite en el plan (${prev} y ${what}); cambiá la etiqueta.`);
     planCodes.set(code, what);
@@ -1672,6 +1675,7 @@ export function planHardwareKitSystem(
   }
   for (const a of accessories) claim(a.code, `inserto de ${a.heightCode}`);
 
+  claim(`${systemCode}-CAJON`, 'ensamble');
   // Un selector por altura con insertos, en el orden de las alturas.
   const accessoryGroups = kits
     .filter((k) => optionCodesByKit.has(k.code))
@@ -1682,6 +1686,11 @@ export function planHardwareKitSystem(
       kitCode: k.code,
       optionIds: optionCodesByKit.get(k.code)!,
     }));
+  for (const g of accessoryGroups) {
+    if ([...g.code].length > MAX_CATALOG_CODE_LENGTH) {
+      throw new Error(`El código de selector ${g.code} supera ${MAX_CATALOG_CODE_LENGTH} caracteres: acortá el código de la familia o la etiqueta.`);
+    }
+  }
 
   return {
     kits,
@@ -1704,6 +1713,9 @@ export function planHardwareKitSystem(
     blockedCode,
   };
 }
+
+/** Largo máximo de hardwares.code / option_groups.code (VARCHAR(50)). Espejo Go maxCatalogCodeLength. */
+export const MAX_CATALOG_CODE_LENGTH = 50;
 
 /**
  * #1633: código de juego a partir de la etiqueta libre de la altura:

@@ -174,6 +174,8 @@ export interface AddSystemHeightRequest {
   /** Ensamble del sistema (code *-CAJON con variant set height). */
   readonly agregadoId: string;
   readonly heightCode: string; // #1633: etiqueta de altura
+    /** #1633: altura interior mínima de la altura nueva (dato, no la tabla Blum). */
+    readonly khMinMm: number;
   readonly kitCostPerUnit: number;
   readonly widthMm: number;
   readonly depthMm: number;
