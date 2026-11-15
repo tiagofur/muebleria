@@ -170,12 +170,14 @@ export function HardwareSystemHeightAddModal({
           depthMm: num(depthMm),
           templateId: KIT_TEMPLATE_DRAWER_HANDS_ID,
         },
-        { hardwareCodes: new Set(), agregadoCodes: new Set() },
+        // Con los códigos reales: un perfil que ya existe sale `exists` y se
+        // reutiliza (igual que el store, review S6), no se bloquea.
+        { hardwareCodes: existingHardwareCodes ?? new Set(), agregadoCodes: new Set() },
       );
     } catch {
       return null;
     }
-  }, [height, kitCode, systemCode, cost, widthMm, depthMm]);
+  }, [height, kitCode, systemCode, cost, widthMm, depthMm, existingHardwareCodes]);
 
   // Review #1637: todos los códigos que se van a crear — largo, choques con
   // el catálogo y entre sí (un inserto «Fij I» pisaría el perfil fijo) —
