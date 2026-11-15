@@ -57,70 +57,192 @@ function setup(opts?: {
   return { onSubmit, onClose, view };
 }
 
-async function fillBasics(user: ReturnType<typeof userEvent.setup>, code = 'MBOX-SYS') {
+type User = ReturnType<typeof userEvent.setup>;
+
+async function fillIdentity(user: User, code = 'MBOX-SYS') {
   await user.type(screen.getByTestId('hardware-system-wizard-code'), code);
   await user.type(screen.getByTestId('hardware-system-wizard-name'), 'Merivobox Iridium');
-  await user.type(screen.getByTestId('hardware-system-wizard-price'), '420');
 }
 
-describe('HardwareKitSystemWizardModal — problemas del planner visibles (#1552)', () => {
-  it('cero alturas: mensaje visible con role=alert y submit bloqueado', async () => {
+/** Identidad → Alturas con la plantilla Blum reducida a M (+ E opcional), precio 420. */
+async function fillBasics(user: User, code = 'MBOX-SYS', opts: { withE?: boolean } = {}) {
+  await fillIdentity(user, code);
+  await user.click(screen.getByTestId('family-wizard-next'));
+  await user.click(screen.getByTestId('family-heights-template'));
+  // Plantilla N/M/K/E: quitar N y K (y E si no se pide).
+  await user.click(screen.getByTestId('family-height-2-remove')); // K
+  await user.click(screen.getByTestId('family-height-0-remove')); // N → quedan M, E
+  if (!opts.withE) await user.click(screen.getByTestId('family-height-1-remove'));
+  await user.type(screen.getByTestId('family-height-0-price'), '420');
+  if (opts.withE) {
+    await user.click(screen.getByTestId('family-heights-apply-price'));
+  }
+}
+
+async function goToSummary(user: User) {
+  while (!screen.queryByTestId('hardware-system-wizard-submit')) {
+    await user.click(screen.getByTestId('family-wizard-next'));
+  }
+}
+
+describe('HardwareKitSystemWizardModal — pasos de la familia (#1633 s2b)', () => {
+  it('arranca en Identidad sin error; Siguiente explica qué falta y no avanza; pasos posteriores cerrados', async () => {
     const user = userEvent.setup();
     setup();
-    await fillBasics(user);
-    // Desmarcar la única altura incluida por defecto (M).
-    await user.click(screen.getByTestId('hardware-system-height-M'));
-
+    expect(screen.getByTestId('family-wizard-step-0')).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByTestId('family-wizard-step-1')).toBeDisabled();
+    expect(screen.queryByTestId('hardware-system-wizard-plan-error')).toBeNull();
+    await user.click(screen.getByTestId('family-wizard-next'));
     const problem = screen.getByTestId('hardware-system-wizard-plan-error');
-    expect(problem).toHaveAttribute('role', 'alert');
-    expect(problem.textContent).toContain('al menos una altura');
-    expect(screen.getByTestId('hardware-system-wizard-submit')).toBeDisabled();
+    expect(problem.textContent).toContain('código');
+    await waitFor(() => expect(problem).toHaveFocus());
+    expect(screen.getByTestId('family-wizard-step-0')).toHaveAttribute('aria-current', 'step');
+    await fillIdentity(user);
+    expect(screen.queryByTestId('hardware-system-wizard-plan-error')).toBeNull();
+    await user.click(screen.getByTestId('family-wizard-next'));
+    expect(screen.getByTestId('family-wizard-step-1')).toHaveAttribute('aria-current', 'step');
+    // El foco va al título del paso nuevo.
+    expect(screen.getByTestId('family-wizard-title')).toHaveFocus();
+    expect(screen.getByTestId('family-wizard-title').textContent).toBe('Alturas');
   });
 
-  it('precio negativo: mensaje del planner visible y SIN llamada al store (no se persiste como 0)', async () => {
+  it('Alturas vacías enseñan la plantilla; precargarla deja filas editables N/M/K/E', async () => {
+    const user = userEvent.setup();
+    setup();
+    await fillIdentity(user);
+    await user.click(screen.getByTestId('family-wizard-next'));
+    expect(screen.getByTestId('family-heights-empty')).toBeInTheDocument();
+    await user.click(screen.getByTestId('family-heights-template'));
+    expect(screen.getByTestId('family-height-0-label')).toHaveValue('N');
+    expect(screen.getByTestId('family-height-3-label')).toHaveValue('E');
+    expect(screen.getByTestId('family-height-1-kh')).toHaveValue(108);
+    // Sin precio no se avanza: el mensaje enseña que puede ser 0.
+    await user.click(screen.getByTestId('family-wizard-next'));
+    expect(screen.getByTestId('hardware-system-wizard-plan-error').textContent).toContain('puede ser 0');
+    await waitFor(() => expect(screen.getByTestId('hardware-system-wizard-plan-error')).toHaveFocus());
+    expect(screen.getByTestId('family-wizard-title').textContent).toBe('Alturas');
+    await user.type(screen.getByTestId('family-height-0-price'), '400');
+    await user.click(screen.getByTestId('family-heights-apply-price'));
+    expect(screen.getByTestId('family-height-3-price')).toHaveValue(400);
+    expect(screen.queryByTestId('hardware-system-wizard-plan-error')).toBeNull();
+  });
+
+  it('etiquetas libres de otra marca: crea juegos por etiqueta con precio por altura', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = setup();
+    await user.type(screen.getByTestId('hardware-system-wizard-code'), 'LGX');
+    await user.type(screen.getByTestId('hardware-system-wizard-name'), 'Legrabox');
+    await user.type(screen.getByTestId('hardware-system-wizard-brand'), 'Blum');
+    await user.click(screen.getByTestId('family-wizard-next'));
+    await user.click(screen.getByTestId('family-heights-add'));
+    await user.type(screen.getByTestId('family-height-0-label'), 'Baja');
+    await user.type(screen.getByTestId('family-height-0-kh'), '70');
+    await user.type(screen.getByTestId('family-height-0-price'), '450');
+    await user.click(screen.getByTestId('family-heights-add'));
+    await user.type(screen.getByTestId('family-height-1-label'), 'Alta 186');
+    await user.type(screen.getByTestId('family-height-1-kh'), '186');
+    await user.type(screen.getByTestId('family-height-1-price'), '610');
+    await goToSummary(user);
+    expect(screen.getByTestId('hardware-system-wizard-preview').textContent).toContain('LGX-ALTA-186');
+    await user.click(screen.getByTestId('hardware-system-wizard-submit'));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const input = onSubmit.mock.calls[0]![0].input;
+    expect(input.brand).toBe('Blum');
+    expect(input.heights.map((h) => [h.code, h.khMinMm, h.kitCostPerUnit])).toEqual([
+      ['Baja', 70, 450],
+      ['Alta 186', 186, 610],
+    ]);
+  });
+
+  it('subir/bajar reordena y devuelve el foco al mismo control de la fila movida', async () => {
+    const user = userEvent.setup();
+    setup();
+    await fillIdentity(user);
+    await user.click(screen.getByTestId('family-wizard-next'));
+    await user.click(screen.getByTestId('family-heights-template'));
+    await user.click(screen.getByTestId('family-height-1-up'));
+    expect(screen.getByTestId('family-height-0-label')).toHaveValue('M');
+    await waitFor(() => expect(screen.getByTestId('family-height-0-up')).toBeDisabled());
+  });
+
+  it('insertos con «Aplica en»: uno por altura marcada, con su precio', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = setup();
+    await fillBasics(user, 'MBOX-SYS', { withE: true });
+    await user.click(screen.getByTestId('family-wizard-next'));
+    await user.click(screen.getByTestId('hardware-system-accessory-add'));
+    await user.type(screen.getByTestId('hardware-system-accessory-0-name'), 'Galería');
+    // Preselecciona la altura más alta (E); se suma la M.
+    expect(screen.getByTestId('hardware-system-accessory-0-height-E')).toBeChecked();
+    await user.click(screen.getByTestId('hardware-system-accessory-0-height-M'));
+    await user.type(screen.getByTestId('hardware-system-accessory-0-price'), '120');
+    await goToSummary(user);
+    const preview = screen.getByTestId('hardware-system-wizard-preview').textContent ?? '';
+    expect(preview).toContain('MBOX-SYS-E-GALERIA');
+    expect(preview).toContain('MBOX-SYS-M-GALERIA');
+    await user.click(screen.getByTestId('hardware-system-wizard-submit'));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const acc = onSubmit.mock.calls[0]![0].input.accessories![0]!;
+    expect(acc.heights).toEqual(['E', 'M']);
+    expect(acc.costPerUnit).toBe(120);
+  });
+});
+
+describe('HardwareKitSystemWizardModal — problemas visibles (#1552)', () => {
+  it('etiqueta repetida en Alturas: mensaje con role=alert y Siguiente bloqueado', async () => {
+    const user = userEvent.setup();
+    setup();
+    await fillBasics(user, 'MBOX-SYS', { withE: true });
+    await user.clear(screen.getByTestId('family-height-1-label'));
+    await user.type(screen.getByTestId('family-height-1-label'), 'm');
+    await user.click(screen.getByTestId('family-wizard-next'));
+    const problem = screen.getByTestId('hardware-system-wizard-plan-error');
+    expect(problem).toHaveAttribute('role', 'alert');
+    expect(problem.textContent).toContain('repetida');
+    expect(screen.getByTestId('family-wizard-title').textContent).toBe('Alturas');
+  });
+
+  it('precio negativo: mensaje visible y sin llamada al store', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn(async (_req: HardwareKitSystemCreateRequest) => okResult);
     setup({ onSubmit });
     await fillBasics(user);
-    await user.clear(screen.getByTestId('hardware-system-wizard-price'));
-    await user.type(screen.getByTestId('hardware-system-wizard-price'), '-420');
-
+    await user.clear(screen.getByTestId('family-height-0-price'));
+    await user.type(screen.getByTestId('family-height-0-price'), '-420');
+    await user.click(screen.getByTestId('family-wizard-next'));
     const problem = screen.getByTestId('hardware-system-wizard-plan-error');
-    expect(problem).toHaveAttribute('role', 'alert');
     expect(problem.textContent).toContain('precio');
-    expect(screen.getByTestId('hardware-system-wizard-submit')).toBeDisabled();
-
-    // El submit nativo del formulario no puede colarse: no hay llamada.
-    await user.click(screen.getByTestId('hardware-system-wizard-submit'));
+    expect(screen.getByTestId('family-wizard-title').textContent).toBe('Alturas');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it('código bloqueado: mensaje inline en la vista previa con role=alert', async () => {
+  it('código bloqueado: aviso en el Resumen con role=alert y envío bloqueado', async () => {
     const user = userEvent.setup();
     setup({ existingAgregadoCodes: ['MBOX-SYS-CAJON'] });
     await fillBasics(user);
-
+    await goToSummary(user);
     const blocked = screen.getByTestId('hardware-system-wizard-blocked');
     expect(blocked).toHaveAttribute('role', 'alert');
     expect(blocked.textContent).toContain('MBOX-SYS-CAJON');
     expect(screen.getByTestId('hardware-system-wizard-submit')).toBeDisabled();
   });
 
-  it('accesorios duplicados: aviso amable en vez de 409 crudo', async () => {
+  it('insertos duplicados o sin altura: aviso amable antes de avanzar', async () => {
     const user = userEvent.setup();
     setup();
-    await fillBasics(user);
-    // El kit E no está incluido por defecto: activarlo para poder dar accesorios.
-    await user.click(screen.getByTestId('hardware-system-height-E'));
+    await fillBasics(user, 'MBOX-SYS', { withE: true });
+    await user.click(screen.getByTestId('family-wizard-next'));
     await user.click(screen.getByTestId('hardware-system-accessory-add'));
     await user.type(screen.getByTestId('hardware-system-accessory-0-name'), 'Galería');
     await user.click(screen.getByTestId('hardware-system-accessory-add'));
     await user.type(screen.getByTestId('hardware-system-accessory-1-name'), 'galeria');
-
-    const problem = screen.getByTestId('hardware-system-wizard-plan-error');
-    expect(problem).toHaveAttribute('role', 'alert');
-    expect(problem.textContent).toContain('mismo código');
-    expect(screen.getByTestId('hardware-system-wizard-submit')).toBeDisabled();
+    await user.click(screen.getByTestId('family-wizard-next'));
+    expect(screen.getByTestId('hardware-system-wizard-plan-error').textContent).toContain('mismo código');
+    expect(screen.getByTestId('family-wizard-title').textContent).toBe('Insertos');
+    await user.clear(screen.getByTestId('hardware-system-accessory-1-name'));
+    await user.type(screen.getByTestId('hardware-system-accessory-1-name'), 'Boxcap');
+    await user.click(screen.getByTestId('hardware-system-accessory-1-height-E'));
+    expect(screen.getByTestId('hardware-system-wizard-plan-error').textContent).toContain('ninguna altura');
   });
 });
 
@@ -130,6 +252,8 @@ describe('HardwareKitSystemWizardModal — guard de subidas y cierre (#1552)', (
     const onSubmit = vi.fn(async (_req: HardwareKitSystemCreateRequest) => okResult);
     setup({ onSubmit });
     await fillBasics(user);
+    await user.click(screen.getByTestId('family-wizard-next')); // Insertos
+    await user.click(screen.getByTestId('family-wizard-next')); // Diseños 3D
 
     const fileInput = screen
       .getAllByTestId(/^hardware-system-wizard-file-/)
@@ -137,6 +261,7 @@ describe('HardwareKitSystemWizardModal — guard de subidas y cierre (#1552)', (
     expect(fileInput).toBeDefined();
     await user.upload(fileInput, new File(['skp'], 'lateral.skp', { type: 'application/octet-stream' }));
 
+    await goToSummary(user);
     await user.click(screen.getByTestId('hardware-system-wizard-submit'));
     await waitFor(() => {
       expect(screen.getByTestId('hardware-system-wizard-error').textContent).toContain(
@@ -157,6 +282,7 @@ describe('HardwareKitSystemWizardModal — guard de subidas y cierre (#1552)', (
     );
     const { onClose } = setup({ onSubmit });
     await fillBasics(user);
+    await goToSummary(user);
     await user.click(screen.getByTestId('hardware-system-wizard-submit'));
 
     expect(screen.getByTestId('hardware-system-wizard-submit')).toHaveTextContent('Creando');
@@ -180,6 +306,7 @@ describe('HardwareKitSystemWizardModal — reset tras «Listo» (#1552, el P1)',
     const onSubmit = vi.fn(async (_req: HardwareKitSystemCreateRequest) => okResult);
     const { view } = setup({ onSubmit });
     await fillBasics(user);
+    await goToSummary(user);
     await user.click(screen.getByTestId('hardware-system-wizard-submit'));
 
     await waitFor(() => {
@@ -212,8 +339,8 @@ describe('HardwareKitSystemWizardModal — reset tras «Listo» (#1552, el P1)',
     expect(screen.queryByTestId('hardware-system-wizard-result')).toBeNull();
     expect(screen.getByTestId('hardware-system-wizard-code')).toHaveValue('');
     expect(screen.getByTestId('hardware-system-wizard-name')).toHaveValue('');
-    // Input number vacío: value null en el DOM.
-    expect(screen.getByTestId('hardware-system-wizard-price')).toHaveValue(null);
+    // Vuelve al primer paso, sin alturas cargadas.
+    expect(screen.getByTestId('family-wizard-step-0')).toHaveAttribute('aria-current', 'step');
   });
 
   it('un segundo sistema distinto se puede crear en la misma sesión', async () => {
@@ -221,6 +348,7 @@ describe('HardwareKitSystemWizardModal — reset tras «Listo» (#1552, el P1)',
     const onSubmit = vi.fn(async (_req: HardwareKitSystemCreateRequest) => okResult);
     const { view } = setup({ onSubmit });
     await fillBasics(user, 'MBOX-SYS');
+    await goToSummary(user);
     await user.click(screen.getByTestId('hardware-system-wizard-submit'));
     await waitFor(() => {
       expect(screen.getByTestId('hardware-system-wizard-result')).toBeTruthy();
@@ -246,8 +374,8 @@ describe('HardwareKitSystemWizardModal — reset tras «Listo» (#1552, el P1)',
       />,
     );
 
-    await user.type(screen.getByTestId('hardware-system-wizard-code'), 'MBOX-OTRO');
-    await user.type(screen.getByTestId('hardware-system-wizard-name'), 'Otro sistema');
+    await fillBasics(user, 'MBOX-OTRO');
+    await goToSummary(user);
     await user.click(screen.getByTestId('hardware-system-wizard-submit'));
 
     await waitFor(() => {

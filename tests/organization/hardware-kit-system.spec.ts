@@ -68,16 +68,27 @@ test.describe.serial('Herrajes — sistema generador (#1546 M4)', () => {
     await page.getByTestId('hardware-new-typed').evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-type-pick-kit').evaluate((el) => (el as HTMLElement).click());
     await page.getByTestId('hardware-type-pick-kit-system').evaluate((el) => (el as HTMLElement).click());
+    // #1633 s2b: asistente por pasos — Identidad → Alturas → Insertos →
+    // Diseños 3D → Resumen.
     await page.getByTestId('hardware-system-wizard-code').fill(SYS_CODE);
     await page.getByTestId('hardware-system-wizard-name').fill('Merivobox Sistema QA');
-    await page.getByTestId('hardware-system-wizard-price').fill('420');
+    await page.getByTestId('hardware-system-wizard-brand').fill('Blum');
+    await page.getByTestId('family-wizard-next').click();
 
-    // Alturas: M (default) + E (checkbox).
-    await page.getByTestId('hardware-system-height-E').check();
+    // Alturas: plantilla Blum (N/M/K/E) reducida a M y E, precio 420 en todas.
+    await page.getByTestId('family-heights-template').click();
+    await page.getByTestId('family-height-2-remove').click(); // K
+    await page.getByTestId('family-height-0-remove').click(); // N → quedan M, E
+    await page.getByTestId('family-height-0-price').fill('420');
+    await page.getByTestId('family-heights-apply-price').click();
+    await page.getByTestId('family-wizard-next').click();
 
-    // Accesorio del E: galería.
+    // Insertos: galería en la E (preseleccionada: la altura más alta).
     await page.getByTestId('hardware-system-accessory-add').click();
     await page.getByTestId('hardware-system-accessory-0-name').fill('Galería Gris Iridium');
+    await expect(page.getByTestId('hardware-system-accessory-0-height-E')).toBeChecked();
+    await page.getByTestId('family-wizard-next').click(); // Diseños 3D
+    await page.getByTestId('family-wizard-next').click(); // Resumen
 
     // Preview agrupa: 2 juegos + 1 accesorio + ensamble con variantes M/E.
     const preview = page.getByTestId('hardware-system-wizard-preview');

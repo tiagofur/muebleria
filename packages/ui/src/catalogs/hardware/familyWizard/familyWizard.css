@@ -1,0 +1,193 @@
+/**
+ * Asistente «Nueva familia de cajón» (#1633 s2b). Tokens only (design.md §3).
+ */
+
+.family-wizard__steps ol {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.family-wizard__step-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.family-wizard__step-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.family-wizard__step-btn:focus-visible {
+  outline: 2px solid var(--brand-600);
+  outline-offset: 2px;
+}
+
+.family-wizard__step-btn:disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* Estado por icono + peso + color (nunca sólo color, §4.8). */
+.family-wizard__step--current .family-wizard__step-btn {
+  border-color: var(--brand-600);
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.family-wizard__step--current .family-wizard__marker {
+  color: var(--brand-600);
+}
+
+.family-wizard__step--current .family-wizard__marker svg {
+  fill: currentColor;
+}
+
+.family-wizard__step--done .family-wizard__marker {
+  color: var(--success-600);
+}
+
+.family-wizard__marker {
+  display: inline-flex;
+  align-items: center;
+}
+
+.family-wizard__step-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+}
+
+.family-wizard__step-title:focus {
+  outline: none;
+}
+
+.family-wizard__step-title:focus-visible {
+  outline: 2px solid var(--brand-600);
+  outline-offset: 2px;
+}
+
+.family-wizard__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+  margin-top: var(--space-3);
+}
+
+.family-wizard__footer-end {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.family-heights__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.family-heights__empty {
+  padding: var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.family-heights__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--space-2);
+}
+
+.family-heights__table th {
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  padding: var(--space-1);
+}
+
+.family-heights__table td {
+  padding: var(--space-1);
+  vertical-align: middle;
+}
+
+.family-heights__table input {
+  width: 100%;
+  min-width: 0;
+}
+
+.family-heights__row-actions {
+  white-space: nowrap;
+}
+
+.family-insert__heights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border: 0;
+  margin: 0 0 var(--space-2);
+  padding: 0;
+}
+
+.family-insert__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 44px;
+}
+
+.family-summary__list {
+  list-style: disc;
+  margin: 0 0 var(--space-2);
+  padding-left: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 480px) {
+  .family-heights__table thead {
+    display: none;
+  }
+
+  .family-heights__table tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-1);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .family-heights__row-actions {
+    grid-column: 1 / -1;
+  }
+
+  /* Sin encabezado visible, cada celda lleva su rótulo. */
+  .family-heights__table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .family-wizard__step-btn {
+    transition: none;
+  }
+}
