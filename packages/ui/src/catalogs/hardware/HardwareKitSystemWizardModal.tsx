@@ -1,15 +1,15 @@
 /**
- * Asistente «Nuevo sistema de cajones» (#1546 M4 S1): un solo flujo que
- * genera TODO el sistema MERIVOBOX — un kit multi-diseño por altura incluida
- * (con su par de SKPs por mano), los herrajes accesorios del cajón E
- * (galería/boxcap/boxcover con piezas por ancla) y UN agregado con variantes
- * de altura cuyo sync materializa por bahía. El plan es autoridad: el store
- * lo re-deriva contra el catálogo real antes de persistir.
+ * Asistente «Nueva familia de cajón» (#1546 M4 → #1633 s2b): en pasos —
+ * Identidad → Alturas → Insertos → Diseños 3D → Resumen — genera la familia
+ * completa: un juego multi-diseño por altura (etiqueta libre, altura interior
+ * mínima y precio propios), los insertos de cada altura con su selector y UN
+ * ensamble con variantes de altura marcado como familia de cajón. El plan del
+ * dominio es autoridad: el store lo re-deriva contra el catálogo real antes de
+ * persistir. UX Brief: issue #1633.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  HARDWARE_KIT_SYSTEM_HEIGHTS,
   planHardwareKitSystem,
   type HardwareKitSystemInput,
   type HardwareKitSystemPlan,
@@ -18,12 +18,32 @@ import {
 } from '@granete/domain';
 import { Modal } from '../../common';
 import {
-  duplicatedInsertoSuffix,
+  emptyInsertoDraft,
   insertoDraftsToAccessories,
   KitSystemInsertosFieldset,
   type InsertoDraft,
 } from './KitSystemInsertosFieldset';
 import { uploadKitWizardDesigns, useKitWizardRun, type KitWizardRunTask } from './useKitWizardRun';
+import { FamilyWizardSteps } from './familyWizard/FamilyWizardSteps';
+import { FamilyHeightsStep } from './familyWizard/FamilyHeightsStep';
+import {
+  FamilyDesignsStep,
+  insertDesignFileKey,
+  kitDesignFileKey,
+  sideLabel,
+} from './familyWizard/FamilyDesignsStep';
+import {
+  FAMILY_WIZARD_STEPS,
+  heightRowsProblem,
+  heightRowsToInput,
+  identityProblem,
+  insertsProblem,
+  parseMm,
+  type FamilyHeightRow,
+  type FamilyIdentity,
+  type FamilyWizardStep,
+} from './familyWizard/familyWizardModel';
+import './familyWizard/familyWizard.css';
 
 export type SystemFileBuckets = Record<string, File>;
 
@@ -37,7 +57,7 @@ export interface HardwareKitSystemWizardModalProps {
   readonly eligibilityGroups?: readonly { readonly id: string; readonly code: string; readonly name: string }[];
   /**
    * Sube un SKP y devuelve el binding exacto (identifiers). Opcional: sin
-   * servicio de recursos en la sesión igual se puede crear el sistema, sólo
+   * servicio de recursos en la sesión igual se puede crear la familia, sólo
    * sin subir diseños (#1552 — antes reventaba con TypeError).
    */
   readonly uploadDesign?: (
@@ -46,11 +66,7 @@ export interface HardwareKitSystemWizardModalProps {
   ) => Promise<HardwareVisualAssetBinding>;
 }
 
-/** Parseo estricto: lo inválido es NaN y el planner lo rechaza con mensaje. */
-const num = (v: string): number => {
-  const n = Number(v.trim());
-  return Number.isFinite(n) ? n : Number.NaN;
-};
+const EMPTY_IDENTITY: FamilyIdentity = { code: '', name: '', brand: '', line: '', widthMm: '570', depthMm: '530' };
 
 export function HardwareKitSystemWizardModal({
   open,
@@ -61,22 +77,25 @@ export function HardwareKitSystemWizardModal({
   existingAgregadoCodes,
   eligibilityGroups = [],
 }: HardwareKitSystemWizardModalProps): ReactNode {
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
-  const [price, setPrice] = useState('');
-  const [widthMm, setWidthMm] = useState('570');
-  const [depthMm, setDepthMm] = useState('530');
-  const [heights, setHeights] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(HARDWARE_KIT_SYSTEM_HEIGHTS.map((h) => [h.code, h.include])),
-  );
-  // Insertos del E con la forma COMPLETA (#1596: nada a medias): nombre +
-  // «Al abrir» (default: viaja con el cajón) + offsets explícitos por lado.
-  const [accessories, setAccessories] = useState<InsertoDraft[]>([]);
-  // #1596 decisión 9: elegibilidad del ensamble — grupo existente, grupo
-  // nuevo (default SISTEMA_CAJON) u omisión confirmada.
+  const [step, setStep] = useState<FamilyWizardStep>(0);
+  const [identity, setIdentity] = useState<FamilyIdentity>(EMPTY_IDENTITY);
+  const [heightRows, setHeightRows] = useState<FamilyHeightRow[]>([]);
+  // Insertos con la forma COMPLETA (#1596: nada a medias) + «Aplica en» y
+  // precio (#1633): un herraje por (inserto × altura).
+  const [inserts, setInserts] = useState<InsertoDraft[]>([]);
+  // #1596 decisión 9: dónde queda disponible el ensamble — grupo existente,
+  // grupo nuevo (default SISTEMA_CAJON) u omisión confirmada.
   const [eligibilityMode, setEligibilityMode] = useState<'new' | 'existing' | 'skip'>('new');
   const [eligibilityGroupId, setEligibilityGroupId] = useState('');
   const [skipEligibilityConfirmed, setSkipEligibilityConfirmed] = useState(false);
+  const [files, setFiles] = useState<SystemFileBuckets>({});
+  const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
+  const stepTitleRef = useRef<HTMLHeadingElement | null>(null);
+  const problemRef = useRef<HTMLParagraphElement | null>(null);
+  const movedStep = useRef(false);
+  // Pasos donde el usuario ya intentó avanzar: el problema local se muestra
+  // recién entonces (no se recibe a nadie con un error antes de escribir).
+  const [attempted, setAttempted] = useState<ReadonlySet<number>>(new Set());
 
   // Review S2: si el grupo canónico ya existe, preseleccionarlo — crear otro
   // con el mismo código daría 409 en el primer intento.
@@ -90,19 +109,26 @@ export function HardwareKitSystemWizardModal({
     // Sólo al abrir el asistente: la elección del usuario manda después.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-  const [files, setFiles] = useState<SystemFileBuckets>({});
-  const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
 
-  // Reset de los campos propios del asistente; la máquina de fases la resetea
-  // el hook (#1552: antes el modal quedaba en «done» para siempre).
+  // Al cambiar de paso el foco va al título del paso (lector de pantalla y
+  // teclado parten del contenido nuevo, no del botón que ya no está).
+  useEffect(() => {
+    if (movedStep.current) stepTitleRef.current?.focus();
+    movedStep.current = false;
+  }, [step]);
+  const goTo = (next: FamilyWizardStep): void => {
+    movedStep.current = true;
+    setStep(next);
+  };
+
+  // Reset de los campos propios; la máquina de fases la resetea el hook
+  // (#1552: antes el modal quedaba en «done» para siempre).
   const resetForm = useCallback(() => {
-    setCode('');
-    setName('');
-    setPrice('');
-    setWidthMm('570');
-    setDepthMm('530');
-    setHeights(Object.fromEntries(HARDWARE_KIT_SYSTEM_HEIGHTS.map((h) => [h.code, h.include])));
-    setAccessories([]);
+    setStep(0);
+    setAttempted(new Set());
+    setIdentity(EMPTY_IDENTITY);
+    setHeightRows([]);
+    setInserts([]);
     setEligibilityMode('new');
     setEligibilityGroupId('');
     setSkipEligibilityConfirmed(false);
@@ -116,40 +142,51 @@ export function HardwareKitSystemWizardModal({
   // reabrir tras «Listo» muestra el formulario limpio, no el resultado viejo.
   const wizard = useKitWizardRun<HardwareKitResult>({ open, onClose, resetForm });
 
-  const systemInput = useMemo<HardwareKitSystemInput | null>(() => {
-    const c = code.trim();
-    const n = name.trim();
-    if (!c || !n) return null;
-    return {
-      code: c,
-      name: n,
-      kitCostPerUnit: num(price),
-      widthMm: num(widthMm),
-      depthMm: num(depthMm),
-      heights: HARDWARE_KIT_SYSTEM_HEIGHTS.map((h) => ({
-        code: h.code,
-        labelEs: h.labelEs,
-        khMinMm: h.khMinMm,
-        include: heights[h.code] ?? false,
-      })),
-      accessoriesE: insertoDraftsToAccessories(accessories),
-    };
-  }, [code, name, price, widthMm, depthMm, heights, accessories]);
+  const heightLabels = useMemo(
+    () => heightRows.map((r) => r.label.trim()).filter(Boolean),
+    [heightRows],
+  );
+  // Review #1636 P1: al renombrar o quitar una altura, los insertos sueltan
+  // la etiqueta que ya no existe (no queda una casilla invisible imposible
+  // de desmarcar que el plan rechaza).
+  useEffect(() => {
+    const available = new Set(heightLabels.map((l) => l.toLowerCase()));
+    setInserts((prev) => {
+      let changed = false;
+      const next = prev.map((d) => {
+        const kept = (d.heights ?? []).filter((h) => available.has(h.toLowerCase()));
+        if (kept.length === (d.heights ?? []).length) return d;
+        changed = true;
+        return { ...d, heights: kept };
+      });
+      return changed ? next : prev;
+    });
+  }, [heightLabels]);
+  const problems = useMemo<readonly (string | null)[]>(
+    () => [identityProblem(identity), heightRowsProblem(heightRows), insertsProblem(inserts, heightLabels), null, null],
+    [identity, heightRows, inserts, heightLabels],
+  );
+  const localReachable = problems.map((_, i) => problems.slice(0, i).every((p) => p === null));
 
-  // Plan + su problema visible (#1552): los rechazos del planner (cero
-  // alturas, medidas, accesorios duplicados) se muestran con role="alert"
-  // en vez de borrar la vista previa en silencio. Sin plan no hay submit.
+  const systemInput = useMemo<HardwareKitSystemInput | null>(() => {
+    if (problems[0] !== null) return null;
+    return {
+      code: identity.code.trim(),
+      name: identity.name.trim(),
+      kitCostPerUnit: 0,
+      widthMm: parseMm(identity.widthMm),
+      depthMm: parseMm(identity.depthMm),
+      ...(identity.brand.trim() ? { brand: identity.brand.trim() } : {}),
+      ...(identity.line.trim() ? { line: identity.line.trim() } : {}),
+      heights: heightRowsToInput(heightRows),
+      accessories: insertoDraftsToAccessories(inserts),
+    };
+  }, [problems, identity, heightRows, inserts]);
+
+  // Plan + su problema visible (#1552): los rechazos del planner se muestran
+  // con role="alert"; sin plan no hay envío.
   const planned = useMemo<{ plan: HardwareKitSystemPlan | null; problem: string | null }>(() => {
-    if (!systemInput) return { plan: null, problem: null };
-    // Dos accesorios con el mismo sufijo generan el mismo código → 409 crudo
-    // del servidor; se detecta acá con mensaje amable.
-    const duplicated = duplicatedInsertoSuffix(systemInput.accessoriesE ?? []);
-    if (duplicated) {
-      return {
-        plan: null,
-        problem: `Dos accesorios generarían el mismo código (…-${duplicated}): renombrá uno para diferenciarlos.`,
-      };
-    }
+    if (!systemInput || problems[1] !== null) return { plan: null, problem: null };
     try {
       return {
         plan: planHardwareKitSystem(systemInput, {
@@ -161,52 +198,79 @@ export function HardwareKitSystemWizardModal({
     } catch (err) {
       return {
         plan: null,
-        problem:
-          err instanceof Error ? err.message : 'El plan no se pudo generar con estos datos.',
+        problem: err instanceof Error ? err.message : 'El plan no se pudo generar con estos datos.',
       };
     }
-  }, [systemInput, existingHardwareCodes, existingAgregadoCodes]);
+  }, [systemInput, problems, existingHardwareCodes, existingAgregadoCodes]);
   const plan = planned.plan;
+  // Rechazo del planner atribuible a las ALTURAS (plan sin insertos): frena
+  // la salida de Alturas. El del plan completo frena desde Insertos — así un
+  // problema de insertos nunca encierra al usuario en Alturas.
+  const heightsPlanProblem = useMemo<string | null>(() => {
+    if (!systemInput || problems[1] !== null) return null;
+    try {
+      planHardwareKitSystem(
+        { ...systemInput, accessories: [] },
+        { hardwareCodes: existingHardwareCodes ?? new Set(), agregadoCodes: existingAgregadoCodes ?? new Set() },
+      );
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Las alturas no generan un plan válido.';
+    }
+  }, [systemInput, problems, existingHardwareCodes, existingAgregadoCodes]);
+  const planProblemAt = (i: number): string | null =>
+    i === 1 ? heightsPlanProblem : i >= 2 ? planned.problem : null;
+  const reachable = localReachable.map(
+    (ok, i) => ok && (i < 2 || heightsPlanProblem === null) && (i < 3 || planned.problem === null),
+  );
+  const complete = problems.map((p, i) => p === null && planProblemAt(i) === null);
 
-  const fileKey = (kitCode: string, hand: string, partCode: string): string =>
-    `${kitCode}:${hand}:${partCode}`;
-  const accFileKey = (accCode: string, anchor: string): string => `${accCode}:${anchor}`;
+  // Un solo mensaje por paso: el problema local del paso actual; si no hay,
+  // el del plan (a partir de Alturas, que es donde nace el plan).
+  const stepProblem =
+    problems[step] !== null ? (attempted.has(step) ? problems[step] : null) : planProblemAt(step);
+
+  const advance = (): void => {
+    if (problems[step] !== null || planProblemAt(step) !== null) {
+      setAttempted((prev) => new Set(prev).add(step));
+      requestAnimationFrame(() => problemRef.current?.focus());
+      return;
+    }
+    goTo((step + 1) as FamilyWizardStep);
+  };
+
+  const setFile = (key: string, file: File | null): void =>
+    setFiles((prev) => {
+      const next = { ...prev };
+      if (file) next[key] = file;
+      else delete next[key];
+      return next;
+    });
 
   const submit = async (): Promise<void> => {
     if (!systemInput || !plan || wizard.running) return;
     if (plan.blockedCode) {
-      wizard.setError(`Ya existe un ensamble con el código «${plan.blockedCode}». Cambiá el código del sistema.`);
+      wizard.setError(`Ya existe un ensamble con el código «${plan.blockedCode}». Cambiá el código de la familia.`);
       return;
     }
-    // Subidas pendientes como lista plana: kits por mano + accesorios por ancla.
-    const handLabel = (hand: string): string =>
-      hand === 'left' ? 'izq' : hand === 'right' ? 'der' : 'centro';
+    // Subidas pendientes como lista plana: juegos por lado + insertos por ancla.
     const tasks: KitWizardRunTask[] = [];
     for (const kit of plan.kits) {
       for (const design of kit.designs) {
-        if (!design.handsParts) continue;
-        for (const part of design.handsParts) {
-          const file = files[fileKey(kit.code, part.hand, design.code)];
+        for (const part of design.handsParts ?? []) {
+          const key = kitDesignFileKey(kit.code, part.hand, design.code);
+          const file = files[key];
           if (!file) continue;
-          tasks.push({
-            key: fileKey(kit.code, part.hand, design.code),
-            file,
-            label: `${design.name} — ${handLabel(part.hand)}`,
-            displayName: design.name,
-          });
+          tasks.push({ key, file, label: `${design.name} — ${sideLabel(part.hand)}`, displayName: design.name });
         }
       }
     }
     for (const acc of plan.accessories) {
       for (const anchor of acc.anchors) {
-        const file = files[accFileKey(acc.code, anchor)];
+        const key = insertDesignFileKey(acc.code, anchor);
+        const file = files[key];
         if (!file) continue;
-        tasks.push({
-          key: accFileKey(acc.code, anchor),
-          file,
-          label: `${acc.name} — ${handLabel(anchor)}`,
-          displayName: acc.name,
-        });
+        tasks.push({ key, file, label: `${acc.name} — ${sideLabel(anchor)}`, displayName: acc.name });
       }
     }
     if (tasks.length > 0 && !uploadDesign) {
@@ -215,15 +279,13 @@ export function HardwareKitSystemWizardModal({
     }
     wizard.begin();
     try {
-      // Con uploadDesign ausente la lista de tareas es vacía (guard de
-      // arriba): cero subidas, el sistema se crea sin diseños.
       const designs =
         tasks.length > 0 && uploadDesign
           ? await uploadKitWizardDesigns(tasks, uploadDesign, wizard.setProgress)
           : {};
-      wizard.setProgress('Creando el sistema…');
-      // #1596 decisión 9: la elegibilidad viaja en el MISMO request
-      // transaccional; omitir exige confirmar el aviso.
+      wizard.setProgress('Creando la familia…');
+      // #1596 decisión 9: la disponibilidad viaja en el MISMO request
+      // transaccional; omitirla exige confirmar el aviso.
       const eligibilityGroup =
         eligibilityMode === 'skip'
           ? undefined
@@ -237,26 +299,27 @@ export function HardwareKitSystemWizardModal({
       });
       wizard.complete(created);
     } catch (err) {
-      wizard.fail(err, 'No se pudo crear el sistema.');
+      wizard.fail(err, 'No se pudo crear la familia.');
     }
   };
+
+  const isLast = step === FAMILY_WIZARD_STEPS.length - 1;
+  const canSubmit = !!systemInput && !!plan && plan.blockedCode === null && !wizard.running;
 
   return (
     <Modal
       open={open}
       onClose={wizard.handleClose}
-      title="Nuevo sistema de cajones"
+      title="Nueva familia de cajón"
       size="lg"
       dataTestId="hardware-system-wizard-modal"
     >
       {wizard.phase === 'done' && wizard.result ? (
         <div data-testid="hardware-system-wizard-result">
-          <p className="catalog-form__section-title">✓ Sistema creado</p>
+          <p className="catalog-form__section-title">✓ Familia creada</p>
           <p>
-            Filas generadas:{' '}
-            {wizard.result.createdCodes.length > 0
-              ? wizard.result.createdCodes.join(', ')
-              : '—'}
+            Registros creados:{' '}
+            {wizard.result.createdCodes.length > 0 ? wizard.result.createdCodes.join(', ') : '—'}
           </p>
           <button type="button" className="btn btn--primary" onClick={wizard.handleClose}>
             Listo
@@ -265,283 +328,252 @@ export function HardwareKitSystemWizardModal({
       ) : (
         <form
           className="catalog-form"
+          // Los mensajes del asistente son la validación (enseñan qué falta);
+          // la nativa del navegador bloquearía el envío sin explicarlo.
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
-            void submit();
+            if (isLast) void submit();
+            else advance();
           }}
         >
-          {planned.problem ? (
+          <FamilyWizardSteps current={step} reachable={reachable} complete={complete} onSelect={goTo} />
+          <h3 className="family-wizard__step-title" tabIndex={-1} ref={stepTitleRef} data-testid="family-wizard-title">
+            {FAMILY_WIZARD_STEPS[step]}
+          </h3>
+
+          {stepProblem ? (
             <p
               className="catalog-form__error"
               role="alert"
+              tabIndex={-1}
+              ref={problemRef}
               data-testid="hardware-system-wizard-plan-error"
             >
-              {planned.problem}
+              {stepProblem}
             </p>
           ) : null}
           {wizard.error ? (
-            <p
-              className="catalog-form__error"
-              role="alert"
-              data-testid="hardware-system-wizard-error"
-            >
+            <p className="catalog-form__error" role="alert" data-testid="hardware-system-wizard-error">
               {wizard.error}
             </p>
           ) : null}
-          <div className="catalog-form__field">
-            <label htmlFor="system-code">Código del sistema</label>
-            <input
-              id="system-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="Ej: MBOX-IRIDIUN"
-              autoComplete="off"
-              required
-              data-testid="hardware-system-wizard-code"
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="system-name">Nombre</label>
-            <input
-              id="system-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ej: Merivobox Iridium"
-              required
-              data-testid="hardware-system-wizard-name"
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="system-price">Costo por juego</label>
-            <input
-              id="system-price"
-              type="number"
-              min={0}
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              data-testid="hardware-system-wizard-price"
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="system-width">Ancho (W mm)</label>
-            <input
-              id="system-width"
-              type="number"
-              min={0}
-              value={widthMm}
-              onChange={(e) => setWidthMm(e.target.value)}
-              data-testid="hardware-system-wizard-width"
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="system-depth">Fondo (D mm)</label>
-            <input
-              id="system-depth"
-              type="number"
-              min={0}
-              value={depthMm}
-              onChange={(e) => setDepthMm(e.target.value)}
-              data-testid="hardware-system-wizard-depth"
-            />
-          </div>
 
-          <fieldset className="catalog-form__section">
-            <legend className="catalog-form__section-title">Alturas del sistema</legend>
-            {HARDWARE_KIT_SYSTEM_HEIGHTS.map((h) => (
-              <label
-                key={h.code}
-                style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-                data-testid={`hardware-system-height-${h.code}`}
-              >
+          {step === 0 ? (
+            <>
+              <div className="catalog-form__field">
+                <label htmlFor="system-code">Código de la familia</label>
                 <input
-                  type="checkbox"
-                  checked={heights[h.code] ?? false}
-                  onChange={(e) => setHeights((prev) => ({ ...prev, [h.code]: e.target.checked }))}
+                  id="system-code"
+                  value={identity.code}
+                  onChange={(e) => setIdentity((p) => ({ ...p, code: e.target.value }))}
+                  placeholder="Ej: MBOX-IRIDIUM"
+                  autoComplete="off"
+                  data-testid="hardware-system-wizard-code"
                 />
-                <span>{h.labelEs}</span>
-              </label>
-            ))}
-          </fieldset>
-
-                    <fieldset className="catalog-form__section" data-testid="hardware-system-wizard-designs">
-            <legend className="catalog-form__section-title">Diseños 3D (opcionales)</legend>
-            <p className="catalog-form__hint">
-              Un archivo por pieza (.skp). Las piezas sin diseño se ven con la
-              representación genérica y podés subir el diseño después desde su
-              ficha. Los costados nacen sin desfase (0 mm): si tu diseño no
-              está dibujado en su posición final, ajustá el desfase de cada
-              lado en la ficha de la pieza, sección «Diseño — un SKP por lado».
-            </p>
-            {plan?.kits.map((kit) =>
-              kit.designs.map((design) =>
-                (design.handsParts ?? []).map((part) => {
-                  const key = fileKey(kit.code, part.hand, design.code);
-                  const slotId = `system-file-${kit.code}-${part.hand}-${design.code}`
-                    .toLowerCase()
-                    .replace(/[^a-z0-9-]/g, '-');
-                  const handLabel = part.hand === 'left' ? 'izq' : part.hand === 'right' ? 'der' : 'centro';
-                  return (
-                    <div className="catalog-form__field" key={key}>
-                      <label htmlFor={slotId}>
-                        {kit.code} · {design.name.includes('—') ? design.name.split('—')[1]!.trim() : design.name} ({handLabel})
-                      </label>
-                      <input
-                        id={slotId}
-                        type="file"
-                        accept=".skp,.glb"
-                        ref={(el) => {
-                          fileInputsRef.current[key] = el;
-                        }}
-                        onChange={(e) =>
-                          setFiles((prev) => {
-                            const next = { ...prev };
-                            if (e.target.files?.[0]) next[key] = e.target.files[0];
-                            else delete next[key];
-                            return next;
-                          })
-                        }
-                        disabled={design.exists}
-                        data-testid={`hardware-system-wizard-file-${key}`}
-                      />
-                    </div>
-                  );
-                }),
-              ),
-            )}
-            {plan?.accessories.map((acc) =>
-              acc.anchors.map((anchor) => {
-                const key = accFileKey(acc.code, anchor);
-                const slotId = `system-file-${acc.code}-${anchor}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-                const handLabel = anchor === 'left' ? 'izq' : anchor === 'right' ? 'der' : 'centro';
-                return (
-                  <div className="catalog-form__field" key={key}>
-                    <label htmlFor={slotId}>
-                      {acc.code} ({handLabel})
-                    </label>
-                    <input
-                      id={slotId}
-                      type="file"
-                      accept=".skp,.glb"
-                      ref={(el) => {
-                        fileInputsRef.current[key] = el;
-                      }}
-                      onChange={(e) =>
-                        setFiles((prev) => {
-                          const next = { ...prev };
-                          if (e.target.files?.[0]) next[key] = e.target.files[0];
-                          else delete next[key];
-                          return next;
-                        })
-                      }
-                      disabled={acc.exists}
-                      data-testid={`hardware-system-wizard-file-${key}`}
-                    />
-                  </div>
-                );
-              }),
-            )}
-          </fieldset>
-
-          <KitSystemInsertosFieldset
-            drafts={accessories}
-            onChange={setAccessories}
-            legend="Insertos del cajón E"
-            hint="Cada inserto (galería, boxcap, boxcover…) nace como un par con su SKP por lado, su posición y su «Al abrir»; queda como opción del selector del cajón E."
-            testIdPrefix="hardware-system-accessory"
-          />
-
-          <fieldset className="catalog-form__section" data-testid="hardware-system-eligibility">
-            <legend className="catalog-form__section-title">Elegibilidad del sistema</legend>
-            <p className="catalog-form__hint">
-              Dónde queda elegible el ensamble del sistema: los módulos lo eligen por
-              ese grupo. Sin elegibilidad, el sistema existe pero ningún módulo puede
-              montarlo.
-            </p>
-            <label className="catalog-form__field">
-              <span>Grupo de sistemas de cajón</span>
-              <select
-                value={eligibilityMode === 'existing' ? eligibilityGroupId : ''}
-                onChange={(e) => {
-                  // Review S4: elegir un grupo limpia la omisión confirmada.
-                  setSkipEligibilityConfirmed(false);
-                  if (e.target.value) {
-                    setEligibilityMode('existing');
-                    setEligibilityGroupId(e.target.value);
-                  } else {
-                    setEligibilityMode('new');
-                    setEligibilityGroupId('');
-                  }
-                }}
-                data-testid="hardware-system-eligibility-select"
-              >
-                <option value="">Crear grupo nuevo «SISTEMA_CAJON»</option>
-                {eligibilityGroups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.code} — {g.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="checkbox"
-                checked={skipEligibilityConfirmed}
-                onChange={(e) => {
-                  setSkipEligibilityConfirmed(e.target.checked);
-                  if (e.target.checked) setEligibilityMode('skip');
-                  else setEligibilityMode('new');
-                }}
-                data-testid="hardware-system-eligibility-skip"
-              />
-              <span>Sin elegibilidad ahora — ningún módulo podrá elegir este sistema</span>
-            </label>
-          </fieldset>
-
-
-          {plan ? (
-            <div className="catalog-hw-wizard__preview" data-testid="hardware-system-wizard-preview">
-              <p className="catalog-form__section-title">Se va a crear</p>
-              <p>
-                {plan.kits.length} juego(s): {plan.kits.map((k) => k.code).join(', ')}
-                {plan.accessories.length > 0
-                  ? ` + ${plan.accessories.length} inserto(s): ${plan.accessories
-                      .map((a) => a.code)
-                      .join(', ')}`
-                  : ''}{' '}
-                + ensamble <strong>{plan.agregado.code}</strong> con variantes de altura (
-                {plan.agregado.variants.map((v) => v.heightCode).join('/')})
-                {plan.accessoryGroups.length > 0 ? ` + selectores ${plan.accessoryGroups.map((g) => g.code).join(", ")}` : ''}
-                {eligibilityMode === 'skip'
-                  ? ' · sin elegibilidad (ningún módulo podrá elegirlo)'
-                  : eligibilityMode === 'existing' && eligibilityGroupId
-                    ? ` · elegible en el grupo elegido`
-                    : ' · elegible en el grupo nuevo SISTEMA_CAJON'}
-                .
-              </p>
-              {plan.blockedCode ? (
-                <p
-                  className="catalog-form__error"
-                  role="alert"
-                  data-testid="hardware-system-wizard-blocked"
-                >
-                  El ensamble «{plan.blockedCode}» ya existe: cambiá el código del sistema.
-                </p>
-              ) : null}
-            </div>
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="system-name">Nombre</label>
+                <input
+                  id="system-name"
+                  value={identity.name}
+                  onChange={(e) => setIdentity((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="Ej: Merivobox Iridium"
+                  data-testid="hardware-system-wizard-name"
+                />
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="system-brand">Marca (opcional)</label>
+                <input
+                  id="system-brand"
+                  value={identity.brand}
+                  onChange={(e) => setIdentity((p) => ({ ...p, brand: e.target.value }))}
+                  placeholder="Ej: Blum, Hettich, Häfele"
+                  maxLength={80}
+                  data-testid="hardware-system-wizard-brand"
+                />
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="system-line">Línea (opcional)</label>
+                <input
+                  id="system-line"
+                  value={identity.line}
+                  onChange={(e) => setIdentity((p) => ({ ...p, line: e.target.value }))}
+                  placeholder="Ej: Merivobox, Legrabox"
+                  maxLength={80}
+                  data-testid="hardware-system-wizard-line"
+                />
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="system-width">Ancho de la guía (mm)</label>
+                <input
+                  id="system-width"
+                  type="number"
+                  min={0}
+                  value={identity.widthMm}
+                  onChange={(e) => setIdentity((p) => ({ ...p, widthMm: e.target.value }))}
+                  data-testid="hardware-system-wizard-width"
+                />
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="system-depth">Fondo de la guía (mm)</label>
+                <input
+                  id="system-depth"
+                  type="number"
+                  min={0}
+                  value={identity.depthMm}
+                  onChange={(e) => setIdentity((p) => ({ ...p, depthMm: e.target.value }))}
+                  data-testid="hardware-system-wizard-depth"
+                />
+              </div>
+            </>
           ) : null}
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button
-              type="submit"
-              className="btn btn--primary"
-              disabled={!systemInput || !plan || plan.blockedCode !== null || wizard.running}
-              data-testid="hardware-system-wizard-submit"
-            >
-              {wizard.phase === 'running' ? (wizard.progress ?? 'Creando…') : 'Crear sistema'}
-            </button>
-            <button type="button" className="btn" onClick={wizard.handleClose}>
+          {step === 1 ? <FamilyHeightsStep rows={heightRows} onChange={setHeightRows} /> : null}
+
+          {step === 2 ? (
+            <KitSystemInsertosFieldset
+              drafts={inserts}
+              onChange={setInserts}
+              legend="Insertos de la familia"
+              hint="Galería, boxcap, boxcover… Marcá en qué alturas se ofrece cada uno: cada altura tiene su propia pieza y su selector. El primero de cada altura es el que se usa por defecto (ordená con Subir/Bajar). Sin insertos, la familia igual se crea."
+              testIdPrefix="hardware-system-accessory"
+              heightOptions={heightLabels}
+              newDraft={() => ({
+                ...emptyInsertoDraft(),
+                // Preselecciona la altura más alta (donde suelen ir los insertos).
+                heights: heightLabels.length > 0 ? [heightLabels[heightLabels.length - 1]!] : [],
+                price: '',
+              })}
+            />
+          ) : null}
+
+          {step === 3 ? (
+            <FamilyDesignsStep plan={plan} files={files} setFile={setFile} fileInputsRef={fileInputsRef} />
+          ) : null}
+
+          {step === 4 ? (
+            <>
+              <fieldset className="catalog-form__section" data-testid="hardware-system-eligibility">
+                <legend className="catalog-form__section-title">Disponible en</legend>
+                <p className="catalog-form__hint">
+                  Los muebles eligen el cajón dentro de este grupo. Sin grupo, la familia existe pero
+                  ningún mueble puede usarla.
+                </p>
+                <label className="catalog-form__field">
+                  <span>Grupo de sistemas de cajón</span>
+                  <select
+                    value={eligibilityMode === 'existing' ? eligibilityGroupId : ''}
+                    onChange={(e) => {
+                      // Review S4: elegir un grupo limpia la omisión confirmada.
+                      setSkipEligibilityConfirmed(false);
+                      if (e.target.value) {
+                        setEligibilityMode('existing');
+                        setEligibilityGroupId(e.target.value);
+                      } else {
+                        setEligibilityMode('new');
+                        setEligibilityGroupId('');
+                      }
+                    }}
+                    data-testid="hardware-system-eligibility-select"
+                  >
+                    <option value="">Crear grupo nuevo «Sistemas de cajón»</option>
+                    {eligibilityGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} ({g.code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="family-insert__chip">
+                  <input
+                    type="checkbox"
+                    checked={skipEligibilityConfirmed}
+                    onChange={(e) => {
+                      setSkipEligibilityConfirmed(e.target.checked);
+                      setEligibilityMode(e.target.checked ? 'skip' : 'new');
+                    }}
+                    data-testid="hardware-system-eligibility-skip"
+                  />
+                  <span>Todavía no — ningún mueble podrá usar esta familia</span>
+                </label>
+              </fieldset>
+
+              {plan ? (
+                <div className="catalog-hw-wizard__preview" data-testid="hardware-system-wizard-preview">
+                  <p className="catalog-form__section-title">Se va a crear</p>
+                  <ul className="family-summary__list">
+                    <li>
+                      {plan.kits.length} juego(s): {plan.kits.map((k) => `${k.code} (${k.heightCode})`).join(', ')}
+                    </li>
+                    {plan.accessories.length > 0 ? (
+                      <li>
+                        {plan.accessories.length} inserto(s): {plan.accessories.map((a) => a.code).join(', ')}
+                      </li>
+                    ) : null}
+                    {plan.accessoryGroups.length > 0 ? (
+                      <li>
+                        Selector de insertos en: {plan.accessoryGroups.map((g) => g.name.replace(/^Insertos /, '')).join(', ')}
+                      </li>
+                    ) : null}
+                    <li>
+                      Ensamble <strong>{plan.agregado.code}</strong> con alturas{' '}
+                      {plan.agregado.variants.map((v) => v.label).join(' / ')}
+                    </li>
+                    <li>
+                      {eligibilityMode === 'skip'
+                        ? 'Sin grupo: ningún mueble podrá usarla todavía'
+                        : eligibilityMode === 'existing' && eligibilityGroupId
+                          ? 'Disponible en el grupo elegido'
+                          : 'Disponible en el grupo nuevo «Sistemas de cajón»'}
+                    </li>
+                  </ul>
+                  {plan.blockedCode ? (
+                    <p className="catalog-form__error" role="alert" data-testid="hardware-system-wizard-blocked">
+                      El ensamble «{plan.blockedCode}» ya existe: cambiá el código de la familia.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
+          <div className="family-wizard__footer">
+            <button type="button" className="btn btn--ghost" onClick={wizard.handleClose}>
               Cancelar
             </button>
+            <div className="family-wizard__footer-end">
+              {step > 0 ? (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => goTo((step - 1) as FamilyWizardStep)}
+                  disabled={wizard.running}
+                  data-testid="family-wizard-back"
+                >
+                  Atrás
+                </button>
+              ) : null}
+              {isLast ? (
+                <button
+                  type="submit"
+                  className="btn btn--primary"
+                  disabled={!canSubmit}
+                  data-testid="hardware-system-wizard-submit"
+                >
+                  {wizard.phase === 'running' ? (wizard.progress ?? 'Creando…') : 'Crear familia'}
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  className="btn btn--primary"
+                  disabled={wizard.running}
+                  data-testid="family-wizard-next"
+                >
+                  Siguiente
+                </button>
+              )}
+            </div>
           </div>
         </form>
       )}
