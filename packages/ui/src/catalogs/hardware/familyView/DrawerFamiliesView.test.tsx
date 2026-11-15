@@ -21,9 +21,12 @@ const incomplete: DrawerFamilySummary = {
   name: 'Cajón Sistema',
   brand: 'Blum',
   line: 'Merivobox',
+  guideWidthMm: 570,
+  guideDepthMm: 530,
+  availableIn: [],
   heights: [
-    { label: 'M', khMinMm: 108, kit: { id: 'kit-m', code: 'SYS-M', name: 'M', costPerUnit: 420, designsMissing: 0 }, selector: null },
-    { label: 'E', khMinMm: 209, kit: { id: 'kit-e', code: 'SYS-E', name: 'E', costPerUnit: 0, designsMissing: 1 }, selector: { id: 'g', code: 'SYS_LATERAL_E', defaultNone: false } },
+    { label: 'M', khMinMm: 108, kit: { id: 'kit-m', code: 'SYS-M', name: 'M', costPerUnit: 420, designsMissing: 0, active: true }, selector: null, labelDerived: true },
+    { label: 'E', khMinMm: 209, kit: { id: 'kit-e', code: 'SYS-E', name: 'E', costPerUnit: 0, designsMissing: 1, active: true }, selector: { id: 'g', code: 'SYS_LATERAL_E', defaultNone: false }, labelDerived: false },
   ],
   inserts: [{ key: 'GAL', label: 'Galería' }],
   cells: [
@@ -69,6 +72,11 @@ describe('DrawerFamiliesView (#1633 s2c-2)', () => {
     expect(onOpen).toHaveBeenCalledWith('kit-e');
     await user.click(screen.getByTestId('drawer-family-add-height'));
     expect(onAdd).toHaveBeenCalledWith('agr');
+    // Brief: altura legada con etiqueta deducida, medidas de la guía y «Disponible en».
+    expect(screen.getByTestId('drawer-family-derived-M')).toHaveTextContent('Etiqueta deducida');
+    expect(screen.queryByTestId('drawer-family-derived-E')).toBeNull();
+    expect(screen.getByTestId('drawer-family-guide')).toHaveTextContent('Ancho 570 mm × Fondo 530 mm');
+    expect(screen.getByTestId('drawer-family-available')).toHaveTextContent('Ningún grupo');
     await user.click(screen.getByTestId('drawer-family-back'));
     expect(screen.getByTestId('drawer-families-list')).toBeInTheDocument();
   });
@@ -86,7 +94,7 @@ describe('DrawerFamiliesView (#1633 s2c-2)', () => {
   });
 
   it('familyMissingText: juegos inexistentes y familia sin alturas', () => {
-    expect(familyMissingText({ ...complete, missing: { kits: 2, designs: 0, prices: 0 } })).toBe('2 juego(s) inexistente(s)');
+    expect(familyMissingText({ ...complete, missing: { kits: 2, designs: 0, prices: 0 } })).toBe('2 juego(s) inexistente(s) o inactivo(s)');
     expect(familyMissingText({ ...complete, heights: [] })).toBe('sin alturas');
   });
 });

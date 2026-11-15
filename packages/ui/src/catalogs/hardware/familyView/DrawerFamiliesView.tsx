@@ -19,7 +19,7 @@ const money = (n: number): string =>
 export function familyMissingText(f: DrawerFamilySummary): string {
   const parts: string[] = [];
   if (f.heights.length === 0) parts.push('sin alturas');
-  if (f.missing.kits > 0) parts.push(`${f.missing.kits} juego(s) inexistente(s)`);
+  if (f.missing.kits > 0) parts.push(`${f.missing.kits} juego(s) inexistente(s) o inactivo(s)`);
   if (f.missing.designs > 0) parts.push(`${f.missing.designs} diseño(s)`);
   if (f.missing.prices > 0) parts.push(`${f.missing.prices} precio(s)`);
   return parts.join(', ');
@@ -61,6 +61,11 @@ function FamilyDetail({
             <p className="drawer-family__meta">
               {[family.brand, family.line, family.code].filter(Boolean).join(' · ')}
             </p>
+            {family.guideWidthMm || family.guideDepthMm ? (
+              <p className="drawer-family__meta" data-testid="drawer-family-guide">
+                Guía: Ancho {family.guideWidthMm ?? '—'} mm × Fondo {family.guideDepthMm ?? '—'} mm
+              </p>
+            ) : null}
           </div>
           {onAddHeight ? (
             <button type="button" className="btn" onClick={onAddHeight} data-testid="drawer-family-add-height">
@@ -89,6 +94,15 @@ function FamilyDetail({
                 <th scope="row">
                   <span className="drawer-family__height-label">{h.label}</span>
                   <span className="drawer-family__height-mm">{h.khMinMm} mm</span>
+                  {h.labelDerived ? (
+                    <span
+                      className="drawer-family__derived"
+                      title="Esta altura se guardó antes de que la etiqueta fuera un dato: la letra se deduce de la medida Blum."
+                      data-testid={`drawer-family-derived-${h.label}`}
+                    >
+                      Etiqueta deducida
+                    </span>
+                  ) : null}
                 </th>
                 <td>
                   {h.kit ? (
@@ -101,6 +115,7 @@ function FamilyDetail({
                       >
                         {h.kit.code}
                       </button>
+                      {!h.kit.active ? <span className="drawer-family__warn">Juego inactivo</span> : null}
                       <span className={h.kit.costPerUnit > 0 ? '' : 'drawer-family__warn'}>
                         {h.kit.costPerUnit > 0 ? money(h.kit.costPerUnit) : 'Falta precio'}
                       </span>
@@ -155,6 +170,18 @@ function FamilyDetail({
           </tbody>
         </table>
       </div>
+      <section className="drawer-family__available" aria-labelledby="drawer-family-available-title">
+        <h4 id="drawer-family-available-title" className="drawer-family__subtitle">Disponible en</h4>
+        {family.availableIn.length > 0 ? (
+          <p className="drawer-family__meta" data-testid="drawer-family-available">
+            {family.availableIn.map((g) => g.name || g.code).join(', ')}
+          </p>
+        ) : (
+          <p className="drawer-family__warn" data-testid="drawer-family-available">
+            Ningún grupo: los muebles todavía no pueden elegir esta familia.
+          </p>
+        )}
+      </section>
       {family.inserts.length === 0 ? (
         <p className="catalog-form__hint" data-testid="drawer-family-no-inserts">
           Esta familia no tiene insertos. Se añaden desde «Añadir altura» o desde la ficha de cada juego.

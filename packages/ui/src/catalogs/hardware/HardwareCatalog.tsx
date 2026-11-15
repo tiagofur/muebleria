@@ -223,12 +223,13 @@ export function HardwareCatalog({
   const editingHardware = editingId
     ? (hardware.find((h) => h.id === editingId) ?? null)
     : null;
-  // #1596 alcance 10: el sistema (ensamble -CAJON con variantes) al que
-  // pertenece el kit en edición, si lo hay.
+  // #1633 s2c-2: familias de cajón para la vista «Familias de cajón».
   const families = useMemo(
     () => drawerFamilies(agregados, { hardware, optionGroups: optionGroups ?? [] }),
     [agregados, hardware, optionGroups],
   );
+  // #1596 alcance 10: el sistema (ensamble -CAJON con variantes) al que
+  // pertenece el kit en edición, si lo hay.
   const editingKitSystem = useMemo(() => {
     if (!editingHardware) return null;
     for (const a of agregados) {

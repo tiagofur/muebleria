@@ -416,40 +416,55 @@ herraje existente** suman partes; **Quitar** las desvincula sin borrarlas.
 **Cómo saber que quedó bien:** la lista agrupa las partes bajo el juego con
 la marca «N partes de diseño», y el mueble dibuja cada parte en su lugar.
 
-### 8c.5 Sistema de cajones por alturas
+### 8c.5 Familia de cajón (alturas, insertos y vista de familia)
 
-**Para qué sirve:** dar de alta un sistema tipo Merivobox completo — un
-juego por altura Blum (N 85.5, M 108, K 146, E 209 mm) — de una vez, con
-sus insertos y con el ensamble que los módulos eligen por bahía.
+**Para qué sirve:** dar de alta un modelo de cajón de **cualquier marca**
+(Blum Merivobox/Legrabox, Hettich, Häfele…) con **sus** alturas, sus
+insertos y sus precios, en una sola pasada, y ver después en una pantalla
+qué tiene la familia y qué le falta para cotizar y fabricar.
 
-**Pasos:** Herrajes → **Nuevo → Juego → Sistema por alturas**.
+**Pasos:** Herrajes → **Nuevo → Juego → Sistema por alturas** abre el
+asistente **Nueva familia de cajón**, en pasos:
 
-1. Identidad del sistema: código, nombre, costo por juego, ancho y fondo.
-2. **Alturas:** marcá las que querés incluir; cada altura pide el diseño
-   del costado (fijo y móvil, por mano — subir o elegir).
-3. **Insertos del cajón E** (opcional, podés añadirlos después): cada uno
-   nace con su SKP por lado, sus offsets y su «Al abrir» — nada queda a
-   medias. El orden en que los cargás es el orden del selector: el primero
-   es el inserto por defecto de los cajones E (se puede cambiar después con
-   las flechas de **Insertos del juego**, ver 8c.3). Los **costados** nacen sin desfase (0 mm): si el diseño no
-   está dibujado en su posición final, se ajusta después en la ficha de
-   cada pieza, sección **Diseño — un SKP por lado**.
-4. **Elegibilidad:** elegís en qué grupo queda disponible el sistema para
-   los módulos (el default es el grupo de sistemas de cajón). Si decidís
-   omitirlo, la app te avisa que ningún módulo podrá elegirlo y hay que
-   confirmar.
-5. **Revisión:** la lista exacta de lo que se va a crear y el botón Crear.
-   Si algo falla a mitad, no queda nada creado a medias: se corrige y se
-   reintenta.
+1. **Identidad:** código, nombre, marca y línea (opcionales), ancho y fondo
+   de la guía.
+2. **Alturas:** una fila por altura con **etiqueta libre** («M», «C»,
+   «Alta 186»), **altura interior mínima** (el hueco libre que necesita la
+   bahía: con ella el mueble elige la altura sola) y **precio del juego**.
+   **Precargar plantilla Blum Merivobox (N · M · K · E)** llena las cuatro
+   alturas Blum para editarlas; «Aplicar el precio de la primera altura a
+   todas» copia el precio. Las filas se ordenan con las flechas.
+3. **Insertos** (opcional): galería, boxcap, boxcover… Cada uno marca en
+   qué alturas se ofrece («Aplica en») y su precio; cada altura tiene su
+   propia pieza y su selector «Insertos <altura>». El primero de cada altura
+   es el que se usa por defecto (Subir/Bajar para cambiarlo). Los desfases
+   se escriben como Ancho / Fondo / Alto.
+4. **Diseños 3D** (opcional): un SKP por pieza y por lado. Los costados
+   nacen sin desfase (0 mm): si el diseño no está dibujado en su posición
+   final, se ajusta después en la ficha de cada pieza.
+5. **Resumen:** **Disponible en** (el grupo donde los muebles eligen la
+   familia; sin grupo, la app avisa que ningún mueble podrá usarla) y la
+   lista de lo que se va a crear. **Crear familia** lo guarda todo de una
+   vez: si algo falla, no queda nada a medias.
 
-**Añadir una altura después** (el sistema ya existe): abrí cualquier juego
-del sistema → sección **Sistema de cajones** → **Añadir altura**. Sólo
-ofrece las alturas que faltan y agrega la variante al ensamble. Si la
-altura es la **E**, ahí mismo podés declarar sus **insertos** (galería,
-BOXCAP, BOXCOVER…) igual que en el asistente: quedan como opciones del
-selector del juego E. Con sesión, todo se guarda de una vez: si algo falla
-(un código que ya existe, otra persona cambió el ensamble mientras tanto),
-no queda nada a medias y la app dice qué corregir.
+Si un paso tiene algo pendiente, **Siguiente** dice qué falta y no avanza.
+
+**Ver la familia:** Herrajes → pestaña **Familias de cajón**. Cada familia
+muestra sus alturas, sus insertos y su estado: **Completa** o **Le falta:**
+(diseños, precios o juegos inexistentes/inactivos). Al abrirla, una tabla
+cruza alturas e insertos: cada celda dice si el inserto está disponible en
+esa altura, cuál es **Por defecto**, y si le falta precio o diseño. Un
+precio en 0 cuenta como **Falta precio** (si un inserto es realmente
+gratis, la familia seguirá marcándolo). Las alturas guardadas antes de que
+la etiqueta fuera un dato muestran **Etiqueta deducida** (la letra sale de
+la medida Blum). Cada juego o inserto abre su ficha.
+
+**Añadir una altura después:** desde la familia (**Añadir altura**) o desde
+la ficha de cualquier juego de la familia (**Añadir altura a la familia**).
+Se escribe la etiqueta y la altura interior mínima (o se usa el atajo con
+las alturas Blum que le faltan), el precio y, si querés, sus insertos —en
+**cualquier** altura—. La app avisa antes de subir nada si la etiqueta o la
+medida ya existen, o si un código generado choca o supera 50 caracteres.
 
 **Cómo saber que quedó bien:** en la cotización, cada bahía resuelve su
 altura automáticamente (una bahía baja de 209 mm sale con el juego E; una

@@ -82,4 +82,38 @@ describe('#1633 summarizeDrawerFamily', () => {
     );
     expect(list.map((f) => f.agregadoId)).toEqual(['agr']);
   });
+
+  it('review #1638: juego inactivo cuenta como faltante; etiqueta deducida marcada; disponible en y medidas', () => {
+    const inactive = summarizeDrawerFamily(
+      { ...family, externalDims: { width: 570, height: 209, depth: 530 } } as Agregado,
+      {
+        hardware: hardware.map((h) => (h.id === 'kit-m' ? { ...h, active: false } : h)),
+        optionGroups: [
+          ...optionGroups,
+          { id: 'elig', code: 'SISTEMA_CAJON', name: 'Sistemas de cajón', kind: 'agregado', required: false, optionIds: ['agr'] } as OptionGroup,
+        ],
+      },
+    );
+    expect(inactive.heights[0]!.kit?.active).toBe(false);
+    expect(inactive.missing.kits).toBe(1);
+    expect(inactive.heights.map((h) => h.labelDerived)).toEqual([true, false]);
+    expect(inactive.availableIn.map((g) => g.code)).toEqual(['SISTEMA_CAJON']);
+    expect([inactive.guideWidthMm, inactive.guideDepthMm]).toEqual([570, 530]);
+  });
+
+  it('review #1638: insertos con código fuera del patrón se agrupan por nombre entre alturas', () => {
+    const hw2: Hardware[] = [
+      ...hardware,
+      hw({ id: 'x-m', code: 'MBOX-M-GAL-IG', name: 'Galería', costPerUnit: 10, pieces: [{ anchor: 'left', asset }] }),
+      hw({ id: 'x-e', code: 'MBOX-E-GAL-IG', name: 'Galería', costPerUnit: 10, pieces: [{ anchor: 'left', asset }] }),
+    ];
+    const groups: OptionGroup[] = [
+      { ...optionGroups[0]!, optionIds: ['x-e'] } as OptionGroup,
+      { ...optionGroups[1]!, optionIds: ['x-m'] } as OptionGroup,
+    ];
+    const s2 = summarizeDrawerFamily(family, { hardware: hw2, optionGroups: groups });
+    expect(s2.inserts).toEqual([{ key: 'nombre:galería', label: 'Galería' }]);
+    expect(s2.cells[0]!['nombre:galería']?.code).toBe('MBOX-M-GAL-IG');
+    expect(s2.cells[1]!['nombre:galería']?.code).toBe('MBOX-E-GAL-IG');
+  });
 });
