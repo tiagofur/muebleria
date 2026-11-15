@@ -85,12 +85,39 @@ func (s *Server) HandleHardwareKitSystemCreate(w http.ResponseWriter, r *http.Re
 	// after sibling rows were written would COMMIT a half system (the
 	// middleware commits 4xx). The resolved group (id + version) rides in the
 	// plan; the member append happens later in the same transaction.
-	if plan.eligibility != nil && plan.eligibility.existingGroupID != "" {
-		groups, err := s.Store.ListOptionGroups(r.Context())
+	var groups []domain.OptionGroup
+	if len(plan.optionGroups) > 0 || plan.eligibility != nil {
+		var err error
+		groups, err = s.Store.ListOptionGroups(r.Context())
 		if err != nil {
-			respondWithInternalError(w, err, "kit system eligibility probe")
+			respondWithInternalError(w, err, "kit system option group probe")
 			return
 		}
+	}
+	// #1633: every selector code (and a new eligibility group's) is checked
+	// BEFORE the first insert — a typed 409, never a half system.
+	existingGroupCodes := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		existingGroupCodes[g.Code] = true
+	}
+	takenGroups := []string{}
+	for _, g := range plan.optionGroups {
+		if existingGroupCodes[g.Code] {
+			takenGroups = append(takenGroups, g.Code)
+		}
+	}
+	if plan.eligibility != nil && plan.eligibility.newGroup != nil && existingGroupCodes[plan.eligibility.newGroup.Code] {
+		takenGroups = append(takenGroups, plan.eligibility.newGroup.Code)
+	}
+	if len(takenGroups) > 0 {
+		respondWithJSON(w, http.StatusConflict, map[string]any{
+			"code":    "HARDWARE_KIT_SYSTEM_CODE_TAKEN",
+			"message": fmt.Sprintf("códigos de grupo ya existen en el catálogo: %v", takenGroups),
+			"details": map[string]any{"codes": takenGroups},
+		})
+		return
+	}
+	if plan.eligibility != nil && plan.eligibility.existingGroupID != "" {
 		for i := range groups {
 			if groups[i].ID == plan.eligibility.existingGroupID {
 				plan.eligibility.eligibilityTarget = &groups[i]
@@ -189,13 +216,13 @@ func (s *Server) HandleHardwareKitSystemCreate(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if plan.optionGroup != nil {
-		if err := s.Store.CreateOptionGroup(r.Context(), plan.optionGroup); err != nil {
+	for _, og := range plan.optionGroups {
+		if err := s.Store.CreateOptionGroup(r.Context(), og); err != nil {
 			if isDuplicateKey(err) {
 				respondWithJSON(w, http.StatusConflict, map[string]any{
 					"code":    "HARDWARE_KIT_SYSTEM_CODE_TAKEN",
-					"message": fmt.Sprintf("el grupo «%s» ya existe en el catálogo", plan.optionGroup.Code),
-					"details": map[string]any{"codes": []string{plan.optionGroup.Code}},
+					"message": fmt.Sprintf("el grupo «%s» ya existe en el catálogo", og.Code),
+					"details": map[string]any{"codes": []string{og.Code}},
 				})
 				return
 			}
@@ -254,7 +281,7 @@ func (s *Server) HandleHardwareKitSystemCreate(w http.ResponseWriter, r *http.Re
 type kitSystemPlan struct {
 	hardware      []domain.Hardware
 	agregado      *domain.Agregado
-	optionGroup   *domain.OptionGroup
+	optionGroups  []*domain.OptionGroup // #1633: one insert selector per height kit
 	eligibility   *kitSystemEligibility
 	variantSetIDs []string
 	allCodes      []string
@@ -464,22 +491,44 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 		return nil, invalidPayload(fmt.Sprintf("ensamble inválido: %v", err), nil)
 	}
 
-	optionGroup := (*domain.OptionGroup)(nil)
+	// #1633: one insert selector per height kit (option_groups); the legacy
+	// single option_group is the same list of one. Never both.
+	groupRows := req.OptionGroups
 	if req.OptionGroup != nil {
-		og := req.OptionGroup
+		if len(groupRows) > 0 {
+			return nil, invalidPayload("option_group y option_groups son excluyentes", nil)
+		}
+		groupRows = []openapi.HardwareKitSystemOptionGroupRow{*req.OptionGroup}
+	}
+	optionGroups := make([]*domain.OptionGroup, 0, len(groupRows))
+	seenGroupCodes := map[string]bool{}
+	seenGroupKits := map[string]bool{}
+	for i := range groupRows {
+		og := &groupRows[i]
 		if og.Kind != "hardware" {
 			return nil, invalidPayload("el grupo del sistema debe ser kind hardware", nil)
+		}
+		if og.ID == "" || og.Code == "" || og.Name == "" || len(og.OptionIds) == 0 {
+			return nil, invalidPayload("cada selector de insertos necesita id, code, name y al menos una opción", nil)
 		}
 		if !allIDs[og.KitHardwareID] || !kitIDs[og.KitHardwareID] {
 			return nil, invalidPayload("kit_hardware_id del grupo no es una fila kit del payload", nil)
 		}
+		if seenGroupCodes[og.Code] {
+			return nil, invalidPayload(fmt.Sprintf("código de selector repetido en el payload: «%s»", og.Code), nil)
+		}
+		seenGroupCodes[og.Code] = true
+		if seenGroupKits[og.KitHardwareID] {
+			return nil, invalidPayload("dos selectores de insertos no pueden vincularse al mismo juego", nil)
+		}
+		seenGroupKits[og.KitHardwareID] = true
 		for _, optionID := range og.OptionIds {
-			if !allIDs[optionID] {
-				return nil, invalidPayload(fmt.Sprintf("option_ids del grupo referencia una fila inexistente del payload: «%s»", optionID), nil)
+			if !allIDs[optionID] || kitIDs[optionID] {
+				return nil, invalidPayload(fmt.Sprintf("option_ids del grupo referencia una fila que no es inserto del payload: «%s»", optionID), nil)
 			}
 		}
 		kitRef := og.KitHardwareID
-		optionGroup = &domain.OptionGroup{
+		optionGroups = append(optionGroups, &domain.OptionGroup{
 			ID:            og.ID,
 			Code:          og.Code,
 			Name:          og.Name,
@@ -487,7 +536,7 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 			Required:      og.Required,
 			OptionIDs:     og.OptionIds,
 			KitHardwareID: &kitRef,
-		}
+		})
 	}
 
 	allCodes := append([]string{}, seenCodesSlice(seenCodes)...)
@@ -495,10 +544,13 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 	if egErr != nil {
 		return nil, invalidPayload(egErr.Error(), nil)
 	}
+	if eligibility != nil && eligibility.newGroup != nil && seenGroupCodes[eligibility.newGroup.Code] {
+		return nil, invalidPayload("un selector de insertos y el grupo de elegibilidad no pueden compartir código", nil)
+	}
 	return &kitSystemPlan{
 		hardware:      hardware,
 		agregado:      agr,
-		optionGroup:   optionGroup,
+		optionGroups:  optionGroups,
 		eligibility:   eligibility,
 		variantSetIDs: variantSetIDs,
 		allCodes:      allCodes,

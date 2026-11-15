@@ -231,6 +231,16 @@ export interface WorkspaceRepository {
       readonly option_ids: readonly string[];
       readonly kit_hardware_id: string;
     } | null;
+    /** #1633: un selector de insertos por altura (excluyente con option_group). */
+    readonly option_groups?: readonly {
+      readonly id: string;
+      readonly code: string;
+      readonly name: string;
+      readonly kind: 'hardware';
+      readonly required: boolean;
+      readonly option_ids: readonly string[];
+      readonly kit_hardware_id: string;
+    }[];
   }): Promise<{
     readonly created_codes: readonly string[];
     readonly reused_codes: readonly string[];

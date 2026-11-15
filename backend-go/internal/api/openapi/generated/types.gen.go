@@ -3452,6 +3452,7 @@ type HardwareKitSystemCreateRequest struct {
 	Hardware              []HardwareKitSystemHardwareRow        `json:"hardware"`
 	Agregado              HardwareKitSystemAgregadoRow          `json:"agregado"`
 	OptionGroup           *HardwareKitSystemOptionGroupRow      `json:"option_group,omitempty"`
+	OptionGroups          []HardwareKitSystemOptionGroupRow     `json:"option_groups,omitempty"`
 	EligibilityGroup      *HardwareKitSystemEligibilityGroupRow `json:"eligibility_group,omitempty"`
 }
 

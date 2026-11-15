@@ -302,7 +302,7 @@ export interface ShellViewCtx {
   /** #1596 alcance 10: altura faltante para un sistema existente. */
   readonly addSystemHeight: (req: {
     readonly agregadoId: string;
-    readonly heightCode: 'N' | 'M' | 'K' | 'E';
+    readonly heightCode: string; // #1633: etiqueta de altura
     readonly kitCostPerUnit: number;
     readonly widthMm: number;
     readonly depthMm: number;

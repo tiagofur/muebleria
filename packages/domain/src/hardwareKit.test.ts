@@ -18,6 +18,7 @@ import {
   KIT_TEMPLATE_DRAWER_HANDS_ID,
   planHardwareKitSystem,
   isDrawerSystemAgregado,
+  heightCodeSlug,
   validateHardwareKitTemplate,
   type HardwareKitPlanInput,
   type HardwareKitSystemInput,
@@ -795,15 +796,19 @@ describe('planHardwareKitSystem (#1546 M4 — sistema generador)', () => {
 
   it('el grupo de accesorios se vincula al kit E con los herrajes accesorios como opciones', () => {
     const plan = planHardwareKitSystem(systemInput, noExisting);
-    expect(plan.accessoryGroup).toEqual({
-      code: 'MBOX-IRIDIUN_LATERAL_E',
-      name: 'Lateral superior E',
-      required: false,
-      kitCode: 'MBOX-IRIDIUN-E',
-      optionIds: ['MBOX-IRIDIUN-E-GALERIA'],
-    });
+    expect(plan.accessoryGroups).toEqual([
+      {
+        code: 'MBOX-IRIDIUN_LATERAL_E',
+        name: 'Insertos E',
+        required: false,
+        kitCode: 'MBOX-IRIDIUN-E',
+        optionIds: ['MBOX-IRIDIUN-E-GALERIA'],
+      },
+    ]);
     expect(plan.accessories[0]).toMatchObject({
       code: 'MBOX-IRIDIUN-E-GALERIA',
+      heightCode: 'E',
+      kitCode: 'MBOX-IRIDIUN-E',
       anchors: ['left', 'right'],
       exists: false,
     });
@@ -815,8 +820,88 @@ describe('planHardwareKitSystem (#1546 M4 — sistema generador)', () => {
       noExisting,
     );
     expect(plan.accessories).toEqual([]);
-    expect(plan.accessoryGroup).toBeNull();
+    expect(plan.accessoryGroups).toEqual([]);
     expect(plan.kits.map((k) => k.code)).toEqual(['MBOX-IRIDIUN-M']);
+  });
+
+  describe('#1633 alturas libres e insertos por altura', () => {
+    const legrabox: HardwareKitSystemInput = {
+      code: 'LGX',
+      name: 'Legrabox',
+      kitCostPerUnit: 500,
+      widthMm: 560,
+      depthMm: 500,
+      heights: [
+        { code: 'N', labelEs: 'N', khMinMm: 70, include: true, kitCostPerUnit: 450 },
+        { code: 'Alta 186', labelEs: 'Alta 186', khMinMm: 186, include: true },
+        { code: 'C', labelEs: 'C', khMinMm: 177, include: true, kitCostPerUnit: 610 },
+      ],
+      accessories: [
+        { suffix: 'GAL', name: 'Galería', anchors: ['left', 'right'], heights: ['Alta 186', 'C'], costPerUnit: 120 },
+        { suffix: 'BOX', name: 'Boxcover', anchors: ['left', 'right'], heights: ['c'] },
+      ],
+    };
+
+    it('etiquetas libres ⇒ códigos de juego normalizados y precio por altura', () => {
+      const plan = planHardwareKitSystem(legrabox, noExisting);
+      expect(plan.kits.map((k) => [k.code, k.heightCode, k.costPerUnit])).toEqual([
+        ['LGX-N', 'N', 450],
+        ['LGX-ALTA-186', 'Alta 186', 500],
+        ['LGX-C', 'C', 610],
+      ]);
+      expect(plan.agregado.variants.map((v) => v.label)).toEqual(['N', 'Alta 186', 'C']);
+    });
+
+    it('un herraje por inserto × altura y un selector por altura con insertos, en orden', () => {
+      const plan = planHardwareKitSystem(legrabox, noExisting);
+      expect(plan.accessories.map((a) => [a.code, a.kitCode, a.costPerUnit])).toEqual([
+        ['LGX-ALTA-186-GAL', 'LGX-ALTA-186', 120],
+        ['LGX-C-GAL', 'LGX-C', 120],
+        ['LGX-C-BOX', 'LGX-C', 0],
+      ]);
+      expect(plan.accessoryGroups).toEqual([
+        { code: 'LGX_LATERAL_ALTA-186', name: 'Insertos Alta 186', required: false, kitCode: 'LGX-ALTA-186', optionIds: ['LGX-ALTA-186-GAL'] },
+        { code: 'LGX_LATERAL_C', name: 'Insertos C', required: false, kitCode: 'LGX-C', optionIds: ['LGX-C-GAL', 'LGX-C-BOX'] },
+      ]);
+    });
+
+    it('fail-closed: etiquetas repetidas, slug que choca, medida repetida, altura ajena o vacía', () => {
+      const withHeights = (heights: HardwareKitSystemInput['heights']) => ({ ...legrabox, heights, accessories: [] });
+      expect(() => planHardwareKitSystem(withHeights([
+        { code: 'M', labelEs: 'M', khMinMm: 108, include: true },
+        { code: ' m ', labelEs: 'm', khMinMm: 110, include: true },
+      ]), noExisting)).toThrow('repetida');
+      expect(() => planHardwareKitSystem(withHeights([
+        { code: 'Alta-1', labelEs: '', khMinMm: 100, include: true },
+        { code: 'Alta 1', labelEs: '', khMinMm: 120, include: true },
+      ]), noExisting)).toThrow('mismo código de juego');
+      expect(() => planHardwareKitSystem(withHeights([
+        { code: 'A', labelEs: '', khMinMm: 100, include: true },
+        { code: 'B', labelEs: '', khMinMm: 100, include: true },
+      ]), noExisting)).toThrow('misma altura interior mínima');
+      expect(() => planHardwareKitSystem(withHeights([
+        { code: '  ', labelEs: '', khMinMm: 100, include: true },
+      ]), noExisting)).toThrow('necesita una etiqueta');
+      expect(() => planHardwareKitSystem({
+        ...legrabox,
+        accessories: [{ suffix: 'X', name: 'X', anchors: ['left'], heights: ['Z'] }],
+      }, noExisting)).toThrow('no está en el sistema');
+      expect(() => planHardwareKitSystem({
+        ...legrabox,
+        accessories: [{ suffix: 'X', name: 'Suelto', anchors: ['left'], heights: [] }],
+      }, noExisting)).toThrow('no se ofrece en ninguna altura');
+      expect(() => planHardwareKitSystem({
+        ...legrabox,
+        accessoriesE: [{ suffix: 'Y', name: 'Y', anchors: ['left'] }],
+      }, noExisting)).toThrow('no en ambos');
+    });
+
+    it('heightCodeSlug: sin acentos, mayúsculas, separadores colapsados', () => {
+      expect(heightCodeSlug('M')).toBe('M');
+      expect(heightCodeSlug(' Alta  186 ')).toBe('ALTA-186');
+      expect(heightCodeSlug('Baja/Única')).toBe('BAJA-UNICA');
+      expect(heightCodeSlug('***')).toBe('');
+    });
   });
 
   it('fail-closed: sin alturas incluidas o código vacío', () => {

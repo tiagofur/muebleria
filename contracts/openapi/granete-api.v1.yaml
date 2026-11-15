@@ -21116,7 +21116,13 @@
             "oneOf": [
               { "$ref": "#/components/schemas/HardwareKitSystemOptionGroupRow" },
               { "type": "null" }
-            ]
+            ],
+            "description": "Legado (#1519): un único selector de insertos. Excluyente con option_groups."
+          },
+          "option_groups": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/HardwareKitSystemOptionGroupRow" },
+            "description": "#1633: un selector de insertos por altura (cada uno vinculado a un juego distinto del payload), creados en la MISMA transacción. Excluyente con option_group."
           },
           "eligibility_group": {
             "oneOf": [

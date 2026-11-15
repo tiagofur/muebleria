@@ -510,7 +510,7 @@ export function HardwareKitSystemWizardModal({
                   : ''}{' '}
                 + ensamble <strong>{plan.agregado.code}</strong> con variantes de altura (
                 {plan.agregado.variants.map((v) => v.heightCode).join('/')})
-                {plan.accessoryGroup ? ` + selector ${plan.accessoryGroup.code}` : ''}
+                {plan.accessoryGroups.length > 0 ? ` + selectores ${plan.accessoryGroups.map((g) => g.code).join(", ")}` : ''}
                 {eligibilityMode === 'skip'
                   ? ' · sin elegibilidad (ningún módulo podrá elegirlo)'
                   : eligibilityMode === 'existing' && eligibilityGroupId

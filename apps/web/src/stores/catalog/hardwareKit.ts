@@ -281,12 +281,12 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       const createdCodes: string[] = [];
       const reusedCodes: string[] = [];
       const newHardware: Hardware[] = [];
-      const systemKitIds = new Map<string, string>(); // heightCode → kit id
+      const systemKitIds = new Map<string, string>(); // kit code → kit id (#1633)
 
       // 1. Kit multi-diseño por altura (FIJ/MOV con pieces por ancla).
       for (const kit of plan.kits) {
         const kitId = idFor(kit.code);
-        systemKitIds.set(kit.heightCode, kitId);
+        systemKitIds.set(kit.code, kitId);
         if (kit.exists) {
           reusedCodes.push(kit.code);
         } else {
@@ -295,7 +295,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
             code: kit.code,
             name: kit.name,
             unit: 'set',
-            costPerUnit: req.input.kitCostPerUnit,
+            costPerUnit: kit.costPerUnit, // #1633: precio por altura
             active: true,
             notes: `Juego ${kit.heightCode} del sistema ${req.input.code.trim()} (M4).`,
           });
@@ -336,10 +336,8 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       // EXPLÍCITOS (decisión 2: dibuja en 0,0,0 y posiciona por offset) y la
       // declaración de movimiento que el motor ya lee (decisión 4: «Al
       // abrir» = actor:drawer por defecto, nunca inferido del nombre).
-      const accessoryIds: string[] = [];
       for (const acc of plan.accessories) {
         const accId = idFor(acc.code);
-        accessoryIds.push(accId);
         if (acc.exists) {
           reusedCodes.push(acc.code);
           continue;
@@ -359,9 +357,9 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           code: acc.code,
           name: acc.name,
           unit: 'piece',
-          costPerUnit: 0,
+          costPerUnit: acc.costPerUnit, // #1633: precio del inserto
           active: true,
-          notes: `Accesorio del cajón E del sistema ${req.input.code.trim()} (#1519): se elige por mueble y el motor lo monta por cajón.`,
+          notes: `Inserto de la altura ${acc.heightCode} del sistema ${req.input.code.trim()} (#1519/#1633): se elige por mueble y el motor lo monta por cajón.`,
           pieces,
           designParts: [
             { componentName: acc.code, actorMembership, label: '', finishKey: '' },
@@ -404,22 +402,17 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         drawerSystem: plan.agregado.drawerSystem,
       };
 
-      // 5. Grupo de accesorios del E como opción (kind hardware, link al kit E).
-      let accessoryGroupDraft: OptionGroup | null = null;
-      if (plan.accessoryGroup) {
-        const eKitId = systemKitIds.get('E');
-        if (eKitId) {
-          accessoryGroupDraft = {
-            id: ctx.newId(),
-            code: plan.accessoryGroup.code,
-            name: plan.accessoryGroup.name,
-            kind: 'hardware',
-            required: plan.accessoryGroup.required,
-            optionIds: accessoryIds,
-            kitHardwareId: eKitId,
-          };
-        }
-      }
+      // 5. #1633: un selector de insertos por altura con insertos (kind
+      // hardware, vinculado a SU juego), opciones en el orden declarado.
+      const accessoryGroupDrafts: OptionGroup[] = plan.accessoryGroups.map((g) => ({
+        id: ctx.newId(),
+        code: g.code,
+        name: g.name,
+        kind: 'hardware',
+        required: g.required,
+        optionIds: g.optionIds.map((code) => idFor(code)),
+        kitHardwareId: systemKitIds.get(g.kitCode)!,
+      }));
 
       const serverApply = ctx.deps.createHardwareKitSystem;
       const authed = ctx.deps.getSession() === 'auth';
@@ -452,17 +445,15 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
             })),
             ...(agregado.drawerSystem ? { drawer_system: agregado.drawerSystem } : {}),
           },
-          option_group: accessoryGroupDraft
-            ? {
-                id: accessoryGroupDraft.id,
-                code: accessoryGroupDraft.code,
-                name: accessoryGroupDraft.name,
-                kind: 'hardware' as const,
-                required: accessoryGroupDraft.required,
-                option_ids: accessoryGroupDraft.optionIds,
-                kit_hardware_id: accessoryGroupDraft.kitHardwareId ?? '',
-              }
-            : null,
+          option_groups: accessoryGroupDrafts.map((g) => ({
+            id: g.id,
+            code: g.code,
+            name: g.name,
+            kind: 'hardware' as const,
+            required: g.required,
+            option_ids: g.optionIds,
+            kit_hardware_id: g.kitHardwareId ?? '',
+          })),
           // #1596 decisión 9: la elegibilidad se aplica en la MISMA
           // transacción del servidor.
           eligibility_group: req.eligibilityGroup
@@ -503,11 +494,11 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           ...catalog,
           hardware: [...(catalog.hardware ?? []), ...newHardware],
           agregados: [...(catalog.agregados ?? []), serverAgregado],
-          ...(accessoryGroupDraft || eligibilityDraft
+          ...(accessoryGroupDrafts.length > 0 || eligibilityDraft
             ? {
                 optionGroups: [
                   ...(catalog.optionGroups ?? []),
-                  ...(accessoryGroupDraft ? [accessoryGroupDraft] : []),
+                  ...accessoryGroupDrafts,
                   ...(eligibilityDraft ? [eligibilityDraft] : []),
                 ],
               }
@@ -526,12 +517,9 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       // Guest (sin backend): la elegibilidad se aplica en la MISMA mutación
       // local — sin éxito aparente: un grupo inexistente aborta todo antes
       // de escribir (#1596 decisión 9). El selector de insertos del E
-      // (accessoryGroupDraft, #1519) entra en la MISMA lista — review B1:
+      // (accessoryGroupDrafts, #1519/#1633) entran en la MISMA lista — review B1:
       // sin esto, guest creaba el sistema y perdía el selector.
-      const guestOptionGroups = [...(catalog.optionGroups ?? [])];
-      if (accessoryGroupDraft) {
-        guestOptionGroups.push(accessoryGroupDraft);
-      }
+      const guestOptionGroups = [...(catalog.optionGroups ?? []), ...accessoryGroupDrafts];
       if (req.eligibilityGroup) {
         if (req.eligibilityGroup.existingGroupId) {
           const target = guestOptionGroups.find(
@@ -567,7 +555,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
           hardware: [...(c.hardware ?? []), ...newHardware],
           agregados: [...(c.agregados ?? []), agregado],
           optionGroups:
-            accessoryGroupDraft || req.eligibilityGroup
+            accessoryGroupDrafts.length > 0 || req.eligibilityGroup
               ? guestOptionGroups
               : c.optionGroups,
         }),

@@ -143,6 +143,16 @@ export interface ApiCatalogDeps {
       readonly option_ids: readonly string[];
       readonly kit_hardware_id: string;
     } | null;
+    /** #1633: un selector de insertos por altura (excluyente con option_group). */
+    readonly option_groups?: readonly {
+      readonly id: string;
+      readonly code: string;
+      readonly name: string;
+      readonly kind: 'hardware';
+      readonly required: boolean;
+      readonly option_ids: readonly string[];
+      readonly kit_hardware_id: string;
+    }[];
     /** #1596 decisión 9: elegibilidad del ensamble en la misma transacción. */
     readonly eligibility_group?: {
       readonly existing_group_id?: string;
@@ -163,7 +173,7 @@ export interface ApiCatalogDeps {
 export interface AddSystemHeightRequest {
   /** Ensamble del sistema (code *-CAJON con variant set height). */
   readonly agregadoId: string;
-  readonly heightCode: 'N' | 'M' | 'K' | 'E';
+  readonly heightCode: string; // #1633: etiqueta de altura
   readonly kitCostPerUnit: number;
   readonly widthMm: number;
   readonly depthMm: number;
