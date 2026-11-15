@@ -466,6 +466,8 @@ export function duplicateAgregado(
     presentationMotion: agregado.presentationMotion
       ? clonePresentationMotion(agregado.presentationMotion)
       : undefined,
+    // #1633: la copia de una familia de cajón sigue siendo familia.
+    ...(agregado.drawerSystem ? { drawerSystem: { ...agregado.drawerSystem } } : {}),
   };
 }
 

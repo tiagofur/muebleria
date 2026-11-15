@@ -7,6 +7,7 @@ import type {
   AgregadoPresentationMotion,
   AgregadoRigidMember,
   AgregadoVariantSet,
+  AgregadoDrawerSystem,
   AssemblyCompatibilityRule,
   HardwareLine,
   ModuleComponentInstance,
@@ -43,6 +44,9 @@ export interface AgregadoDraft {
   variantSets: AgregadoVariantSet[];
   compatibilityRules: AssemblyCompatibilityRule[];
   commercialKitHardwareId?: string;
+  /** #1633: marcador de familia de cajón — viaja en el borrador como el
+   * resto de la receta; perderlo aquí lo borraría de la revisión nueva. */
+  drawerSystem?: AgregadoDrawerSystem;
   active?: boolean;
   /** Preserved when an agregado carries keyframes or a custom non-side pivot. */
   preservedPresentationMotion?: AgregadoPresentationMotion;
@@ -122,6 +126,9 @@ const variantSetDraftRule = objectRule({
       nominalDimensionMm: numberRule,
       ...stringFields('hardwareId'),
       commercialKitHardwareId: optionalRule(stringRule),
+      // #1633: etiqueta de altura; sin ella un borrador persistido de una
+      // familia etiquetada no revalidaría y se descartaría al recargar.
+      label: optionalRule(stringRule),
     }),
   ),
 });
@@ -144,6 +151,9 @@ const agregadoDraftRule = objectRule({
   variantSets: optionalRule(arrayRule(variantSetDraftRule)),
   compatibilityRules: optionalRule(arrayRule(compatibilityRuleDraftRule)),
   commercialKitHardwareId: optionalRule(stringRule),
+  drawerSystem: optionalRule(
+    (value) => typeof value === 'object' && value !== null && !Array.isArray(value),
+  ),
   active: optionalRule(booleanRule),
   preservedPresentationMotion: optionalRule(
     (value) => typeof value === 'object' && value !== null && !Array.isArray(value),
@@ -212,6 +222,7 @@ export function agregadoToDraft(a: Agregado): AgregadoDraft {
     variantSets: (a.variantSets ?? []).map((s) => structuredClone(s)),
     compatibilityRules: (a.compatibilityRules ?? []).map((r) => ({ ...r })),
     commercialKitHardwareId: a.commercialKitHardwareId ?? undefined,
+    ...(a.drawerSystem ? { drawerSystem: { ...a.drawerSystem } } : {}),
     ...(a.active !== undefined ? { active: a.active } : {}),
     ...(preservedPresentationMotion ? { preservedPresentationMotion } : {}),
   };
@@ -292,5 +303,6 @@ export function draftToAgregado(id: string, draft: AgregadoDraft): Agregado {
     compatibilityRules:
       (draft.compatibilityRules ?? []).length > 0 ? draft.compatibilityRules : undefined,
     commercialKitHardwareId: draft.commercialKitHardwareId || undefined,
+    ...(draft.drawerSystem ? { drawerSystem: { ...draft.drawerSystem } } : {}),
   };
 }

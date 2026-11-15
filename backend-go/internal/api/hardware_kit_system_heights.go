@@ -422,9 +422,10 @@ func addHeightVariant(agr domain.Agregado, variant domain.ProductVariant) (domai
 			}
 		}
 	}
-	// #1633: the label is unique too, against the EFFECTIVE label of the
-	// existing heights (a legacy unlabeled 108 counts as «M»).
-	if label := strings.TrimSpace(variant.Label); label != "" {
+	// #1633: the label is unique too, compared EFFECTIVE against EFFECTIVE:
+	// a legacy unlabeled 108 counts as «M», and so does a new unlabeled 108-
+	// table nominal — two heights never both show as the same letter.
+	if label := domain.EffectiveVariantLabel(variant); label != "" {
 		for _, v := range vs.Variants {
 			if strings.EqualFold(domain.EffectiveVariantLabel(v), label) {
 				return agr, "", map[string]any{

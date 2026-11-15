@@ -42,6 +42,13 @@ func TestAddHeightVariant_RejectsEffectiveLabelDuplicate_1633(t *testing.T) {
 	if problem == nil || problem["code"] != "HARDWARE_KIT_SYSTEM_HEIGHT_EXISTS" {
 		t.Fatalf("duplicate effective label must be a typed 422, got %v", problem)
 	}
+	// An unlabeled new height whose derived letter collides is rejected too.
+	labeledN := domain.Agregado{ID: "agr", VariantSets: []domain.AgregadoVariantSet{{
+		ID: "vs", Dimension: "height", Variants: []domain.ProductVariant{{NominalDimensionMm: 90, HardwareID: "k-n", Label: "N"}},
+	}}}
+	if _, _, problem := addHeightVariant(labeledN, domain.ProductVariant{NominalDimensionMm: 85.5, HardwareID: "k4"}); problem == nil {
+		t.Fatal("an unlabeled 85.5 (derived «N») must collide with an existing «N»")
+	}
 	next, _, problem := addHeightVariant(legacy, domain.ProductVariant{NominalDimensionMm: 177, HardwareID: "k3", Label: "C"})
 	if problem != nil {
 		t.Fatalf("a new label must be accepted: %v", problem)
@@ -133,8 +140,8 @@ func TestHardwareKitSystem_RejectsDuplicateLabelsBeforeWrites_1633(t *testing.T)
 		`"variants":[{"nominalDimensionMm":209,"hardwareId":`,
 		`"variants":[{"label":"M","nominalDimensionMm":108,"hardwareId":`+`"`+kitSystemUUID(741)+`"},{"label":" m ","nominalDimensionMm":209,"hardwareId":`, 1)
 	rec := e.run(t, payload)
-	if rec.Code < 400 || rec.Code >= 500 {
-		t.Fatalf("duplicate labels = %d %s, want 4xx", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "duplicate label") {
+		t.Fatalf("duplicate labels = %d %s, want 422 naming the duplicate label", rec.Code, rec.Body.String())
 	}
 	if got := e.sqlCount(t, "agregados", []string{"FAM-B-CAJON"}); got != 0 {
 		t.Fatalf("rejected system left an agregado: %d", got)
