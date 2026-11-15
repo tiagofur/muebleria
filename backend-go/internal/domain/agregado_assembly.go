@@ -192,6 +192,9 @@ type ProductVariant struct {
 	// Es dato: la letra ya no se deduce del nominal. Ausente en datos previos
 	// ⇒ EffectiveVariantLabel deriva la letra Blum por compatibilidad.
 	Label string `json:"label,omitempty"`
+	// #1633: altura de la trasera del cajón (mm), informativa: el motor no
+	// la consume todavía. 0/ausente = no declarada.
+	BackHeightMm float64 `json:"backHeightMm,omitempty"`
 }
 
 // MaxVariantLabelLength bounds the free height label (#1633).
@@ -858,6 +861,9 @@ func ValidateAgregadoVariantSet(vs AgregadoVariantSet) error {
 		}
 		if v.CommercialKitHardwareID != "" && strings.TrimSpace(v.CommercialKitHardwareID) == "" {
 			return fmt.Errorf("variant set '%s' variant %d: commercialKitHardwareId cannot be whitespace (omit the field to use the agregado-level kit)", vs.ID, i)
+		}
+		if v.BackHeightMm != 0 && (math.IsNaN(v.BackHeightMm) || math.IsInf(v.BackHeightMm, 0) || v.BackHeightMm < 0) {
+			return fmt.Errorf("variant set '%s' variant %d: backHeightMm must be finite and positive (omit the field when unknown)", vs.ID, i)
 		}
 		// #1633: free label, bounded and unique (case-insensitive) in the set.
 		label := strings.TrimSpace(v.Label)

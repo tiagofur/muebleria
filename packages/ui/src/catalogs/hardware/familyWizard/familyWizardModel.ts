@@ -15,6 +15,8 @@ export interface FamilyHeightRow {
   readonly label: string;
   readonly khMinMm: string;
   readonly price: string;
+  /** #1633: altura de la trasera (mm), opcional e informativa. */
+  readonly backHeightMm?: string;
 }
 
 export const FAMILY_WIZARD_STEPS = ['Identidad', 'Alturas', 'Insertos', 'Diseños 3D', 'Resumen'] as const;
@@ -74,34 +76,58 @@ export function heightRowsProblem(rows: readonly FamilyHeightRow[]): string | nu
     nominals.add(kh);
     const price = parseMm(row.price);
     if (!(price >= 0)) return `Poné el precio del juego «${label}» (puede ser 0).`;
+    if ((row.backHeightMm ?? '').trim() !== '' && !(parseMm(row.backHeightMm ?? '') > 0)) {
+      return `La altura de trasera de «${label}» tiene que ser mayor que 0 mm (o dejala vacía).`;
+    }
   }
   return null;
 }
 
-export function heightRowsToInput(rows: readonly FamilyHeightRow[]): HardwareKitSystemHeight[] {
-  return rows.map((row) => ({
-    code: row.label.trim(),
-    labelEs: row.label.trim(),
-    khMinMm: parseMm(row.khMinMm),
-    include: true,
-    kitCostPerUnit: parseMm(row.price),
-  }));
+export function heightRowsToInput(
+  rows: readonly FamilyHeightRow[],
+  insertDefaults: Readonly<Record<string, 'first_active' | 'none'>> = {},
+): HardwareKitSystemHeight[] {
+  return rows.map((row) => {
+    const back = (row.backHeightMm ?? '').trim();
+    const def = insertDefaults[row.label.trim().toLowerCase()];
+    return {
+      code: row.label.trim(),
+      labelEs: row.label.trim(),
+      khMinMm: parseMm(row.khMinMm),
+      include: true,
+      kitCostPerUnit: parseMm(row.price),
+      ...(back !== '' ? { backHeightMm: parseMm(back) } : {}),
+      ...(def === 'none' ? { insertDefault: 'none' as const } : {}),
+    };
+  });
+}
+
+/** #1633: ¿el inserto se ofrece en alguna altura de la familia? (único predicado). */
+export function insertHasHeight(d: InsertoDraft, heightLabels: readonly string[]): boolean {
+  const available = new Set(heightLabels.map((l) => l.trim().toLowerCase()));
+  return (d.heights ?? []).some((h) => available.has(h.trim().toLowerCase()));
+}
+
+/** #1633: insertos con nombre que no se ofrecen en ninguna altura (no se crean). */
+export function insertsWithoutHeights(drafts: readonly InsertoDraft[], heightLabels: readonly string[]): string[] {
+  return drafts.filter((d) => d.name.trim() && !insertHasHeight(d, heightLabels)).map((d) => d.name.trim());
 }
 
 export function insertsProblem(drafts: readonly InsertoDraft[], heightLabels: readonly string[]): string | null {
-  const available = new Set(heightLabels.map((l) => l.trim().toLowerCase()));
   const suffixes = new Set<string>();
   for (const [i, d] of drafts.entries()) {
     const name = d.name.trim();
     if (!name) return `El inserto ${i + 1} necesita un nombre (o quitalo).`;
     const suffix = insertoSuffix(name);
     if (!suffix) return `El nombre «${name}» no deja un código válido.`;
+    // Un inserto que no se crea (sin alturas) no compite por el código.
+    if (!insertHasHeight(d, heightLabels)) continue;
     if (suffixes.has(suffix)) {
       return `Dos insertos generarían el mismo código (…-${suffix}): renombrá uno para diferenciarlos.`;
     }
     suffixes.add(suffix);
-    const heights = (d.heights ?? []).filter((h) => available.has(h.trim().toLowerCase()));
-    if (heights.length === 0) return `El inserto «${name}» no se ofrece en ninguna altura: marcá al menos una.`;
+    // #1633: un inserto sin alturas no bloquea — es una advertencia y no se
+    // crea (insertsWithoutHeights).
     if (d.price !== undefined && !(parseMm(d.price || '0') >= 0)) {
       return `El precio del inserto «${name}» no puede ser negativo.`;
     }

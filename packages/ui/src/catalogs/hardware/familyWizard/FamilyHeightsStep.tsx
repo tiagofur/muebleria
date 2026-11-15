@@ -40,6 +40,27 @@ export function FamilyHeightsStep({
 
   return (
     <div className="family-heights">
+      <figure className="family-heights__figure" aria-labelledby="family-heights-figure-caption">
+        <svg viewBox="0 0 220 120" aria-hidden="true" className="family-heights__svg">
+          {/* Hueco de la bahía (frente del mueble) */}
+          <rect x="20" y="10" width="140" height="100" className="family-heights__svg-bay" />
+          {/* Cajón: costado y trasera */}
+          <rect x="34" y="62" width="112" height="44" className="family-heights__svg-drawer" />
+          <rect x="34" y="70" width="112" height="36" className="family-heights__svg-back" />
+          {/* Cota: altura interior mínima = hueco libre de la bahía */}
+          <line x1="178" y1="10" x2="178" y2="110" className="family-heights__svg-dim" />
+          <line x1="172" y1="10" x2="184" y2="10" className="family-heights__svg-dim" />
+          <line x1="172" y1="110" x2="184" y2="110" className="family-heights__svg-dim" />
+          <text x="190" y="64" className="family-heights__svg-text">KH</text>
+          {/* Cota: altura de trasera */}
+          <line x1="10" y1="70" x2="10" y2="106" className="family-heights__svg-dim" />
+          <text x="0" y="66" className="family-heights__svg-text">T</text>
+        </svg>
+        <figcaption id="family-heights-figure-caption" className="catalog-form__hint">
+          <strong>KH — altura interior mínima:</strong> el hueco libre que necesita la bahía (de
+          tablero a tablero). <strong>T — altura de trasera</strong> (opcional, informativa).
+        </figcaption>
+      </figure>
       <p className="catalog-form__hint">
         Cada fila es una altura del modelo de cajón. La <strong>altura interior mínima</strong> es el
         hueco libre que necesita la bahía: con ella el mueble elige la altura automáticamente.
@@ -98,6 +119,7 @@ export function FamilyHeightsStep({
               <th scope="col">Etiqueta</th>
               <th scope="col">Altura interior mínima (mm)</th>
               <th scope="col">Precio del juego</th>
+              <th scope="col">Trasera (mm, opcional)</th>
               <th scope="col">
                 <span className="visually-hidden">Acciones</span>
               </th>
@@ -137,6 +159,17 @@ export function FamilyHeightsStep({
                       onChange={(e) => update(idx, { price: e.target.value })}
                       aria-label={`Precio del juego de la altura ${name}`}
                       data-testid={`family-height-${idx}-price`}
+                    />
+                  </td>
+                  <td data-label="Trasera (mm, opcional)">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.5"
+                      value={row.backHeightMm ?? ''}
+                      onChange={(e) => update(idx, { backHeightMm: e.target.value })}
+                      aria-label={`Altura de trasera de la altura ${name}`}
+                      data-testid={`family-height-${idx}-back`}
                     />
                   </td>
                   <td className="family-heights__row-actions">

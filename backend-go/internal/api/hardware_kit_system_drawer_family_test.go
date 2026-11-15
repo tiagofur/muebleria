@@ -282,3 +282,64 @@ func TestKitSystemPlans_RejectCodesOverFiftyChars_1633(t *testing.T) {
 		t.Fatalf("create plan must reject a 51-char selector code, got %v", problem)
 	}
 }
+
+// #1633 s2c-3: la altura de trasera (informativa) y el «ninguno» por defecto
+// de un selector llegan a la receta y al grupo; «ninguno» en un selector
+// obligatorio es un 422 antes de escribir.
+func TestHardwareKitSystem_BackHeightAndSelectorDefault_1633(t *testing.T) {
+	e := kitSystemE2EStore(t)
+	seed := 92
+	kitC := kitSystemUUID(seed*10 + 6)
+	group := strings.Replace(
+		optionGroupJSON(kitSystemUUID(seed*10+7), "BH_LATERAL_C", kitC, kitSystemUUID(seed*10+3)),
+		`"kit_hardware_id"`, `"default_choice":"none","kit_hardware_id"`, 1)
+	payload := twoHeightSystemPayload("BH", seed, fmt.Sprintf(`, "option_groups": [%s]`, group))
+	payload = strings.Replace(payload, `{"label":"C","nominalDimensionMm":177,`, `{"label":"C","backHeightMm":160,"nominalDimensionMm":177,`, 1)
+	rec := e.run(t, payload)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("system create = %d %s", rec.Code, rec.Body.String())
+	}
+	agrID := decodeKitSystemResponse(rec).AgregadoID
+	actor := storage.TenantActor{OrganizationID: e.org, UserID: kitSysActor}
+	var back float64
+	var defaultChoice string
+	err := e.store.WithinTenantTx(context.Background(), actor, func(ctx context.Context) error {
+		a, err := e.store.GetAgregadoByIDWithRecipe(ctx, agrID)
+		if err != nil {
+			return err
+		}
+		for _, v := range a.VariantSets[0].Variants {
+			if v.Label == "C" {
+				back = v.BackHeightMm
+			}
+		}
+		groups, err := e.store.ListOptionGroups(ctx)
+		if err != nil {
+			return err
+		}
+		for _, g := range groups {
+			if g.Code == "BH_LATERAL_C" {
+				defaultChoice = g.DefaultChoice
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if back != 160 || defaultChoice != "none" {
+		t.Fatalf("persisted backHeightMm=%v default_choice=%q, want 160 / none", back, defaultChoice)
+	}
+
+	seed = 93
+	required := strings.Replace(
+		optionGroupJSON(kitSystemUUID(seed*10+7), "REQ_NONE", kitSystemUUID(seed*10+6), kitSystemUUID(seed*10+3)),
+		`"required":false,`, `"required":true,"default_choice":"none",`, 1)
+	rec = e.run(t, twoHeightSystemPayload("RQ", seed, fmt.Sprintf(`, "option_groups": [%s]`, required)))
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("required + none = %d %s, want 422", rec.Code, rec.Body.String())
+	}
+	if got := e.sqlCount(t, "hardwares", []string{"RQ-N", "RQ-C"}); got != 0 {
+		t.Fatalf("rejected plan left %d kit rows", got)
+	}
+}

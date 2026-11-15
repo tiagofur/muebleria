@@ -205,10 +205,11 @@ describe('HardwareKitSystemWizardModal — review #1636', () => {
     await user.clear(screen.getByTestId('family-height-1-label'));
     await user.type(screen.getByTestId('family-height-1-label'), 'Alta');
     await user.click(screen.getByTestId('family-wizard-next'));
-    // La E ya no existe: el inserto quedó sin altura y lo dice; marcar Alta resuelve.
-    await user.click(screen.getByTestId('family-wizard-next'));
-    expect(screen.getByTestId('hardware-system-wizard-plan-error').textContent).toContain('ninguna altura');
+    // La E ya no existe: el inserto quedó sin altura — advertencia (no se
+    // crearía), no bloqueo; marcar Alta lo vuelve a incluir.
+    expect(screen.getByTestId('family-inserts-without-heights').textContent).toContain('Galería');
     await user.click(screen.getByTestId('hardware-system-accessory-0-height-Alta'));
+    expect(screen.queryByTestId('family-inserts-without-heights')).toBeNull();
     await goToSummary(user);
     expect(screen.getByTestId('hardware-system-wizard-submit')).toBeEnabled();
     await user.click(screen.getByTestId('hardware-system-wizard-submit'));
@@ -335,11 +336,15 @@ describe('HardwareKitSystemWizardModal — problemas visibles (#1552)', () => {
     await user.click(screen.getByTestId('family-wizard-next'));
     expect(screen.getByTestId('hardware-system-wizard-plan-error').textContent).toContain('mismo código');
     expect(screen.getByTestId('family-wizard-title').textContent).toBe('Insertos');
+    await waitFor(() => expect(screen.getByTestId('hardware-system-wizard-plan-error')).toHaveFocus());
     await user.clear(screen.getByTestId('hardware-system-accessory-1-name'));
     await user.type(screen.getByTestId('hardware-system-accessory-1-name'), 'Boxcap');
-    // Desmarcar la E preseleccionada deja al segundo inserto sin altura.
+    // Desmarcar la E preseleccionada deja al segundo inserto sin altura:
+    // advertencia, y se puede seguir (ese inserto no se crea).
     await user.click(screen.getByTestId('hardware-system-accessory-1-height-E'));
-    expect(screen.getByTestId('hardware-system-wizard-plan-error').textContent).toContain('ninguna altura');
+    expect(screen.getByTestId('family-inserts-without-heights').textContent).toContain('Boxcap');
+    await user.click(screen.getByTestId('family-wizard-next'));
+    expect(screen.getByTestId('family-wizard-title').textContent).toBe('Diseños 3D');
   });
 });
 
@@ -480,5 +485,70 @@ describe('HardwareKitSystemWizardModal — reset tras «Listo» (#1552, el P1)',
     });
     expect(onSubmit).toHaveBeenCalledTimes(2);
     expect(onSubmit.mock.calls[1]?.[0]?.input.code).toBe('MBOX-OTRO');
+  });
+});
+
+describe('HardwareKitSystemWizardModal — pendientes del brief (#1633 s2c-3)', () => {
+  it('altura de trasera opcional y «Sin inserto» por defecto llegan al envío', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = setup();
+    await fillBasics(user, 'MBOX-SYS', { withE: true });
+    await user.type(screen.getByTestId('family-height-1-back'), '184');
+    await user.click(screen.getByTestId('family-wizard-next'));
+    await user.click(screen.getByTestId('hardware-system-accessory-add'));
+    await user.type(screen.getByTestId('hardware-system-accessory-0-name'), 'Galería');
+    await user.selectOptions(screen.getByTestId('family-insert-default-E'), 'none');
+    await goToSummary(user);
+    expect(screen.getByTestId('hardware-system-wizard-preview').textContent).toContain('sin inserto por defecto');
+    await user.click(screen.getByTestId('hardware-system-wizard-submit'));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const heights = onSubmit.mock.calls[0]![0].input.heights;
+    expect(heights.map((h) => [h.code, h.backHeightMm, h.insertDefault])).toEqual([
+      ['M', undefined, undefined],
+      ['E', 184, 'none'],
+    ]);
+  });
+
+  it('un inserto sin alturas no se manda; trasera inválida avisa', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = setup();
+    await fillBasics(user, 'MBOX-SYS', { withE: true });
+    await user.type(screen.getByTestId('family-height-0-back'), '-3');
+    await user.click(screen.getByTestId('family-wizard-next'));
+    expect(screen.getByTestId('hardware-system-wizard-plan-error').textContent).toContain('trasera');
+    await user.clear(screen.getByTestId('family-height-0-back'));
+    await user.click(screen.getByTestId('family-wizard-next'));
+    await user.click(screen.getByTestId('hardware-system-accessory-add'));
+    await user.type(screen.getByTestId('hardware-system-accessory-0-name'), 'Suelto');
+    await user.click(screen.getByTestId('hardware-system-accessory-0-height-E'));
+    await goToSummary(user);
+    await user.click(screen.getByTestId('hardware-system-wizard-submit'));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]![0].input.accessories).toEqual([]);
+  });
+
+  it('cerrar con cambios pide confirmación; sin cambios cierra directo', async () => {
+    const user = userEvent.setup();
+    const { onClose } = setup();
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await fillIdentity(user);
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(screen.getByTestId('family-wizard-close-confirm')).toBeInTheDocument();
+    expect(screen.getByTestId('family-wizard-close-keep')).toHaveFocus();
+    await user.click(screen.getByTestId('family-wizard-close-keep'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await user.click(screen.getByTestId('family-wizard-close-confirm-close'));
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('Escape con cambios también pide confirmación', async () => {
+    const user = userEvent.setup();
+    const { onClose } = setup();
+    await user.type(screen.getByTestId('hardware-system-wizard-brand'), 'Blum');
+    await user.keyboard('{Escape}');
+    expect(screen.getByTestId('family-wizard-close-confirm')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

@@ -37,7 +37,9 @@ import {
   heightRowsProblem,
   heightRowsToInput,
   identityProblem,
+  insertHasHeight,
   insertsProblem,
+  insertsWithoutHeights,
   parseMm,
   type FamilyHeightRow,
   type FamilyIdentity,
@@ -83,6 +85,11 @@ export function HardwareKitSystemWizardModal({
   // Insertos con la forma COMPLETA (#1596: nada a medias) + «Aplica en» y
   // precio (#1633): un herraje por (inserto × altura).
   const [inserts, setInserts] = useState<InsertoDraft[]>([]);
+  // #1633: por altura (etiqueta en minúsculas), qué monta el mueble si no
+  // elige inserto: la primera opción (default) o ninguno.
+  const [insertDefaults, setInsertDefaults] = useState<Record<string, 'first_active' | 'none'>>({});
+  // Escape/Cancelar con cambios pide confirmación (el borrador se conserva).
+  const [confirmClose, setConfirmClose] = useState(false);
   // #1596 decisión 9: dónde queda disponible el ensamble — grupo existente,
   // grupo nuevo (default SISTEMA_CAJON) u omisión confirmada.
   const [eligibilityMode, setEligibilityMode] = useState<'new' | 'existing' | 'skip'>('new');
@@ -129,6 +136,8 @@ export function HardwareKitSystemWizardModal({
     setIdentity(EMPTY_IDENTITY);
     setHeightRows([]);
     setInserts([]);
+    setInsertDefaults({});
+    setConfirmClose(false);
     setEligibilityMode('new');
     setEligibilityGroupId('');
     setSkipEligibilityConfirmed(false);
@@ -178,10 +187,11 @@ export function HardwareKitSystemWizardModal({
       depthMm: parseMm(identity.depthMm),
       ...(identity.brand.trim() ? { brand: identity.brand.trim() } : {}),
       ...(identity.line.trim() ? { line: identity.line.trim() } : {}),
-      heights: heightRowsToInput(heightRows),
-      accessories: insertoDraftsToAccessories(inserts),
+      heights: heightRowsToInput(heightRows, insertDefaults),
+      // #1633: un inserto sin alturas es una advertencia y no se crea.
+      accessories: insertoDraftsToAccessories(inserts.filter((d) => insertHasHeight(d, heightLabels))),
     };
-  }, [problems, identity, heightRows, inserts]);
+  }, [problems, identity, heightRows, inserts, insertDefaults, heightLabels]);
 
   // Plan + su problema visible (#1552): los rechazos del planner se muestran
   // con role="alert"; sin plan no hay envío.
@@ -303,13 +313,32 @@ export function HardwareKitSystemWizardModal({
     }
   };
 
+  const dirty =
+    identity.code.trim() !== '' ||
+    identity.name.trim() !== '' ||
+    identity.brand.trim() !== '' ||
+    identity.line.trim() !== '' ||
+    heightRows.length > 0 ||
+    inserts.length > 0;
+  const requestClose = (): void => {
+    if (wizard.phase === 'done' || wizard.running || !dirty) {
+      wizard.handleClose();
+      return;
+    }
+    setConfirmClose(true);
+  };
+  const withoutHeights = insertsWithoutHeights(inserts, heightLabels);
+  const heightsWithInserts = heightLabels.filter((l) =>
+    inserts.some((d) => d.name.trim() && (d.heights ?? []).some((h) => h.toLowerCase() === l.toLowerCase())),
+  );
+
   const isLast = step === FAMILY_WIZARD_STEPS.length - 1;
   const canSubmit = !!systemInput && !!plan && plan.blockedCode === null && !wizard.running;
 
   return (
     <Modal
       open={open}
-      onClose={wizard.handleClose}
+      onClose={requestClose}
       title="Nueva familia de cajón"
       size="lg"
       dataTestId="hardware-system-wizard-modal"
@@ -337,6 +366,31 @@ export function HardwareKitSystemWizardModal({
             else advance();
           }}
         >
+          {confirmClose ? (
+            <div className="family-wizard__confirm" role="alert" data-testid="family-wizard-close-confirm">
+              <span>Tenés cambios sin crear. Si cerrás, el borrador se conserva al volver a abrir.</span>
+              <button
+                type="button"
+                className="btn btn--small"
+                autoFocus
+                onClick={() => setConfirmClose(false)}
+                data-testid="family-wizard-close-keep"
+              >
+                Seguir editando
+              </button>
+              <button
+                type="button"
+                className="btn btn--small btn--ghost"
+                onClick={() => {
+                  setConfirmClose(false);
+                  wizard.handleClose();
+                }}
+                data-testid="family-wizard-close-confirm-close"
+              >
+                Cerrar
+              </button>
+            </div>
+          ) : null}
           <FamilyWizardSteps current={step} reachable={reachable} complete={complete} onSelect={goTo} />
           <h3 className="family-wizard__step-title" tabIndex={-1} ref={stepTitleRef} data-testid="family-wizard-title">
             {FAMILY_WIZARD_STEPS[step]}
@@ -447,6 +501,35 @@ export function HardwareKitSystemWizardModal({
               })}
             />
           ) : null}
+          {step === 2 && withoutHeights.length > 0 ? (
+            <p className="family-insert__warning" role="status" data-testid="family-inserts-without-heights">
+              {withoutHeights.map((n) => `«${n}»`).join(', ')} no se ofrece{withoutHeights.length > 1 ? 'n' : ''} en
+              ninguna altura: no se va a crear. Marcá al menos una altura para incluirlo.
+            </p>
+          ) : null}
+          {step === 2 && heightsWithInserts.length > 0 ? (
+            <fieldset className="catalog-form__section" data-testid="family-insert-defaults">
+              <legend className="catalog-form__section-title">Si el mueble no elige un inserto</legend>
+              {heightsWithInserts.map((label) => (
+                <label key={label} className="catalog-form__field">
+                  <span>Altura {label}</span>
+                  <select
+                    value={insertDefaults[label.toLowerCase()] ?? 'first_active'}
+                    onChange={(e) =>
+                      setInsertDefaults((prev) => ({
+                        ...prev,
+                        [label.toLowerCase()]: e.target.value as 'first_active' | 'none',
+                      }))
+                    }
+                    data-testid={`family-insert-default-${label}`}
+                  >
+                    <option value="first_active">Se usa el primero de la lista</option>
+                    <option value="none">Sin inserto</option>
+                  </select>
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
 
           {step === 3 ? (
             <FamilyDesignsStep plan={plan} files={files} setFile={setFile} fileInputsRef={fileInputsRef} />
@@ -513,7 +596,10 @@ export function HardwareKitSystemWizardModal({
                     ) : null}
                     {plan.accessoryGroups.length > 0 ? (
                       <li>
-                        Selector de insertos en: {plan.accessoryGroups.map((g) => g.name.replace(/^Insertos /, '')).join(', ')}
+                        Selector de insertos en:{' '}
+                        {plan.accessoryGroups
+                          .map((g) => `${g.name.replace(/^Insertos /, '')}${g.defaultChoice === 'none' ? ' (sin inserto por defecto)' : ''}`)
+                          .join(', ')}
                       </li>
                     ) : null}
                     <li>
@@ -539,7 +625,7 @@ export function HardwareKitSystemWizardModal({
           ) : null}
 
           <div className="family-wizard__footer">
-            <button type="button" className="btn btn--ghost" onClick={wizard.handleClose}>
+            <button type="button" className="btn btn--ghost" onClick={requestClose}>
               Cancelar
             </button>
             <div className="family-wizard__footer-end">

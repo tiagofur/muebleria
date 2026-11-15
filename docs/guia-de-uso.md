@@ -430,15 +430,20 @@ asistente **Nueva familia de cajón**, en pasos:
    de la guía.
 2. **Alturas:** una fila por altura con **etiqueta libre** («M», «C»,
    «Alta 186»), **altura interior mínima** (el hueco libre que necesita la
-   bahía: con ella el mueble elige la altura sola) y **precio del juego**.
+   bahía, de tablero a tablero: con ella el mueble elige la altura sola),
+   **precio del juego** y, si querés, la **altura de la trasera** (sólo
+   informativa). Un dibujo arriba de la tabla muestra qué se mide.
    **Precargar plantilla Blum Merivobox (N · M · K · E)** llena las cuatro
    alturas Blum para editarlas; «Aplicar el precio de la primera altura a
    todas» copia el precio. Las filas se ordenan con las flechas.
 3. **Insertos** (opcional): galería, boxcap, boxcover… Cada uno marca en
    qué alturas se ofrece («Aplica en») y su precio; cada altura tiene su
    propia pieza y su selector «Insertos <altura>». El primero de cada altura
-   es el que se usa por defecto (Subir/Bajar para cambiarlo). Los desfases
-   se escriben como Ancho / Fondo / Alto.
+   es el que se usa por defecto (Subir/Bajar para cambiarlo); para cada
+   altura con insertos se elige **Si el mueble no elige un inserto**: el
+   primero de la lista o **Sin inserto**. Un inserto que no se marca en
+   ninguna altura queda avisado y **no se crea**. Los desfases se escriben
+   como Ancho / Fondo / Alto.
 4. **Diseños 3D** (opcional): un SKP por pieza y por lado. Los costados
    nacen sin desfase (0 mm): si el diseño no está dibujado en su posición
    final, se ajusta después en la ficha de cada pieza.
@@ -448,6 +453,8 @@ asistente **Nueva familia de cajón**, en pasos:
    vez: si algo falla, no queda nada a medias.
 
 Si un paso tiene algo pendiente, **Siguiente** dice qué falta y no avanza.
+Cerrar el asistente con cambios (Escape o Cancelar) pide confirmación; el
+borrador se conserva si lo volvés a abrir.
 
 **Ver la familia:** Herrajes → pestaña **Familias de cajón**. Cada familia
 muestra sus alturas, sus insertos y su estado: **Completa** o **Le falta:**

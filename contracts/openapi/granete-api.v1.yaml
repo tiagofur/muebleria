@@ -21347,6 +21347,11 @@
             "type": "string",
             "maxLength": 40,
             "description": "Etiqueta comercial libre de la altura (#1633: «M», «C», «Alta 186»); única en el ensamble, sin distinguir mayúsculas."
+          },
+          "backHeightMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Altura de la trasera del cajón (mm), informativa (#1633). Omitir si no se conoce."
           }
         }
       },
@@ -21407,6 +21412,11 @@
             "type": "string",
             "maxLength": 40,
             "description": "Etiqueta comercial libre de la altura (#1633: «M», «C», «Alta 186»); única en el ensamble, sin distinguir mayúsculas."
+          },
+          "backHeightMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Altura de la trasera del cajón (mm), informativa (#1633). Omitir si no se conoce."
           }
         }
       },
@@ -21439,6 +21449,11 @@
           "kit_hardware_id": {
             "type": "string",
             "description": "Kit al que se vincula el grupo: debe referenciar una fila kit del payload."
+          },
+          "default_choice": {
+            "type": "string",
+            "enum": ["first_active", "none"],
+            "description": "#1627/#1633: qué monta el mueble si no elige — la primera opción activa (default) o ninguno (sólo en selectores opcionales)."
           }
         }
       },
