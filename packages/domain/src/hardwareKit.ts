@@ -12,6 +12,7 @@
 
 import type { HardwareVisualAssetBinding } from './types';
 import type { AgregadoDrawerSystem, RigidMemberHand } from './agregadoAssembly';
+import { MAX_VARIANT_LABEL_LENGTH } from './agregadoAssembly';
 
 export type HardwareKitDesignSlot = 'fixed_left' | 'fixed_right' | 'moving_left' | 'moving_right';
 
@@ -1379,13 +1380,19 @@ export function ensureAgregadoKitParts(
 
 // ── #1546 M4: sistema generador de cajones (MERIVOBOX N/M/K/E + accesorios) ──
 
-/** Altura Blum del sistema (#1546): autoridad numérica del fixture #1493. */
+/**
+ * Altura de la familia de cajón. #1633: `code` es la ETIQUETA libre de la
+ * altura («M», «C», «Alta 186»); N/M/K/E es sólo la plantilla Blum
+ * (HARDWARE_KIT_SYSTEM_HEIGHTS), no una regla.
+ */
 export interface HardwareKitSystemHeight {
-  readonly code: 'N' | 'M' | 'K' | 'E';
+  readonly code: string;
   readonly labelEs: string;
-  /** KH mínimo (espacio interior en mueble): 85.5 / 108 / 146 / 209. */
+  /** Altura interior mínima (KH): el hueco libre que necesita la bahía. */
   readonly khMinMm: number;
   readonly include: boolean;
+  /** #1633: precio del juego de ESTA altura; ausente ⇒ input.kitCostPerUnit. */
+  readonly kitCostPerUnit?: number;
 }
 
 /** Accesorio del cajón E declarado en el sistema (#1519: galería/boxcap/boxcover). */
@@ -1407,6 +1414,15 @@ export interface HardwareKitSystemAccessory {
    * puesto en 'actor:drawer' (viaja con el cajón); nunca se infiere del nombre.
    */
   readonly actorMembership?: 'body' | 'actor:drawer' | 'actor:door';
+  /**
+   * #1633: etiquetas de las alturas donde se ofrece el inserto. Se genera
+   * un herraje por (inserto × altura) — cada altura tiene su pieza física —
+   * y un selector por altura con insertos. En `accessoriesE` (legado) vale
+   * siempre ['E'].
+   */
+  readonly heights?: readonly string[];
+  /** #1633: precio por pieza del inserto (0 si se omite). */
+  readonly costPerUnit?: number;
 }
 
 export interface HardwareKitSystemInput {
@@ -1418,8 +1434,13 @@ export interface HardwareKitSystemInput {
   readonly depthMm: number;
   /** Alturas a incluir (del autoritario HARDWARE_KIT_SYSTEM_HEIGHTS). */
   readonly heights: readonly HardwareKitSystemHeight[];
-  /** Accesorios del cajón E (vacío = sistema sin accesorios). */
+  /**
+   * Legado (#1519): insertos del cajón E. Equivale a `accessories` con
+   * heights ['E']; no se combinan ambos campos.
+   */
   readonly accessoriesE?: readonly HardwareKitSystemAccessory[];
+  /** #1633: insertos de la familia, cada uno con las alturas donde aplica. */
+  readonly accessories?: readonly HardwareKitSystemAccessory[];
   readonly fixedOffsetMm?: number;
   readonly movingOffsetMm?: number;
   /** #1633: marca/línea de la familia de cajón (texto libre, opcional). */
@@ -1428,7 +1449,7 @@ export interface HardwareKitSystemInput {
 }
 
 /** Autoridad Blum de alturas (fixture merivobox-pilot-canonical.json #1493). */
-export const HARDWARE_KIT_SYSTEM_HEIGHTS: readonly (HardwareKitSystemHeight & { include: boolean })[] = [
+export const HARDWARE_KIT_SYSTEM_HEIGHTS: readonly HardwareKitSystemHeight[] = [
   { code: 'N', labelEs: 'N (85.5 mm — cubertero bajo)', khMinMm: 85.5, include: false },
   { code: 'M', labelEs: 'M (108 mm — estándar)', khMinMm: 108, include: true },
   { code: 'K', labelEs: 'K (146 mm — intermedio)', khMinMm: 146, include: false },
@@ -1442,28 +1463,38 @@ export interface HardwareKitSystemPlan {
     readonly name: string;
     readonly heightCode: string;
     readonly khMinMm: number;
+    /** #1633: precio del juego de esta altura. */
+    readonly costPerUnit: number;
     readonly exists: boolean;
     /** Filas multi-diseño del kit (FIJ/MOV, cada una con piezas por ancla). */
     readonly designs: readonly HardwareKitPlanDesignEntry[];
   }[];
-  /** Herrajes accesorios del cajón E (cada uno con piezas por ancla). */
+  /** Insertos: uno por (inserto × altura), cada uno con piezas por ancla. */
   readonly accessories: readonly {
     readonly code: string;
     readonly name: string;
+    /** #1633: altura (etiqueta) y juego al que pertenece este inserto. */
+    readonly heightCode: string;
+    readonly kitCode: string;
+    readonly costPerUnit: number;
     readonly exists: boolean;
     readonly anchors: readonly ('left' | 'right' | 'center')[];
     /** #1596: offsets explícitos y «Al abrir» declarado (ver input). */
     readonly pieceOffsets?: Readonly<Partial<Record<'left' | 'right' | 'center', { x: number; y: number; z: number }>>>;
     readonly actorMembership?: 'body' | 'actor:drawer' | 'actor:door';
   }[];
-  /** Grupo de accesorios vinculado al kit E (solo si E incluida y hay accesorios). */
-  readonly accessoryGroup: {
+  /**
+   * #1633: un selector de insertos por altura que tenga insertos, vinculado
+   * a su juego; optionIds son CÓDIGOS de insertos del plan, en el orden
+   * declarado (el primero es el default, #1627).
+   */
+  readonly accessoryGroups: readonly {
     readonly code: string;
     readonly name: string;
     readonly required: boolean;
     readonly kitCode: string;
     readonly optionIds: readonly string[];
-  } | null;
+  }[];
   /** Un agregado con variantes de altura — el sync materializa por bahía. */
   readonly agregado: {
     readonly code: string;
@@ -1504,33 +1535,60 @@ export function planHardwareKitSystem(
   const systemName = input.name.trim();
   if (!systemName) throw new Error('El nombre del sistema no puede estar vacío.');
 
-  const included = input.heights.filter((h) => h.include);
+  const included = input.heights
+    .filter((h) => h.include)
+    .map((h) => ({ ...h, code: h.code.trim() }));
   if (included.length === 0) {
-    throw new Error('Incluí al menos una altura (N/M/K/E) para el sistema.');
+    throw new Error('Incluí al menos una altura para el sistema.');
   }
-  const seenHeights = new Set<string>();
+  // #1633: etiquetas libres — únicas sin distinguir mayúsculas, acotadas, con
+  // medida positiva única y un código de juego (slug) sin colisiones.
+  const seenLabels = new Set<string>();
+  const seenNominals = new Set<number>();
+  const slugByLabel = new Map<string, string>();
+  const seenSlugs = new Map<string, string>();
   for (const h of included) {
-    if (seenHeights.has(h.code)) {
-      throw new Error(`Altura ${h.code} repetida en el sistema.`);
+    if (!h.code) throw new Error('Cada altura necesita una etiqueta.');
+    if ([...h.code].length > MAX_VARIANT_LABEL_LENGTH) {
+      throw new Error(`La etiqueta «${h.code}» supera ${MAX_VARIANT_LABEL_LENGTH} caracteres.`);
     }
-    seenHeights.add(h.code);
+    const key = h.code.toLowerCase();
+    if (seenLabels.has(key)) throw new Error(`Altura ${h.code} repetida en el sistema.`);
+    seenLabels.add(key);
+    if (!Number.isFinite(h.khMinMm) || h.khMinMm <= 0) {
+      throw new Error(`La altura ${h.code} necesita una altura interior mínima mayor que 0.`);
+    }
+    if (seenNominals.has(h.khMinMm)) {
+      throw new Error(`Dos alturas no pueden tener la misma altura interior mínima (${h.khMinMm} mm).`);
+    }
+    seenNominals.add(h.khMinMm);
+    const price = h.kitCostPerUnit ?? input.kitCostPerUnit;
+    if (!Number.isFinite(price) || price < 0) {
+      throw new Error(`El precio del juego ${h.code} no puede ser negativo.`);
+    }
+    const slug = heightCodeSlug(h.code);
+    if (!slug) throw new Error(`La etiqueta «${h.code}» no deja un código de juego válido.`);
+    const clash = seenSlugs.get(slug);
+    if (clash) {
+      throw new Error(`Las alturas «${clash}» y «${h.code}» generan el mismo código de juego (${slug}).`);
+    }
+    seenSlugs.set(slug, h.code);
+    slugByLabel.set(key, slug);
   }
 
   const blockedCode = existing.agregadoCodes.has(`${systemCode}-CAJON`)
     ? `${systemCode}-CAJON`
     : null;
 
-  const heightByCode = new Map(input.heights.map((h) => [h.code, h] as const));
-
-  // Kits por altura — cada uno con la estructura drawer-hands (FIJ/MOV con
-  // piezas por ancla), código systemCode-ALTURA.
+  // Juegos por altura — cada uno con la estructura drawer-hands (FIJ/MOV con
+  // piezas por ancla), código systemCode-SLUG (N/M/K/E ⇒ el código de siempre).
   const kits = included.map((height) => {
-    const code = `${systemCode}-${height.code}`;
+    const code = `${systemCode}-${slugByLabel.get(height.code.toLowerCase())!}`;
     const subPlan = planHardwareKit(
       {
         code,
         name: `${systemName} ${height.code}`,
-        kitCostPerUnit: input.kitCostPerUnit,
+        kitCostPerUnit: height.kitCostPerUnit ?? input.kitCostPerUnit,
         widthMm: input.widthMm,
         heightMm: height.khMinMm,
         depthMm: input.depthMm,
@@ -1545,38 +1603,90 @@ export function planHardwareKitSystem(
       name: `${systemName} ${height.code}`,
       heightCode: height.code,
       khMinMm: height.khMinMm,
+      costPerUnit: height.kitCostPerUnit ?? input.kitCostPerUnit,
       exists: subPlan.kit.exists,
       designs: subPlan.designs,
     };
   });
+  const kitByLabel = new Map(kits.map((k) => [k.heightCode.toLowerCase(), k] as const));
 
-  // Accesorios del E (F1: herraje con piezas por ancla). Sólo si E incluida.
-  const eKit = kits.find((k) => k.heightCode === 'E');
-  const accessories = (eKit ? (input.accessoriesE ?? []) : []).map((acc) => ({
-    code: `${systemCode}-E-${acc.suffix}`,
-    name: `${systemName} E — ${acc.name}`,
-    exists: existing.hardwareCodes.has(`${systemCode}-E-${acc.suffix}`),
-    anchors: acc.anchors,
-    ...(acc.pieceOffsets ? { pieceOffsets: acc.pieceOffsets } : {}),
-    ...(acc.actorMembership ? { actorMembership: acc.actorMembership } : {}),
-  }));
-
-  // Grupo de accesorios del kit E — los herrajes accesorios como opciones.
-  const accessoryGroup =
-    eKit && accessories.length > 0
-      ? {
-          code: `${systemCode}_LATERAL_E`,
-          name: 'Lateral superior E',
-          required: false,
-          kitCode: eKit.code,
-          optionIds: accessories.map((a) => a.code),
+  // Insertos (#1633): uno por (inserto × altura). El legado accessoriesE vale
+  // heights ['E'] y, como antes, se ignora si la E no está incluida.
+  if (input.accessories && input.accessoriesE && input.accessoriesE.length > 0) {
+    throw new Error('Declará los insertos en «accessories» o en «accessoriesE», no en ambos.');
+  }
+  const declared: readonly HardwareKitSystemAccessory[] = input.accessories
+    ? input.accessories
+    : (input.accessoriesE ?? []).map((acc) => ({ ...acc, heights: ['E'] }));
+  const accessories: HardwareKitSystemPlan['accessories'][number][] = [];
+  const optionCodesByKit = new Map<string, string[]>();
+  for (const acc of declared) {
+    const heights = acc.heights ?? [];
+    if (input.accessories && heights.length === 0) {
+      throw new Error(`El inserto «${acc.name}» no se ofrece en ninguna altura.`);
+    }
+    const price = acc.costPerUnit ?? 0;
+    if (!Number.isFinite(price) || price < 0) {
+      throw new Error(`El precio del inserto «${acc.name}» no puede ser negativo.`);
+    }
+    for (const label of heights) {
+      const kit = kitByLabel.get(label.trim().toLowerCase());
+      if (!kit) {
+        if (input.accessories) {
+          throw new Error(`El inserto «${acc.name}» apunta a la altura «${label}», que no está en el sistema.`);
         }
-      : null;
+        continue; // legado: sin E incluida, sin insertos
+      }
+      const slug = slugByLabel.get(kit.heightCode.toLowerCase())!;
+      const code = `${systemCode}-${slug}-${acc.suffix}`;
+      if (accessories.some((a) => a.code === code)) {
+        throw new Error(`Inserto repetido en la altura ${kit.heightCode}: «${acc.suffix}».`);
+      }
+      accessories.push({
+        code,
+        name: `${systemName} ${kit.heightCode} — ${acc.name}`,
+        heightCode: kit.heightCode,
+        kitCode: kit.code,
+        costPerUnit: price,
+        exists: existing.hardwareCodes.has(code),
+        anchors: acc.anchors,
+        ...(acc.pieceOffsets ? { pieceOffsets: acc.pieceOffsets } : {}),
+        ...(acc.actorMembership ? { actorMembership: acc.actorMembership } : {}),
+      });
+      optionCodesByKit.set(kit.code, [...(optionCodesByKit.get(kit.code) ?? []), code]);
+    }
+  }
+
+  // #1633 review: una etiqueta puede normalizarse al código de OTRA fila
+  // («E GAL» ⇒ SYS-E-GAL = inserto GAL de la E; «E FIJ» ⇒ el perfil fijo de
+  // la E). El plan lo rechaza aquí, no recién en el envío.
+  const planCodes = new Map<string, string>();
+  const claim = (code: string, what: string): void => {
+    const prev = planCodes.get(code);
+    if (prev) throw new Error(`El código ${code} se repite en el plan (${prev} y ${what}); cambiá la etiqueta.`);
+    planCodes.set(code, what);
+  };
+  for (const k of kits) {
+    claim(k.code, `juego ${k.heightCode}`);
+    for (const d of k.designs) if (d.code !== k.code) claim(d.code, `parte de ${k.heightCode}`);
+  }
+  for (const a of accessories) claim(a.code, `inserto de ${a.heightCode}`);
+
+  // Un selector por altura con insertos, en el orden de las alturas.
+  const accessoryGroups = kits
+    .filter((k) => optionCodesByKit.has(k.code))
+    .map((k) => ({
+      code: `${systemCode}_LATERAL_${slugByLabel.get(k.heightCode.toLowerCase())!}`,
+      name: `Insertos ${k.heightCode}`,
+      required: false,
+      kitCode: k.code,
+      optionIds: optionCodesByKit.get(k.code)!,
+    }));
 
   return {
     kits,
     accessories,
-    accessoryGroup,
+    accessoryGroups,
     agregado: {
       code: `${systemCode}-CAJON`,
       name: `Cajón ${systemName}`,
@@ -1585,7 +1695,7 @@ export function planHardwareKitSystem(
       variants: kits.map((k) => ({
         heightCode: k.heightCode,
         label: k.heightCode,
-        khMinMm: heightByCode.get(k.heightCode)!.khMinMm,
+        khMinMm: k.khMinMm,
         kitCode: k.code,
       })),
       motion: 'translate',
@@ -1593,6 +1703,20 @@ export function planHardwareKitSystem(
     },
     blockedCode,
   };
+}
+
+/**
+ * #1633: código de juego a partir de la etiqueta libre de la altura:
+ * mayúsculas sin acentos, todo lo que no sea A-Z/0-9 → «-». «M» ⇒ «M»;
+ * «Alta 186» ⇒ «ALTA-186».
+ */
+export function heightCodeSlug(label: string): string {
+  return label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 /** #1633: marca/línea recortadas; el objeto (aun vacío) marca la familia. */

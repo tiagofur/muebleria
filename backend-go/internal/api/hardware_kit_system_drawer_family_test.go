@@ -8,6 +8,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -145,5 +146,114 @@ func TestHardwareKitSystem_RejectsDuplicateLabelsBeforeWrites_1633(t *testing.T)
 	}
 	if got := e.sqlCount(t, "agregados", []string{"FAM-B-CAJON"}); got != 0 {
 		t.Fatalf("rejected system left an agregado: %d", got)
+	}
+}
+
+// twoHeightSystemPayload: kits N (seed*10+1) and C (seed*10+6), one insert
+// row per height, and `groups` as the raw option-group JSON fields.
+func twoHeightSystemPayload(code string, seed int, groups string) string {
+	kitN, kitC := kitSystemUUID(seed*10+1), kitSystemUUID(seed*10+6)
+	insN, insC := kitSystemUUID(seed*10+2), kitSystemUUID(seed*10+3)
+	agrID := kitSystemUUID(seed*10 + 4)
+	insert := func(id, kit, suffix string) string {
+		return fmt.Sprintf(`{"id":%q,"code":"%s-%s","name":"Inserto %s","unit":"piece","cost_per_unit":120,"active":true,"pieces":[{"anchor":"left","offsetMm":{"x":0,"y":0,"z":0}}],"design_parts":[{"component_name":"%s-%s","actor_membership":"actor:drawer"}]}`,
+			id, code, suffix, suffix, code, suffix)
+	}
+	return fmt.Sprintf(`{
+		"expected_existing_codes": [],
+		"hardware": [
+			{"id":%q,"code":"%s-N","name":"Kit N","unit":"set","cost_per_unit":450,"active":true},
+			{"id":%q,"code":"%s-C","name":"Kit C","unit":"set","cost_per_unit":610,"active":true},
+			%s, %s
+		],
+		"agregado": {
+			"id":%q,"code":"%s-CAJON","name":"Cajón %s","active":true,
+			"width_mm":560,"height_mm":177,"depth_mm":500,
+			"commercial_kit_hardware_id":%q,
+			"drawer_system": {},
+			"variant_sets": [{"id":"","dimension":"height","variants":[
+				{"label":"N","nominalDimensionMm":70,"hardwareId":%q,"commercialKitHardwareId":%q},
+				{"label":"C","nominalDimensionMm":177,"hardwareId":%q,"commercialKitHardwareId":%q}
+			]}]
+		}%s
+	}`,
+		kitN, code, kitC, code,
+		insert(insN, kitN, "N-GAL"), insert(insC, kitC, "C-GAL"),
+		agrID, code, code, kitN,
+		kitN, kitN, kitC, kitC,
+		groups)
+}
+
+func optionGroupJSON(id, code, kit string, options ...string) string {
+	quoted := make([]string, len(options))
+	for i, o := range options {
+		quoted[i] = fmt.Sprintf("%q", o)
+	}
+	return fmt.Sprintf(`{"id":%q,"code":%q,"name":"Insertos","kind":"hardware","required":false,"option_ids":[%s],"kit_hardware_id":%q}`,
+		id, code, strings.Join(quoted, ","), kit)
+}
+
+func TestHardwareKitSystem_OneSelectorPerHeightInOneTransaction_1633(t *testing.T) {
+	e := kitSystemE2EStore(t)
+	seed := 80
+	kitN, kitC := kitSystemUUID(seed*10+1), kitSystemUUID(seed*10+6)
+	groups := fmt.Sprintf(`, "option_groups": [%s, %s]`,
+		optionGroupJSON(kitSystemUUID(seed*10+7), "MH_LATERAL_N", kitN, kitSystemUUID(seed*10+2)),
+		optionGroupJSON(kitSystemUUID(seed*10+8), "MH_LATERAL_C", kitC, kitSystemUUID(seed*10+3)))
+	rec := e.run(t, twoHeightSystemPayload("MH", seed, groups))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("system create = %d %s", rec.Code, rec.Body.String())
+	}
+	if got := e.sqlCount(t, "option_groups", []string{"MH_LATERAL_N", "MH_LATERAL_C"}); got != 2 {
+		t.Fatalf("selectors persisted = %d, want 2", got)
+	}
+	if got := e.sqlCount(t, "hardwares", []string{"MH-N", "MH-C", "MH-N-GAL", "MH-C-GAL"}); got != 4 {
+		t.Fatalf("hardware persisted = %d, want 4", got)
+	}
+}
+
+func TestHardwareKitSystem_SelectorFailuresBeforeWrites_1633(t *testing.T) {
+	e := kitSystemE2EStore(t)
+	// A taken selector code is a typed 409 decided before the first insert.
+	seed := 81
+	first := twoHeightSystemPayload("TK", seed, fmt.Sprintf(`, "option_groups": [%s]`,
+		optionGroupJSON(kitSystemUUID(seed*10+7), "TAKEN_SEL", kitSystemUUID(seed*10+1), kitSystemUUID(seed*10+2))))
+	if rec := e.run(t, first); rec.Code != http.StatusCreated {
+		t.Fatalf("seed create = %d %s", rec.Code, rec.Body.String())
+	}
+	seed = 82
+	second := twoHeightSystemPayload("TK2", seed, fmt.Sprintf(`, "option_groups": [%s]`,
+		optionGroupJSON(kitSystemUUID(seed*10+7), "TAKEN_SEL", kitSystemUUID(seed*10+1), kitSystemUUID(seed*10+2))))
+	rec := e.run(t, second)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "TAKEN_SEL") {
+		t.Fatalf("taken selector = %d %s, want 409 naming it", rec.Code, rec.Body.String())
+	}
+	if got := e.sqlCount(t, "hardwares", []string{"TK2-N", "TK2-C"}); got != 0 {
+		t.Fatalf("a taken selector left %d kit rows", got)
+	}
+
+	seed = 83
+	kitN := kitSystemUUID(seed*10 + 1)
+	cases := map[string]string{
+		"dos selectores al mismo juego": fmt.Sprintf(`, "option_groups": [%s, %s]`,
+			optionGroupJSON(kitSystemUUID(seed*10+7), "SAME_A", kitN, kitSystemUUID(seed*10+2)),
+			optionGroupJSON(kitSystemUUID(seed*10+8), "SAME_B", kitN, kitSystemUUID(seed*10+3))),
+		"código repetido en el payload": fmt.Sprintf(`, "option_groups": [%s, %s]`,
+			optionGroupJSON(kitSystemUUID(seed*10+7), "DUP", kitN, kitSystemUUID(seed*10+2)),
+			optionGroupJSON(kitSystemUUID(seed*10+8), "DUP", kitSystemUUID(seed*10+6), kitSystemUUID(seed*10+3))),
+		"opción que es un juego": fmt.Sprintf(`, "option_groups": [%s]`,
+			optionGroupJSON(kitSystemUUID(seed*10+7), "KITOPT", kitN, kitSystemUUID(seed*10+6))),
+		"option_group y option_groups juntos": fmt.Sprintf(`, "option_group": %s, "option_groups": [%s]`,
+			optionGroupJSON(kitSystemUUID(seed*10+7), "LEG", kitN, kitSystemUUID(seed*10+2)),
+			optionGroupJSON(kitSystemUUID(seed*10+8), "NEW", kitSystemUUID(seed*10+6), kitSystemUUID(seed*10+3))),
+	}
+	for name, groups := range cases {
+		rec := e.run(t, twoHeightSystemPayload("BAD", seed, groups))
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("%s: = %d %s, want 422", name, rec.Code, rec.Body.String())
+		}
+		if got := e.sqlCount(t, "hardwares", []string{"BAD-N", "BAD-C"}); got != 0 {
+			t.Fatalf("%s: rejected plan left %d kit rows", name, got)
+		}
 	}
 }

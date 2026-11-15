@@ -46,7 +46,7 @@ export interface HardwareSystemHeightAddModalProps {
   ) => Promise<HardwareVisualAssetBinding>;
   readonly onSubmit: (req: {
     readonly agregadoId: string;
-    readonly heightCode: 'N' | 'M' | 'K' | 'E';
+    readonly heightCode: string; // #1633: etiqueta de altura
     readonly kitCostPerUnit: number;
     readonly widthMm: number;
     readonly depthMm: number;

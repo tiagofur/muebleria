@@ -132,7 +132,7 @@ export interface HardwareCatalogProps {
   /** #1596 alcance 10: añadir altura faltante a un sistema existente. */
   readonly onAddSystemHeight?: (req: {
     readonly agregadoId: string;
-    readonly heightCode: 'N' | 'M' | 'K' | 'E';
+    readonly heightCode: string; // #1633: etiqueta de altura
     readonly kitCostPerUnit: number;
     readonly widthMm: number;
     readonly depthMm: number;
