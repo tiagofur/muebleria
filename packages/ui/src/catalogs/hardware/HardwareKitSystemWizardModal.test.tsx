@@ -261,6 +261,7 @@ describe('HardwareKitSystemWizardModal — review #1636', () => {
     await user.type(screen.getByTestId('family-height-0-label'), 'Mía');
     await user.click(screen.getByTestId('family-heights-template'));
     expect(screen.getByTestId('family-heights-template-confirm')).toBeInTheDocument();
+    expect(screen.getByTestId('family-heights-template-replace')).toHaveFocus();
     expect(screen.getByTestId('family-height-0-label')).toHaveValue('Mía');
     await user.click(screen.getByTestId('family-heights-template-replace'));
     expect(screen.getByTestId('family-height-0-label')).toHaveValue('N');

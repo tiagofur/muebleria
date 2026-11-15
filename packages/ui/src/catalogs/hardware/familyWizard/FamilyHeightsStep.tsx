@@ -18,6 +18,11 @@ export function FamilyHeightsStep({
   const tableRef = useRef<HTMLTableElement | null>(null);
   // Review #1636: la plantilla no pisa filas escritas sin confirmar.
   const [confirmTemplate, setConfirmTemplate] = useState(false);
+  const templateBtnRef = useRef<HTMLButtonElement | null>(null);
+  const closeConfirm = (): void => {
+    setConfirmTemplate(false);
+    requestAnimationFrame(() => templateBtnRef.current?.focus());
+  };
   const update = (idx: number, patch: Partial<FamilyHeightRow>) =>
     onChange(rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   // Tras reordenar, el foco vuelve al mismo control de la fila movida.
@@ -44,6 +49,7 @@ export function FamilyHeightsStep({
         <button
           type="button"
           className="btn btn--small"
+          ref={templateBtnRef}
           onClick={() => (rows.length > 0 ? setConfirmTemplate(true) : onChange(blumMerivoboxTemplate()))}
           data-testid="family-heights-template"
         >
@@ -59,22 +65,24 @@ export function FamilyHeightsStep({
         </button>
       </div>
       {confirmTemplate ? (
-        <div className="family-heights__confirm" role="alertdialog" aria-label="Reemplazar alturas" data-testid="family-heights-template-confirm">
+        <div className="family-heights__confirm" role="alert" data-testid="family-heights-template-confirm">
           <span>
             La plantilla reemplaza las {rows.length} altura(s) que escribiste. ¿Seguir?
           </span>
           <button
             type="button"
             className="btn btn--small btn--danger"
+            // El foco entra a la decisión y vuelve al botón de la plantilla.
+            autoFocus
             onClick={() => {
               onChange(blumMerivoboxTemplate());
-              setConfirmTemplate(false);
+              closeConfirm();
             }}
             data-testid="family-heights-template-replace"
           >
             Reemplazar
           </button>
-          <button type="button" className="btn btn--small btn--ghost" onClick={() => setConfirmTemplate(false)}>
+          <button type="button" className="btn btn--small btn--ghost" onClick={closeConfirm}>
             Conservar mis alturas
           </button>
         </div>
