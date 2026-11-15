@@ -542,4 +542,13 @@ describe('HardwareKitSystemWizardModal — pendientes del brief (#1633 s2c-3)', 
     await user.click(screen.getByTestId('family-wizard-close-confirm-close'));
     expect(onClose).toHaveBeenCalledTimes(2);
   });
+
+  it('Escape con cambios también pide confirmación', async () => {
+    const user = userEvent.setup();
+    const { onClose } = setup();
+    await user.type(screen.getByTestId('hardware-system-wizard-brand'), 'Blum');
+    await user.keyboard('{Escape}');
+    expect(screen.getByTestId('family-wizard-close-confirm')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

@@ -37,6 +37,7 @@ import {
   heightRowsProblem,
   heightRowsToInput,
   identityProblem,
+  insertHasHeight,
   insertsProblem,
   insertsWithoutHeights,
   parseMm,
@@ -171,8 +172,8 @@ export function HardwareKitSystemWizardModal({
     });
   }, [heightLabels]);
   const problems = useMemo<readonly (string | null)[]>(
-    () => [identityProblem(identity), heightRowsProblem(heightRows), insertsProblem(inserts), null, null],
-    [identity, heightRows, inserts],
+    () => [identityProblem(identity), heightRowsProblem(heightRows), insertsProblem(inserts, heightLabels), null, null],
+    [identity, heightRows, inserts, heightLabels],
   );
   const localReachable = problems.map((_, i) => problems.slice(0, i).every((p) => p === null));
 
@@ -188,9 +189,7 @@ export function HardwareKitSystemWizardModal({
       ...(identity.line.trim() ? { line: identity.line.trim() } : {}),
       heights: heightRowsToInput(heightRows, insertDefaults),
       // #1633: un inserto sin alturas es una advertencia y no se crea.
-      accessories: insertoDraftsToAccessories(
-        inserts.filter((d) => (d.heights ?? []).some((h) => heightLabels.some((l) => l.toLowerCase() === h.toLowerCase()))),
-      ),
+      accessories: insertoDraftsToAccessories(inserts.filter((d) => insertHasHeight(d, heightLabels))),
     };
   }, [problems, identity, heightRows, inserts, insertDefaults, heightLabels]);
 
@@ -315,7 +314,12 @@ export function HardwareKitSystemWizardModal({
   };
 
   const dirty =
-    identity.code.trim() !== '' || identity.name.trim() !== '' || heightRows.length > 0 || inserts.length > 0;
+    identity.code.trim() !== '' ||
+    identity.name.trim() !== '' ||
+    identity.brand.trim() !== '' ||
+    identity.line.trim() !== '' ||
+    heightRows.length > 0 ||
+    inserts.length > 0;
   const requestClose = (): void => {
     if (wizard.phase === 'done' || wizard.running || !dirty) {
       wizard.handleClose();

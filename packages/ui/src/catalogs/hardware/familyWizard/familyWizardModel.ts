@@ -102,21 +102,26 @@ export function heightRowsToInput(
   });
 }
 
-/** #1633: insertos con nombre que no se ofrecen en ninguna altura (no se crean). */
-export function insertsWithoutHeights(drafts: readonly InsertoDraft[], heightLabels: readonly string[]): string[] {
+/** #1633: ¿el inserto se ofrece en alguna altura de la familia? (único predicado). */
+export function insertHasHeight(d: InsertoDraft, heightLabels: readonly string[]): boolean {
   const available = new Set(heightLabels.map((l) => l.trim().toLowerCase()));
-  return drafts
-    .filter((d) => d.name.trim() && !(d.heights ?? []).some((h) => available.has(h.trim().toLowerCase())))
-    .map((d) => d.name.trim());
+  return (d.heights ?? []).some((h) => available.has(h.trim().toLowerCase()));
 }
 
-export function insertsProblem(drafts: readonly InsertoDraft[]): string | null {
+/** #1633: insertos con nombre que no se ofrecen en ninguna altura (no se crean). */
+export function insertsWithoutHeights(drafts: readonly InsertoDraft[], heightLabels: readonly string[]): string[] {
+  return drafts.filter((d) => d.name.trim() && !insertHasHeight(d, heightLabels)).map((d) => d.name.trim());
+}
+
+export function insertsProblem(drafts: readonly InsertoDraft[], heightLabels: readonly string[]): string | null {
   const suffixes = new Set<string>();
   for (const [i, d] of drafts.entries()) {
     const name = d.name.trim();
     if (!name) return `El inserto ${i + 1} necesita un nombre (o quitalo).`;
     const suffix = insertoSuffix(name);
     if (!suffix) return `El nombre «${name}» no deja un código válido.`;
+    // Un inserto que no se crea (sin alturas) no compite por el código.
+    if (!insertHasHeight(d, heightLabels)) continue;
     if (suffixes.has(suffix)) {
       return `Dos insertos generarían el mismo código (…-${suffix}): renombrá uno para diferenciarlos.`;
     }

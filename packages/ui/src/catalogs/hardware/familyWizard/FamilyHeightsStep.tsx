@@ -41,7 +41,7 @@ export function FamilyHeightsStep({
   return (
     <div className="family-heights">
       <figure className="family-heights__figure" aria-labelledby="family-heights-figure-caption">
-        <svg viewBox="0 0 220 120" role="img" aria-hidden="true" className="family-heights__svg">
+        <svg viewBox="0 0 220 120" aria-hidden="true" className="family-heights__svg">
           {/* Hueco de la bahía (frente del mueble) */}
           <rect x="20" y="10" width="140" height="100" className="family-heights__svg-bay" />
           {/* Cajón: costado y trasera */}
