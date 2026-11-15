@@ -18,6 +18,7 @@ module Granete
         transport/http_adapter
         transport/multipart_body
         metadata/store
+        metadata/assembly_height_labels
         connection/model_binding
         connection/transform_contract
         connection/position_journal

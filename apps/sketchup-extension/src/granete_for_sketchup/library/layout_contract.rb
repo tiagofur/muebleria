@@ -295,12 +295,13 @@ module Granete
       class LayoutAssembly
         attr_reader :assembly_instance_id, :agregado_id, :recipe_revision,
                     :snapshot_id, :is_historical, :dimensions_mm, :placement,
-                    :rigid_members, :fabricated_components
+                    :rigid_members, :fabricated_components, :height_label
 
         def initialize(assembly_instance_id:, agregado_id:, placement:,
                        rigid_members: [], fabricated_components: [],
                        recipe_revision: nil, snapshot_id: nil, is_historical: false,
-                       dimensions_mm: nil)
+                       dimensions_mm: nil, height_label: nil)
+          @height_label = height_label
           @assembly_instance_id = assembly_instance_id
           @agregado_id = agregado_id
           @placement = placement
@@ -832,7 +833,6 @@ module Granete
           raw.map { |entry| parse_assembly(entry) }
         end
 
-        # rubocop:disable-next Metrics/AbcSize
         def parse_assembly(raw)
           raise LayoutContract::ContractError, 'Assembly de composición inválido' unless raw.is_a?(Hash)
 
@@ -847,16 +847,7 @@ module Granete
           recipe_rev = parse_recipe_revision(raw, inst_id)
           snapshot_id = ContractCoercions.optional_opaque_string(raw['snapshotId'], "snapshotId de #{inst_id}")
 
-          if is_hist
-            if recipe_rev.nil? || recipe_rev <= 0
-              raise LayoutContract::ContractError,
-                    "Assembly histórico #{inst_id} requiere recipeRevision > 0 (obtenido: #{recipe_rev.inspect})"
-            end
-            if snapshot_id.nil?
-              raise LayoutContract::ContractError,
-                    "Assembly histórico #{inst_id} requiere snapshotId no vacío"
-            end
-          end
+          validate_historical_assembly!(inst_id, recipe_rev, snapshot_id) if is_hist
 
           placement = parse_placement(raw['placement'] || raw['localTransform'] || raw['transform'], inst_id)
           dims = ContractCoercions.optional_triple(
@@ -880,8 +871,28 @@ module Granete
             recipe_revision: recipe_rev,
             snapshot_id: snapshot_id,
             is_historical: is_hist,
-            dimensions_mm: dims
+            dimensions_mm: dims,
+            height_label: parse_height_label(raw['heightLabel'])
           )
+        end
+
+        def validate_historical_assembly!(inst_id, recipe_rev, snapshot_id)
+          if recipe_rev.nil? || recipe_rev <= 0
+            raise LayoutContract::ContractError,
+                  "Assembly histórico #{inst_id} requiere recipeRevision > 0 (obtenido: #{recipe_rev.inspect})"
+          end
+          return unless snapshot_id.nil?
+
+          raise LayoutContract::ContractError,
+                "Assembly histórico #{inst_id} requiere snapshotId no vacío"
+        end
+
+        # #1633: etiqueta de la altura de la bahía (presentación); vacía = nil.
+        def parse_height_label(raw)
+          return nil unless raw.is_a?(String)
+
+          text = raw.strip
+          text.empty? ? nil : text
         end
 
         def parse_recipe_revision(raw, inst_id)

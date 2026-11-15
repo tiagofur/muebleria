@@ -1183,13 +1183,21 @@ module Granete
           boards_count = 0
           hardware_count = 0
           assemblies_count = 0
+          height_labels = {}
           if native_layout.respond_to?(:assemblies) && native_layout.assemblies
             native_layout.assemblies.each do |assembly|
               counts = render_native_assembly(model, furniture_definition, instance_id, assembly, mirror_width_mm)
               boards_count += counts['boards']
               hardware_count += counts['hardware']
               assemblies_count += 1
+              if assembly.respond_to?(:height_label) && assembly.height_label
+                height_labels[assembly.assembly_instance_id] = assembly.height_label
+              end
             end
+          end
+          # #1633: la altura de cada cajón, para rotularlo en el Inspector.
+          if defined?(Metadata::AssemblyHeightLabels)
+            Metadata::AssemblyHeightLabels.write(furniture_definition, height_labels)
           end
           { 'boards' => boards_count, 'hardware' => hardware_count, 'assemblies' => assemblies_count }
         end

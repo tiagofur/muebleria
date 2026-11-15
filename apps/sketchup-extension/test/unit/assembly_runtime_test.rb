@@ -10,6 +10,7 @@ require_relative '../../src/granete_for_sketchup/assets/hardware_asset_cache'
 require_relative '../../src/granete_for_sketchup/assets/asset_loader'
 require_relative '../../src/granete_for_sketchup/model/furniture_builder'
 require_relative '../../src/granete_for_sketchup/metadata/store'
+require_relative '../../src/granete_for_sketchup/metadata/assembly_height_labels'
 
 class AssemblyRuntimeTest < Minitest::Test
   MM = 1.0 / 25.4
@@ -64,6 +65,36 @@ class AssemblyRuntimeTest < Minitest::Test
 
   def teardown
     FileUtils.remove_entry(@tmp_dir) if @tmp_dir && File.directory?(@tmp_dir)
+  end
+
+  # #1633: heightLabel (altura de la bahía) se lee del layout; ausente o
+  # vacío queda nil — nunca se inventa.
+  def test_layout_assembly_height_label
+    layout_data = build_drawer_assembly_layout(width_mm: 600.0)
+    assert_nil Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_data).assemblies.first.height_label
+
+    labeled = JSON.parse(JSON.generate(layout_data))
+    labeled['assemblies'][0]['heightLabel'] = ' M '
+    assert_equal 'M', Granete::SketchUpExtension::Library::LayoutContract.parse!(labeled).assemblies.first.height_label
+
+    blank = JSON.parse(JSON.generate(layout_data))
+    blank['assemblies'][0]['heightLabel'] = '  '
+    assert_nil Granete::SketchUpExtension::Library::LayoutContract.parse!(blank).assemblies.first.height_label
+  end
+
+  # #1633: al materializar, la altura de cada bahía queda en la definición
+  # del mueble (la lee el escáner de cajones del Inspector).
+  def test_insert_records_bay_height_labels_on_the_furniture_definition
+    layout_data = build_drawer_assembly_layout(width_mm: 600.0)
+    layout_data['assemblies'][0]['heightLabel'] = 'E'
+    parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_data)
+    result = @builder.insert_furniture(@model, { 'name' => 'Drawer Unit', 'furniture_definition_id' => 'f-def-1' },
+                                       {}, resolved_layout: parsed)
+    assert result['success']
+
+    furniture = @model.active_entities.instances.first
+    labels = Granete::SketchUpExtension::Metadata::AssemblyHeightLabels.read(furniture.definition)
+    assert_equal({ 'drawer-inst-1' => 'E' }, labels)
   end
 
   # D1: Layout contract parses assemblies, validates basis, fails closed on invalid input
