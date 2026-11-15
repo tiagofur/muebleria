@@ -464,6 +464,7 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 				HardwareID:              v.HardwareId,
 				CommercialKitHardwareID: derefString(v.CommercialKitHardwareId),
 				Label:                   strings.TrimSpace(derefString(v.Label)),
+				BackHeightMm:            derefFloat(v.BackHeightMm),
 			})
 		}
 		id := uuid.NewString()
@@ -550,6 +551,15 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 				return nil, invalidPayload(fmt.Sprintf("option_ids del grupo referencia una fila que no es inserto del payload: «%s»", optionID), nil)
 			}
 		}
+		// #1633: qué monta el mueble si no elige (#1627); «ninguno» sólo
+		// tiene sentido en un selector opcional.
+		defaultChoice := derefString(og.DefaultChoice)
+		if !domain.ValidOptionGroupDefaultChoice(defaultChoice) {
+			return nil, invalidPayload(fmt.Sprintf("default_choice inválido en el selector «%s»", og.Code), nil)
+		}
+		if defaultChoice == domain.OptionGroupDefaultNone && og.Required {
+			return nil, invalidPayload(fmt.Sprintf("el selector «%s» es obligatorio: no puede tener «ninguno» por defecto", og.Code), nil)
+		}
 		kitRef := og.KitHardwareID
 		optionGroups = append(optionGroups, &domain.OptionGroup{
 			ID:            og.ID,
@@ -559,6 +569,7 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 			Required:      og.Required,
 			OptionIDs:     og.OptionIds,
 			KitHardwareID: &kitRef,
+			DefaultChoice: defaultChoice,
 		})
 	}
 

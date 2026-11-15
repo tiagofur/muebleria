@@ -383,10 +383,15 @@ func kitSystemHeightPlanFromRequest(req *openapi.HardwareKitSystemHeightAddReque
 				return nil, invalidPayload(fmt.Sprintf("option_ids del selector referencia una fila que no es inserto del payload: «%s»", id), nil)
 			}
 		}
+		defaultChoice := derefString(og.DefaultChoice)
+		if !domain.ValidOptionGroupDefaultChoice(defaultChoice) || (defaultChoice == domain.OptionGroupDefaultNone && og.Required) {
+			return nil, invalidPayload(fmt.Sprintf("default_choice inválido en el selector «%s»", og.Code), nil)
+		}
 		kitRef := og.KitHardwareID
 		optionGroup = &domain.OptionGroup{
 			ID: og.ID, Code: og.Code, Name: og.Name, Kind: og.Kind,
 			Required: og.Required, OptionIDs: og.OptionIds, KitHardwareID: &kitRef,
+			DefaultChoice: defaultChoice,
 		}
 	}
 
@@ -398,7 +403,8 @@ func kitSystemHeightPlanFromRequest(req *openapi.HardwareKitSystemHeightAddReque
 		hardware:    hardware,
 		variant: domain.ProductVariant{
 			NominalDimensionMm: req.Variant.NominalDimensionMm, HardwareID: kitID, CommercialKitHardwareID: kitID,
-			Label: strings.TrimSpace(derefString(req.Variant.Label)),
+			Label:        strings.TrimSpace(derefString(req.Variant.Label)),
+			BackHeightMm: derefFloat(req.Variant.BackHeightMm),
 		},
 		optionGroup: optionGroup,
 		eligibility: eligibility,

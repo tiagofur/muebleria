@@ -129,6 +129,8 @@ export interface ApiCatalogDeps {
           readonly commercialKitHardwareId?: string | null;
           /** #1633: etiqueta libre de la altura. */
           readonly label?: string;
+          /** #1633: altura de la trasera (mm), informativa. */
+          readonly backHeightMm?: number;
         }[];
       }[];
       /** #1633: marcador de familia de cajón. */
@@ -152,6 +154,7 @@ export interface ApiCatalogDeps {
       readonly required: boolean;
       readonly option_ids: readonly string[];
       readonly kit_hardware_id: string;
+      readonly default_choice?: 'first_active' | 'none';
     }[];
     /** #1596 decisión 9: elegibilidad del ensamble en la misma transacción. */
     readonly eligibility_group?: {

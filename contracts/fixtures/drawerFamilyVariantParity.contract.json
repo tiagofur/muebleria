@@ -1,66 +1,216 @@
 {
   "scenario": "#1633 — familia de cajón: la etiqueta de altura es dato (libre, ≤40, única sin distinguir mayúsculas); las variantes previas sin etiqueta muestran la letra Blum deducida del nominal; el marcador drawerSystem acota marca/línea a 80. Go (domain.ValidateAgregadoVariantSet / EffectiveVariantLabel / ValidateAgregadoDrawerSystem) y TS (validateAgregadoVariantSet / effectiveVariantLabel / validateAgregadoDrawerSystem) deben coincidir.",
   "effectiveLabel": [
-    { "name": "etiqueta propia manda sobre el nominal Blum", "variant": { "nominalDimensionMm": 108, "hardwareId": "k", "label": "C" }, "expected": "C" },
-    { "name": "etiqueta se recorta", "variant": { "nominalDimensionMm": 186, "hardwareId": "k", "label": "  Alta 186 " }, "expected": "Alta 186" },
-    { "name": "legacy sin etiqueta: letra Blum M", "variant": { "nominalDimensionMm": 108, "hardwareId": "k" }, "expected": "M" },
-    { "name": "legacy sin etiqueta: letra Blum N (85.5)", "variant": { "nominalDimensionMm": 85.5, "hardwareId": "k" }, "expected": "N" },
-    { "name": "sin etiqueta y nominal fuera de la tabla Blum", "variant": { "nominalDimensionMm": 110, "hardwareId": "k" }, "expected": "" }
+    {
+      "name": "etiqueta propia manda sobre el nominal Blum",
+      "variant": {
+        "nominalDimensionMm": 108,
+        "hardwareId": "k",
+        "label": "C"
+      },
+      "expected": "C"
+    },
+    {
+      "name": "etiqueta se recorta",
+      "variant": {
+        "nominalDimensionMm": 186,
+        "hardwareId": "k",
+        "label": "  Alta 186 "
+      },
+      "expected": "Alta 186"
+    },
+    {
+      "name": "legacy sin etiqueta: letra Blum M",
+      "variant": {
+        "nominalDimensionMm": 108,
+        "hardwareId": "k"
+      },
+      "expected": "M"
+    },
+    {
+      "name": "legacy sin etiqueta: letra Blum N (85.5)",
+      "variant": {
+        "nominalDimensionMm": 85.5,
+        "hardwareId": "k"
+      },
+      "expected": "N"
+    },
+    {
+      "name": "sin etiqueta y nominal fuera de la tabla Blum",
+      "variant": {
+        "nominalDimensionMm": 110,
+        "hardwareId": "k"
+      },
+      "expected": ""
+    }
   ],
   "variantSets": [
     {
       "name": "etiquetas libres de otra marca",
-      "variantSet": { "id": "vs", "dimension": "height", "variants": [
-        { "nominalDimensionMm": 70, "hardwareId": "k1", "label": "Baja" },
-        { "nominalDimensionMm": 140, "hardwareId": "k2", "label": "Media" },
-        { "nominalDimensionMm": 220, "hardwareId": "k3", "label": "Alta 220" }
-      ] },
+      "variantSet": {
+        "id": "vs",
+        "dimension": "height",
+        "variants": [
+          {
+            "nominalDimensionMm": 70,
+            "hardwareId": "k1",
+            "label": "Baja"
+          },
+          {
+            "nominalDimensionMm": 140,
+            "hardwareId": "k2",
+            "label": "Media"
+          },
+          {
+            "nominalDimensionMm": 220,
+            "hardwareId": "k3",
+            "label": "Alta 220"
+          }
+        ]
+      },
       "valid": true
     },
     {
       "name": "mezcla de variantes con y sin etiqueta (legacy)",
-      "variantSet": { "id": "vs", "dimension": "height", "variants": [
-        { "nominalDimensionMm": 108, "hardwareId": "k1" },
-        { "nominalDimensionMm": 209, "hardwareId": "k2", "label": "E" }
-      ] },
+      "variantSet": {
+        "id": "vs",
+        "dimension": "height",
+        "variants": [
+          {
+            "nominalDimensionMm": 108,
+            "hardwareId": "k1"
+          },
+          {
+            "nominalDimensionMm": 209,
+            "hardwareId": "k2",
+            "label": "E"
+          }
+        ]
+      },
       "valid": true
     },
     {
       "name": "etiqueta duplicada sin distinguir mayúsculas",
-      "variantSet": { "id": "vs", "dimension": "height", "variants": [
-        { "nominalDimensionMm": 108, "hardwareId": "k1", "label": "m" },
-        { "nominalDimensionMm": 146, "hardwareId": "k2", "label": " M " }
-      ] },
+      "variantSet": {
+        "id": "vs",
+        "dimension": "height",
+        "variants": [
+          {
+            "nominalDimensionMm": 108,
+            "hardwareId": "k1",
+            "label": "m"
+          },
+          {
+            "nominalDimensionMm": 146,
+            "hardwareId": "k2",
+            "label": " M "
+          }
+        ]
+      },
       "valid": false,
       "errorContains": "duplicate label"
     },
     {
       "name": "etiqueta sólo espacios",
-      "variantSet": { "id": "vs", "dimension": "height", "variants": [
-        { "nominalDimensionMm": 108, "hardwareId": "k1", "label": "   " }
-      ] },
+      "variantSet": {
+        "id": "vs",
+        "dimension": "height",
+        "variants": [
+          {
+            "nominalDimensionMm": 108,
+            "hardwareId": "k1",
+            "label": "   "
+          }
+        ]
+      },
       "valid": false,
       "errorContains": "label cannot be whitespace"
     },
     {
       "name": "etiqueta de 41 caracteres",
-      "variantSet": { "id": "vs", "dimension": "height", "variants": [
-        { "nominalDimensionMm": 108, "hardwareId": "k1", "label": "ABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJA" }
-      ] },
+      "variantSet": {
+        "id": "vs",
+        "dimension": "height",
+        "variants": [
+          {
+            "nominalDimensionMm": 108,
+            "hardwareId": "k1",
+            "label": "ABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJA"
+          }
+        ]
+      },
       "valid": false,
       "errorContains": "label exceeds 40 characters"
     },
     {
       "name": "etiqueta de 40 caracteres con acentos (cuenta runas, no bytes)",
-      "variantSet": { "id": "vs", "dimension": "height", "variants": [
-        { "nominalDimensionMm": 108, "hardwareId": "k1", "label": "ÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚ" }
-      ] },
+      "variantSet": {
+        "id": "vs",
+        "dimension": "height",
+        "variants": [
+          {
+            "nominalDimensionMm": 108,
+            "hardwareId": "k1",
+            "label": "ÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚÁÉÍÓÚ"
+          }
+        ]
+      },
       "valid": true
+    },
+    {
+      "name": "altura de trasera declarada",
+      "variantSet": {
+        "id": "vs",
+        "dimension": "height",
+        "variants": [
+          {
+            "nominalDimensionMm": 108,
+            "hardwareId": "k1",
+            "label": "M",
+            "backHeightMm": 83
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "altura de trasera negativa",
+      "variantSet": {
+        "id": "vs",
+        "dimension": "height",
+        "variants": [
+          {
+            "nominalDimensionMm": 108,
+            "hardwareId": "k1",
+            "backHeightMm": -5
+          }
+        ]
+      },
+      "valid": false,
+      "errorContains": "backHeightMm must be finite and positive"
     }
   ],
   "drawerSystems": [
-    { "name": "marcador vacío es válido", "drawerSystem": {}, "valid": true },
-    { "name": "marca y línea", "drawerSystem": { "brand": "Blum", "line": "Merivobox" }, "valid": true },
-    { "name": "marca de 81 caracteres", "drawerSystem": { "brand": "ABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJA" }, "valid": false, "errorContains": "drawerSystem.brand exceeds 80 characters" }
+    {
+      "name": "marcador vacío es válido",
+      "drawerSystem": {},
+      "valid": true
+    },
+    {
+      "name": "marca y línea",
+      "drawerSystem": {
+        "brand": "Blum",
+        "line": "Merivobox"
+      },
+      "valid": true
+    },
+    {
+      "name": "marca de 81 caracteres",
+      "drawerSystem": {
+        "brand": "ABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJA"
+      },
+      "valid": false,
+      "errorContains": "drawerSystem.brand exceeds 80 characters"
+    }
   ]
 }

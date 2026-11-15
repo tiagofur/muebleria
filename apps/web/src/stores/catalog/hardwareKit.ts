@@ -398,6 +398,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
               hardwareId: idFor(v.kitCode),
               commercialKitHardwareId: idFor(v.kitCode),
               label: v.label,
+              ...(v.backHeightMm !== undefined ? { backHeightMm: v.backHeightMm } : {}),
             })),
           },
         ],
@@ -414,6 +415,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         required: g.required,
         optionIds: g.optionIds.map((code) => idFor(code)),
         kitHardwareId: systemKitIds.get(g.kitCode)!,
+        ...(g.defaultChoice ? { defaultChoice: g.defaultChoice } : {}),
       }));
 
       const serverApply = ctx.deps.createHardwareKitSystem;
@@ -443,6 +445,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
                 hardwareId: v.hardwareId,
                 commercialKitHardwareId: v.commercialKitHardwareId ?? null,
                 ...(v.label ? { label: v.label } : {}),
+                ...(v.backHeightMm ? { backHeightMm: v.backHeightMm } : {}),
               })),
             })),
             ...(agregado.drawerSystem ? { drawer_system: agregado.drawerSystem } : {}),
@@ -455,6 +458,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
             required: g.required,
             option_ids: g.optionIds,
             kit_hardware_id: g.kitHardwareId ?? '',
+            ...(g.defaultChoice === 'none' ? { default_choice: 'none' as const } : {}),
           })),
           // #1596 decisión 9: la elegibilidad se aplica en la MISMA
           // transacción del servidor.

@@ -217,6 +217,8 @@ export interface WorkspaceRepository {
           readonly commercialKitHardwareId?: string | null;
           /** #1633: etiqueta libre de la altura. */
           readonly label?: string;
+          /** #1633: altura de la trasera (mm), informativa. */
+          readonly backHeightMm?: number;
         }[];
       }[];
       /** #1633: marcador de familia de cajón. */
@@ -240,6 +242,7 @@ export interface WorkspaceRepository {
       readonly required: boolean;
       readonly option_ids: readonly string[];
       readonly kit_hardware_id: string;
+      readonly default_choice?: 'first_active' | 'none';
     }[];
   }): Promise<{
     readonly created_codes: readonly string[];

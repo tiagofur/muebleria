@@ -3517,9 +3517,10 @@ type HardwareKitSystemHeightAddRequest struct {
 }
 
 type HardwareKitSystemHeightVariant struct {
-	NominalDimensionMm float64 `json:"nominalDimensionMm"`
-	KitHardwareID      string  `json:"kit_hardware_id"`
-	Label              *string `json:"label,omitempty"`
+	NominalDimensionMm float64  `json:"nominalDimensionMm"`
+	KitHardwareID      string   `json:"kit_hardware_id"`
+	Label              *string  `json:"label,omitempty"`
+	BackHeightMm       *float64 `json:"backHeightMm,omitempty"`
 }
 
 type HardwareKitSystemHeightAdded struct {
@@ -3531,10 +3532,11 @@ type HardwareKitSystemHeightAdded struct {
 }
 
 type HardwareKitSystemVariant struct {
-	NominalDimensionMm      float64 `json:"nominalDimensionMm"`
-	HardwareId              string  `json:"hardwareId"`
-	CommercialKitHardwareId *string `json:"commercialKitHardwareId,omitempty"`
-	Label                   *string `json:"label,omitempty"`
+	NominalDimensionMm      float64  `json:"nominalDimensionMm"`
+	HardwareId              string   `json:"hardwareId"`
+	CommercialKitHardwareId *string  `json:"commercialKitHardwareId,omitempty"`
+	Label                   *string  `json:"label,omitempty"`
+	BackHeightMm            *float64 `json:"backHeightMm,omitempty"`
 }
 
 type HardwareKitSystemOptionGroupRow struct {
@@ -3545,6 +3547,7 @@ type HardwareKitSystemOptionGroupRow struct {
 	Required      bool     `json:"required"`
 	OptionIds     []string `json:"option_ids"`
 	KitHardwareID string   `json:"kit_hardware_id"`
+	DefaultChoice *string  `json:"default_choice,omitempty"`
 }
 
 type HardwareKitSystemCreated struct {

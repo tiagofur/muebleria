@@ -928,6 +928,20 @@ describe('planHardwareKitSystem (#1546 M4 — sistema generador)', () => {
       }, noExisting)).toThrow('supera 50 caracteres');
     });
 
+    it('#1633 s2c-3: trasera y «ninguno» por altura llegan a variantes y selectores', () => {
+      const plan = planHardwareKitSystem({
+        ...legrabox,
+        heights: legrabox.heights.map((h) => (h.code === 'C' ? { ...h, backHeightMm: 160, insertDefault: 'none' } : h)),
+      }, noExisting);
+      expect(plan.agregado.variants.find((v) => v.label === 'C')?.backHeightMm).toBe(160);
+      expect(plan.accessoryGroups.find((g) => g.kitCode === 'LGX-C')?.defaultChoice).toBe('none');
+      expect(plan.accessoryGroups.find((g) => g.kitCode === 'LGX-ALTA-186')?.defaultChoice).toBeUndefined();
+      expect(() => planHardwareKitSystem({
+        ...legrabox,
+        heights: legrabox.heights.map((h) => (h.code === 'C' ? { ...h, backHeightMm: -1 } : h)),
+      }, noExisting)).toThrow('trasera');
+    });
+
     it('heightCodeSlug: sin acentos, mayúsculas, separadores colapsados', () => {
       expect(heightCodeSlug('M')).toBe('M');
       expect(heightCodeSlug(' Alta  186 ')).toBe('ALTA-186');

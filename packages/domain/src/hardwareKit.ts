@@ -1393,6 +1393,10 @@ export interface HardwareKitSystemHeight {
   readonly include: boolean;
   /** #1633: precio del juego de ESTA altura; ausente ⇒ input.kitCostPerUnit. */
   readonly kitCostPerUnit?: number;
+  /** #1633: altura de la trasera (mm), informativa; ausente = no declarada. */
+  readonly backHeightMm?: number;
+  /** #1633/#1627: si el mueble no elige inserto en esta altura: primera opción (default) o ninguno. */
+  readonly insertDefault?: 'first_active' | 'none';
 }
 
 /** Accesorio del cajón E declarado en el sistema (#1519: galería/boxcap/boxcover). */
@@ -1494,6 +1498,8 @@ export interface HardwareKitSystemPlan {
     readonly required: boolean;
     readonly kitCode: string;
     readonly optionIds: readonly string[];
+    /** Sólo presente cuando es «ninguno» (el default del servidor es la primera opción). */
+    readonly defaultChoice?: 'none';
   }[];
   /** Un agregado con variantes de altura — el sync materializa por bahía. */
   readonly agregado: {
@@ -1510,6 +1516,7 @@ export interface HardwareKitSystemPlan {
       readonly label: string;
       readonly khMinMm: number;
       readonly kitCode: string;
+      readonly backHeightMm?: number;
     }[];
     readonly motion: HardwareKitTemplate['motion'];
     /** #1633: marcador explícito de familia de cajón. */
@@ -1566,6 +1573,9 @@ export function planHardwareKitSystem(
     if (!Number.isFinite(price) || price < 0) {
       throw new Error(`El precio del juego ${h.code} no puede ser negativo.`);
     }
+    if (h.backHeightMm !== undefined && !(Number.isFinite(h.backHeightMm) && h.backHeightMm > 0)) {
+      throw new Error(`La altura de trasera de ${h.code} tiene que ser mayor que 0 mm (o dejarla vacía).`);
+    }
     const slug = heightCodeSlug(h.code);
     if (!slug) throw new Error(`La etiqueta «${h.code}» no deja un código de juego válido.`);
     const clash = seenSlugs.get(slug);
@@ -1606,6 +1616,8 @@ export function planHardwareKitSystem(
       costPerUnit: height.kitCostPerUnit ?? input.kitCostPerUnit,
       exists: subPlan.kit.exists,
       designs: subPlan.designs,
+      ...(height.backHeightMm !== undefined ? { backHeightMm: height.backHeightMm } : {}),
+      ...(height.insertDefault === 'none' ? { insertDefault: 'none' as const } : {}),
     };
   });
   const kitByLabel = new Map(kits.map((k) => [k.heightCode.toLowerCase(), k] as const));
@@ -1685,6 +1697,7 @@ export function planHardwareKitSystem(
       required: false,
       kitCode: k.code,
       optionIds: optionCodesByKit.get(k.code)!,
+      ...(k.insertDefault === 'none' ? { defaultChoice: 'none' as const } : {}),
     }));
   for (const g of accessoryGroups) {
     if ([...g.code].length > MAX_CATALOG_CODE_LENGTH) {
@@ -1706,6 +1719,7 @@ export function planHardwareKitSystem(
         label: k.heightCode,
         khMinMm: k.khMinMm,
         kitCode: k.code,
+        ...(k.backHeightMm !== undefined ? { backHeightMm: k.backHeightMm } : {}),
       })),
       motion: 'translate',
       drawerSystem: drawerSystemFromInput(input),

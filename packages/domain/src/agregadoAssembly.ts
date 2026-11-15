@@ -190,6 +190,8 @@ export interface ProductVariant {
    * effectiveVariantLabel deriva la letra Blum por compatibilidad.
    */
   readonly label?: string;
+  /** #1633: altura de la trasera del cajón (mm), informativa. Ausente = no declarada. */
+  readonly backHeightMm?: number;
 }
 
 /** Tope de la etiqueta libre de altura (#1633). Espejo Go MaxVariantLabelLength. */
@@ -863,6 +865,11 @@ export function validateAgregadoVariantSet(vs: AgregadoVariantSet): void {
     if (v.commercialKitHardwareId !== undefined && v.commercialKitHardwareId.trim() === '') {
       throw new Error(
         `variant set '${vs.id}' variant ${i}: commercialKitHardwareId cannot be whitespace (omit the field to use the agregado-level kit)`,
+      );
+    }
+    if (v.backHeightMm !== undefined && v.backHeightMm !== 0 && !(Number.isFinite(v.backHeightMm) && v.backHeightMm > 0)) {
+      throw new Error(
+        `variant set '${vs.id}' variant ${i}: backHeightMm must be finite and positive (omit the field when unknown)`,
       );
     }
     // #1633: etiqueta libre, acotada y única (sin distinguir mayúsculas).
