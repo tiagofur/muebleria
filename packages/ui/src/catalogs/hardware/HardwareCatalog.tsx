@@ -21,6 +21,7 @@ import type {
 } from '@granete/domain';
 import {
   accessoryKitMemberHardwareIds,
+  drawerFamilies,
   UNCATEGORIZED_FILTER,
   effectiveVariantLabel,
   isDrawerSystemAgregado,
@@ -50,7 +51,9 @@ import {
   StatusChips,
   useDebouncedValue,
   useRoutableEntitySelection,
+  WorkspaceTabs,
 } from '../../common';
+import { DrawerFamiliesView } from './familyView/DrawerFamiliesView';
 import {
   filterCatalogItems,
   type CatalogStatusFilter,
@@ -196,6 +199,9 @@ export function HardwareCatalog({
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = useState<CatalogStatusFilter>('active');
+  // #1633 s2c-2: vista par «Familias de cajón» (UX Brief): las familias con
+  // su matriz alturas × insertos, sin tocar la lista de herrajes.
+  const [view, setView] = useState<'hardware' | 'families'>('hardware');
   // #1507: filtro por subgrupo de herrajes (null = todas).
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
@@ -217,6 +223,11 @@ export function HardwareCatalog({
   const editingHardware = editingId
     ? (hardware.find((h) => h.id === editingId) ?? null)
     : null;
+  // #1633 s2c-2: familias de cajón para la vista «Familias de cajón».
+  const families = useMemo(
+    () => drawerFamilies(agregados, { hardware, optionGroups: optionGroups ?? [] }),
+    [agregados, hardware, optionGroups],
+  );
   // #1596 alcance 10: el sistema (ensamble -CAJON con variantes) al que
   // pertenece el kit en edición, si lo hay.
   const editingKitSystem = useMemo(() => {
@@ -729,23 +740,63 @@ export function HardwareCatalog({
       {!isTrulyEmpty ? (
         <PageToolbar
           ariaLabel="Buscar y filtrar herrajes"
-          search={
+          tabs={
+            <WorkspaceTabs
+              tabs={[
+                { id: 'hardware', label: 'Herrajes' },
+                { id: 'families', label: 'Familias de cajón', count: families.length },
+              ]}
+              activeTab={view}
+              onTabChange={setView}
+              ariaLabel="Vistas del catálogo de herrajes"
+              idPrefix="hardware-view"
+              testIdPrefix="hardware-view-tab"
+            />
+          }
+          search={view === 'families' ? undefined : (
             <SearchInput
               value={search}
               onChange={setSearch}
               placeholder="Buscar herrajes…"
               aria-label="Buscar herrajes"
             />
-          }
+          )}
           filters={
-            <>
-              <StatusChips value={status} onChange={setStatus} />
-            </>
+            view === 'families' ? undefined : (
+              <>
+                <StatusChips value={status} onChange={setStatus} />
+              </>
+            )
           }
         />
       ) : null}
 
-      <div className={showCategorySidebar ? 'module-list-layout' : 'catalog-layout'}>
+      {view === 'families' && !isTrulyEmpty ? (
+        <div id="hardware-view-panel-families" role="tabpanel" aria-labelledby="hardware-view-tab-families">
+          <DrawerFamiliesView
+            families={families}
+            onOpenHardware={(id) => {
+              const target = hardware.find((h) => h.id === id);
+              if (target) startEdit(target);
+            }}
+            onAddHeight={
+              canMutate && onAddSystemHeight
+                ? (agregadoId) => {
+                    const agr = agregados.find((a) => a.id === agregadoId);
+                    if (agr) setSystemHeightFor(agr);
+                  }
+                : undefined
+            }
+            onCreateFamily={canMutate ? () => startCreateOfType('kit', { variant: 'system' }) : undefined}
+          />
+        </div>
+      ) : (
+      <div
+        className={showCategorySidebar ? 'module-list-layout' : 'catalog-layout'}
+        {...(!isTrulyEmpty
+          ? { id: 'hardware-view-panel-hardware', role: 'tabpanel', 'aria-labelledby': 'hardware-view-tab-hardware' }
+          : {})}
+      >
         {showCategorySidebar ? (
           <aside
             className="module-category-tree"
@@ -1117,6 +1168,7 @@ export function HardwareCatalog({
           />
         )}
       </div>
+      )}
 
       <HardwareCategoryModals
         open={manageCategoriesOpen}

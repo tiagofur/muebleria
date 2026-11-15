@@ -1,0 +1,203 @@
+/**
+ * Vista «Familias de cajón» (#1633 s2c-2). Tokens only (design.md §3).
+ */
+
+.drawer-family__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--space-3);
+}
+
+.drawer-family__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.drawer-family__title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.drawer-family__meta,
+.drawer-family__counts {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* Estado por icono + texto (nunca sólo color, §4.8). */
+.drawer-family__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+
+.drawer-family__status--complete {
+  color: var(--success-600);
+  background: var(--success-50);
+}
+
+.drawer-family__status--missing {
+  color: var(--text-primary);
+  background: var(--warning-50);
+  border: 1px solid var(--warning-500);
+}
+
+.drawer-family__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.drawer-family__detail-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.drawer-family__detail-header > .drawer-family__detail-title-row {
+  align-self: stretch;
+}
+
+.drawer-family__detail-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.drawer-family__detail-title-row .drawer-family__title {
+  font-size: var(--text-lg);
+}
+
+.drawer-family__matrix-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.drawer-family__matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.drawer-family__matrix th,
+.drawer-family__matrix td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.drawer-family__matrix thead th {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  background: var(--surface-app);
+}
+
+.drawer-family__height-label {
+  display: block;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.drawer-family__height-mm {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-weight: normal;
+}
+
+.drawer-family__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.drawer-family__link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--brand-600);
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px; /* target táctil del brief (§4.8) */
+}
+
+.drawer-family__link:hover {
+  color: var(--brand-700);
+}
+
+.drawer-family__link:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-focus);
+}
+
+.drawer-family__warn {
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+}
+
+.drawer-family__warn::before {
+  content: '⚠ ';
+}
+
+.drawer-family__ok,
+.drawer-family__default {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.drawer-family__default {
+  color: var(--brand-600);
+  font-weight: var(--weight-medium);
+}
+
+.drawer-family__na {
+  color: var(--text-muted);
+}
+
+.drawer-family__derived {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 0 var(--space-1);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: normal;
+  color: var(--text-secondary);
+}
+
+.drawer-family__subtitle {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}

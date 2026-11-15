@@ -790,7 +790,11 @@ describe('planHardwareKitSystem (#1546 M4 — sistema generador)', () => {
 
   it('#1633: el sistema se reconoce por el marcador; -CAJON sólo por compatibilidad', () => {
     expect(isDrawerSystemAgregado({ code: 'LEGRABOX-N', drawerSystem: {} })).toBe(true);
-    expect(isDrawerSystemAgregado({ code: 'MBOX-IRIDIUM-GRAY-CAJON' })).toBe(true);
+    expect(
+      isDrawerSystemAgregado({ code: 'MBOX-IRIDIUM-GRAY-CAJON', variantSets: [{ dimension: 'height' }] }),
+    ).toBe(true);
+    // Un ensamble común llamado «…-CAJON» sin alturas no es una familia.
+    expect(isDrawerSystemAgregado({ code: '49402645-CAJON' })).toBe(false);
     expect(isDrawerSystemAgregado({ code: 'PUERTA-ABATIBLE' })).toBe(false);
   });
 
