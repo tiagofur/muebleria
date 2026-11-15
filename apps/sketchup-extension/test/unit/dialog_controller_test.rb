@@ -865,6 +865,93 @@ class DialogControllerTest < Minitest::Test
     refute_includes init_script, '"materialId":"mat-02"'
   end
 
+  # #1631: the selector lists options in the group's saved order (the order
+  # of the received ids), not the global catalog order.
+  def selector_init_script_for(callback, payload, catalog)
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new, metadata_store: @store, catalog_provider: catalog
+    )
+    dialog = controller.show
+    dialog.callbacks.fetch(callback).call(nil, JSON.generate(payload))
+    selector = controller.send(:option_selector)
+    refute_nil selector.dialog
+    selector.dialog.callbacks.fetch('selector_ready').call(nil)
+    selector.dialog.executed_scripts.find { |s| s.include?('initOptionSelector') }
+  end
+
+  def assert_ids_in_order(script, ids)
+    positions = ids.map { |id| script.index(%("materialId":"#{id}")) }
+    refute_includes positions, nil, "every id must reach the selector: #{ids.inspect}"
+    assert_equal positions.sort, positions, "selector order must follow #{ids.inspect}"
+  end
+
+  def test_open_hardware_selector_keeps_the_saved_option_order
+    catalog = Class.new(Granete::SketchUpExtension::Library::CatalogProvider) do
+      def all_hardware
+        [
+          { 'id' => 'hw-bcap', 'code' => 'MBOX-E-BCAP', 'name' => 'Boxcap', 'category' => 'other' },
+          { 'id' => 'hw-other', 'code' => 'OTHER', 'name' => 'Otro', 'category' => 'other' },
+          { 'id' => 'hw-bcov', 'code' => 'MBOX-E-BCOV', 'name' => 'Boxcover', 'category' => 'other' },
+          { 'id' => 'hw-gal', 'code' => 'MBOX-E-GAL', 'name' => 'Galería', 'category' => 'other' }
+        ]
+      end
+    end.new
+
+    script = selector_init_script_for(
+      'open_hardware_selector',
+      { 'groupCode' => 'INSERTO', 'groupName' => 'Inserto', 'optionIds' => %w[hw-gal hw-bcap hw-bcov] },
+      catalog
+    )
+    refute_nil script
+    assert_ids_in_order(script, %w[hw-gal hw-bcap hw-bcov])
+    refute_includes script, '"materialId":"hw-other"'
+  end
+
+  def test_open_hardware_selector_keeps_the_saved_order_for_agregados
+    catalog = Class.new(Granete::SketchUpExtension::Library::CatalogProvider) do
+      def all_hardware
+        []
+      end
+
+      def all_agregados
+        [
+          { 'id' => 'agr-hafele', 'code' => 'HAFELE', 'name' => 'Häfele' },
+          { 'id' => 'agr-mbox', 'code' => 'MBOX', 'name' => 'Merivobox' }
+        ]
+      end
+    end.new
+
+    script = selector_init_script_for(
+      'open_hardware_selector',
+      { 'groupCode' => 'CAJONES', 'groupName' => 'Cajones', 'optionIds' => %w[agr-mbox agr-hafele] },
+      catalog
+    )
+    refute_nil script
+    assert_ids_in_order(script, %w[agr-mbox agr-hafele])
+  end
+
+  def test_open_material_selector_keeps_the_order_of_explicit_allowed_ids
+    catalog = Class.new(Granete::SketchUpExtension::Library::CatalogProvider) do
+      def all_materials
+        [
+          { 'materialId' => 'mat-01', 'name' => 'Roble 18mm' },
+          { 'materialId' => 'mat-02', 'name' => 'Blanco 15mm' },
+          { 'materialId' => 'mat-03', 'name' => 'Nogal 18mm' }
+        ]
+      end
+    end.new
+
+    script = selector_init_script_for(
+      'open_material_selector',
+      { 'role' => 'FRENTES', 'roleName' => 'Frentes', 'context' => 'inspector',
+        'allowedMaterialIds' => %w[mat-03 mat-01] },
+      catalog
+    )
+    refute_nil script
+    assert_ids_in_order(script, %w[mat-03 mat-01])
+    refute_includes script, '"materialId":"mat-02"'
+  end
+
   def test_open_material_selector_filters_materials_by_definition_material_roles
     fake_catalog = Class.new(Granete::SketchUpExtension::Library::CatalogProvider) do
       def all_materials

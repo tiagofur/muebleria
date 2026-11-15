@@ -83,25 +83,40 @@ module Granete
         def selector_allowed_materials(params)
           all = @catalog_provider.respond_to?(:all_materials) ? @catalog_provider.all_materials : []
 
-          filter_ids = resolve_allowed_material_ids(params)
+          filter_ids, ordered = resolve_allowed_material_ids(params)
           return all if filter_ids.nil? || filter_ids.empty?
 
-          all.select do |mat|
-            mat_id = mat['materialId'] || mat[:materialId] || mat['id'] || mat[:id]
-            filter_ids.include?(mat_id)
-          end
+          material_key = ->(mat) { [mat['materialId'] || mat[:materialId] || mat['id'] || mat[:id]] }
+          selected = all.select { |mat| filter_ids.include?(material_key.call(mat).first) }
+          ordered ? order_by_allowed_ids(selected, filter_ids, &material_key) : selected
         end
 
+        # Returns [ids, ordered]. #1631: an explicit list or the definition's
+        # role optionIds carry the group's saved order, so the selector
+        # presents them in that order; the cross-definition union has no
+        # meaningful order and keeps the catalog order.
         def resolve_allowed_material_ids(params)
           if params[:allowed_material_ids].is_a?(Array) && !params[:allowed_material_ids].empty?
-            return params[:allowed_material_ids]
+            return [params[:allowed_material_ids], true]
           end
 
           target_role = params[:role].to_s
           from_def = definition_role_material_ids(params[:definition_id], target_role)
-          return from_def if from_def
+          return [from_def, true] if from_def
 
-          aggregate_catalog_role_material_ids(target_role)
+          [aggregate_catalog_role_material_ids(target_role), false]
+        end
+
+        # #1631: stable sort of the filtered catalog entries by the position of
+        # their first matching key in allowed_ids (the group's saved order).
+        # Entries without a match keep their catalog order at the end.
+        def order_by_allowed_ids(items, allowed_ids)
+          rank = {}
+          allowed_ids.each_with_index { |id, index| rank[id] = index unless rank.key?(id) }
+          items.each_with_index.sort_by do |item, catalog_index|
+            positions = yield(item).filter_map { |key| rank[key] }
+            [positions.min || allowed_ids.length, catalog_index]
+          end.map(&:first)
         end
 
         def definition_role_material_ids(definition_id, target_role)
@@ -167,7 +182,10 @@ module Granete
         def selector_allowed_hardware(allowed_ids)
           all_hw = @catalog_provider.respond_to?(:all_hardware) ? @catalog_provider.all_hardware : []
           raw = if allowed_ids.is_a?(Array) && !allowed_ids.empty?
-                  all_hw.select { |hw| allowed_ids.include?(hw['id']) || allowed_ids.include?(hw['code']) }
+                  order_by_allowed_ids(
+                    all_hw.select { |hw| allowed_ids.include?(hw['id']) || allowed_ids.include?(hw['code']) },
+                    allowed_ids
+                  ) { |hw| [hw['id'], hw['code']] }
                 else
                   all_hw
                 end
@@ -183,9 +201,12 @@ module Granete
           return nil unless allowed_ids.is_a?(Array) && !allowed_ids.empty?
           return nil unless @catalog_provider.respond_to?(:all_agregados)
 
-          raw_agr = @catalog_provider.all_agregados.select do |a|
-            allowed_ids.include?(a['id']) || allowed_ids.include?(a['code'])
-          end
+          raw_agr = order_by_allowed_ids(
+            @catalog_provider.all_agregados.select do |a|
+              allowed_ids.include?(a['id']) || allowed_ids.include?(a['code'])
+            end,
+            allowed_ids
+          ) { |a| [a['id'], a['code']] }
           return nil if raw_agr.empty?
 
           formatted = raw_agr.map do |a|
