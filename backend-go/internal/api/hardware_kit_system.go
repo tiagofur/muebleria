@@ -56,6 +56,15 @@ func (s *Server) HandleHardwareKitSystemCreate(w http.ResponseWriter, r *http.Re
 	// pre-check, yielding a clean typed 409 instead of a mid-write unique
 	// violation on an aborted transaction.
 	sortedCodes := append([]string{}, plan.allCodes...)
+	// #1633 review: the selector codes (and a new eligibility group's) are
+	// serialized too, in their own namespace — two concurrent creations
+	// race on the group pre-check otherwise.
+	for _, g := range plan.optionGroups {
+		sortedCodes = append(sortedCodes, "option_group:"+g.Code)
+	}
+	if plan.eligibility != nil && plan.eligibility.newGroup != nil {
+		sortedCodes = append(sortedCodes, "option_group:"+plan.eligibility.newGroup.Code)
+	}
 	sort.Strings(sortedCodes)
 	if err := s.Store.LockCatalogCodes(r.Context(), sortedCodes); err != nil {
 		respondWithInternalError(w, err, "kit system code locks")

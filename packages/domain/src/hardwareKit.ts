@@ -1657,6 +1657,21 @@ export function planHardwareKitSystem(
     }
   }
 
+  // #1633 review: una etiqueta puede normalizarse al código de OTRA fila
+  // («E GAL» ⇒ SYS-E-GAL = inserto GAL de la E; «E FIJ» ⇒ el perfil fijo de
+  // la E). El plan lo rechaza aquí, no recién en el envío.
+  const planCodes = new Map<string, string>();
+  const claim = (code: string, what: string): void => {
+    const prev = planCodes.get(code);
+    if (prev) throw new Error(`El código ${code} se repite en el plan (${prev} y ${what}); cambiá la etiqueta.`);
+    planCodes.set(code, what);
+  };
+  for (const k of kits) {
+    claim(k.code, `juego ${k.heightCode}`);
+    for (const d of k.designs) if (d.code !== k.code) claim(d.code, `parte de ${k.heightCode}`);
+  }
+  for (const a of accessories) claim(a.code, `inserto de ${a.heightCode}`);
+
   // Un selector por altura con insertos, en el orden de las alturas.
   const accessoryGroups = kits
     .filter((k) => optionCodesByKit.has(k.code))

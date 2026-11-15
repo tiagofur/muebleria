@@ -896,6 +896,25 @@ describe('planHardwareKitSystem (#1546 M4 — sistema generador)', () => {
       }, noExisting)).toThrow('no en ambos');
     });
 
+    it('fail-closed: una etiqueta cuyo código pisa otra fila del plan', () => {
+      expect(() => planHardwareKitSystem({
+        ...legrabox,
+        heights: [
+          { code: 'E', labelEs: '', khMinMm: 209, include: true },
+          { code: 'E GAL', labelEs: '', khMinMm: 230, include: true },
+        ],
+        accessories: [{ suffix: 'GAL', name: 'Galería', anchors: ['left'], heights: ['E'] }],
+      }, noExisting)).toThrow('se repite en el plan');
+      expect(() => planHardwareKitSystem({
+        ...legrabox,
+        heights: [
+          { code: 'E', labelEs: '', khMinMm: 209, include: true },
+          { code: 'E FIJ', labelEs: '', khMinMm: 230, include: true },
+        ],
+        accessories: [],
+      }, noExisting)).toThrow('se repite en el plan');
+    });
+
     it('heightCodeSlug: sin acentos, mayúsculas, separadores colapsados', () => {
       expect(heightCodeSlug('M')).toBe('M');
       expect(heightCodeSlug(' Alta  186 ')).toBe('ALTA-186');
