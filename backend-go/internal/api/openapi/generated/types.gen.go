@@ -3484,16 +3484,22 @@ type HardwareKitSystemEligibilityGroupRow struct {
 }
 
 type HardwareKitSystemAgregadoRow struct {
-	ID                      string                        `json:"id"`
-	Code                    string                        `json:"code"`
-	Name                    string                        `json:"name"`
-	Active                  bool                          `json:"active"`
-	WidthMm                 float64                       `json:"width_mm"`
-	HeightMm                float64                       `json:"height_mm"`
-	DepthMm                 float64                       `json:"depth_mm"`
-	CommercialKitHardwareID string                        `json:"commercial_kit_hardware_id"`
-	PresentationMotion      *map[string]any               `json:"presentation_motion,omitempty"`
-	VariantSets             []HardwareKitSystemVariantSet `json:"variant_sets"`
+	ID                      string                         `json:"id"`
+	Code                    string                         `json:"code"`
+	Name                    string                         `json:"name"`
+	Active                  bool                           `json:"active"`
+	WidthMm                 float64                        `json:"width_mm"`
+	HeightMm                float64                        `json:"height_mm"`
+	DepthMm                 float64                        `json:"depth_mm"`
+	CommercialKitHardwareID string                         `json:"commercial_kit_hardware_id"`
+	PresentationMotion      *map[string]any                `json:"presentation_motion,omitempty"`
+	VariantSets             []HardwareKitSystemVariantSet  `json:"variant_sets"`
+	DrawerSystem            *HardwareKitSystemDrawerSystem `json:"drawer_system,omitempty"`
+}
+
+type HardwareKitSystemDrawerSystem struct {
+	Brand *string `json:"brand,omitempty"`
+	Line  *string `json:"line,omitempty"`
 }
 
 type HardwareKitSystemVariantSet struct {
@@ -3512,6 +3518,7 @@ type HardwareKitSystemHeightAddRequest struct {
 type HardwareKitSystemHeightVariant struct {
 	NominalDimensionMm float64 `json:"nominalDimensionMm"`
 	KitHardwareID      string  `json:"kit_hardware_id"`
+	Label              *string `json:"label,omitempty"`
 }
 
 type HardwareKitSystemHeightAdded struct {
@@ -3526,6 +3533,7 @@ type HardwareKitSystemVariant struct {
 	NominalDimensionMm      float64 `json:"nominalDimensionMm"`
 	HardwareId              string  `json:"hardwareId"`
 	CommercialKitHardwareId *string `json:"commercialKitHardwareId,omitempty"`
+	Label                   *string `json:"label,omitempty"`
 }
 
 type HardwareKitSystemOptionGroupRow struct {

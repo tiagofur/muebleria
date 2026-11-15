@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // RigidMemberSourceKind discriminates whether a rigid member points directly to a fixed
@@ -187,6 +188,54 @@ type ProductVariant struct {
 	// MERIVOBOX N/M/K/E = un kit distinto; la altura E lleva su galería).
 	// Ausente ⇒ fallback al commercialKitHardwareId del agregado.
 	CommercialKitHardwareID string `json:"commercialKitHardwareId,omitempty"`
+	// #1633: etiqueta comercial libre de la variante («M», «C», «Alta 186»).
+	// Es dato: la letra ya no se deduce del nominal. Ausente en datos previos
+	// ⇒ EffectiveVariantLabel deriva la letra Blum por compatibilidad.
+	Label string `json:"label,omitempty"`
+}
+
+// MaxVariantLabelLength bounds the free height label (#1633).
+const MaxVariantLabelLength = 40
+
+// legacyBlumHeightLabels is the read-compatibility table for height variants
+// saved before #1633 (no label): the Blum MERIVOBOX KH minimums of the
+// #1493 fixture. It never constrains new data — labels are free.
+var legacyBlumHeightLabels = map[float64]string{85.5: "N", 108: "M", 146: "K", 209: "E"}
+
+// EffectiveVariantLabel returns the variant's own label, or — for variants
+// saved before #1633 — the Blum letter of its nominal, or "" when neither
+// applies (#1633). Mirror: TS effectiveVariantLabel (parity fixture
+// drawerFamilyVariantParity).
+func EffectiveVariantLabel(v ProductVariant) string {
+	if label := strings.TrimSpace(v.Label); label != "" {
+		return label
+	}
+	return legacyBlumHeightLabels[v.NominalDimensionMm]
+}
+
+// AgregadoDrawerSystem marks an agregado as a drawer family (#1633): the
+// explicit datum that replaces recognising a system by its «-CAJON» code
+// suffix. Brand and line are optional free text.
+type AgregadoDrawerSystem struct {
+	Brand string `json:"brand,omitempty"`
+	Line  string `json:"line,omitempty"`
+}
+
+// MaxDrawerSystemTextLength bounds brand/line (#1633).
+const MaxDrawerSystemTextLength = 80
+
+// ValidateAgregadoDrawerSystem checks the drawer-family marker (#1633).
+func ValidateAgregadoDrawerSystem(ds *AgregadoDrawerSystem) error {
+	if ds == nil {
+		return nil
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(ds.Brand)) > MaxDrawerSystemTextLength {
+		return fmt.Errorf("drawerSystem.brand exceeds %d characters", MaxDrawerSystemTextLength)
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(ds.Line)) > MaxDrawerSystemTextLength {
+		return fmt.Errorf("drawerSystem.line exceeds %d characters", MaxDrawerSystemTextLength)
+	}
+	return nil
 }
 
 // AgregadoVariantSet groups discrete commercial sizes available for a specific dimension.
@@ -307,6 +356,9 @@ type AgregadoRecipePayload struct {
 	RigidMembers            []AgregadoRigidMember       `json:"rigidMembers"`
 	VariantSets             []AgregadoVariantSet        `json:"variantSets"`
 	CompatibilityRules      []AssemblyCompatibilityRule `json:"compatibilityRules"`
+	// #1633: marcador de familia de cajón; omitempty ⇒ recetas previas sin
+	// cambio de forma (mismo hash de contenido).
+	DrawerSystem *AgregadoDrawerSystem `json:"drawerSystem,omitempty"`
 }
 
 // ToRecipePayload extracts the recipe payload from an Agregado catalog entity.
@@ -342,6 +394,7 @@ func (a Agregado) ToRecipePayload() AgregadoRecipePayload {
 		RigidMembers:            rms,
 		VariantSets:             vss,
 		CompatibilityRules:      rules,
+		DrawerSystem:            a.DrawerSystem,
 	}
 }
 
@@ -357,6 +410,7 @@ func (a *Agregado) ApplyRecipe(p AgregadoRecipePayload) {
 	a.Components = recipe.Components
 	a.HardwareLines = recipe.HardwareLines
 	a.CommercialKitHardwareID = recipe.CommercialKitHardwareID
+	a.DrawerSystem = recipe.DrawerSystem
 	a.WidthMm, a.HeightMm, a.DepthMm = recipe.WidthMm, recipe.HeightMm, recipe.DepthMm
 }
 
@@ -376,6 +430,7 @@ func (p AgregadoRecipePayload) ToAgregado(id, code, name string) Agregado {
 		RigidMembers:            p.RigidMembers,
 		VariantSets:             p.VariantSets,
 		CompatibilityRules:      p.CompatibilityRules,
+		DrawerSystem:            p.DrawerSystem,
 		Active:                  true,
 	}
 }
@@ -789,6 +844,7 @@ func ValidateAgregadoVariantSet(vs AgregadoVariantSet) error {
 		return fmt.Errorf("variant set '%s' must define at least one ProductVariant", vs.ID)
 	}
 	seenNominals := make(map[float64]bool)
+	seenLabels := make(map[string]bool)
 	for i, v := range vs.Variants {
 		if math.IsNaN(v.NominalDimensionMm) || math.IsInf(v.NominalDimensionMm, 0) || v.NominalDimensionMm <= 0 {
 			return fmt.Errorf("variant set '%s' variant %d: nominalDimensionMm must be finite and positive", vs.ID, i)
@@ -802,6 +858,21 @@ func ValidateAgregadoVariantSet(vs AgregadoVariantSet) error {
 		}
 		if v.CommercialKitHardwareID != "" && strings.TrimSpace(v.CommercialKitHardwareID) == "" {
 			return fmt.Errorf("variant set '%s' variant %d: commercialKitHardwareId cannot be whitespace (omit the field to use the agregado-level kit)", vs.ID, i)
+		}
+		// #1633: free label, bounded and unique (case-insensitive) in the set.
+		label := strings.TrimSpace(v.Label)
+		if v.Label != "" && label == "" {
+			return fmt.Errorf("variant set '%s' variant %d: label cannot be whitespace (omit the field)", vs.ID, i)
+		}
+		if utf8.RuneCountInString(label) > MaxVariantLabelLength {
+			return fmt.Errorf("variant set '%s' variant %d: label exceeds %d characters", vs.ID, i, MaxVariantLabelLength)
+		}
+		if label != "" {
+			key := strings.ToLower(label)
+			if seenLabels[key] {
+				return fmt.Errorf("variant set '%s' has duplicate label: %s", vs.ID, label)
+			}
+			seenLabels[key] = true
 		}
 	}
 	return nil
@@ -839,6 +910,10 @@ func ValidateDimensionRule(axisName string, rule AssemblyDimensionRule, validVar
 func ValidateAgregadoAssemblyDefinition(agregado Agregado) error {
 	if strings.TrimSpace(agregado.ID) == "" {
 		return errors.New("agregado must have a non-empty id")
+	}
+
+	if err := ValidateAgregadoDrawerSystem(agregado.DrawerSystem); err != nil {
+		return err
 	}
 
 	hasKit := agregado.CommercialKitHardwareID != nil && strings.TrimSpace(*agregado.CommercialKitHardwareID) != ""

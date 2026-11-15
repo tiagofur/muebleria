@@ -13,6 +13,7 @@ import type {
   AssemblyCompatibilityRule,
   AssemblyDimensionRule,
   HardwareRotationDeg,
+  AgregadoDrawerSystem,
 } from './agregadoAssembly';
 import type { ConnectionFace, ConstructiveRole, JoinerySystemId } from './factoryConstructionPolicy';
 
@@ -1117,6 +1118,11 @@ export interface Agregado {
   readonly variantSets?: readonly AgregadoVariantSet[];
   /** Rules for selecting and validating variants based on available space */
   readonly compatibilityRules?: readonly AssemblyCompatibilityRule[];
+  /**
+   * #1633: marcador explícito de familia de cajón (marca/línea). Su presencia
+   * — no el sufijo «-CAJON» del código — identifica el sistema de cajón.
+   */
+  readonly drawerSystem?: AgregadoDrawerSystem;
   /**
    * How this sub-assembly moves in the 3D presentation (door swing, drawer slide,
    * fold-down panel, etc.). Presentation-only — never reaches BOM or cost (#529).

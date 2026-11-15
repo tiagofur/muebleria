@@ -223,3 +223,40 @@ describe('isAgregadoDraft acepta los campos vivos de la receta (#1460)', () => {
     expect(saved.active).toBe(true);
   });
 });
+
+describe('#1633 familia de cajón: el marcador sobrevive editar y duplicar', () => {
+  const family: Agregado = {
+    id: 'agr-lgx',
+    code: 'LEGRABOX',
+    name: 'Cajón Legrabox',
+    drawerSystem: { brand: 'Blum', line: 'Legrabox' },
+    variantSets: [
+      {
+        id: 'vs',
+        dimension: 'height',
+        variants: [{ nominalDimensionMm: 90, hardwareId: 'k-n', label: 'N' }],
+      },
+    ],
+  };
+
+  it('draftToAgregado(agregadoToDraft(a)) conserva drawerSystem y etiquetas', () => {
+    const back = draftToAgregado(family.id, agregadoToDraft(family));
+    expect(back.drawerSystem).toEqual(family.drawerSystem);
+    expect(back.variantSets?.[0]?.variants[0]?.label).toBe('N');
+  });
+
+  it('el borrador de duplicado conserva el marcador', () => {
+    const dup = draftToAgregado('agr-copy', agregadoToDuplicateDraft(family, [family.code], () => 'n'));
+    expect(dup.drawerSystem).toEqual(family.drawerSystem);
+  });
+
+  it('un ensamble sin marcador no gana uno', () => {
+    const plain: Agregado = { id: 'p', code: 'PUERTA', name: 'Puerta' };
+    expect(draftToAgregado('p', agregadoToDraft(plain)).drawerSystem).toBeUndefined();
+  });
+
+  it('isAgregadoDraft acepta un borrador persistido con drawerSystem', () => {
+    expect(isAgregadoDraft(agregadoToDraft(family))).toBe(true);
+    expect(isAgregadoDraft(JSON.parse(JSON.stringify(agregadoToDraft(family))))).toBe(true);
+  });
+});

@@ -416,6 +416,7 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 				NominalDimensionMm:      v.NominalDimensionMm,
 				HardwareID:              v.HardwareId,
 				CommercialKitHardwareID: derefString(v.CommercialKitHardwareId),
+				Label:                   strings.TrimSpace(derefString(v.Label)),
 			})
 		}
 		id := uuid.NewString()
@@ -455,6 +456,12 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 		CommercialKitHardwareID: &kitRef,
 		VariantSets:             variantSets,
 		PresentationMotion:      presentationMotion,
+		DrawerSystem:            drawerSystemFromRequest(agrRow.DrawerSystem),
+	}
+	// #1633: the same definition rules as the agregado CRUD and «Añadir
+	// altura» (labels bounded/unique, drawer marker) — before any write.
+	if err := domain.ValidateAgregadoAssemblyDefinition(*agr); err != nil {
+		return nil, invalidPayload(fmt.Sprintf("ensamble inválido: %v", err), nil)
 	}
 
 	optionGroup := (*domain.OptionGroup)(nil)
@@ -590,4 +597,16 @@ func seenCodesSlice(seen map[string]bool) []string {
 		out = append(out, code)
 	}
 	return out
+}
+
+// drawerSystemFromRequest maps the wire drawer-family marker (#1633); a
+// present-but-empty object still marks the agregado as a drawer family.
+func drawerSystemFromRequest(row *openapi.HardwareKitSystemDrawerSystem) *domain.AgregadoDrawerSystem {
+	if row == nil {
+		return nil
+	}
+	return &domain.AgregadoDrawerSystem{
+		Brand: strings.TrimSpace(derefString(row.Brand)),
+		Line:  strings.TrimSpace(derefString(row.Line)),
+	}
 }

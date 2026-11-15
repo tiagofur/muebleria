@@ -21242,7 +21242,18 @@
             "type": "array",
             "minItems": 1,
             "items": { "$ref": "#/components/schemas/HardwareKitSystemVariantSet" }
+          },
+          "drawer_system": {
+            "$ref": "#/components/schemas/HardwareKitSystemDrawerSystem"
           }
+        }
+      },
+      "HardwareKitSystemDrawerSystem": {
+        "type": "object",
+        "description": "Marcador de familia de cajón (#1633): reemplaza reconocer el sistema por el sufijo -CAJON del código.",
+        "properties": {
+          "brand": { "type": "string", "maxLength": 80, "description": "Marca (texto libre)." },
+          "line": { "type": "string", "maxLength": 80, "description": "Línea del fabricante (texto libre)." }
         }
       },
       "HardwareKitSystemVariantSet": {
@@ -21325,6 +21336,11 @@
           "kit_hardware_id": {
             "type": "string",
             "description": "La fila kit del payload."
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "Etiqueta comercial libre de la altura (#1633: «M», «C», «Alta 186»); única en el ensamble, sin distinguir mayúsculas."
           }
         }
       },
@@ -21380,6 +21396,11 @@
           "commercialKitHardwareId": {
             "type": ["string", "null"],
             "description": "Kit comercial de la variante (#1493): debe referenciar una fila kit del payload."
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "Etiqueta comercial libre de la altura (#1633: «M», «C», «Alta 186»); única en el ensamble, sin distinguir mayúsculas."
           }
         }
       },

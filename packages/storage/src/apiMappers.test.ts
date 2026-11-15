@@ -3384,3 +3384,33 @@ describe('agregado round-trip — elecciones de grupo sobreviven (#1168)', () =>
     expect(lines[2]?.hardware_id).toBe('hw-tornillo-35');
   });
 });
+
+describe('#1633 familia de cajón en el mapper de agregados', () => {
+  const family = {
+    id: 'agr-lgx',
+    code: 'LEGRABOX',
+    name: 'Cajón Legrabox',
+    drawerSystem: { brand: 'Blum', line: 'Legrabox' },
+    variantSets: [
+      {
+        id: 'vs',
+        dimension: 'height' as const,
+        variants: [{ nominalDimensionMm: 90, hardwareId: 'k-n', label: 'N' }],
+      },
+    ],
+  };
+
+  it('drawer_system y la etiqueta de altura hacen el viaje de ida y vuelta', () => {
+    const api = agregadoToApi(family);
+    expect(api.drawer_system).toEqual({ brand: 'Blum', line: 'Legrabox' });
+    const back = agregadoFromApi(api as unknown as Record<string, unknown>);
+    expect(back.drawerSystem).toEqual(family.drawerSystem);
+    expect(back.variantSets?.[0]?.variants[0]?.label).toBe('N');
+  });
+
+  it('un marcador vacío sigue marcando; su ausencia no inventa uno', () => {
+    expect(agregadoFromApi({ id: 'a', code: 'A', name: 'A', drawer_system: {} }).drawerSystem).toEqual({});
+    expect(agregadoFromApi({ id: 'b', code: 'B', name: 'B' }).drawerSystem).toBeUndefined();
+    expect('drawer_system' in agregadoToApi({ id: 'c', code: 'C', name: 'C' })).toBe(false);
+  });
+});

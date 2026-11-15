@@ -19,6 +19,8 @@ import type {
   HardwareVisualAssetBinding,
 } from '@granete/domain';
 import {
+  effectiveVariantLabel,
+  isDrawerSystemAgregado,
   HARDWARE_KIT_SYSTEM_HEIGHTS,
   KIT_TEMPLATE_DRAWER_HANDS_ID,
   planHardwareKit,
@@ -395,9 +397,11 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
               nominalDimensionMm: v.khMinMm,
               hardwareId: idFor(v.kitCode),
               commercialKitHardwareId: idFor(v.kitCode),
+              label: v.label,
             })),
           },
         ],
+        drawerSystem: plan.agregado.drawerSystem,
       };
 
       // 5. Grupo de accesorios del E como opción (kind hardware, link al kit E).
@@ -443,8 +447,10 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
                 nominalDimensionMm: v.nominalDimensionMm,
                 hardwareId: v.hardwareId,
                 commercialKitHardwareId: v.commercialKitHardwareId ?? null,
+                ...(v.label ? { label: v.label } : {}),
               })),
             })),
+            ...(agregado.drawerSystem ? { drawer_system: agregado.drawerSystem } : {}),
           },
           option_group: accessoryGroupDraft
             ? {
@@ -590,10 +596,13 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       if (!catalog) throw new Error('El catálogo no está cargado.');
       const agregado = (catalog.agregados ?? []).find((a) => a.id === req.agregadoId);
       if (!agregado) throw new Error('El ensamble del sistema ya no existe.');
-      const systemCode = agregado.code.replace(/-CAJON$/, '');
-      if (!systemCode || systemCode === agregado.code) {
-        throw new Error(`«${agregado.code}» no es un ensamble de sistema (-CAJON).`);
+      // #1633: el sistema se reconoce por su marcador (o, en ensambles
+      // previos, por el sufijo que les dio el asistente). El sufijo sólo
+      // sigue sirviendo de PREFIJO para nombrar el juego nuevo.
+      if (!isDrawerSystemAgregado(agregado)) {
+        throw new Error(`«${agregado.code}» no es una familia de cajón.`);
       }
+      const systemCode = agregado.code.replace(/-CAJON$/, '');
       const height = HARDWARE_KIT_SYSTEM_HEIGHTS.find((h) => h.code === req.heightCode);
       if (!height) throw new Error(`Altura «${req.heightCode}» fuera de la lista canónica.`);
 
@@ -607,7 +616,13 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         throw new Error(`El juego «${kitCode}» ya existe en el catálogo.`);
       }
       const heightVs = (agregado.variantSets ?? []).find((vs) => vs.dimension === 'height');
-      if (heightVs?.variants.some((v) => v.nominalDimensionMm === height.khMinMm)) {
+      if (
+        heightVs?.variants.some(
+          (v) =>
+            v.nominalDimensionMm === height.khMinMm ||
+            effectiveVariantLabel(v).toLowerCase() === req.heightCode.toLowerCase(),
+        )
+      ) {
         throw new Error(`El sistema ya tiene la altura ${req.heightCode} (${height.khMinMm} mm).`);
       }
 
@@ -725,6 +740,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         nominalDimensionMm: height.khMinMm,
         hardwareId: kitId,
         commercialKitHardwareId: kitId,
+        label: req.heightCode, // #1633: la etiqueta se persiste como dato
       };
       // La variante nueva entra en el variant set height EXISTENTE; la
       // altura externa del ensamble sube al máximo de sus variantes.
@@ -771,7 +787,7 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
         const eligibility = req.eligibilityGroup;
         const added = await serverApply(agregado.id, {
           hardware: newHardware.map(kitSystemHardwareRow),
-          variant: { nominalDimensionMm: height.khMinMm, kit_hardware_id: kitId },
+          variant: { nominalDimensionMm: height.khMinMm, kit_hardware_id: kitId, label: req.heightCode },
           option_group: insertoGroup
             ? {
                 id: insertoGroup.id,

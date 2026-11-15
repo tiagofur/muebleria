@@ -636,6 +636,14 @@ describe('duplicateAgregado (S5 #1009)', () => {
     expect(copy.hardwareLines?.[0]?.quantity).toBe(3);
   });
 
+  it('#1633: la copia de una familia de cajón conserva el marcador (clonado)', () => {
+    const source = { ...sampleAgregado(), drawerSystem: { brand: 'Blum', line: 'Legrabox' } };
+    const copy = duplicateAgregado(source, { newId: 'agr-new', newCode: 'LGX-COPY' });
+    expect(copy.drawerSystem).toEqual({ brand: 'Blum', line: 'Legrabox' });
+    expect(copy.drawerSystem).not.toBe(source.drawerSystem);
+    expect(duplicateAgregado(sampleAgregado(), { newId: 'x', newCode: 'X' }).drawerSystem).toBeUndefined();
+  });
+
   it('preserves the composition deep: instances, overrides and motion', () => {
     const source = sampleAgregado();
     const copy = duplicateAgregado(source, { newId: 'agr-new', newCode: 'C2' });

@@ -275,6 +275,9 @@ type Agregado struct {
 	RigidMembers            []AgregadoRigidMember       `json:"rigid_members,omitempty"`
 	VariantSets             []AgregadoVariantSet        `json:"variant_sets,omitempty"`
 	CompatibilityRules      []AssemblyCompatibilityRule `json:"compatibility_rules,omitempty"`
+	// DrawerSystem marks the agregado as a drawer family (#1633). Recipe
+	// field: persisted in the revision payload, hydrated by ApplyRecipe.
+	DrawerSystem *AgregadoDrawerSystem `json:"drawer_system,omitempty"`
 	// PresentationMotion carries the #529 opening kinematics authored in the
 	// catalog UI (rotate/translate/keyframes). Presentation-only pass-through:
 	// the backend stores and echoes it but never interprets it — hosts replay
