@@ -277,6 +277,31 @@ type LayoutAssembly struct {
 	// altura Blum MERIVOBOX N/M/K/E) — la web la nombra («Cajón E cacerolero»)
 	// en lugar de inferirla de los assets.
 	SelectedVariants []domain.SelectedAssemblyVariant `json:"selectedVariants,omitempty"`
+	// #1633: etiqueta de la altura elegida en esta bahía («M», «Alta 186»;
+	// la letra Blum deducida en variantes previas sin etiqueta). Sólo en la
+	// respuesta del layout — nunca entra a snapshots ni hashes publicados.
+	HeightLabel string `json:"heightLabel,omitempty"`
+}
+
+// selectedHeightLabel resolves the effective label of the height variant the
+// bay selected (#1633), or "" when the agregado has no height set.
+func selectedHeightLabel(agr domain.Agregado, selected []domain.SelectedAssemblyVariant) string {
+	for _, vs := range agr.VariantSets {
+		if vs.Dimension != "height" {
+			continue
+		}
+		for _, sel := range selected {
+			if sel.VariantSetID != vs.ID {
+				continue
+			}
+			for _, v := range vs.Variants {
+				if v.HardwareID == sel.HardwareID && v.NominalDimensionMm == sel.NominalDimensionMm {
+					return domain.EffectiveVariantLabel(v)
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // LayoutAssemblyRejection reports an agregado bay or instance that did NOT
@@ -804,6 +829,7 @@ func resolveLayoutAssemblies(module domain.Module, catalog domain.Catalog, dims 
 				DimensionsMm:     [3]float64{unit.w, unit.h, unit.d},
 				RigidMembers:     resolvedAssembly.RigidMembers,
 				SelectedVariants: resolvedAssembly.SelectedVariants,
+				HeightLabel:      selectedHeightLabel(agr, resolvedAssembly.SelectedVariants),
 			})
 		}
 	}

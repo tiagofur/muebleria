@@ -255,6 +255,11 @@ func TestMerivoboxHeightsPerBayKitSync_1493(t *testing.T) {
 	galeriaBay := c.ModuleThreeDrawers.GaleriaMemberOnlyInBay
 	for bay, asy := range ordered {
 		wantCode := c.ModuleThreeDrawers.ExpectedByBay[bay]
+		// #1633: el layout nombra la altura de la bahía (aquí deducida de la
+		// medida Blum: el contrato no trae etiquetas).
+		if asy.HeightLabel != wantCode {
+			t.Errorf("bay %d: heightLabel = %q, want %q", bay, asy.HeightLabel, wantCode)
+		}
 		wantHw := ""
 		for _, n := range c.Nominals {
 			if n.Code == wantCode {
@@ -295,3 +300,23 @@ func TestMerivoboxHeightsPerBayKitSync_1493(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// #1633: con etiqueta propia en la variante, el layout la usa (no la letra).
+func TestLayoutHeightLabelUsesOwnLabel_1633(t *testing.T) {
+	agr := domain.Agregado{VariantSets: []domain.AgregadoVariantSet{{
+		ID: "vs", Dimension: "height", Variants: []domain.ProductVariant{
+			{NominalDimensionMm: 108, HardwareID: "k-m", Label: "Baja"},
+			{NominalDimensionMm: 209, HardwareID: "k-e"},
+		},
+	}}}
+	got := engine.SelectedHeightLabelForTest(agr, []domain.SelectedAssemblyVariant{{VariantSetID: "vs", HardwareID: "k-m", NominalDimensionMm: 108}})
+	if got != "Baja" {
+		t.Fatalf("own label: got %q, want Baja", got)
+	}
+	if got := engine.SelectedHeightLabelForTest(agr, []domain.SelectedAssemblyVariant{{VariantSetID: "vs", HardwareID: "k-e", NominalDimensionMm: 209}}); got != "E" {
+		t.Fatalf("legacy: got %q, want E", got)
+	}
+	if got := engine.SelectedHeightLabelForTest(domain.Agregado{}, nil); got != "" {
+		t.Fatalf("no height set: got %q", got)
+	}
+}

@@ -2,6 +2,7 @@
 
 require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/metadata/store'
+require_relative '../../src/granete_for_sketchup/metadata/assembly_height_labels'
 require_relative '../../src/granete_for_sketchup/selection/door_actors'
 
 # #1377 Slice 1 — Drawer actors discovery from MANAGED METADATA ONLY:
@@ -63,6 +64,50 @@ class DrawerActorsTest < Minitest::Test
 
     # Fixed rail must NOT be included in moving hardware
     refute_includes hw_names, 'slide-fix-l'
+  end
+
+  # #1633 — el layout guarda la altura de cada bahía en la definición del
+  # mueble; el escáner rotula «Cajón N · altura X» por ensamble. Sin dato
+  # (mueble previo o ensamble sin alturas) el rótulo queda como antes.
+  def test_drawer_labels_carry_the_bay_height_label
+    furniture = build_furniture do |definition|
+      drawer_front_child(definition, 'front-bajo', pos_z: 0.0)
+      drawer_box_child(definition, 'box-1-bajo', assembly_id: 'asm-bajo', pos_z: 0.0)
+      slide_rail_child(definition, 'rail-bajo', assembly_id: 'asm-bajo', membership: 'actor:drawer')
+      drawer_front_child(definition, 'front-alto', pos_z: 40.0)
+      drawer_box_child(definition, 'box-2-alto', assembly_id: 'asm-alto', pos_z: 40.0)
+      slide_rail_child(definition, 'rail-alto', assembly_id: 'asm-alto', membership: 'actor:drawer')
+    end
+    Granete::SketchUpExtension::Metadata::AssemblyHeightLabels.write(
+      furniture.definition, { 'asm-bajo' => 'E', 'asm-alto' => 'Alta 186' }
+    )
+
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_equal ['Cajón 1 · altura E', 'Cajón 2 · altura Alta 186'], scanned.drawers.map(&:name)
+  end
+
+  def test_drawer_labels_without_height_data_stay_plain
+    furniture = build_furniture do |definition|
+      drawer_front_child(definition, 'front-1', pos_z: 0.0)
+      drawer_box_child(definition, 'box-1', assembly_id: 'asm-1', pos_z: 0.0)
+      slide_rail_child(definition, 'rail-1', assembly_id: 'asm-1', membership: 'actor:drawer')
+    end
+
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_equal ['Cajón'], scanned.drawers.map(&:name)
+  end
+
+  def test_height_labels_round_trip_and_empty_map_clears
+    definition = @model.definitions.add('labels-def')
+    labels = Granete::SketchUpExtension::Metadata::AssemblyHeightLabels
+    labels.write(definition, { 'asm-1' => ' M ', 'asm-2' => '', '' => 'X' })
+    assert_equal({ 'asm-1' => 'M' }, labels.read(definition))
+    labels.write(definition, {})
+    assert_equal({}, labels.read(definition))
+    definition.set_attribute(labels::DICTIONARY, labels::KEY, '{broken')
+    assert_equal({}, labels.read(definition))
   end
 
   # #1464 — el shape que partió la apertura: el frente modelado como agregado

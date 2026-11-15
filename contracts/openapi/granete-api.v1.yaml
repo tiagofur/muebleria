@@ -21619,6 +21619,10 @@
                 "agregadoId": {
                   "type": "string"
                 },
+                "heightLabel": {
+                  "type": "string",
+                  "description": "#1633: etiqueta de la altura elegida en esta bahía (dato o letra Blum deducida); ausente si el ensamble no tiene alturas."
+                },
                 "selectedVariants": {
                   "type": "array",
                   "description": "#1493: commercial variant chosen per variant set in this bay (kit and dimensions derive from it).",

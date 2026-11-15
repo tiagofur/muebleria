@@ -53,7 +53,9 @@ module Granete
           doors = []
           hardware_by_host = Hash.new { |h, k| h[k] = [] }
           drawer_fronts = []
-          drawer_groups = Hash.new { |h, k| h[k] = { components: [], hardware: [], min_z: Float::INFINITY } }
+          drawer_groups = Hash.new do |h, k|
+            h[k] = { assembly_id: k, components: [], hardware: [], min_z: Float::INFINITY }
+          end
           unassigned_box_boards = []
 
           has_children = furniture_entity.respond_to?(:definition) &&
@@ -71,7 +73,9 @@ module Granete
           end
 
           assign_legacy_box_boards(drawer_groups, unassigned_box_boards)
-          drawers = build_drawers(drawer_fronts, drawer_groups, hardware_by_host)
+          # #1633: presentación opcional — sin el módulo cargado, rótulo simple.
+          height_labels = defined?(Metadata::AssemblyHeightLabels) ? Metadata::AssemblyHeightLabels.read(furniture_entity.definition) : {}
+          drawers = build_drawers(drawer_fronts, drawer_groups, hardware_by_host, height_labels)
           DoorActorSet.new(doors, hardware_by_host, drawers)
         end
 
@@ -203,7 +207,7 @@ module Granete
           end
         end
 
-        def build_drawers(drawer_fronts, drawer_groups, hardware_by_host)
+        def build_drawers(drawer_fronts, drawer_groups, hardware_by_host, height_labels = {})
           sorted_fronts = drawer_fronts.sort_by { |f| [f[:min_z], f[:id].to_s] }
           sorted_groups = drawer_groups.values.sort_by { |g| [g[:min_z], g[:components].first&.name.to_s] }
 
@@ -222,7 +226,7 @@ module Granete
             next if front_info.nil? && group_info.nil?
             next if front_info.nil? && inert_group?(group_info)
 
-            build_single_drawer(i, count, front_info, group_info, hardware_by_host)
+            build_single_drawer(i, count, front_info, group_info, hardware_by_host, height_labels)
           end.compact
         end
 
@@ -230,7 +234,7 @@ module Granete
           group_info.nil? || group_info[:hardware].empty?
         end
 
-        def build_single_drawer(idx, total, front_info, group_info, hardware_by_host)
+        def build_single_drawer(idx, total, front_info, group_info, hardware_by_host, height_labels = {})
           components = []
           components << front_info[:entity] if front_info
           components.concat(group_info[:components]) if group_info
@@ -240,6 +244,9 @@ module Granete
           hardware.concat(group_info[:hardware]) if group_info
 
           label = total == 1 ? 'Cajón' : "Cajón #{idx + 1}"
+          # #1633: la altura que resolvió la bahía, como dato del layout.
+          height = group_info && height_labels[group_info[:assembly_id].to_s]
+          label = "#{label} · altura #{height}" if height && !height.to_s.strip.empty?
           min_z = if front_info
                     front_info[:min_z]
                   elsif group_info
