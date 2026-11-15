@@ -1744,8 +1744,16 @@ function drawerSystemFromInput(input: Pick<HardwareKitSystemInput, 'brand' | 'li
  * sufijo «-CAJON» que les dio el asistente — compatibilidad de lectura, no
  * regla nueva.
  */
-export function isDrawerSystemAgregado(a: { readonly code: string; readonly drawerSystem?: AgregadoDrawerSystem }): boolean {
-  return a.drawerSystem !== undefined || a.code.endsWith('-CAJON');
+export function isDrawerSystemAgregado(a: {
+  readonly code: string;
+  readonly drawerSystem?: AgregadoDrawerSystem;
+  readonly variantSets?: readonly { readonly dimension: string }[];
+}): boolean {
+  if (a.drawerSystem !== undefined) return true;
+  // Compatibilidad: el asistente previo nombraba el ensamble «-CAJON» Y le
+  // daba un conjunto de alturas. Un ensamble común que sólo se llama
+  // «…-CAJON» (p. ej. un cajón Häfele de una altura) no es una familia.
+  return a.code.endsWith('-CAJON') && (a.variantSets ?? []).some((vs) => vs.dimension === 'height');
 }
 
 /** #1596 decisión 9: dónde queda elegible el ensamble nuevo (grupo kind:agregado). */

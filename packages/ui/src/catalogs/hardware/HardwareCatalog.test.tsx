@@ -659,3 +659,36 @@ describe('HardwareCatalog — Dimensiones W×H×D (#1453 F1)', () => {
     expect(screen.getByText(/van completas o vacías/)).toBeTruthy();
   });
 });
+
+describe('HardwareCatalog — pestaña «Familias de cajón» (#1633 s2c-2)', () => {
+  it('muestra la familia en su pestaña y abre la ficha del juego desde la matriz', async () => {
+    const user = userEvent.setup();
+    const kit: Hardware = { id: 'kit-m', code: 'SYS-M', name: 'Sistema M', unit: 'set', costPerUnit: 420, active: true };
+    render(
+      <HardwareCatalog
+        hardware={[sampleHardware, kit]}
+        agregados={[
+          {
+            id: 'agr', code: 'SYS-CAJON', name: 'Cajón Sistema', active: true, drawerSystem: {},
+            variantSets: [{ id: 'vs', dimension: 'height', variants: [{ nominalDimensionMm: 108, hardwareId: 'kit-m', label: 'M' }] }],
+          } as never,
+          // Ensamble común «…-CAJON» sin alturas: no es familia.
+          { id: 'hf', code: '49402645-CAJON', name: 'Cajón Häfele', active: true } as never,
+        ]}
+        optionGroups={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+    const tab = screen.getByTestId('hardware-view-tab-tab-families');
+    expect(tab.textContent).toContain('1');
+    await user.click(tab);
+    expect(screen.getByTestId('drawer-family-card-SYS-CAJON')).toBeTruthy();
+    expect(screen.queryByTestId('drawer-family-card-49402645-CAJON')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Ver la familia Cajón Sistema' }));
+    await user.click(screen.getByRole('button', { name: 'Abrir el juego SYS-M' }));
+    expect(screen.getByRole('dialog').textContent).toContain('SYS-M');
+  });
+});
