@@ -11,6 +11,7 @@
 
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  effectiveVariantLabel,
   HARDWARE_KIT_SYSTEM_HEIGHTS,
   KIT_TEMPLATE_DRAWER_HANDS_ID,
   planHardwareKit,
@@ -76,16 +77,20 @@ export function HardwareSystemHeightAddModal({
   onSubmit,
 }: HardwareSystemHeightAddModalProps): ReactNode {
   const systemCode = agregado.code.replace(/-CAJON$/, '');
-  const existingHeights = useMemo(
-    () =>
-      new Set(
-        (agregado.variantSets ?? [])
-          .filter((vs) => vs.dimension === 'height')
-          .flatMap((vs) => vs.variants.map((v) => v.nominalDimensionMm)),
-      ),
-    [agregado],
+  // #1633: una altura existe si coincide su medida O su etiqueta (dato, o
+  // la letra deducida en variantes previas sin etiqueta).
+  const existingHeights = useMemo(() => {
+    const variants = (agregado.variantSets ?? [])
+      .filter((vs) => vs.dimension === 'height')
+      .flatMap((vs) => vs.variants);
+    return {
+      nominals: new Set(variants.map((v) => v.nominalDimensionMm)),
+      labels: new Set(variants.map((v) => effectiveVariantLabel(v).toLowerCase()).filter(Boolean)),
+    };
+  }, [agregado]);
+  const missing = HARDWARE_KIT_SYSTEM_HEIGHTS.filter(
+    (h) => !existingHeights.nominals.has(h.khMinMm) && !existingHeights.labels.has(h.code.toLowerCase()),
   );
-  const missing = HARDWARE_KIT_SYSTEM_HEIGHTS.filter((h) => !existingHeights.has(h.khMinMm));
 
   const [heightCode, setHeightCode] = useState<string>('');
   const [cost, setCost] = useState('0');

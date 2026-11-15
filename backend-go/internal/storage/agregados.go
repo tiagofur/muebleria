@@ -153,6 +153,7 @@ func agregadoPostHasRecipe(a *domain.Agregado) bool {
 	return len(a.RigidMembers) > 0 ||
 		len(a.VariantSets) > 0 ||
 		len(a.CompatibilityRules) > 0 ||
+		a.DrawerSystem != nil ||
 		(a.CommercialKitHardwareID != nil && *a.CommercialKitHardwareID != "")
 }
 

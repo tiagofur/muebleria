@@ -3792,8 +3792,19 @@ export function agregadoToApi(a: import('@granete/domain').Agregado): Record<str
     ...(a.compatibilityRules ? { compatibility_rules: a.compatibilityRules } : {}),
     ...(a.commercialKitHardwareId ? { commercial_kit_hardware_id: a.commercialKitHardwareId } : {}),
     ...(a.presentationMotion ? { presentation_motion: a.presentationMotion } : {}),
+    // #1633: el marcador de familia de cajón viaja con la receta.
+    ...(a.drawerSystem ? { drawer_system: a.drawerSystem } : {}),
     active: a.active !== false,
   };
+}
+
+/** #1633: marcador de familia de cajón; un objeto vacío sigue marcando. */
+function drawerSystemFromApi(raw: unknown): import('@granete/domain').AgregadoDrawerSystem | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const brand = typeof r.brand === 'string' && r.brand.trim() ? r.brand.trim() : undefined;
+  const line = typeof r.line === 'string' && r.line.trim() ? r.line.trim() : undefined;
+  return { ...(brand ? { brand } : {}), ...(line ? { line } : {}) };
 }
 
 export function agregadoFromApi(raw: Record<string, unknown>): import('@granete/domain').Agregado {
@@ -3832,6 +3843,7 @@ export function agregadoFromApi(raw: Record<string, unknown>): import('@granete/
       : undefined,
     commercialKitHardwareId:
       (raw.commercial_kit_hardware_id ?? raw.commercialKitHardwareId) as string | undefined,
+    drawerSystem: drawerSystemFromApi(raw.drawer_system ?? raw.drawerSystem),
     active: raw.active !== false,
   };
 }

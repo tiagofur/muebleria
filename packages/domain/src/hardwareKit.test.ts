@@ -17,6 +17,7 @@ import {
   validateHardwareKitLink,
   KIT_TEMPLATE_DRAWER_HANDS_ID,
   planHardwareKitSystem,
+  isDrawerSystemAgregado,
   validateHardwareKitTemplate,
   type HardwareKitPlanInput,
   type HardwareKitSystemInput,
@@ -768,12 +769,28 @@ describe('planHardwareKitSystem (#1546 M4 — sistema generador)', () => {
   it('el agregado del sistema usa variantes de altura y NO lleva miembros de kit fijos', () => {
     const plan = planHardwareKitSystem(systemInput, noExisting);
     expect(plan.agregado.code).toBe('MBOX-IRIDIUN-CAJON');
+    // #1633: la etiqueta de altura se persiste como dato.
     expect(plan.agregado.variants).toEqual([
-      { heightCode: 'M', khMinMm: 108, kitCode: 'MBOX-IRIDIUN-M' },
-      { heightCode: 'E', khMinMm: 209, kitCode: 'MBOX-IRIDIUN-E' },
+      { heightCode: 'M', label: 'M', khMinMm: 108, kitCode: 'MBOX-IRIDIUN-M' },
+      { heightCode: 'E', label: 'E', khMinMm: 209, kitCode: 'MBOX-IRIDIUN-E' },
     ]);
     // El sync por bahía materializa las partes del kit efectivo (paridad #1493):
     // el plan no genera miembros fijos de ningún kit.
+  });
+
+  it('#1633: el plan marca la familia de cajón con marca/línea recortadas', () => {
+    expect(planHardwareKitSystem(systemInput, noExisting).agregado.drawerSystem).toEqual({});
+    const branded = planHardwareKitSystem(
+      { ...systemInput, brand: ' Blum ', line: 'Merivobox ' },
+      noExisting,
+    );
+    expect(branded.agregado.drawerSystem).toEqual({ brand: 'Blum', line: 'Merivobox' });
+  });
+
+  it('#1633: el sistema se reconoce por el marcador; -CAJON sólo por compatibilidad', () => {
+    expect(isDrawerSystemAgregado({ code: 'LEGRABOX-N', drawerSystem: {} })).toBe(true);
+    expect(isDrawerSystemAgregado({ code: 'MBOX-IRIDIUM-GRAY-CAJON' })).toBe(true);
+    expect(isDrawerSystemAgregado({ code: 'PUERTA-ABATIBLE' })).toBe(false);
   });
 
   it('el grupo de accesorios se vincula al kit E con los herrajes accesorios como opciones', () => {

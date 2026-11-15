@@ -184,6 +184,59 @@ export interface ProductVariant {
    * commercialKitHardwareId del agregado.
    */
   readonly commercialKitHardwareId?: string;
+  /**
+   * #1633: etiqueta comercial libre de la altura («M», «C», «Alta 186»). Es
+   * dato: la letra ya no se deduce del nominal. Ausente en datos previos ⇒
+   * effectiveVariantLabel deriva la letra Blum por compatibilidad.
+   */
+  readonly label?: string;
+}
+
+/** Tope de la etiqueta libre de altura (#1633). Espejo Go MaxVariantLabelLength. */
+export const MAX_VARIANT_LABEL_LENGTH = 40;
+
+/**
+ * Compatibilidad de lectura (#1633): KH mínimos Blum MERIVOBOX del fixture
+ * #1493 para variantes guardadas sin etiqueta. Nunca restringe datos nuevos.
+ */
+const LEGACY_BLUM_HEIGHT_LABELS: ReadonlyMap<number, string> = new Map([
+  [85.5, 'N'],
+  [108, 'M'],
+  [146, 'K'],
+  [209, 'E'],
+]);
+
+/**
+ * #1633: la etiqueta propia de la variante o — para variantes previas sin
+ * etiqueta — la letra Blum de su nominal; '' si ninguna aplica. Espejo Go
+ * EffectiveVariantLabel (fixture drawerFamilyVariantParity).
+ */
+export function effectiveVariantLabel(v: Pick<ProductVariant, 'label' | 'nominalDimensionMm'>): string {
+  const own = v.label?.trim() ?? '';
+  if (own) return own;
+  return LEGACY_BLUM_HEIGHT_LABELS.get(v.nominalDimensionMm) ?? '';
+}
+
+/**
+ * #1633: marcador explícito de familia de cajón (reemplaza reconocer el
+ * sistema por el sufijo «-CAJON» del código). Marca y línea opcionales.
+ */
+export interface AgregadoDrawerSystem {
+  readonly brand?: string;
+  readonly line?: string;
+}
+
+/** Tope de marca/línea (#1633). Espejo Go MaxDrawerSystemTextLength. */
+export const MAX_DRAWER_SYSTEM_TEXT_LENGTH = 80;
+
+export function validateAgregadoDrawerSystem(ds: AgregadoDrawerSystem | undefined): void {
+  if (!ds) return;
+  if ([...(ds.brand?.trim() ?? '')].length > MAX_DRAWER_SYSTEM_TEXT_LENGTH) {
+    throw new Error(`drawerSystem.brand exceeds ${MAX_DRAWER_SYSTEM_TEXT_LENGTH} characters`);
+  }
+  if ([...(ds.line?.trim() ?? '')].length > MAX_DRAWER_SYSTEM_TEXT_LENGTH) {
+    throw new Error(`drawerSystem.line exceeds ${MAX_DRAWER_SYSTEM_TEXT_LENGTH} characters`);
+  }
 }
 
 export interface AgregadoVariantSet {
@@ -794,6 +847,7 @@ export function validateAgregadoVariantSet(vs: AgregadoVariantSet): void {
     throw new Error(`variant set '${vs.id}' must define at least one ProductVariant`);
   }
   const seenNominals = new Set<number>();
+  const seenLabels = new Set<string>();
   for (let i = 0; i < vs.variants.length; i++) {
     const v = vs.variants[i];
     if (!v || !Number.isFinite(v.nominalDimensionMm) || v.nominalDimensionMm <= 0) {
@@ -810,6 +864,23 @@ export function validateAgregadoVariantSet(vs: AgregadoVariantSet): void {
       throw new Error(
         `variant set '${vs.id}' variant ${i}: commercialKitHardwareId cannot be whitespace (omit the field to use the agregado-level kit)`,
       );
+    }
+    // #1633: etiqueta libre, acotada y única (sin distinguir mayúsculas).
+    if (v.label !== undefined) {
+      const label = v.label.trim();
+      if (v.label !== '' && label === '') {
+        throw new Error(`variant set '${vs.id}' variant ${i}: label cannot be whitespace (omit the field)`);
+      }
+      if ([...label].length > MAX_VARIANT_LABEL_LENGTH) {
+        throw new Error(`variant set '${vs.id}' variant ${i}: label exceeds ${MAX_VARIANT_LABEL_LENGTH} characters`);
+      }
+      if (label) {
+        const key = label.toLowerCase();
+        if (seenLabels.has(key)) {
+          throw new Error(`variant set '${vs.id}' has duplicate label: ${label}`);
+        }
+        seenLabels.add(key);
+      }
     }
   }
 }
@@ -851,12 +922,14 @@ export interface AgregadoAssemblyInput {
   readonly rigidMembers?: readonly AgregadoRigidMember[];
   readonly variantSets?: readonly AgregadoVariantSet[];
   readonly compatibilityRules?: readonly AssemblyCompatibilityRule[];
+  readonly drawerSystem?: AgregadoDrawerSystem;
 }
 
 export function validateAgregadoAssemblyDefinition(agregado: AgregadoAssemblyInput): void {
   if (!agregado.id || !agregado.id.trim()) {
     throw new Error('agregado must have a non-empty id');
   }
+  validateAgregadoDrawerSystem(agregado.drawerSystem);
 
   const hasKit =
     agregado.commercialKitHardwareId !== undefined &&

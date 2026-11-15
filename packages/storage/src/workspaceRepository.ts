@@ -215,8 +215,12 @@ export interface WorkspaceRepository {
           readonly nominalDimensionMm: number;
           readonly hardwareId: string;
           readonly commercialKitHardwareId?: string | null;
+          /** #1633: etiqueta libre de la altura. */
+          readonly label?: string;
         }[];
       }[];
+      /** #1633: marcador de familia de cajón. */
+      readonly drawer_system?: { readonly brand?: string; readonly line?: string };
     };
     readonly option_group?: {
       readonly id: string;

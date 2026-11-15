@@ -11,7 +11,7 @@
  */
 
 import type { HardwareVisualAssetBinding } from './types';
-import type { RigidMemberHand } from './agregadoAssembly';
+import type { AgregadoDrawerSystem, RigidMemberHand } from './agregadoAssembly';
 
 export type HardwareKitDesignSlot = 'fixed_left' | 'fixed_right' | 'moving_left' | 'moving_right';
 
@@ -1422,6 +1422,9 @@ export interface HardwareKitSystemInput {
   readonly accessoriesE?: readonly HardwareKitSystemAccessory[];
   readonly fixedOffsetMm?: number;
   readonly movingOffsetMm?: number;
+  /** #1633: marca/línea de la familia de cajón (texto libre, opcional). */
+  readonly brand?: string;
+  readonly line?: string;
 }
 
 /** Autoridad Blum de alturas (fixture merivobox-pilot-canonical.json #1493). */
@@ -1467,9 +1470,19 @@ export interface HardwareKitSystemPlan {
     readonly name: string;
     readonly widthMm: number;
     readonly depthMm: number;
-    /** Variante = KH mínimo de la altura (nominal del variant set). */
-    readonly variants: readonly { readonly heightCode: string; readonly khMinMm: number; readonly kitCode: string }[];
+    /**
+     * Variante = KH mínimo de la altura (nominal del variant set). #1633:
+     * `label` es la etiqueta que se PERSISTE (hoy = heightCode de la plantilla).
+     */
+    readonly variants: readonly {
+      readonly heightCode: string;
+      readonly label: string;
+      readonly khMinMm: number;
+      readonly kitCode: string;
+    }[];
     readonly motion: HardwareKitTemplate['motion'];
+    /** #1633: marcador explícito de familia de cajón. */
+    readonly drawerSystem: AgregadoDrawerSystem;
   };
   readonly blockedCode: string | null;
 }
@@ -1571,13 +1584,32 @@ export function planHardwareKitSystem(
       depthMm: input.depthMm,
       variants: kits.map((k) => ({
         heightCode: k.heightCode,
+        label: k.heightCode,
         khMinMm: heightByCode.get(k.heightCode)!.khMinMm,
         kitCode: k.code,
       })),
       motion: 'translate',
+      drawerSystem: drawerSystemFromInput(input),
     },
     blockedCode,
   };
+}
+
+/** #1633: marca/línea recortadas; el objeto (aun vacío) marca la familia. */
+function drawerSystemFromInput(input: Pick<HardwareKitSystemInput, 'brand' | 'line'>): AgregadoDrawerSystem {
+  const brand = input.brand?.trim();
+  const line = input.line?.trim();
+  return { ...(brand ? { brand } : {}), ...(line ? { line } : {}) };
+}
+
+/**
+ * #1633: ¿el ensamble es una familia de cajón? El marcador explícito manda;
+ * los ensambles creados antes de #1633 (sin marcador) se reconocen por el
+ * sufijo «-CAJON» que les dio el asistente — compatibilidad de lectura, no
+ * regla nueva.
+ */
+export function isDrawerSystemAgregado(a: { readonly code: string; readonly drawerSystem?: AgregadoDrawerSystem }): boolean {
+  return a.drawerSystem !== undefined || a.code.endsWith('-CAJON');
 }
 
 /** #1596 decisión 9: dónde queda elegible el ensamble nuevo (grupo kind:agregado). */

@@ -22,7 +22,8 @@ import type {
 import {
   accessoryKitMemberHardwareIds,
   UNCATEGORIZED_FILTER,
-  HARDWARE_KIT_SYSTEM_HEIGHTS,
+  effectiveVariantLabel,
+  isDrawerSystemAgregado,
   ValidationError,
   countMachiningOperations,
   ensureAgregadoKitParts,
@@ -219,7 +220,9 @@ export function HardwareCatalog({
   const editingKitSystem = useMemo(() => {
     if (!editingHardware) return null;
     for (const a of agregados) {
-      if (!a.code.endsWith('-CAJON')) continue;
+      // #1633: el sistema es un dato (marcador) y la altura su etiqueta;
+      // editar el número ya no hace «desaparecer» la altura.
+      if (!isDrawerSystemAgregado(a)) continue;
       for (const vs of a.variantSets ?? []) {
         const variant = vs.variants.find(
           (v) =>
@@ -227,16 +230,8 @@ export function HardwareCatalog({
             v.commercialKitHardwareId === editingHardware.id,
         );
         if (!variant) continue;
-        const heights = vs.variants.flatMap((v) => {
-          const code = HARDWARE_KIT_SYSTEM_HEIGHTS.find(
-            (hh) => hh.khMinMm === v.nominalDimensionMm,
-          )?.code;
-          return code ? [code] : [];
-        });
-        const own = HARDWARE_KIT_SYSTEM_HEIGHTS.find(
-          (hh) => hh.khMinMm === variant.nominalDimensionMm,
-        );
-        return { agregado: a, heights, ownHeight: own?.code ?? '' };
+        const heights = vs.variants.map(effectiveVariantLabel).filter(Boolean);
+        return { agregado: a, heights, ownHeight: effectiveVariantLabel(variant) };
       }
     }
     return null;

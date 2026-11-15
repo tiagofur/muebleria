@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"net/http"
 	"sort"
 
@@ -381,7 +382,10 @@ func kitSystemHeightPlanFromRequest(req *openapi.HardwareKitSystemHeightAddReque
 	}
 	return &kitSystemHeightPlan{
 		hardware:    hardware,
-		variant:     domain.ProductVariant{NominalDimensionMm: req.Variant.NominalDimensionMm, HardwareID: kitID, CommercialKitHardwareID: kitID},
+		variant: domain.ProductVariant{
+			NominalDimensionMm: req.Variant.NominalDimensionMm, HardwareID: kitID, CommercialKitHardwareID: kitID,
+			Label: strings.TrimSpace(derefString(req.Variant.Label)),
+		},
 		optionGroup: optionGroup,
 		eligibility: eligibility,
 		allCodes:    seenCodesSlice(seenCodes),
@@ -415,6 +419,19 @@ func addHeightVariant(agr domain.Agregado, variant domain.ProductVariant) (domai
 				"code":    "HARDWARE_KIT_SYSTEM_HEIGHT_EXISTS",
 				"message": fmt.Sprintf("el ensamble ya tiene la altura de %g mm", variant.NominalDimensionMm),
 				"details": map[string]any{"nominalDimensionMm": variant.NominalDimensionMm},
+			}
+		}
+	}
+	// #1633: the label is unique too, against the EFFECTIVE label of the
+	// existing heights (a legacy unlabeled 108 counts as «M»).
+	if label := strings.TrimSpace(variant.Label); label != "" {
+		for _, v := range vs.Variants {
+			if strings.EqualFold(domain.EffectiveVariantLabel(v), label) {
+				return agr, "", map[string]any{
+					"code":    "HARDWARE_KIT_SYSTEM_HEIGHT_EXISTS",
+					"message": fmt.Sprintf("el ensamble ya tiene una altura «%s»", label),
+					"details": map[string]any{"label": label},
+				}
 			}
 		}
 	}

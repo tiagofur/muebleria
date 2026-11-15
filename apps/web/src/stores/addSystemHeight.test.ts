@@ -88,7 +88,8 @@ describe('#1625 addSystemHeight — con sesión: una transacción del servidor',
     expect(agregadoId).toBe('agr-sys');
     const kit = body.hardware.find((h: { code: string }) => h.code === 'SYS-E');
     expect(kit.unit).toBe('set');
-    expect(body.variant).toEqual({ nominalDimensionMm: 209, kit_hardware_id: kit.id });
+    // #1633: la etiqueta de altura viaja como dato.
+    expect(body.variant).toEqual({ nominalDimensionMm: 209, kit_hardware_id: kit.id, label: 'E' });
     const inserto = body.hardware.find((h: { code: string }) => h.code === 'SYS-E-GAL');
     expect(inserto.kit_hardware_id).toBeNull();
     expect(inserto.pieces[0].offsetMm).toEqual({ x: 1, y: 2, z: 3 });
