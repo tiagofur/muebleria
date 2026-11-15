@@ -4,7 +4,7 @@
  * fila — con la plantilla Blum MERIVOBOX como punto de partida editable.
  */
 
-import { useRef, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react';
 import { blumMerivoboxTemplate, newHeightRow, type FamilyHeightRow } from './familyWizardModel';
 
@@ -16,6 +16,8 @@ export function FamilyHeightsStep({
   readonly onChange: (next: FamilyHeightRow[]) => void;
 }): ReactNode {
   const tableRef = useRef<HTMLTableElement | null>(null);
+  // Review #1636: la plantilla no pisa filas escritas sin confirmar.
+  const [confirmTemplate, setConfirmTemplate] = useState(false);
   const update = (idx: number, patch: Partial<FamilyHeightRow>) =>
     onChange(rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   // Tras reordenar, el foco vuelve al mismo control de la fila movida.
@@ -42,7 +44,7 @@ export function FamilyHeightsStep({
         <button
           type="button"
           className="btn btn--small"
-          onClick={() => onChange(blumMerivoboxTemplate())}
+          onClick={() => (rows.length > 0 ? setConfirmTemplate(true) : onChange(blumMerivoboxTemplate()))}
           data-testid="family-heights-template"
         >
           Precargar plantilla Blum Merivobox (N · M · K · E)
@@ -56,6 +58,27 @@ export function FamilyHeightsStep({
           Añadir altura
         </button>
       </div>
+      {confirmTemplate ? (
+        <div className="family-heights__confirm" role="alertdialog" aria-label="Reemplazar alturas" data-testid="family-heights-template-confirm">
+          <span>
+            La plantilla reemplaza las {rows.length} altura(s) que escribiste. ¿Seguir?
+          </span>
+          <button
+            type="button"
+            className="btn btn--small btn--danger"
+            onClick={() => {
+              onChange(blumMerivoboxTemplate());
+              setConfirmTemplate(false);
+            }}
+            data-testid="family-heights-template-replace"
+          >
+            Reemplazar
+          </button>
+          <button type="button" className="btn btn--small btn--ghost" onClick={() => setConfirmTemplate(false)}>
+            Conservar mis alturas
+          </button>
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <p className="family-heights__empty" data-testid="family-heights-empty">
           Todavía no hay alturas. Precargá la plantilla Blum y editala, o añadí la primera altura.

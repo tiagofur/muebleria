@@ -19,6 +19,9 @@ import type {
 import { HardwareKitSystemWizardModal } from './HardwareKitSystemWizardModal';
 
 afterEach(cleanup);
+// Flujos de varios pasos con muchas interacciones: bajo carga del runner
+// completo el default de 5 s queda corto (review #1636).
+vi.setConfig({ testTimeout: 20_000 });
 
 const okResult: HardwareKitResult = {
   createdCodes: ['MBOX-SYS-M', 'MBOX-SYS-CAJON'],
@@ -188,6 +191,98 @@ describe('HardwareKitSystemWizardModal — pasos de la familia (#1633 s2b)', () 
   });
 });
 
+describe('HardwareKitSystemWizardModal — review #1636', () => {
+  it('P1: renombrar una altura suelta la etiqueta vieja de los insertos (sin quedar trabado)', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = setup();
+    await fillBasics(user, 'MBOX-SYS', { withE: true });
+    await user.click(screen.getByTestId('family-wizard-next'));
+    await user.click(screen.getByTestId('hardware-system-accessory-add'));
+    await user.type(screen.getByTestId('hardware-system-accessory-0-name'), 'Galería');
+    expect(screen.getByTestId('hardware-system-accessory-0-height-E')).toBeChecked();
+    // Volver a Alturas y renombrar E → Alta.
+    await user.click(screen.getByTestId('family-wizard-step-1'));
+    await user.clear(screen.getByTestId('family-height-1-label'));
+    await user.type(screen.getByTestId('family-height-1-label'), 'Alta');
+    await user.click(screen.getByTestId('family-wizard-next'));
+    // La E ya no existe: el inserto quedó sin altura y lo dice; marcar Alta resuelve.
+    await user.click(screen.getByTestId('family-wizard-next'));
+    expect(screen.getByTestId('hardware-system-wizard-plan-error').textContent).toContain('ninguna altura');
+    await user.click(screen.getByTestId('hardware-system-accessory-0-height-Alta'));
+    await goToSummary(user);
+    expect(screen.getByTestId('hardware-system-wizard-submit')).toBeEnabled();
+    await user.click(screen.getByTestId('hardware-system-wizard-submit'));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]![0].input.accessories![0]!.heights).toEqual(['Alta']);
+  });
+
+  it('P1: un rechazo del plan frena «Siguiente» y no marca los pasos como completos', async () => {
+    const user = userEvent.setup();
+    setup();
+    await fillIdentity(user);
+    await user.click(screen.getByTestId('family-wizard-next'));
+    await user.click(screen.getByTestId('family-heights-add'));
+    await user.type(screen.getByTestId('family-height-0-label'), 'Alta-1');
+    await user.type(screen.getByTestId('family-height-0-kh'), '100');
+    await user.type(screen.getByTestId('family-height-0-price'), '0');
+    await user.click(screen.getByTestId('family-heights-add'));
+    await user.type(screen.getByTestId('family-height-1-label'), 'Alta 1');
+    await user.type(screen.getByTestId('family-height-1-kh'), '120');
+    await user.type(screen.getByTestId('family-height-1-price'), '0');
+    expect(screen.getByTestId('hardware-system-wizard-plan-error').textContent).toContain('mismo código de juego');
+    await user.click(screen.getByTestId('family-wizard-next'));
+    expect(screen.getByTestId('family-wizard-title').textContent).toBe('Alturas');
+    expect(screen.getByTestId('family-wizard-step-2')).toBeDisabled();
+  });
+
+  it('P2: el archivo elegido sigue visible al volver a Diseños 3D y se puede quitar', async () => {
+    const user = userEvent.setup();
+    setup();
+    await fillBasics(user);
+    await user.click(screen.getByTestId('family-wizard-next')); // Insertos
+    await user.click(screen.getByTestId('family-wizard-next')); // Diseños 3D
+    const input = screen.getAllByTestId(/^hardware-system-wizard-file-/)[0] as HTMLInputElement;
+    const key = input.dataset.testid!.replace('hardware-system-wizard-file-', '');
+    await user.upload(input, new File(['skp'], 'fijo.skp', { type: 'application/octet-stream' }));
+    await user.click(screen.getByTestId('family-wizard-next')); // Resumen
+    await user.click(screen.getByTestId('family-wizard-back')); // Diseños 3D
+    const chosen = screen.getByTestId(`hardware-system-wizard-chosen-${key}`);
+    expect(chosen.textContent).toContain('fijo.skp');
+    await user.click(screen.getByRole('button', { name: /Quitar el archivo fijo\.skp/ }));
+    expect(screen.queryByTestId(`hardware-system-wizard-chosen-${key}`)).toBeNull();
+  });
+
+  it('la plantilla no pisa alturas escritas sin confirmar', async () => {
+    const user = userEvent.setup();
+    setup();
+    await fillIdentity(user);
+    await user.click(screen.getByTestId('family-wizard-next'));
+    await user.click(screen.getByTestId('family-heights-add'));
+    await user.type(screen.getByTestId('family-height-0-label'), 'Mía');
+    await user.click(screen.getByTestId('family-heights-template'));
+    expect(screen.getByTestId('family-heights-template-confirm')).toBeInTheDocument();
+    expect(screen.getByTestId('family-height-0-label')).toHaveValue('Mía');
+    await user.click(screen.getByTestId('family-heights-template-replace'));
+    expect(screen.getByTestId('family-height-0-label')).toHaveValue('N');
+  });
+
+  it('el orden de los insertos se cambia con Subir/Bajar y llega así al plan', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = setup();
+    await fillBasics(user, 'MBOX-SYS', { withE: true });
+    await user.click(screen.getByTestId('family-wizard-next'));
+    await user.click(screen.getByTestId('hardware-system-accessory-add'));
+    await user.type(screen.getByTestId('hardware-system-accessory-0-name'), 'Galería');
+    await user.click(screen.getByTestId('hardware-system-accessory-add'));
+    await user.type(screen.getByTestId('hardware-system-accessory-1-name'), 'Boxcap');
+    await user.click(screen.getByTestId('hardware-system-accessory-1-up'));
+    await goToSummary(user);
+    await user.click(screen.getByTestId('hardware-system-wizard-submit'));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]![0].input.accessories!.map((a) => a.name)).toEqual(['Boxcap', 'Galería']);
+  });
+});
+
 describe('HardwareKitSystemWizardModal — problemas visibles (#1552)', () => {
   it('etiqueta repetida en Alturas: mensaje con role=alert y Siguiente bloqueado', async () => {
     const user = userEvent.setup();
@@ -241,6 +336,7 @@ describe('HardwareKitSystemWizardModal — problemas visibles (#1552)', () => {
     expect(screen.getByTestId('family-wizard-title').textContent).toBe('Insertos');
     await user.clear(screen.getByTestId('hardware-system-accessory-1-name'));
     await user.type(screen.getByTestId('hardware-system-accessory-1-name'), 'Boxcap');
+    // Desmarcar la E preseleccionada deja al segundo inserto sin altura.
     await user.click(screen.getByTestId('hardware-system-accessory-1-height-E'));
     expect(screen.getByTestId('hardware-system-wizard-plan-error').textContent).toContain('ninguna altura');
   });

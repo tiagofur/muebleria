@@ -18,12 +18,15 @@ function FileSlot({
   fileKey,
   label,
   disabled,
+  chosen,
   setFile,
   fileInputsRef,
 }: {
   readonly fileKey: string;
   readonly label: string;
   readonly disabled: boolean;
+  /** Review #1636 P2: el archivo elegido sigue visible al volver al paso. */
+  readonly chosen: File | undefined;
   readonly setFile: (key: string, file: File | null) => void;
   readonly fileInputsRef: MutableRefObject<Record<string, HTMLInputElement | null>>;
 }): ReactNode {
@@ -31,6 +34,23 @@ function FileSlot({
   return (
     <div className="catalog-form__field">
       <label htmlFor={slotId}>{label}</label>
+      {chosen ? (
+        <span className="family-designs__chosen" data-testid={`hardware-system-wizard-chosen-${fileKey}`}>
+          {chosen.name}
+          <button
+            type="button"
+            className="btn btn--small btn--ghost"
+            onClick={() => {
+              setFile(fileKey, null);
+              const input = fileInputsRef.current[fileKey];
+              if (input) input.value = '';
+            }}
+            aria-label={`Quitar el archivo ${chosen.name} de ${label}`}
+          >
+            Quitar
+          </button>
+        </span>
+      ) : null}
       <input
         id={slotId}
         type="file"
@@ -48,10 +68,12 @@ function FileSlot({
 
 export function FamilyDesignsStep({
   plan,
+  files,
   setFile,
   fileInputsRef,
 }: {
   readonly plan: HardwareKitSystemPlan | null;
+  readonly files: Readonly<Record<string, File>>;
   readonly setFile: (key: string, file: File | null) => void;
   readonly fileInputsRef: MutableRefObject<Record<string, HTMLInputElement | null>>;
 }): ReactNode {
@@ -76,6 +98,7 @@ export function FamilyDesignsStep({
                 fileKey={kitDesignFileKey(kit.code, part.hand, design.code)}
                 label={`${design.name.includes('—') ? design.name.split('—')[1]!.trim() : design.name} (${sideLabel(part.hand)})`}
                 disabled={design.exists}
+                chosen={files[kitDesignFileKey(kit.code, part.hand, design.code)]}
                 setFile={setFile}
                 fileInputsRef={fileInputsRef}
               />
@@ -90,6 +113,7 @@ export function FamilyDesignsStep({
                   fileKey={insertDesignFileKey(acc.code, anchor)}
                   label={`Inserto ${acc.name.includes('—') ? acc.name.split('—')[1]!.trim() : acc.name} (${sideLabel(anchor)})`}
                   disabled={acc.exists}
+                  chosen={files[insertDesignFileKey(acc.code, anchor)]}
                   setFile={setFile}
                   fileInputsRef={fileInputsRef}
                 />

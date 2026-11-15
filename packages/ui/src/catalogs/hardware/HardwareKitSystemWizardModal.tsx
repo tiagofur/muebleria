@@ -146,12 +146,27 @@ export function HardwareKitSystemWizardModal({
     () => heightRows.map((r) => r.label.trim()).filter(Boolean),
     [heightRows],
   );
+  // Review #1636 P1: al renombrar o quitar una altura, los insertos sueltan
+  // la etiqueta que ya no existe (no queda una casilla invisible imposible
+  // de desmarcar que el plan rechaza).
+  useEffect(() => {
+    const available = new Set(heightLabels.map((l) => l.toLowerCase()));
+    setInserts((prev) => {
+      let changed = false;
+      const next = prev.map((d) => {
+        const kept = (d.heights ?? []).filter((h) => available.has(h.toLowerCase()));
+        if (kept.length === (d.heights ?? []).length) return d;
+        changed = true;
+        return { ...d, heights: kept };
+      });
+      return changed ? next : prev;
+    });
+  }, [heightLabels]);
   const problems = useMemo<readonly (string | null)[]>(
     () => [identityProblem(identity), heightRowsProblem(heightRows), insertsProblem(inserts, heightLabels), null, null],
     [identity, heightRows, inserts, heightLabels],
   );
-  const reachable = problems.map((_, i) => problems.slice(0, i).every((p) => p === null));
-  const complete = problems.map((p) => p === null);
+  const localReachable = problems.map((_, i) => problems.slice(0, i).every((p) => p === null));
 
   const systemInput = useMemo<HardwareKitSystemInput | null>(() => {
     if (problems[0] !== null) return null;
@@ -188,20 +203,35 @@ export function HardwareKitSystemWizardModal({
     }
   }, [systemInput, problems, existingHardwareCodes, existingAgregadoCodes]);
   const plan = planned.plan;
+  // Rechazo del planner atribuible a las ALTURAS (plan sin insertos): frena
+  // la salida de Alturas. El del plan completo frena desde Insertos — así un
+  // problema de insertos nunca encierra al usuario en Alturas.
+  const heightsPlanProblem = useMemo<string | null>(() => {
+    if (!systemInput || problems[1] !== null) return null;
+    try {
+      planHardwareKitSystem(
+        { ...systemInput, accessories: [] },
+        { hardwareCodes: existingHardwareCodes ?? new Set(), agregadoCodes: existingAgregadoCodes ?? new Set() },
+      );
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Las alturas no generan un plan válido.';
+    }
+  }, [systemInput, problems, existingHardwareCodes, existingAgregadoCodes]);
+  const planProblemAt = (i: number): string | null =>
+    i === 1 ? heightsPlanProblem : i >= 2 ? planned.problem : null;
+  const reachable = localReachable.map(
+    (ok, i) => ok && (i < 2 || heightsPlanProblem === null) && (i < 3 || planned.problem === null),
+  );
+  const complete = problems.map((p, i) => p === null && planProblemAt(i) === null);
 
   // Un solo mensaje por paso: el problema local del paso actual; si no hay,
   // el del plan (a partir de Alturas, que es donde nace el plan).
   const stepProblem =
-    problems[step] !== null
-      ? attempted.has(step)
-        ? problems[step]
-        : null
-      : step >= 1
-        ? planned.problem
-        : null;
+    problems[step] !== null ? (attempted.has(step) ? problems[step] : null) : planProblemAt(step);
 
   const advance = (): void => {
-    if (problems[step] !== null) {
+    if (problems[step] !== null || planProblemAt(step) !== null) {
       setAttempted((prev) => new Set(prev).add(step));
       requestAnimationFrame(() => problemRef.current?.focus());
       return;
@@ -406,7 +436,7 @@ export function HardwareKitSystemWizardModal({
               drafts={inserts}
               onChange={setInserts}
               legend="Insertos de la familia"
-              hint="Galería, boxcap, boxcover… Marcá en qué alturas se ofrece cada uno: cada altura tiene su propia pieza y su selector. El primero de cada altura es el que se usa por defecto. Sin insertos, la familia igual se crea."
+              hint="Galería, boxcap, boxcover… Marcá en qué alturas se ofrece cada uno: cada altura tiene su propia pieza y su selector. El primero de cada altura es el que se usa por defecto (ordená con Subir/Bajar). Sin insertos, la familia igual se crea."
               testIdPrefix="hardware-system-accessory"
               heightOptions={heightLabels}
               newDraft={() => ({
@@ -418,7 +448,9 @@ export function HardwareKitSystemWizardModal({
             />
           ) : null}
 
-          {step === 3 ? <FamilyDesignsStep plan={plan} setFile={setFile} fileInputsRef={fileInputsRef} /> : null}
+          {step === 3 ? (
+            <FamilyDesignsStep plan={plan} files={files} setFile={setFile} fileInputsRef={fileInputsRef} />
+          ) : null}
 
           {step === 4 ? (
             <>

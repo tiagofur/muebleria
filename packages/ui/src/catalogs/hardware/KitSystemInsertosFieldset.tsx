@@ -126,6 +126,40 @@ export function KitSystemInsertosFieldset({
               aria-label={`Nombre del inserto ${idx + 1}`}
               data-testid={`${testIdPrefix}-${idx}-name`}
             />
+            {heightOptions ? (
+              <>
+                {/* #1633: el orden de la familia es el de los selectores — el
+                    primero de cada altura es el que se usa por defecto. */}
+                <button
+                  type="button"
+                  className="btn btn--small btn--ghost"
+                  disabled={idx === 0}
+                  onClick={() => {
+                    const next = [...drafts];
+                    [next[idx - 1], next[idx]] = [next[idx]!, next[idx - 1]!];
+                    onChange(next);
+                  }}
+                  aria-label={`Subir el inserto ${acc.name.trim() || idx + 1}`}
+                  data-testid={`${testIdPrefix}-${idx}-up`}
+                >
+                  Subir
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--small btn--ghost"
+                  disabled={idx === drafts.length - 1}
+                  onClick={() => {
+                    const next = [...drafts];
+                    [next[idx], next[idx + 1]] = [next[idx + 1]!, next[idx]!];
+                    onChange(next);
+                  }}
+                  aria-label={`Bajar el inserto ${acc.name.trim() || idx + 1}`}
+                  data-testid={`${testIdPrefix}-${idx}-down`}
+                >
+                  Bajar
+                </button>
+              </>
+            ) : null}
             <button
               type="button"
               className="btn btn--small btn--ghost"
