@@ -22,6 +22,7 @@ import {
   effectiveVariantLabel,
   isDrawerSystemAgregado,
   heightCodeSlug,
+  MAX_CATALOG_CODE_LENGTH,
   MAX_VARIANT_LABEL_LENGTH,
   KIT_TEMPLATE_DRAWER_HANDS_ID,
   planHardwareKit,
@@ -611,6 +612,9 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
 
       const hardwareList = catalog.hardware ?? [];
       const kitCode = `${systemCode}-${slug}`;
+      if ([...kitCode].length > MAX_CATALOG_CODE_LENGTH) {
+        throw new Error(`El código ${kitCode} supera ${MAX_CATALOG_CODE_LENGTH} caracteres: acortá la etiqueta.`);
+      }
       const existing = {
         hardwareCodes: new Set(hardwareList.map((h) => h.code)),
         agregadoCodes: new Set((catalog.agregados ?? []).map((a) => a.code)),
@@ -697,8 +701,17 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
       const insertoCodes = new Set<string>();
       for (const acc of req.insertos ?? []) {
         const code = `${systemCode}-${slug}-${acc.suffix}`;
-        if (existing.hardwareCodes.has(code) || insertoCodes.has(code) || code === kitCode) {
+        // Review #1637: tampoco puede pisar un perfil del juego («Fij I»).
+        if (
+          existing.hardwareCodes.has(code) ||
+          insertoCodes.has(code) ||
+          code === kitCode ||
+          subPlan.designs.some((d) => d.code === code)
+        ) {
           throw new Error(`El inserto «${code}» ya existe o se repite.`);
+        }
+        if ([...code].length > MAX_CATALOG_CODE_LENGTH) {
+          throw new Error(`El código ${code} supera ${MAX_CATALOG_CODE_LENGTH} caracteres: acortá la etiqueta o el nombre.`);
         }
         const accPrice = acc.costPerUnit ?? 0;
         if (!Number.isFinite(accPrice) || accPrice < 0) {
@@ -741,6 +754,9 @@ export function createHardwareKitActions(ctx: CatalogStoreCtx): HardwareKitSlice
               kitHardwareId: kitId,
             }
           : null;
+      if (insertoGroup && [...insertoGroup.code].length > MAX_CATALOG_CODE_LENGTH) {
+        throw new Error(`El código de selector ${insertoGroup.code} supera ${MAX_CATALOG_CODE_LENGTH} caracteres: acortá la etiqueta.`);
+      }
       if (insertoGroup && (catalog.optionGroups ?? []).some((g) => g.code === insertoGroup.code)) {
         throw new Error(`Ya existe un selector «${insertoGroup.code}»: renombralo antes de añadir los insertos.`);
       }

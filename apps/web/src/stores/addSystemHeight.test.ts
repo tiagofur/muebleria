@@ -149,6 +149,13 @@ describe('#1625 addSystemHeight — con sesión: una transacción del servidor',
     await expect(
       store.getState().addSystemHeight({ agregadoId: 'agr-sys', heightCode: 'X', khMinMm: 0, kitCostPerUnit: 0, widthMm: 570, depthMm: 530 }),
     ).rejects.toThrow('mayor que 0');
+    // Review #1637: un inserto no puede pisar un perfil del juego.
+    await expect(
+      store.getState().addSystemHeight({
+        agregadoId: 'agr-sys', heightCode: 'C', khMinMm: 177, kitCostPerUnit: 0, widthMm: 570, depthMm: 530,
+        insertos: [{ ...galeria, suffix: 'FIJ', name: 'Fij' }],
+      }),
+    ).rejects.toThrow('ya existe o se repite');
     expect(server).not.toHaveBeenCalled();
   });
 });

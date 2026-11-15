@@ -14,6 +14,7 @@ import {
   effectiveVariantLabel,
   HARDWARE_KIT_SYSTEM_HEIGHTS,
   heightCodeSlug,
+  MAX_CATALOG_CODE_LENGTH,
   KIT_TEMPLATE_DRAWER_HANDS_ID,
   planHardwareKit,
   type Agregado,
@@ -42,6 +43,12 @@ export interface HardwareSystemHeightAddModalProps {
   }[];
   /** true si el ensamble ya es miembro de algún grupo kind:agregado. */
   readonly hasEligibilityGroup: boolean;
+  /**
+   * #1633 review #1637: códigos ya usados en el catálogo — los choques y el
+   * largo de los códigos generados se detectan ANTES de subir diseños.
+   */
+  readonly existingHardwareCodes?: ReadonlySet<string>;
+  readonly existingGroupCodes?: ReadonlySet<string>;
   readonly uploadDesign?: (
     file: File,
     displayName: string,
@@ -77,6 +84,8 @@ export function HardwareSystemHeightAddModal({
   agregado,
   eligibilityGroups = [],
   hasEligibilityGroup,
+  existingHardwareCodes,
+  existingGroupCodes,
   uploadDesign,
   onSubmit,
 }: HardwareSystemHeightAddModalProps): ReactNode {
@@ -114,27 +123,37 @@ export function HardwareSystemHeightAddModal({
   const kh = num(khMinMm);
   const slug = heightCodeSlug(label);
   // Problema de la altura nueva (se muestra al editar, en palabras de taller).
-  const heightProblem: string | null = !label
+  // Etiqueta y medida se avisan por separado: una medida repetida se ve
+  // aunque todavía no haya etiqueta.
+  const labelProblem: string | null = !label
     ? null
     : !slug
       ? `La etiqueta «${label}» no deja un código de juego válido.`
       : existingHeights.labels.has(label.toLowerCase())
         ? `La familia ya tiene una altura «${label}».`
-        : khMinMm.trim() === ''
-          ? null
-          : !(kh > 0)
-            ? 'La altura interior mínima tiene que ser mayor que 0 mm.'
-            : existingHeights.nominals.has(kh)
-              ? `La familia ya tiene una altura de ${kh} mm.`
-              : !(num(cost) >= 0)
-                ? 'El precio del juego no puede ser negativo.'
-                : null;
-  const height = label && slug && kh > 0 && heightProblem === null ? { code: label, khMinMm: kh } : undefined;
+        : null;
+  const khProblem: string | null =
+    khMinMm.trim() === ''
+      ? null
+      : !(kh > 0)
+        ? 'La altura interior mínima tiene que ser mayor que 0 mm.'
+        : existingHeights.nominals.has(kh)
+          ? `La familia ya tiene una altura de ${kh} mm.`
+          : null;
+  // El precio no desmonta insertos ni diseños: sólo bloquea el envío.
+  const priceProblem: string | null = num(cost) >= 0 ? null : 'El precio del juego no puede ser negativo.';
+  const height = useMemo(
+    () => (label && slug && kh > 0 && !labelProblem && !khProblem ? { code: label, khMinMm: kh } : undefined),
+    [label, slug, kh, labelProblem, khProblem],
+  );
   const kitCode = height ? `${systemCode}-${slug}` : '';
   // #1633: insertos en cualquier altura (antes sólo la E).
   const insertos = height ? insertoDraftsToAccessories(insertoDrafts) : [];
   const insertoCode = (suffix: string): string => `${kitCode}-${suffix}`;
   const duplicatedSuffix = duplicatedInsertoSuffix(insertos);
+  const insertoPriceProblem = insertos.some((a) => !(Number.isFinite(a.costPerUnit ?? 0) && (a.costPerUnit ?? 0) >= 0))
+    ? 'El precio de un inserto no puede ser negativo.'
+    : null;
 
   // La estructura drawer-hands de la altura nueva (misma del sistema).
   const planned = useMemo(() => {
@@ -157,6 +176,40 @@ export function HardwareSystemHeightAddModal({
       return null;
     }
   }, [height, kitCode, systemCode, cost, widthMm, depthMm]);
+
+  // Review #1637: todos los códigos que se van a crear — largo, choques con
+  // el catálogo y entre sí (un inserto «Fij I» pisaría el perfil fijo) —
+  // se validan antes de subir nada.
+  const codeProblem = useMemo<string | null>(() => {
+    if (!height || !planned) return null;
+    const planCodes: { code: string; what: string }[] = [
+      { code: kitCode, what: 'juego' },
+      ...planned.designs.filter((d) => d.code !== kitCode).map((d) => ({ code: d.code, what: 'perfil del juego' })),
+      ...insertos.map((a) => ({ code: insertoCode(a.suffix), what: `inserto ${a.name}` })),
+    ];
+    const seen = new Set<string>();
+    for (const { code, what } of planCodes) {
+      if ([...code].length > MAX_CATALOG_CODE_LENGTH) {
+        return `El código ${code} (${what}) supera ${MAX_CATALOG_CODE_LENGTH} caracteres: acortá la etiqueta o el nombre.`;
+      }
+      if (seen.has(code)) return `El código ${code} se repite (${what}): cambiá el nombre.`;
+      seen.add(code);
+      const reused = what === 'perfil del juego' && planned.designs.find((d) => d.code === code)?.exists;
+      if (!reused && existingHardwareCodes?.has(code)) return `El código ${code} (${what}) ya existe en el catálogo.`;
+    }
+    if (insertos.length > 0) {
+      const groupCode = `${systemCode}_LATERAL_${slug}`;
+      if ([...groupCode].length > MAX_CATALOG_CODE_LENGTH) {
+        return `El código de selector ${groupCode} supera ${MAX_CATALOG_CODE_LENGTH} caracteres: acortá la etiqueta.`;
+      }
+      if (existingGroupCodes?.has(groupCode)) return `Ya existe un selector «${groupCode}».`;
+    }
+    return null;
+    // insertoCode depende de kitCode, ya en la lista.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [height, planned, kitCode, insertos, systemCode, slug, existingHardwareCodes, existingGroupCodes]);
+  const blockingProblem = priceProblem ?? insertoPriceProblem ?? codeProblem;
+  const heightProblem = labelProblem ?? khProblem ?? blockingProblem;
 
   const wizard = useKitWizardRun<unknown>({
     open,
@@ -181,7 +234,7 @@ export function HardwareSystemHeightAddModal({
   const fileKey = (hand: string, partCode: string): string => `${kitCode}:${hand}:${partCode}`;
 
   const submit = async (): Promise<void> => {
-    if (!height || !planned || wizard.running || duplicatedSuffix) return;
+    if (!height || !planned || wizard.running || duplicatedSuffix || blockingProblem) return;
     const tasks: KitWizardRunTask[] = [];
     for (const design of planned.designs) {
       for (const part of design.handsParts ?? []) {
@@ -309,8 +362,10 @@ export function HardwareSystemHeightAddModal({
           </div>
           {missing.length > 0 ? (
             <div className="catalog-form__field">
-              <span className="catalog-form__label">Atajo: alturas Blum que le faltan</span>
-              <div className="family-heights__actions">
+              <span className="catalog-form__label" id="sys-height-presets-label">
+                Atajo: alturas Blum que le faltan
+              </span>
+              <div className="family-heights__actions" role="group" aria-labelledby="sys-height-presets-label">
                 {missing.map((h) => (
                   <button
                     key={h.code}
@@ -510,7 +565,7 @@ export function HardwareSystemHeightAddModal({
             <button
               type="submit"
               className="btn btn--primary"
-              disabled={!height || !planned || wizard.running || duplicatedSuffix !== null}
+              disabled={!height || !planned || wizard.running || duplicatedSuffix !== null || blockingProblem !== null}
               data-testid="hardware-system-height-submit"
             >
               {wizard.phase === 'running' ? (wizard.progress ?? 'Añadiendo…') : 'Añadir altura'}

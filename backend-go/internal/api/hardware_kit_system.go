@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
@@ -332,6 +333,13 @@ func kitSystemEligibilityFromRequest(row *openapi.HardwareKitSystemEligibilityGr
 	}}, nil
 }
 
+// maxCatalogCodeLength mirrors hardwares.code / option_groups.code
+// VARCHAR(50): a longer generated code is a typed 422 decided before any
+// write, never a 500 from the insert (#1633 review #1637).
+const maxCatalogCodeLength = 50
+
+func codeTooLong(code string) bool { return utf8.RuneCountInString(code) > maxCatalogCodeLength }
+
 func invalidPayload(message string, details map[string]any) map[string]any {
 	return map[string]any{
 		"code":    "HARDWARE_KIT_SYSTEM_PAYLOAD_INVALID",
@@ -350,6 +358,9 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 		row := &req.Hardware[i]
 		if row.ID == "" || row.Code == "" || row.Name == "" {
 			return nil, invalidPayload("cada fila de herraje necesita id, code y name", map[string]any{"index": i})
+		}
+		if codeTooLong(row.Code) {
+			return nil, invalidPayload(fmt.Sprintf("el código «%s» supera %d caracteres: acortá la etiqueta o el nombre", row.Code, maxCatalogCodeLength), map[string]any{"index": i})
 		}
 		if row.Unit != "set" && row.Unit != "piece" {
 			return nil, invalidPayload(fmt.Sprintf("unidad inválida «%s» en «%s» (set|piece)", row.Unit, row.Code), nil)
@@ -519,6 +530,9 @@ func kitSystemPlanFromRequest(req *openapi.HardwareKitSystemCreateRequest) (*kit
 		}
 		if og.ID == "" || og.Code == "" || og.Name == "" || len(og.OptionIds) == 0 {
 			return nil, invalidPayload("cada selector de insertos necesita id, code, name y al menos una opción", nil)
+		}
+		if codeTooLong(og.Code) {
+			return nil, invalidPayload(fmt.Sprintf("el código de selector «%s» supera %d caracteres", og.Code, maxCatalogCodeLength), nil)
 		}
 		if !allIDs[og.KitHardwareID] || !kitIDs[og.KitHardwareID] {
 			return nil, invalidPayload("kit_hardware_id del grupo no es una fila kit del payload", nil)

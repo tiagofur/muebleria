@@ -915,6 +915,15 @@ describe('planHardwareKitSystem (#1546 M4 — sistema generador)', () => {
       }, noExisting)).toThrow('se repite en el plan');
     });
 
+    it('fail-closed: un código generado de más de 50 caracteres (VARCHAR(50))', () => {
+      expect(() => planHardwareKitSystem({
+        ...legrabox,
+        code: 'MBOX-IRIDIUM-GRAY',
+        heights: [{ code: 'Alta 186 para ollas', labelEs: '', khMinMm: 186, include: true, kitCostPerUnit: 0 }],
+        accessories: [{ suffix: 'BOXCOVER-ALTO', name: 'Boxcover alto', anchors: ['left'], heights: ['Alta 186 para ollas'] }],
+      }, noExisting)).toThrow('supera 50 caracteres');
+    });
+
     it('heightCodeSlug: sin acentos, mayúsculas, separadores colapsados', () => {
       expect(heightCodeSlug('M')).toBe('M');
       expect(heightCodeSlug(' Alta  186 ')).toBe('ALTA-186');

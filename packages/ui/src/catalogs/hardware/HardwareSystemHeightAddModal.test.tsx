@@ -24,10 +24,18 @@ const agregado = {
   variantSets: [{ id: 'vs-h', dimension: 'height', variants: [{ nominalDimensionMm: 108, hardwareId: 'kit-m' }] }],
 } as unknown as Agregado;
 
-function setup() {
+function setup(opts: { existingHardwareCodes?: string[]; existingGroupCodes?: string[] } = {}) {
   const onSubmit = vi.fn(async () => undefined);
   render(
-    <HardwareSystemHeightAddModal open onClose={vi.fn()} agregado={agregado} hasEligibilityGroup onSubmit={onSubmit} />,
+    <HardwareSystemHeightAddModal
+      open
+      onClose={vi.fn()}
+      agregado={agregado}
+      hasEligibilityGroup
+      onSubmit={onSubmit}
+      existingHardwareCodes={new Set(opts.existingHardwareCodes ?? [])}
+      existingGroupCodes={new Set(opts.existingGroupCodes ?? [])}
+    />,
   );
   return { onSubmit };
 }
@@ -106,5 +114,47 @@ describe('HardwareSystemHeightAddModal (#1625 → #1633)', () => {
     expect(screen.getByTestId('hardware-system-height-inserto-duplicated')).toHaveAttribute('role', 'alert');
     expect(screen.getByTestId('hardware-system-height-submit')).toBeDisabled();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('review #1637: código demasiado largo o ya existente se avisa antes de subir nada', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = setup({ existingHardwareCodes: ['SYS-C'] });
+    await user.type(screen.getByTestId('hardware-system-height-label'), 'C');
+    await user.type(screen.getByTestId('hardware-system-height-kh'), '177');
+    expect(screen.getByTestId('hardware-system-height-problem').textContent).toContain('SYS-C');
+    expect(screen.getByTestId('hardware-system-height-submit')).toBeDisabled();
+    await user.clear(screen.getByTestId('hardware-system-height-label'));
+    await user.type(screen.getByTestId('hardware-system-height-label'), 'Alta para ollas grandes');
+    await user.click(screen.getByTestId('hardware-system-height-inserto-add'));
+    await user.type(screen.getByTestId('hardware-system-height-inserto-0-name'), 'Boxcover alto reforzado');
+    expect(screen.getByTestId('hardware-system-height-problem').textContent).toContain('supera 50');
+    expect(screen.getByTestId('hardware-system-height-submit')).toBeDisabled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('review #1637: un inserto que pisa un perfil del juego se avisa', async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId('hardware-system-height-preset-E'));
+    await user.click(screen.getByTestId('hardware-system-height-inserto-add'));
+    await user.type(screen.getByTestId('hardware-system-height-inserto-0-name'), 'Fij');
+    // El perfil fijo del juego es SYS-E-FIJ: el inserto «Fij» generaría el mismo código.
+    expect(screen.getByTestId('hardware-system-height-problem').textContent).toContain('se repite');
+    expect(screen.getByTestId('hardware-system-height-submit')).toBeDisabled();
+  });
+
+  it('review #1637: medida repetida sin etiqueta se avisa; un precio inválido no desmonta los insertos', async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.type(screen.getByTestId('hardware-system-height-kh'), '108');
+    expect(screen.getByTestId('hardware-system-height-problem').textContent).toContain('108 mm');
+    await user.clear(screen.getByTestId('hardware-system-height-kh'));
+    await user.click(screen.getByTestId('hardware-system-height-preset-E'));
+    await user.click(screen.getByTestId('hardware-system-height-inserto-add'));
+    await user.clear(screen.getByTestId('hardware-system-height-cost'));
+    await user.type(screen.getByTestId('hardware-system-height-cost'), '-5');
+    expect(screen.getByTestId('hardware-system-height-inserto-0-name')).toBeInTheDocument();
+    expect(screen.getByTestId('hardware-system-height-problem').textContent).toContain('precio');
+    expect(screen.getByTestId('hardware-system-height-submit')).toBeDisabled();
   });
 });

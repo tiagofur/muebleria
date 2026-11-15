@@ -1206,6 +1206,8 @@ export function HardwareCatalog({
           open={systemHeightFor !== null}
           onClose={() => setSystemHeightFor(null)}
           agregado={systemHeightFor}
+          existingHardwareCodes={new Set(hardware.map((h) => h.code))}
+          existingGroupCodes={new Set((optionGroups ?? []).map((og) => og.code))}
           eligibilityGroups={(optionGroups ?? [])
             .filter((og) => og.kind === 'agregado')
             .map((og) => ({ id: og.id, code: og.code, name: og.name }))}
