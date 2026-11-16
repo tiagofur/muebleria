@@ -645,9 +645,7 @@ export function HardwareCatalog({
       {
         key: 'code',
         header: 'Código',
-        render: (r) => (
-          <span className="catalog-row-detail__value--mono">{r.code}</span>
-        ),
+        render: (r) => <span className="catalog-hw-code">{r.code}</span>,
       },
       {
         key: 'name',
@@ -692,7 +690,19 @@ export function HardwareCatalog({
         key: 'cost',
         header: 'Costo unit.',
         numeric: true,
-        render: (r) => formatMoneyDisplay(r.costPerUnit),
+        // #1641: $0 se lee como error de datos — el estado real es «aún no
+        // tiene precio», y se dice; el título lleva el detalle completo.
+        render: (r) =>
+          r.costPerUnit > 0 ? (
+            formatMoneyDisplay(r.costPerUnit)
+          ) : (
+            <span
+              className="catalog-hw-price-missing"
+              title={`${r.code}: todavía no tiene precio`}
+            >
+              — falta precio
+            </span>
+          ),
       },
       {
         key: 'status',
