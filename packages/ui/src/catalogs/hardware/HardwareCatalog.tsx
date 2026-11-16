@@ -1248,7 +1248,6 @@ export function HardwareCatalog({
         <HardwareTypePickerModal
           open={typePickerOpen}
           onClose={() => setTypePickerOpen(false)}
-          hardware={hardware}
           onStart={startCreateOfType}
         />
       ) : null}

@@ -1,11 +1,12 @@
 /**
  * @vitest-environment jsdom
  *
- * #1596 aceptación (vitest): alta de PAR con dos lados y offsets distintos;
- * «copiar al otro lado» sólo al pulsarlo (nunca espejo automático); los
- * offsets mostrados son los que se guardan; «Al abrir» viaja en la
- * declaración que el motor lee; el inserto creado desde un juego cae en su
- * selector en UNA mutación y un fallo del vínculo es visible y reintentable.
+ * #1596/#1641 aceptación (vitest): alta de PAR con dos lados y offsets
+ * distintos; «copiar al otro lado» sólo al pulsarlo (nunca espejo
+ * automático); los offsets mostrados son los que se guardan; «Al abrir»
+ * viaja en la declaración que el motor lee; el inserto se crea DESDE la
+ * ficha del juego (el picker ya no lo ofrece, #1641), cae en su selector en
+ * UNA mutación y un fallo del vínculo es visible y reintentable.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -189,8 +190,8 @@ describe('#1596 review B1 — par legacy con movimiento por nombre', () => {
   });
 });
 
-describe('#1596 alta por tipo — inserto para un juego', () => {
-  it('se crea DESDE el juego en una mutación y un fallo del vínculo es visible y reintentable', async () => {
+describe('#1596/#1641 alta por tipo — inserto para un juego', () => {
+  it('se crea DESDE la ficha del juego en una mutación y un fallo del vínculo es visible y reintentable', async () => {
     const user = userEvent.setup();
     const onCreate = vi.fn();
     let attempts = 0;
@@ -201,11 +202,39 @@ describe('#1596 alta por tipo — inserto para un juego', () => {
       }
       return Promise.resolve('inserto-id');
     });
-    renderCatalog({ onCreate, onCreateInserto });
+    render(
+      <HardwareCatalog
+        hardware={[kitFixture]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onCreateInserto={onCreateInserto}
+        onAddSystemHeight={vi.fn()}
+        optionGroups={[
+          {
+            id: 'og-insertos-e',
+            code: 'INSERTOS-E',
+            name: 'Insertos E',
+            kind: 'hardware',
+            required: false,
+            optionIds: [],
+            kitHardwareId: kitFixture.id,
+          },
+        ]}
+        assetService={{} as never}
+      />,
+    );
 
+    // #1641: el picker ya no ofrece inserto — se entra por la ficha del juego.
     await user.click(screen.getByTestId('hardware-new-typed'));
-    await user.selectOptions(screen.getByTestId('hardware-type-inserto-kit'), kitFixture.id);
-    await user.click(screen.getByTestId('hardware-type-inserto-go'));
+    expect(
+      screen.queryByTestId('hardware-type-pick-inserto'),
+    ).toBeNull();
+
+    await user.click(screen.getByText(kitFixture.code));
+    await user.click(screen.getByRole('button', { name: `Editar ${kitFixture.code}` }));
+    await user.click(screen.getByTestId('hardware-accessory-INSERTOS-E-add-inserto'));
 
     const modal = screen.getByTestId('hardware-form-modal');
     expect(modal.textContent).toContain('Nuevo inserto para un juego');
@@ -224,11 +253,11 @@ describe('#1596 alta por tipo — inserto para un juego', () => {
     fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
     await waitFor(() => expect(attempts).toBe(2));
     await waitFor(() => expect(screen.queryByTestId('hardware-form-modal')).toBeNull());
-    // Sin selector previo, el alta lo nombra por el juego (visible en la UI).
+    // Con selector existente, el alta cae en él sin crear otro.
     expect(onCreateInserto.mock.calls[0]).toEqual([
       expect.objectContaining({ code: 'MBOX-IRIDIUN-E-BOCOV' }),
       kitFixture.id,
-      'Insertos de Merivobox Iridium E',
+      undefined,
     ]);
   });
 });

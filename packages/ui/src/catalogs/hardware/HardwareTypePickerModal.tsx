@@ -1,14 +1,14 @@
 /**
- * #1596 alcance 1: el alta empieza por el tipo de ítem — un único «Nuevo»
- * pregunta qué se da de alta y cada tipo abre sólo lo que necesita
- * (decisión 1: cuatro tipos; lo especial se crea según necesidad). El tipo
- * «Juego» ofrece sus dos variantes internas (sistema por alturas / juego
- * simple); «Inserto» pide el juego al que queda añadido (alcance 3).
+ * #1641: el alta empieza por el tipo de ítem — TRES tipos. El inserto dejó
+ * de ser un alta global (decisión owner 2026-11-16): nace dentro de su juego
+ * (ficha → «Insertos del juego» → «Añadir inserto», asistente de familia
+ * paso «Insertos», o «Añadir altura») porque su vínculo vive en el grupo del
+ * juego y no en el herraje. El tipo «Juego» ofrece sus dos variantes
+ * internas (sistema por alturas / juego simple) como sub-paso revelado.
  */
 
-import { useMemo, useState, type ReactNode } from 'react';
-import { isHardwareKitPart, type Hardware } from '@granete/domain';
-import { Box, Layers, Package, Puzzle } from 'lucide-react';
+import { useRef, useState, type ReactNode } from 'react';
+import { Box, Check, FlipHorizontal2, Package } from 'lucide-react';
 import { Modal } from '../../common';
 
 export type HardwareCreateType = 'piece' | 'pair' | 'kit' | 'inserto';
@@ -16,13 +16,10 @@ export type HardwareCreateType = 'piece' | 'pair' | 'kit' | 'inserto';
 export interface HardwareTypePickerModalProps {
   readonly open: boolean;
   readonly onClose: () => void;
-  /** Catálogo para la lista de juegos (destino del inserto). */
-  readonly hardware: readonly Hardware[];
   readonly onStart: (
     type: HardwareCreateType,
     opts?: {
-      readonly insertoKitId?: string;
-      /** Variante interna del tipo Juego (no es un quinto tipo). */
+      /** Variante interna del tipo Juego (no es un cuarto tipo). */
       readonly variant?: 'system' | 'simple';
     },
   ) => void;
@@ -43,54 +40,46 @@ const TYPES: readonly {
   {
     type: 'pair',
     title: 'Par izquierda/derecha',
-    help: 'Dos piezas que vienen espejadas: galería, BOXCOVER, BOXCAP. Precio del par, un SKP por lado.',
-    icon: <Layers size={18} strokeWidth={1.5} aria-hidden />,
+    help: 'Dos piezas espejadas: galería, BOXCOVER, BOXCAP. Precio del par, un SKP por lado.',
+    icon: <FlipHorizontal2 size={18} strokeWidth={1.5} aria-hidden />,
   },
   {
     type: 'kit',
     title: 'Juego',
-    help: 'Un sistema de cajones por alturas (N/M/K/E) o un juego simple (bisagras del mueble).',
+    help: 'Varios herrajes que se venden y montan juntos.',
     icon: <Package size={18} strokeWidth={1.5} aria-hidden />,
-  },
-  {
-    type: 'inserto',
-    title: 'Inserto para un juego',
-    help: 'Accesorio de un juego existente (p. ej. lateral superior del cajón E); queda en su selector.',
-    icon: <Puzzle size={18} strokeWidth={1.5} aria-hidden />,
   },
 ];
 
 export function HardwareTypePickerModal({
   open,
   onClose,
-  hardware,
   onStart,
 }: HardwareTypePickerModalProps): ReactNode {
   const [kitExpanded, setKitExpanded] = useState(false);
-  const [insertoKitId, setInsertoKitId] = useState('');
-
-  // Juegos disponibles como destino del inserto: kits activos que no son
-  // partes de otro juego (#1436).
-  const kitOptions = useMemo(
-    () =>
-      hardware.filter(
-        (h) => h.active && h.unit === 'set' && !isHardwareKitPart(h),
-      ),
-    [hardware],
-  );
+  // Navegación por flechas entre tarjetas (roving tabindex); las sub-opciones
+  // del juego entran al orden natural de tabulación cuando se revelan.
+  const cardRefs = useRef<readonly HTMLButtonElement[]>([]);
 
   const pick = (type: HardwareCreateType) => {
     if (type === 'kit' && !kitExpanded) {
       setKitExpanded(true);
       return;
     }
-    onStart(type, type === 'inserto' ? { insertoKitId: insertoKitId || undefined } : undefined);
+    onStart(type);
   };
 
   const close = () => {
     setKitExpanded(false);
-    setInsertoKitId('');
     onClose();
+  };
+
+  const onCardKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    const next = event.key === 'ArrowDown' ? index + 1 : index - 1;
+    const target = cardRefs.current[(next + TYPES.length) % TYPES.length];
+    target?.focus();
   };
 
   return (
@@ -101,74 +90,70 @@ export function HardwareTypePickerModal({
       size="sm"
       dataTestId="hardware-type-picker"
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {TYPES.map((t) => (
+      <div className="catalog-type-picker" role="group" aria-label="Tipo de ítem">
+        {TYPES.map((t, i) => (
           <div key={t.type}>
             <button
               type="button"
-              className="btn"
-              style={{ width: '100%', justifyContent: 'flex-start', textAlign: 'left' }}
+              ref={(el) => {
+                if (el) cardRefs.current[i] = el;
+              }}
+              className={
+                t.type === 'kit' && kitExpanded
+                  ? 'catalog-type-card catalog-type-card--active'
+                  : 'catalog-type-card'
+              }
               onClick={() => pick(t.type)}
+              onKeyDown={(e) => onCardKeyDown(e, i)}
               aria-expanded={t.type === 'kit' ? kitExpanded : undefined}
               data-testid={`hardware-type-pick-${t.type}`}
             >
-              {t.icon}
-              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                <strong>{t.title}</strong>
-                <span style={{ fontWeight: 400, fontSize: '0.85em' }}>{t.help}</span>
+              <span className="catalog-type-card__icon" aria-hidden>
+                {t.icon}
               </span>
+              <span className="catalog-type-card__body">
+                <span className="catalog-type-card__title">{t.title}</span>
+                <span className="catalog-type-card__help">{t.help}</span>
+              </span>
+              {t.type === 'kit' && kitExpanded ? (
+                <span className="catalog-type-card__check" aria-hidden>
+                  <Check size={16} strokeWidth={2} />
+                </span>
+              ) : null}
             </button>
             {t.type === 'kit' && kitExpanded ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, marginLeft: 16 }}>
+              <div className="catalog-type-sub">
                 <button
                   type="button"
-                  className="btn btn--small"
+                  className="catalog-type-sub__option"
                   onClick={() => onStart('kit', { variant: 'system' })}
                   data-testid="hardware-type-pick-kit-system"
                 >
-                  Sistema por alturas (N/M/K/E + insertos)
+                  <span className="catalog-type-sub__title">Sistema de cajones por alturas</span>
+                  <span className="catalog-type-sub__help">
+                    Una familia con alturas libres (N/M/K/E…) e insertos por altura.
+                  </span>
                 </button>
                 <button
                   type="button"
-                  className="btn btn--small"
+                  className="catalog-type-sub__option"
                   onClick={() => onStart('kit', { variant: 'simple' })}
                   data-testid="hardware-type-pick-kit-simple"
                 >
-                  Juego simple (un solo herraje múltiple)
-                </button>
-              </div>
-            ) : null}
-            {t.type === 'inserto' ? (
-              <div style={{ marginTop: 4, marginLeft: 16 }}>
-                <label className="catalog-form__field">
-                  <span className="catalog-form__label">Juego al que queda añadido</span>
-                  <select
-                    value={insertoKitId}
-                    onChange={(e) => setInsertoKitId(e.target.value)}
-                    data-testid="hardware-type-inserto-kit"
-                  >
-                    <option value="">Elegir juego…</option>
-                    {kitOptions.map((k) => (
-                      <option key={k.id} value={k.id}>
-                        {k.code} — {k.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  className="btn btn--small btn--primary"
-                  disabled={!insertoKitId}
-                  onClick={() => pick('inserto')}
-                  data-testid="hardware-type-inserto-go"
-                >
-                  Continuar
+                  <span className="catalog-type-sub__title">Juego simple</span>
+                  <span className="catalog-type-sub__help">
+                    Un solo herraje en cantidad (p. ej. las bisagras del mueble).
+                  </span>
                 </button>
               </div>
             ) : null}
           </div>
         ))}
       </div>
+      <p className="catalog-type-picker__foot">
+        Los insertos no se dan de alta solos: se añaden dentro de su juego (ficha del
+        juego → «Insertos del juego») o al crear una familia / altura.
+      </p>
     </Modal>
   );
 }
