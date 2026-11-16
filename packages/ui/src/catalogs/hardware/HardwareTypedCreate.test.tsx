@@ -234,6 +234,8 @@ describe('#1596/#1641 alta por tipo — inserto para un juego', () => {
 
     await user.click(screen.getByText(kitFixture.code));
     await user.click(screen.getByRole('button', { name: `Editar ${kitFixture.code}` }));
+    // #1641: los insertos viven en un disclosure cerrado por defecto.
+    await user.click(screen.getByTestId('hardware-accessories-toggle'));
     await user.click(screen.getByTestId('hardware-accessory-INSERTOS-E-add-inserto'));
 
     const modal = screen.getByTestId('hardware-form-modal');

@@ -1,9 +1,10 @@
 /**
- * Create/edit hardware modal (LG) — Identidad (foto con preview) / Partes
- * del juego (tarjetas de 2 filas: identidad + apertura/posición siempre
- * visibles) / Compra / Vista 3D disclosure (F069 shape + finish preset;
- * F080 per-part finishes) / Maquinado CNC disclosure (F127 drilling
- * footprint).
+ * Create/edit hardware modal (LG) — #1641: Identidad y Compra siempre
+ * visibles arriba; el resto en secciones con estado: Partes del juego
+ * (disclosure abierto por defecto, tarjetas de 2 filas), Vista 3D
+ * disclosure (F069 shape + finish preset; F080 per-part finishes), diseño
+ * por lado, Insertos del juego (disclosure cerrado por defecto) y bloque
+ * Avanzado (F127 drilling footprint + componentes internos).
  * Owns the preview disclosure state; resets it every time the modal opens
  * (F117 fix: it used to stay open between edit sessions).
  */
@@ -13,9 +14,11 @@ import {
   type FormEvent,
   type ReactNode,
   type SetStateAction,
+  useEffect,
   useMemo,
+  useState,
 } from 'react';
-import { ChevronRight, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import {
   childrenOf,
   formatKitPartPlacementLabel,
@@ -142,6 +145,12 @@ export function HardwareFormModal({
     ? availableHardware.find((h) => h.id === draft.insertoKitId)
     : undefined;
   const isKitChildPart = Boolean(draft.kitHardwareId);
+  // #1641: «Partes de este juego» es un disclosure abierto por defecto (el
+  // núcleo del kit) que se reinicia en cada apertura del modal (F117).
+  const [kitPartsOpen, setKitPartsOpen] = useState(true);
+  useEffect(() => {
+    if (open) setKitPartsOpen(true);
+  }, [open, editingId]);
   const childPartConfig = isKitChildPart
     ? resolveKitPartConfig(
         {
@@ -348,8 +357,120 @@ export function HardwareFormModal({
           </div>
         </fieldset>
 
+        <fieldset
+          className="catalog-form__section"
+          data-testid="hardware-form-purchase"
+        >
+          <legend className="catalog-form__section-title">Compra</legend>
+          {isPairLike ? (
+            // #1596: el par se vende como un registro — unidad fija pieza,
+            // el precio es del PAR (los dos lados).
+            <>
+              <input type="hidden" value="piece" />
+              <div className="catalog-form__field">
+                <label htmlFor="hw-cost">Precio del par</label>
+                <input
+                  id="hw-cost"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={draft.costPerUnit}
+                  onChange={(e) =>
+                    setDraft({ ...draft, costPerUnit: Number(e.target.value) })
+                  }
+                  required
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="catalog-form__field">
+                <label htmlFor="hw-unit">Unidad</label>
+                <select
+                  id="hw-unit"
+                  value={draft.unit}
+                  onChange={(e) =>
+                    setDraft({ ...draft, unit: e.target.value as HardwareUnit })
+                  }
+                >
+                  <option value="piece">{UNIT_LABELS.piece}</option>
+                  <option value="set">{UNIT_LABELS.set}</option>
+                  <option value="meter">{UNIT_LABELS.meter}</option>
+                </select>
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="hw-cost">Costo unitario</label>
+                <input
+                  id="hw-cost"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={draft.costPerUnit}
+                  onChange={(e) =>
+                    setDraft({ ...draft, costPerUnit: Number(e.target.value) })
+                  }
+                  required
+                />
+              </div>
+            </>
+          )}
+          <div className="catalog-form__field">
+            <label htmlFor="hw-package">
+              Empaque (misma unidad)
+            </label>
+            <input
+              id="hw-package"
+              type="number"
+              min={0}
+              step="any"
+              value={draft.packageSize}
+              onChange={(e) =>
+                setDraft({ ...draft, packageSize: e.target.value })
+              }
+              placeholder={
+                draft.unit === 'meter'
+                  ? 'ej. 4 (barra de 4 m)'
+                  : 'Opcional'
+              }
+              data-testid="hardware-package-size"
+            />
+            <p className="catalog-form__hint">
+              La lista de compra redondea el consumo hacia arriba a paquetes
+              (ej. zoclo en barras de 4 m).
+            </p>
+          </div>
+          <div className="catalog-form__field">
+            <label htmlFor="hw-notes">Notas</label>
+            <textarea
+              id="hw-notes"
+              value={draft.notes}
+              onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+            />
+          </div>
+        </fieldset>
+
         {editingId && isKit && onEditKitPart ? (
-          <fieldset className="catalog-form__section" data-testid="hardware-form-kit-parts">
+          <div className="catalog-form__disclosure" data-testid="hardware-form-kit-parts">
+            <button
+              type="button"
+              className="catalog-form__disclosure-header"
+              aria-expanded={kitPartsOpen}
+              onClick={() => setKitPartsOpen((o) => !o)}
+              data-testid="hardware-form-kit-parts-toggle"
+            >
+              {kitPartsOpen ? (
+                <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
+              ) : (
+                <ChevronRight size={16} strokeWidth={1.5} aria-hidden />
+              )}
+              <span className="catalog-form__disclosure-title">Partes de este juego</span>
+              <span className="catalog-form__disclosure-summary">
+                {(kitParts ?? []).length} {(kitParts ?? []).length === 1 ? 'parte' : 'partes'} · crear, vincular y posición
+              </span>
+            </button>
+            {kitPartsOpen ? (
+          <div className="catalog-form__disclosure-body">
+          <fieldset className="catalog-form__section">
             <legend className="catalog-form__section-title">
               Partes de este juego ({(kitParts ?? []).length})
             </legend>
@@ -547,6 +668,9 @@ export function HardwareFormModal({
               ) : null}
             </div>
           </fieldset>
+          </div>
+            ) : null}
+          </div>
         ) : null}
 
         {isKitChildPart && childPartConfig ? (
@@ -637,97 +761,6 @@ export function HardwareFormModal({
           </fieldset>
         ) : null}
 
-        <fieldset
-          className="catalog-form__section"
-          data-testid="hardware-form-purchase"
-        >
-          <legend className="catalog-form__section-title">Compra</legend>
-          {isPairLike ? (
-            // #1596: el par se vende como un registro — unidad fija pieza,
-            // el precio es del PAR (los dos lados).
-            <>
-              <input type="hidden" value="piece" />
-              <div className="catalog-form__field">
-                <label htmlFor="hw-cost">Precio del par</label>
-                <input
-                  id="hw-cost"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={draft.costPerUnit}
-                  onChange={(e) =>
-                    setDraft({ ...draft, costPerUnit: Number(e.target.value) })
-                  }
-                  required
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="catalog-form__field">
-                <label htmlFor="hw-unit">Unidad</label>
-                <select
-                  id="hw-unit"
-                  value={draft.unit}
-                  onChange={(e) =>
-                    setDraft({ ...draft, unit: e.target.value as HardwareUnit })
-                  }
-                >
-                  <option value="piece">{UNIT_LABELS.piece}</option>
-                  <option value="set">{UNIT_LABELS.set}</option>
-                  <option value="meter">{UNIT_LABELS.meter}</option>
-                </select>
-              </div>
-              <div className="catalog-form__field">
-                <label htmlFor="hw-cost">Costo unitario</label>
-                <input
-                  id="hw-cost"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={draft.costPerUnit}
-                  onChange={(e) =>
-                    setDraft({ ...draft, costPerUnit: Number(e.target.value) })
-                  }
-                  required
-                />
-              </div>
-            </>
-          )}
-          <div className="catalog-form__field">
-            <label htmlFor="hw-package">
-              Empaque (misma unidad)
-            </label>
-            <input
-              id="hw-package"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.packageSize}
-              onChange={(e) =>
-                setDraft({ ...draft, packageSize: e.target.value })
-              }
-              placeholder={
-                draft.unit === 'meter'
-                  ? 'ej. 4 (barra de 4 m)'
-                  : 'Opcional'
-              }
-              data-testid="hardware-package-size"
-            />
-            <p className="catalog-form__hint">
-              La lista de compra redondea el consumo hacia arriba a paquetes
-              (ej. zoclo en barras de 4 m).
-            </p>
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="hw-notes">Notas</label>
-            <textarea
-              id="hw-notes"
-              value={draft.notes}
-              onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-            />
-          </div>
-        </fieldset>
 
         {/* #667 M2: 3D model & mounting + generic procedural preview. #1596:
             en par/inserto baja al avanzado — el diseño del par son sus
@@ -780,7 +813,9 @@ export function HardwareFormModal({
         ) : null}
 
         {/* #1519 F2: accesorios del juego (galería/boxcap/boxcover…) — SOLO
-            kits: se declaran aquí y el mueble elige por cajón. */}
+            kits: se declaran aquí y el mueble elige por cajón. #1641:
+            cerrado por defecto (gestión de cola larga); el resumen del
+            header dice cuántos selectores hay. */}
         {isKit && editingId ? (
           <HardwareKitAccessoriesSection
             kitId={editingId}
@@ -792,6 +827,7 @@ export function HardwareFormModal({
             onUpdateGroup={onUpdateOptionGroup}
             onDeleteGroup={onDeleteOptionGroup}
             onAddInserto={onAddInserto}
+            defaultOpen={false}
           />
         ) : null}
 

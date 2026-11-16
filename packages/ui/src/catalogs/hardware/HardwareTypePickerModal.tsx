@@ -59,7 +59,7 @@ export function HardwareTypePickerModal({
   const [kitExpanded, setKitExpanded] = useState(false);
   // Navegación por flechas entre tarjetas (roving tabindex); las sub-opciones
   // del juego entran al orden natural de tabulación cuando se revelan.
-  const cardRefs = useRef<readonly HTMLButtonElement[]>([]);
+  const cardRefs = useRef<HTMLButtonElement[]>([]);
 
   const pick = (type: HardwareCreateType) => {
     if (type === 'kit' && !kitExpanded) {
