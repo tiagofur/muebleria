@@ -7,7 +7,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { isHardwareKitPart, type OptionGroup } from '@granete/domain';
-import { ArrowDown, ArrowUp, PackagePlus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, PackagePlus, X } from 'lucide-react';
 import type { Hardware } from '@granete/domain';
 import { CatalogPicker } from '../CatalogPicker';
 
@@ -30,6 +30,7 @@ export function HardwareKitAccessoriesSection({
   onUpdateGroup,
   onDeleteGroup,
   onAddInserto,
+  defaultOpen = true,
 }: {
   readonly kitId: string;
   readonly kitCode: string;
@@ -52,7 +53,10 @@ export function HardwareKitAccessoriesSection({
   readonly onDeleteGroup?: (id: string) => Promise<void> | void;
   /** #1596 alcance 3: alta de inserto nuevo que cae en ESTE selector. */
   readonly onAddInserto?: () => void;
+  /** #1641: en la ficha del juego nace cerrado (gestión de cola larga). */
+  readonly defaultOpen?: boolean;
 }): ReactNode {
+  const [open, setOpen] = useState(defaultOpen);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newRequired, setNewRequired] = useState(false);
@@ -161,7 +165,29 @@ export function HardwareKitAccessoriesSection({
   };
 
   return (
-    <fieldset className="catalog-form__section" data-testid="hardware-form-accessories">
+    <div className="catalog-form__disclosure" data-testid="hardware-form-accessories">
+      <button
+        type="button"
+        className="catalog-form__disclosure-header"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        data-testid="hardware-accessories-toggle"
+      >
+        {open ? (
+          <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
+        ) : (
+          <ChevronRight size={16} strokeWidth={1.5} aria-hidden />
+        )}
+        <span className="catalog-form__disclosure-title">Insertos del juego</span>
+        <span className="catalog-form__disclosure-summary">
+          {accessoryGroups.length > 0
+            ? `${accessoryGroups.length} ${accessoryGroups.length === 1 ? 'selector' : 'selectores'}`
+            : 'sin selectores aún'}
+        </span>
+      </button>
+      {open ? (
+      <div className="catalog-form__disclosure-body">
+      <fieldset className="catalog-form__section">
       <legend className="catalog-form__section-title">
         Insertos del juego{accessoryGroups.length > 0 ? ` · ${accessoryGroups.length}` : ''}
       </legend>
@@ -409,6 +435,9 @@ export function HardwareKitAccessoriesSection({
           </button>
         )
       ) : null}
-    </fieldset>
+      </fieldset>
+      </div>
+      ) : null}
+    </div>
   );
 }

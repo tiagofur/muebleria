@@ -278,8 +278,11 @@ cambie y sin copiar muebles. Este caso está documentado paso a paso en
 ## 8c. Herrajes: pares, juegos, sistemas de cajón e insertos
 
 Todo el alta de herrajes sale de un solo lugar: **Herrajes → «Nuevo»**. La
-app pregunta **qué querés dar de alta** y muestra sólo lo que ese tipo
-necesita — nada de secciones que no corresponden.
+app pregunta **qué querés dar de alta** — **Pieza**, **Par
+izquierda/derecha** o **Juego** (sistema por alturas / juego simple) — y
+muestra sólo lo que ese tipo necesita, nada de secciones que no
+corresponden. Los insertos no se dan de alta solos: nacen dentro de su
+juego (§8c.3).
 
 ### 8c.1 Pieza simple
 
@@ -352,12 +355,12 @@ juego ya creado — por ejemplo, el lateral superior del cajón E (galería,
 BOXCOVER o BOXCAP). Cada uno es un par D/I que entra al **selector** del
 juego; al cotizar se elige uno.
 
-**Pasos (dos caminos):**
+**Pasos (desde el juego; el alta general ya no ofrece inserto, #1641):**
 
 - Desde el juego: abrir el juego → sección **Insertos del juego** →
   **Añadir inserto**. Se crea ahí mismo y queda en el selector.
-- Desde el alta: **Nuevo → Inserto para un juego** → elegir el juego →
-  llenar el par como en 8c.2 → guardar.
+- Al crear una familia de cajón (asistente, paso **Insertos**) o al añadir
+  una altura a una familia existente.
 
 En la sección **Insertos del juego** también está **Añadir existente**
 (un herraje que ya está en el catálogo) y el **estado de cada opción**:

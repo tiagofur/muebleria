@@ -1241,12 +1241,16 @@
   font-size: var(--text-xs);
 }
 
-/* #1422 slice 1: kit↔partes de diseño en la lista de herrajes */
+/* #1422 slice 1: kit↔partes de diseño en la lista de herrajes.
+   #1641: el nombre es una columna — nombre arriba, insignias como línea
+   meta abajo — para que las filas con y sin chips compartan baseline y
+   ritmo (antes los chips fluían junto al nombre y ensanchaban la fila). */
 .catalog-hw-name {
   display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
 }
 
 .catalog-badge--kit,
@@ -1617,4 +1621,152 @@ details[open] > summary > .catalog-advanced-chevron {
 
 .catalog-form-advanced > summary::-webkit-details-marker {
   display: none;
+}
+
+/* #1641: picker de alta por tipo — tres tarjetas con jerarquía clara.
+   La selección del juego se marca (check + acento) porque abre un sub-paso;
+   pieza y par actúan al instante. Navegación por flechas entre tarjetas. */
+.catalog-type-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.catalog-type-card {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.catalog-type-card:hover {
+  border-color: var(--border-brand);
+  background: var(--surface-hover);
+}
+
+.catalog-type-card:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.catalog-type-card--active {
+  border-color: var(--border-brand);
+  background: var(--surface-accent-subtle, #eef2ee);
+}
+
+.catalog-type-card__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-accent-subtle, #eef2ee);
+  color: var(--text-brand);
+}
+
+.catalog-type-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.catalog-type-card__title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.catalog-type-card__help {
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal, 1.45);
+  color: var(--text-secondary);
+}
+
+.catalog-type-card__check {
+  margin-left: auto;
+  padding-top: 2px;
+  color: var(--text-brand);
+}
+
+/* Sub-paso del juego: dos variantes conectadas a su tarjeta. */
+.catalog-type-sub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-1) 28px;
+}
+
+.catalog-type-sub__option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.catalog-type-sub__option:hover {
+  border-color: var(--border-brand);
+  background: var(--surface-hover);
+}
+
+.catalog-type-sub__option:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.catalog-type-sub__title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.catalog-type-sub__help {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+/* Dónde viven los insertos: una línea, no un bloque. */
+.catalog-type-picker__foot {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal, 1.45);
+  color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog-type-card,
+  .catalog-type-sub__option {
+    transition: none;
+  }
+}
+
+/* #1641: código monoespaciado sin quiebre (los códigos largos partían la
+   fila en dos líneas) y precio pendiente legible como estado, no como dato. */
+.catalog-hw-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.catalog-hw-price-missing {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--warning-700, var(--text-secondary));
+  white-space: nowrap;
 }

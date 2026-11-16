@@ -45,6 +45,27 @@ function setup(hardware: readonly Hardware[] = [sampleHardware]) {
 }
 
 describe('HardwareCatalog — create flow', () => {
+  it('costo $0 se lee como estado «falta precio», no como $0.00 (#1641)', () => {
+    render(
+      <HardwareCatalog
+        hardware={[
+          { ...sampleHardware, id: 'hw-0', code: 'HER-SIN-PRECIO', costPerUnit: 0 },
+          sampleHardware,
+        ]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    const missing = screen.getByText('— falta precio');
+    expect(missing.getAttribute('title')).toContain('HER-SIN-PRECIO');
+    // La fila con precio muestra el monto, no el estado.
+    expect(screen.getByText(/\$45/)).toBeTruthy();
+    expect(screen.queryByText('$0.00')).toBeNull();
+  });
+
   it('canMutate=false oculta las acciones de fila (Editar/Desactivar), no solo "Nuevo herraje" (#972)', () => {
     render(
       <HardwareCatalog

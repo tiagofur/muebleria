@@ -158,13 +158,12 @@
   box-shadow: var(--shadow-focus);
 }
 
+/* #1641: un solo tratamiento ámbar para lo que falta (celdas y resumen
+   «Le falta»): texto warning sobre la superficie, sin glifo ⚠ — el texto
+   lleva el estado. */
 .drawer-family__warn {
-  color: var(--text-primary);
+  color: var(--warning-700);
   font-size: var(--text-xs);
-}
-
-.drawer-family__warn::before {
-  content: '⚠ ';
 }
 
 .drawer-family__ok,
@@ -200,4 +199,66 @@
   margin: 0 0 var(--space-1);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
+}
+
+/* ── #1641: vista dedicada ─────────────────────────────────────────────── */
+
+.drawer-families__header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.drawer-families__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.drawer-families__subtitle {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* Estado + «Añadir altura» pegados a la matriz que describen. */
+.drawer-family__matrix-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+/* Columnas con intención: altura compacta, juego protagonista, insertos
+   reparten el resto. table-layout: fixed reparte el ancho sobrante y mata
+   el espacio muerto a la derecha. */
+.drawer-family__matrix {
+  table-layout: fixed;
+}
+
+.drawer-family__col-height {
+  width: 7.5rem;
+}
+
+.drawer-family__col-kit {
+  width: 26%;
+}
+
+.drawer-family__matrix tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+.drawer-family__matrix td.drawer-family__na {
+  vertical-align: middle;
+}
+/* «Etiqueta deducida» sólido y discreto: el borde dashed se leía como
+   control roto. */
+.drawer-family__derived {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-muted);
 }
