@@ -750,7 +750,10 @@ export function HardwareCatalog({
       {!isTrulyEmpty ? (
         <PageToolbar
           ariaLabel="Buscar y filtrar herrajes"
-          tabs={
+          // #1643: los tabs de vista son la decisión primaria — encabezan la
+          // fila; búsqueda y filtro de estado quedan como refinamiento a la
+          // derecha.
+          lead={
             <WorkspaceTabs
               tabs={[
                 { id: 'hardware', label: 'Herrajes' },

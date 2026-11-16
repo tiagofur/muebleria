@@ -144,6 +144,7 @@
   min-width: 0;
 }
 
+.page-toolbar__lead,
 .page-toolbar__filters,
 .page-toolbar__tabs,
 .page-toolbar__contextual-controls {
@@ -165,6 +166,7 @@
     justify-content: flex-start;
   }
 
+  .page-toolbar__lead,
   .page-toolbar__search,
   .page-toolbar__filters,
   .page-toolbar__tabs,
