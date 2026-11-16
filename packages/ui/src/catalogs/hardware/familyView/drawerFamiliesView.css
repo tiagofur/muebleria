@@ -63,26 +63,26 @@
   gap: var(--space-3);
 }
 
+/* #1643: back-link + bloque de identidad en una sola fila densa. */
 .drawer-family__detail-header {
   display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
-.drawer-family__detail-header > .drawer-family__detail-title-row {
-  align-self: stretch;
+.drawer-family__detail-header > .btn {
+  flex: none;
+  margin-top: var(--space-1);
 }
 
-.drawer-family__detail-title-row {
+.drawer-family__identity {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-2);
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
-.drawer-family__detail-title-row .drawer-family__title {
+.drawer-family__identity .drawer-family__title {
   font-size: var(--text-lg);
 }
 
@@ -246,15 +246,17 @@
 }
 
 .drawer-family__col-kit {
-  width: 26%;
+  width: 22%;
 }
 
 .drawer-family__matrix tbody tr:hover {
   background: var(--surface-hover);
 }
 
+/* #1643: el «—» comparte la primera línea de su fila (el centrado lo
+   despegaba del contenido vecino). */
 .drawer-family__matrix td.drawer-family__na {
-  vertical-align: middle;
+  vertical-align: top;
 }
 /* «Etiqueta deducida» sólido y discreto: el borde dashed se leía como
    control roto. */
