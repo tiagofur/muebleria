@@ -133,9 +133,13 @@ function FamilyDetail({
                         {h.kit.code}
                       </button>
                       {!h.kit.active ? <span className="drawer-family__warn">Juego inactivo</span> : null}
-                      <span className={h.kit.costPerUnit > 0 ? '' : 'drawer-family__warn'}>
-                        {h.kit.costPerUnit > 0 ? money(h.kit.costPerUnit) : 'Falta precio'}
-                      </span>
+                      {h.kit.costPerUnit > 0 ? (
+                        <span>{money(h.kit.costPerUnit)}</span>
+                      ) : (
+                        <span className="drawer-family__warn" title={`${h.kit.code}: todavía no tiene precio`}>
+                          Falta precio
+                        </span>
+                      )}
                       {h.kit.designsMissing > 0 ? (
                         <span className="drawer-family__warn">Faltan {h.kit.designsMissing} diseño(s)</span>
                       ) : (
@@ -172,9 +176,13 @@ function FamilyDetail({
                         ) : null}
                         {cell.active ? (
                           <>
-                            <span className={cell.costPerUnit > 0 ? '' : 'drawer-family__warn'}>
-                              {cell.costPerUnit > 0 ? money(cell.costPerUnit) : 'Falta precio'}
-                            </span>
+                            {cell.costPerUnit > 0 ? (
+                              <span>{money(cell.costPerUnit)}</span>
+                            ) : (
+                              <span className="drawer-family__warn" title={`${cell.code}: todavía no tiene precio`}>
+                                Falta precio
+                              </span>
+                            )}
                             {cell.designMissing ? <span className="drawer-family__warn">Falta diseño</span> : null}
                           </>
                         ) : null}

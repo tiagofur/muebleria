@@ -1253,14 +1253,6 @@
   min-width: 0;
 }
 
-.catalog-hw-name .catalog-badge {
-  margin-right: 4px;
-}
-
-.catalog-hw-name .catalog-badge:last-child {
-  margin-right: 0;
-}
-
 .catalog-badge--kit,
 .catalog-badge--part {
   font-size: var(--font-size-xs, 12px);
