@@ -415,70 +415,78 @@ export function HardwareKitSystemWizardModal({
 
           {step === 0 ? (
             <>
-              <div className="catalog-form__field">
-                <label htmlFor="system-code">Código de la familia</label>
-                <input
-                  id="system-code"
-                  value={identity.code}
-                  onChange={(e) => setIdentity((p) => ({ ...p, code: e.target.value }))}
-                  placeholder="Ej: MBOX-IRIDIUM"
-                  autoComplete="off"
-                  data-testid="hardware-system-wizard-code"
-                />
+              {/* #1643: campos pares a dos columnas — el paso Identidad deja
+                  de ser una columna larga con vacío a la derecha. */}
+              <div className="catalog-form__row">
+                <div className="catalog-form__field">
+                  <label htmlFor="system-code">Código de la familia</label>
+                  <input
+                    id="system-code"
+                    value={identity.code}
+                    onChange={(e) => setIdentity((p) => ({ ...p, code: e.target.value }))}
+                    placeholder="Ej: MBOX-IRIDIUM"
+                    autoComplete="off"
+                    data-testid="hardware-system-wizard-code"
+                  />
+                </div>
+                <div className="catalog-form__field">
+                  <label htmlFor="system-name">Nombre</label>
+                  <input
+                    id="system-name"
+                    value={identity.name}
+                    onChange={(e) => setIdentity((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="Ej: Merivobox Iridium"
+                    data-testid="hardware-system-wizard-name"
+                  />
+                </div>
               </div>
-              <div className="catalog-form__field">
-                <label htmlFor="system-name">Nombre</label>
-                <input
-                  id="system-name"
-                  value={identity.name}
-                  onChange={(e) => setIdentity((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Ej: Merivobox Iridium"
-                  data-testid="hardware-system-wizard-name"
-                />
+              <div className="catalog-form__row">
+                <div className="catalog-form__field">
+                  <label htmlFor="system-brand">Marca (opcional)</label>
+                  <input
+                    id="system-brand"
+                    value={identity.brand}
+                    onChange={(e) => setIdentity((p) => ({ ...p, brand: e.target.value }))}
+                    placeholder="Ej: Blum, Hettich, Häfele"
+                    maxLength={80}
+                    data-testid="hardware-system-wizard-brand"
+                  />
+                </div>
+                <div className="catalog-form__field">
+                  <label htmlFor="system-line">Línea (opcional)</label>
+                  <input
+                    id="system-line"
+                    value={identity.line}
+                    onChange={(e) => setIdentity((p) => ({ ...p, line: e.target.value }))}
+                    placeholder="Ej: Merivobox, Legrabox"
+                    maxLength={80}
+                    data-testid="hardware-system-wizard-line"
+                  />
+                </div>
               </div>
-              <div className="catalog-form__field">
-                <label htmlFor="system-brand">Marca (opcional)</label>
-                <input
-                  id="system-brand"
-                  value={identity.brand}
-                  onChange={(e) => setIdentity((p) => ({ ...p, brand: e.target.value }))}
-                  placeholder="Ej: Blum, Hettich, Häfele"
-                  maxLength={80}
-                  data-testid="hardware-system-wizard-brand"
-                />
-              </div>
-              <div className="catalog-form__field">
-                <label htmlFor="system-line">Línea (opcional)</label>
-                <input
-                  id="system-line"
-                  value={identity.line}
-                  onChange={(e) => setIdentity((p) => ({ ...p, line: e.target.value }))}
-                  placeholder="Ej: Merivobox, Legrabox"
-                  maxLength={80}
-                  data-testid="hardware-system-wizard-line"
-                />
-              </div>
-              <div className="catalog-form__field">
-                <label htmlFor="system-width">Ancho de la guía (mm)</label>
-                <input
-                  id="system-width"
-                  type="number"
-                  min={0}
-                  value={identity.widthMm}
-                  onChange={(e) => setIdentity((p) => ({ ...p, widthMm: e.target.value }))}
-                  data-testid="hardware-system-wizard-width"
-                />
-              </div>
-              <div className="catalog-form__field">
-                <label htmlFor="system-depth">Fondo de la guía (mm)</label>
-                <input
-                  id="system-depth"
-                  type="number"
-                  min={0}
-                  value={identity.depthMm}
-                  onChange={(e) => setIdentity((p) => ({ ...p, depthMm: e.target.value }))}
-                  data-testid="hardware-system-wizard-depth"
-                />
+              <div className="catalog-form__row">
+                <div className="catalog-form__field">
+                  <label htmlFor="system-width">Ancho de la guía (mm)</label>
+                  <input
+                    id="system-width"
+                    type="number"
+                    min={0}
+                    value={identity.widthMm}
+                    onChange={(e) => setIdentity((p) => ({ ...p, widthMm: e.target.value }))}
+                    data-testid="hardware-system-wizard-width"
+                  />
+                </div>
+                <div className="catalog-form__field">
+                  <label htmlFor="system-depth">Fondo de la guía (mm)</label>
+                  <input
+                    id="system-depth"
+                    type="number"
+                    min={0}
+                    value={identity.depthMm}
+                    onChange={(e) => setIdentity((p) => ({ ...p, depthMm: e.target.value }))}
+                    data-testid="hardware-system-wizard-depth"
+                  />
+                </div>
               </div>
             </>
           ) : null}
