@@ -46,6 +46,18 @@ const complete: DrawerFamilySummary = {
 };
 
 describe('DrawerFamiliesView (#1633 s2c-2)', () => {
+  it('lista: encabezado dedicado con contador y «Nueva familia» directa (#1641)', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn();
+    render(
+      <DrawerFamiliesView families={[incomplete, complete]} onOpenHardware={vi.fn()} onCreateFamily={onCreate} />,
+    );
+    expect(screen.getByRole('heading', { name: 'Familias de cajón' })).toBeInTheDocument();
+    expect(screen.getByText(/2 familias · alturas libres/)).toBeInTheDocument();
+    await user.click(screen.getByTestId('drawer-families-new'));
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('lista: card por familia con alturas, insertos y estado en texto', () => {
     render(<DrawerFamiliesView families={[incomplete, complete]} onOpenHardware={vi.fn()} />);
     const card = screen.getByTestId('drawer-family-card-SYS-CAJON');

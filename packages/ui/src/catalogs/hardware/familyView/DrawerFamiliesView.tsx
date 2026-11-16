@@ -1,9 +1,10 @@
 /**
- * Vista «Familias de cajón» (#1633 s2c-2, UX Brief): cada familia es una
- * card con su estado (completa / qué le falta); el detalle inline muestra la
- * matriz Alturas × Insertos con el estado de cada celda (precio, diseño,
- * por defecto). Lectura: editar abre la ficha del juego; «Añadir altura»
- * reusa el flujo transaccional existente.
+ * Vista «Familias de cajón» (#1633 s2c-2, UX Brief; #1641 vista dedicada):
+ * cada familia es una card con su estado (completa / qué le falta); el
+ * detalle inline muestra la matriz Alturas × Insertos con el estado de cada
+ * celda (precio, diseño, por defecto). La vista tiene encabezado propio con
+ * contador y creación directa. Lectura: editar abre la ficha del juego;
+ * «Añadir altura» reusa el flujo transaccional existente.
  */
 
 import { useState, type ReactNode } from 'react';
@@ -67,18 +68,34 @@ function FamilyDetail({
               </p>
             ) : null}
           </div>
-          {onAddHeight ? (
-            <button type="button" className="btn" onClick={onAddHeight} data-testid="drawer-family-add-height">
-              Añadir altura
-            </button>
-          ) : null}
         </div>
+      </div>
+
+      {/* #1641: el estado de la familia y «Añadir altura» viven pegados a la
+          matriz que describen — antes flotaban en el encabezado, lejos de su
+          contenido, y el resumen «Le falta» quedaba ambiguo. */}
+      <div className="drawer-family__matrix-head">
         <StatusChip family={family} />
+        {onAddHeight ? (
+          <button type="button" className="btn btn--small" onClick={onAddHeight} data-testid="drawer-family-add-height">
+            Añadir altura
+          </button>
+        ) : null}
       </div>
 
       <div className="drawer-family__matrix-wrap">
         <table className="drawer-family__matrix" data-testid="drawer-family-matrix">
           <caption className="visually-hidden">Alturas e insertos de {family.name}</caption>
+          <colgroup>
+            {/* #1641: alturas compactas, el juego protagoniza y los insertos
+                reparten el resto a partes iguales (antes todo colapsaba a la
+                izquierda y moría el ancho a la derecha). */}
+            <col className="drawer-family__col-height" />
+            <col className="drawer-family__col-kit" />
+            {family.inserts.map((ins) => (
+              <col key={ins.key} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               <th scope="col">Altura</th>
@@ -231,26 +248,50 @@ export function DrawerFamiliesView({
   }
 
   return (
-    <ul className="drawer-family__list" data-testid="drawer-families-list">
-      {families.map((f) => (
-        <li key={f.agregadoId} className="entity-card card-open-host drawer-family__card" data-testid={`drawer-family-card-${f.code}`}>
-          <h3 className="drawer-family__title">
-            <button
-              type="button"
-              className="card-open drawer-family__open"
-              onClick={() => setSelectedId(f.agregadoId)}
-              aria-label={`Ver la familia ${f.name}`}
-            >
-              {f.name}
-            </button>
-          </h3>
-          <p className="drawer-family__meta">{[f.brand, f.line, f.code].filter(Boolean).join(' · ')}</p>
-          <p className="drawer-family__counts">
-            {f.heights.length} altura(s): {f.heights.map((h) => h.label).join(' / ') || '—'} · {f.inserts.length} inserto(s)
+    <div className="drawer-families">
+      {/* #1641: vista dedicada — encabezado propio con contador y creación
+          directa (secundaria: «Nuevo» de la página sigue siendo la única
+          acción primaria de la pantalla). */}
+      <div className="drawer-families__header">
+        <div>
+          <h3 className="drawer-families__title">Familias de cajón</h3>
+          <p className="drawer-families__subtitle">
+            {families.length} {families.length === 1 ? 'familia' : 'familias'} · alturas libres,
+            insertos por altura y un juego con precio por altura.
           </p>
-          <StatusChip family={f} />
-        </li>
-      ))}
-    </ul>
+        </div>
+        {onCreateFamily ? (
+          <button
+            type="button"
+            className="btn"
+            onClick={onCreateFamily}
+            data-testid="drawer-families-new"
+          >
+            Nueva familia
+          </button>
+        ) : null}
+      </div>
+      <ul className="drawer-family__list" data-testid="drawer-families-list">
+        {families.map((f) => (
+          <li key={f.agregadoId} className="entity-card card-open-host drawer-family__card" data-testid={`drawer-family-card-${f.code}`}>
+            <h3 className="drawer-family__title">
+              <button
+                type="button"
+                className="card-open drawer-family__open"
+                onClick={() => setSelectedId(f.agregadoId)}
+                aria-label={`Ver la familia ${f.name}`}
+              >
+                {f.name}
+              </button>
+            </h3>
+            <p className="drawer-family__meta">{[f.brand, f.line, f.code].filter(Boolean).join(' · ')}</p>
+            <p className="drawer-family__counts">
+              {f.heights.length} altura(s): {f.heights.map((h) => h.label).join(' / ') || '—'} · {f.inserts.length} inserto(s)
+            </p>
+            <StatusChip family={f} />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
