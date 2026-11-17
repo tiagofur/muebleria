@@ -15,7 +15,9 @@
 }
 
 .module-category-tree {
-  border: 1px solid var(--border-default);
+  /* #1643: borde del área — el gris neutro no leía sobre el canvas sage
+     (Herrajes y Muebles viven en library/F112). */
+  border: 1px solid var(--area-border, var(--border-default));
   border-radius: var(--radius-md);
   background: var(--surface-card);
   padding: var(--space-3);
