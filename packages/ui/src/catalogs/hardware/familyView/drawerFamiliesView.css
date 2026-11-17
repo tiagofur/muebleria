@@ -11,14 +11,18 @@
   gap: var(--space-3);
 }
 
-.drawer-family__card {
+/* #1643 (owner 17-11): el borde gris neutro no leía sobre el canvas sage
+   del área library — el card toma el borde del área para que su silueta
+   blanca se separe del fondo verde. */
+.drawer-families .drawer-family__card {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--area-border, var(--border));
   border-radius: var(--radius-md);
   background: var(--surface-card);
+  box-shadow: var(--shadow-md);
 }
 
 .drawer-family__title {
@@ -86,10 +90,14 @@
   font-size: var(--text-lg);
 }
 
+/* #1643 (owner 17-11): la matriz era transparente y se asentaba sobre el
+   canvas verde — ahora es una tarjeta blanca con borde del área. */
 .drawer-family__matrix-wrap {
   overflow-x: auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--area-border, var(--border));
   border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
 }
 
 .drawer-family__matrix {
