@@ -52,22 +52,35 @@ function FamilyDetail({
 }): ReactNode {
   return (
     <section className="drawer-family__detail" aria-labelledby="drawer-family-detail-title" data-testid="drawer-family-detail">
+      {/* #1643: ficha densa — el back-link convive con el bloque de identidad
+          y «Disponible en» es una línea del encabezado, no una sección al
+          pie; el estado+acción siguen anclados sobre la matriz (#1641). */}
       <div className="drawer-family__detail-header">
         <button type="button" className="btn btn--ghost btn--small" onClick={onBack} data-testid="drawer-family-back">
           <ArrowLeft size={14} aria-hidden /> Familias
         </button>
-        <div className="drawer-family__detail-title-row">
-          <div>
-            <h3 id="drawer-family-detail-title" className="drawer-family__title">{family.name}</h3>
-            <p className="drawer-family__meta">
-              {[family.brand, family.line, family.code].filter(Boolean).join(' · ')}
+        <div className="drawer-family__identity">
+          <h3 id="drawer-family-detail-title" className="drawer-family__title">{family.name}</h3>
+          <p className="drawer-family__meta">
+            {[family.brand, family.line, family.code].filter(Boolean).join(' · ')}
+          </p>
+          {family.guideWidthMm || family.guideDepthMm ? (
+            <p className="drawer-family__meta" data-testid="drawer-family-guide">
+              Guía: Ancho {family.guideWidthMm ?? '—'} mm × Fondo {family.guideDepthMm ?? '—'} mm
             </p>
-            {family.guideWidthMm || family.guideDepthMm ? (
-              <p className="drawer-family__meta" data-testid="drawer-family-guide">
-                Guía: Ancho {family.guideWidthMm ?? '—'} mm × Fondo {family.guideDepthMm ?? '—'} mm
-              </p>
-            ) : null}
-          </div>
+          ) : null}
+          <p
+            className={
+              family.availableIn.length > 0
+                ? 'drawer-family__meta'
+                : 'drawer-family__meta drawer-family__warn'
+            }
+            data-testid="drawer-family-available"
+          >
+            {family.availableIn.length > 0
+              ? `Disponible en: ${family.availableIn.map((g) => g.name || g.code).join(', ')}`
+              : 'Ningún grupo: los muebles todavía no pueden elegir esta familia.'}
+          </p>
         </div>
       </div>
 
@@ -195,18 +208,6 @@ function FamilyDetail({
           </tbody>
         </table>
       </div>
-      <section className="drawer-family__available" aria-labelledby="drawer-family-available-title">
-        <h4 id="drawer-family-available-title" className="drawer-family__subtitle">Disponible en</h4>
-        {family.availableIn.length > 0 ? (
-          <p className="drawer-family__meta" data-testid="drawer-family-available">
-            {family.availableIn.map((g) => g.name || g.code).join(', ')}
-          </p>
-        ) : (
-          <p className="drawer-family__warn" data-testid="drawer-family-available">
-            Ningún grupo: los muebles todavía no pueden elegir esta familia.
-          </p>
-        )}
-      </section>
       {family.inserts.length === 0 ? (
         <p className="catalog-form__hint" data-testid="drawer-family-no-inserts">
           Esta familia no tiene insertos. Se añaden desde «Añadir altura» o desde la ficha de cada juego.

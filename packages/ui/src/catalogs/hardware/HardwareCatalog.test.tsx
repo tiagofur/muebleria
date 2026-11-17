@@ -45,6 +45,18 @@ function setup(hardware: readonly Hardware[] = [sampleHardware]) {
 }
 
 describe('HardwareCatalog — create flow', () => {
+  it('#1643: los tabs de vista encabezan el toolbar (lead antes que la búsqueda)', () => {
+    setup();
+    const toolbar = screen.getByTestId('page-toolbar');
+    const lead = toolbar.querySelector('.page-toolbar__lead');
+    expect(lead).toBeTruthy();
+    expect(lead?.querySelector('[role="tablist"]')).toBeTruthy();
+    const search = toolbar.querySelector('.page-toolbar__search');
+    expect(
+      lead!.compareDocumentPosition(search!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it('costo $0 se lee como estado «falta precio», no como $0.00 (#1641)', () => {
     render(
       <HardwareCatalog

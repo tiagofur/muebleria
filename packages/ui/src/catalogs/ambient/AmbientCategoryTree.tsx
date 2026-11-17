@@ -7,10 +7,11 @@ import {
   type Dispatch,
   type ReactNode,
   type SetStateAction,
+  useState,
 } from 'react';
 import type { AmbientCategory } from '@granete/domain';
 import { childrenOf } from '@granete/domain';
-import { Pencil, Trash2 } from 'lucide-react';
+import { ChevronRight, Pencil, Trash2 } from 'lucide-react';
 
 export function CategoryTree({
   categories,
@@ -27,6 +28,46 @@ export function CategoryTree({
   readonly setCategoryFilter: Dispatch<SetStateAction<string | null>>;
   readonly counts: ReadonlyMap<string, number>;
 }): ReactNode {
+  // #1643: colapso local por nodo (expandido por defecto; estado de sesión,
+  // no persistido). La raíz es dueña del estado; la recursión lo recibe.
+  const [collapsedIds, setCollapsedIds] = useState<readonly string[]>([]);
+  const toggleCollapsed = (id: string): void =>
+    setCollapsedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  return (
+    <CategoryTreeNodes
+      categories={categories}
+      parentId={parentId}
+      depth={depth}
+      categoryFilter={categoryFilter}
+      setCategoryFilter={setCategoryFilter}
+      counts={counts}
+      collapsedIds={collapsedIds}
+      onToggleCollapsed={toggleCollapsed}
+    />
+  );
+}
+
+function CategoryTreeNodes({
+  categories,
+  parentId,
+  depth,
+  categoryFilter,
+  setCategoryFilter,
+  counts,
+  collapsedIds,
+  onToggleCollapsed,
+}: {
+  readonly categories: readonly AmbientCategory[];
+  readonly parentId: string | undefined;
+  readonly depth: number;
+  readonly categoryFilter: string | null;
+  readonly setCategoryFilter: Dispatch<SetStateAction<string | null>>;
+  readonly counts: ReadonlyMap<string, number>;
+  readonly collapsedIds: readonly string[];
+  readonly onToggleCollapsed: (id: string) => void;
+}): ReactNode {
   const nodes = childrenOf(categories, parentId);
   if (nodes.length === 0) return null;
   return (
@@ -40,36 +81,63 @@ export function CategoryTree({
       {nodes.map((node) => {
         const active = categoryFilter === node.id;
         const count = counts.get(node.id) ?? 0;
+        const hasChildren = childrenOf(categories, node.id).length > 0;
+        const collapsed = collapsedIds.includes(node.id);
+        const itemClass = [
+          'module-category-tree__item',
+          active ? 'module-category-tree__item--active' : '',
+          count === 0 ? 'module-category-tree__item--empty' : '',
+        ]
+          .filter(Boolean)
+          .join(' ');
         return (
           <li key={node.id}>
-            <button
-              type="button"
-              className={
-                active
-                  ? 'module-category-tree__item module-category-tree__item--active'
-                  : 'module-category-tree__item'
-              }
-              onClick={() =>
-                setCategoryFilter((prev) => (prev === node.id ? null : node.id))
-              }
-              data-testid={`category-filter-${node.id}`}
-            >
-              <span className="module-category-tree__label">{node.name}</span>
-              <span
-                className="module-category-tree__count"
-                data-testid={`category-filter-count-${node.id}`}
+            <div className="module-category-tree__row">
+              {hasChildren ? (
+                <button
+                  type="button"
+                  className={
+                    collapsed
+                      ? 'module-category-tree__caret'
+                      : 'module-category-tree__caret module-category-tree__caret--open'
+                  }
+                  aria-expanded={!collapsed}
+                  aria-label={collapsed ? `Expandir ${node.name}` : `Contraer ${node.name}`}
+                  onClick={() => onToggleCollapsed(node.id)}
+                  data-testid={`category-caret-${node.id}`}
+                >
+                  <ChevronRight size={12} strokeWidth={1.5} aria-hidden />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={itemClass}
+                onClick={() =>
+                  setCategoryFilter((prev) => (prev === node.id ? null : node.id))
+                }
+                data-testid={`category-filter-${node.id}`}
               >
-                {count}
-              </span>
-            </button>
-            <CategoryTree
-              categories={categories}
-              parentId={node.id}
-              depth={depth + 1}
-              categoryFilter={categoryFilter}
-              setCategoryFilter={setCategoryFilter}
-              counts={counts}
-            />
+                <span className="module-category-tree__label">{node.name}</span>
+                <span
+                  className="module-category-tree__count"
+                  data-testid={`category-filter-count-${node.id}`}
+                >
+                  {count}
+                </span>
+              </button>
+            </div>
+            {!collapsed ? (
+              <CategoryTreeNodes
+                categories={categories}
+                parentId={node.id}
+                depth={depth + 1}
+                categoryFilter={categoryFilter}
+                setCategoryFilter={setCategoryFilter}
+                counts={counts}
+                collapsedIds={collapsedIds}
+                onToggleCollapsed={onToggleCollapsed}
+              />
+            ) : null}
           </li>
         );
       })}

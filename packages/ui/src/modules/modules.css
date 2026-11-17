@@ -15,7 +15,9 @@
 }
 
 .module-category-tree {
-  border: 1px solid var(--border-default);
+  /* #1643: borde del área — el gris neutro no leía sobre el canvas sage
+     (Herrajes y Muebles viven en library/F112). */
+  border: 1px solid var(--area-border, var(--border-default));
   border-radius: var(--radius-md);
   background: var(--surface-card);
   padding: var(--space-3);
@@ -752,4 +754,62 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+}
+
+/* #1643: caret de colapso por nodo con hijos + ítems sin ítems atenuados.
+   Cambios aditivos compartidos por Materiales/Herrajes/Ambient. */
+.module-category-tree__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.module-category-tree__row .module-category-tree__item {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.module-category-tree__caret {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.module-category-tree__caret:hover {
+  background: var(--surface-hover);
+}
+
+.module-category-tree__caret:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.module-category-tree__caret svg {
+  transition: var(--transition-transform);
+}
+
+.module-category-tree__caret--open svg {
+  transform: rotate(90deg);
+}
+
+.module-category-tree__item--empty {
+  color: var(--text-muted);
+}
+
+.module-category-tree__item--empty .module-category-tree__count {
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .module-category-tree__caret svg {
+    transition: none;
+  }
 }
