@@ -20,8 +20,38 @@ func (s *PostgresStore) ListProjectEvents(ctx context.Context, projectID string)
 	if err != nil {
 		return nil, fmt.Errorf("error listing project events: %w", err)
 	}
-	defer rows.Close()
+	return scanProjectEvents(rows)
+}
 
+// listProjectEventsByProject loads the lifecycle logs of many projects in ONE
+// query (#1647): the project list carries the same OC-010 log as the detail,
+// so deposit/commercial state survives a reload without an N+1 read.
+func (s *PostgresStore) listProjectEventsByProject(ctx context.Context, projectIDs []string) (map[string][]domain.ProjectEvent, error) {
+	out := make(map[string][]domain.ProjectEvent, len(projectIDs))
+	if len(projectIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT id, project_id, type, at, by_user_id, source, note, payload, created_at
+		FROM project_events
+		WHERE project_id = ANY($1)
+		ORDER BY project_id, at ASC, id ASC;
+	`, projectIDs)
+	if err != nil {
+		return nil, fmt.Errorf("error listing project events: %w", err)
+	}
+	events, err := scanProjectEvents(rows)
+	if err != nil {
+		return nil, err
+	}
+	for _, ev := range events {
+		out[ev.ProjectID] = append(out[ev.ProjectID], ev)
+	}
+	return out, nil
+}
+
+func scanProjectEvents(rows pgx.Rows) ([]domain.ProjectEvent, error) {
+	defer rows.Close()
 	events := []domain.ProjectEvent{}
 	for rows.Next() {
 		var ev domain.ProjectEvent

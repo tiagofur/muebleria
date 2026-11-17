@@ -240,6 +240,15 @@ func (s *stubStore) InsertProjectEvent(_ context.Context, ev domain.ProjectEvent
 	return nil
 }
 
+func (s *stubStore) RecordProjectCommercialEvent(_ context.Context, cmd storage.ProjectCommercialEventCommand) (*domain.ProjectEvent, error) {
+	if s.recordCommercialEventErr != nil {
+		return nil, s.recordCommercialEventErr
+	}
+	s.commercialEventCommands = append(s.commercialEventCommands, cmd)
+	ev := cmd.Event
+	return &ev, nil
+}
+
 func (s *stubStore) ListProjectEvents(_ context.Context, _ string) ([]domain.ProjectEvent, error) {
 	if s.listProjectEventsErr != nil {
 		return nil, s.listProjectEventsErr

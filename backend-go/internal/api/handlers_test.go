@@ -479,6 +479,8 @@ type stubStore struct {
 	insertedActivities          []domain.ProductionActivity
 	floorStatusErr              error
 	projectEventsList           []domain.ProjectEvent
+	recordCommercialEventErr    error
+	commercialEventCommands     []storage.ProjectCommercialEventCommand
 	projectEventWrites          []domain.ProjectEvent
 	insertProjectEventErr       error
 	listProjectEventsErr        error

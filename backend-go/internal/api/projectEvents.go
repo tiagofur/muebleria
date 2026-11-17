@@ -4,11 +4,13 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
@@ -127,6 +129,12 @@ func (s *Server) HandleProjectEvents(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusBadRequest, "tipo de evento desconocido: "+req.Type)
 			return
 		}
+		// #1647: deposits and commercial-status changes are server-authored
+		// commands with validated payloads; the generic append cannot mint them.
+		if domain.IsServerAuthoredCommercialEventType(req.Type) {
+			respondWithError(w, http.StatusBadRequest, "este evento se registra con su comando comercial (anticipo o estado comercial), no con la ruta genérica: "+req.Type)
+			return
+		}
 		// F179 (ADR-0005 §1): fail closed on missing/foreign projects BEFORE
 		// appending — GetProjectByID is org-scoped, so a token of another
 		// organization gets the same 404 as for a nonexistent obra. Without
@@ -192,4 +200,39 @@ func (s *Server) HandleProjectEvents(w http.ResponseWriter, r *http.Request) {
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
 	}
+}
+
+// serverOwnProjectEventAppends enforces #1647 on the aggregate PUT: NEW
+// commercial events (deposit_received, quote_*) are dropped — they exist only
+// through the commercial commands — and every other NEW event gets the
+// authenticated actor as author. Events already stored are passed through
+// unchanged (the upsert never rewrites them).
+func serverOwnProjectEventAppends(r *http.Request, claims *auth.Claims, existing, incoming []domain.ProjectEvent) []domain.ProjectEvent {
+	if len(incoming) == 0 {
+		return incoming
+	}
+	known := make(map[string]struct{}, len(existing))
+	for _, ev := range existing {
+		known[ev.ID] = struct{}{}
+	}
+	var actor *string
+	if claims != nil && claims.UserID != "" {
+		id := claims.UserID
+		actor = &id
+	}
+	out := make([]domain.ProjectEvent, 0, len(incoming))
+	for _, ev := range incoming {
+		if _, ok := known[ev.ID]; ok || ev.ID == "" {
+			out = append(out, ev)
+			continue
+		}
+		if domain.IsServerAuthoredCommercialEventType(ev.Type) {
+			slog.Warn("project PUT carried a client-authored commercial event; ignored (use the commercial command)",
+				"event_type", ev.Type, "project_id", ev.ProjectID, "request_id", RequestIDFromContext(r.Context()))
+			continue
+		}
+		ev.ByUserID = actor
+		out = append(out, ev)
+	}
+	return out
 }

@@ -400,6 +400,22 @@ export function AppContent({
       }
       return repo.updateProjectWithInlineCustomer(p, name, context);
     },
+    // #1647: deposits and commercial status are server-authored commands.
+    canRunCommercialCommands: () => getRepository().recordProjectDeposit != null,
+    recordProjectDeposit: (projectId, deposit, key) => {
+      const repo = getRepository();
+      if (!repo.recordProjectDeposit) {
+        return Promise.reject(new Error('El repositorio activo no registra anticipos en el servidor'));
+      }
+      return repo.recordProjectDeposit(projectId, deposit, key);
+    },
+    setProjectCommercialStatus: (projectId, status, key) => {
+      const repo = getRepository();
+      if (!repo.setProjectCommercialStatus) {
+        return Promise.reject(new Error('El repositorio activo no cambia el estado comercial en el servidor'));
+      }
+      return repo.setProjectCommercialStatus(projectId, status, key);
+    },
     saveProject: (p) => getRepository().saveProject(p) as Promise<void>,
     deleteProject: (id) => getRepository().deleteProject(id) as Promise<void>,
     createProjectTemplate: (t) =>

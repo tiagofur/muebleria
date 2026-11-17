@@ -29,6 +29,10 @@ func registerProjectRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	mux.Handle("PUT /api/projects/{projectId}/grip", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectGrip))))
 	mux.Handle("PUT /api/projects/{projectId}/grip/furniture", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectFurnitureGrip))))
 	mux.Handle("POST /api/projects/{projectId}/grip:refresh", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectGripRefresh))))
+	// #1647: server-authored commercial commands. Event id, actor and audit
+	// come from the server; a retry with the same Idempotency-Key replays.
+	mux.Handle("POST /api/projects/{projectId}/deposits", noStoreMiddleware(authMW(server.RequireIdempotency("project.record-deposit", http.HandlerFunc(server.HandleRecordProjectDeposit)))))
+	mux.Handle("POST /api/projects/{projectId}/commercial-status", noStoreMiddleware(authMW(server.RequireIdempotency("project.set-commercial-status", http.HandlerFunc(server.HandleSetProjectCommercialStatus)))))
 	mux.Handle("POST /api/projects/{projectId}/furniture-instances", authMW(server.RequireIdempotency("project.create-furniture-instance", http.HandlerFunc(server.HandleProjectFurnitureInstances))))
 	mux.Handle("POST /api/projects/{projectId}/furniture-instances/{instanceCommand...}", authMW(server.RequireIdempotency("project.duplicate-furniture-instance", projectFurnitureInstanceCommandRouter(map[string]http.Handler{
 		"duplicate": http.HandlerFunc(server.HandleFurnitureInstanceDuplicate),

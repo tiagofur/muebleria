@@ -347,11 +347,11 @@ export interface ProjectDetailViewProps {
   readonly onChangeCommercialStatus?: (
     projectId: string,
     status: import('@granete/domain').CommercialStatus,
-  ) => void | Promise<void>;
+  ) => boolean | void | Promise<boolean | void>;
   readonly onRecordDeposit?: (
     projectId: string,
     params: import('@granete/domain').DepositReceivedPayload & { note?: string },
-  ) => void | Promise<void>;
+  ) => boolean | void | Promise<boolean | void>;
 }
 
 // ─── Inner component (consumes context) ─────────────────────────────

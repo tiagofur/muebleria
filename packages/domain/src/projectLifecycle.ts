@@ -628,6 +628,71 @@ export function recordDepositReceived(
   return appendProjectEvent(project, event);
 }
 
+/* ── Deposit command validation (#1647) ───────────────────────────────────── */
+
+/** Deposit payload limits shared with the Go validator. */
+export const DEPOSIT_MAX_AMOUNT = 1e12;
+export const DEPOSIT_MAX_REFERENCE_LENGTH = 120;
+export const DEPOSIT_MAX_NOTE_LENGTH = 500;
+
+/** Closed payment-method vocabulary of the deposit command. */
+export const DEPOSIT_PAYMENT_METHODS = ['cash', 'transfer', 'card', 'check', 'other'] as const;
+export type DepositPaymentMethod = (typeof DEPOSIT_PAYMENT_METHODS)[number];
+
+export interface DepositCommandInput {
+  readonly amount: number;
+  readonly currency: string;
+  readonly paymentMethod?: string;
+  readonly reference?: string;
+  readonly note?: string;
+}
+
+export type DepositValidationResult =
+  | { readonly ok: true; readonly value: DepositCommandInput }
+  | {
+      readonly ok: false;
+      readonly field: 'amount' | 'currency' | 'paymentMethod' | 'reference' | 'note';
+      readonly message: string;
+    };
+
+/**
+ * Validates and normalizes a deposit command. The server is the authority
+ * (backend-go/internal/domain/projectCommercialCommands.go); this mirror only
+ * gives immediate feedback. Both are pinned by
+ * contracts/projectDepositPayload.contract.json. Lengths count code points.
+ */
+export function validateDepositPayload(input: DepositCommandInput): DepositValidationResult {
+  const value: DepositCommandInput = {
+    amount: input.amount,
+    currency: (input.currency ?? '').trim(),
+    paymentMethod: input.paymentMethod?.trim() || undefined,
+    reference: input.reference?.trim() || undefined,
+    note: input.note?.trim() || undefined,
+  };
+  if (!Number.isFinite(value.amount) || value.amount <= 0) {
+    return { ok: false, field: 'amount', message: 'El monto del anticipo debe ser mayor a cero.' };
+  }
+  if (value.amount > DEPOSIT_MAX_AMOUNT) {
+    return { ok: false, field: 'amount', message: 'El monto del anticipo excede el máximo permitido.' };
+  }
+  if (!/^[A-Z]{3}$/.test(value.currency)) {
+    return { ok: false, field: 'currency', message: 'La moneda debe ser un código ISO de tres letras (p. ej. MXN).' };
+  }
+  if (
+    value.paymentMethod !== undefined &&
+    !(DEPOSIT_PAYMENT_METHODS as readonly string[]).includes(value.paymentMethod)
+  ) {
+    return { ok: false, field: 'paymentMethod', message: 'Medio de pago desconocido.' };
+  }
+  if ([...(value.reference ?? '')].length > DEPOSIT_MAX_REFERENCE_LENGTH) {
+    return { ok: false, field: 'reference', message: `La referencia admite hasta ${DEPOSIT_MAX_REFERENCE_LENGTH} caracteres.` };
+  }
+  if ([...(value.note ?? '')].length > DEPOSIT_MAX_NOTE_LENGTH) {
+    return { ok: false, field: 'note', message: `La nota admite hasta ${DEPOSIT_MAX_NOTE_LENGTH} caracteres.` };
+  }
+  return { ok: true, value };
+}
+
 /**
  * Get the latest deposit details from the project events.
  */

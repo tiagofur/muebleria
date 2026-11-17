@@ -44,6 +44,8 @@ import type {
   ShowcasePhotoItem,
   ApprovalType,
   CommercialStatus,
+  DepositCommandInput,
+  ProjectEvent,
   ProductionReleaseOptions,
   ChangeOrderImpact,
 } from '@granete/domain';
@@ -95,6 +97,7 @@ import {
   createApproval,
   setProjectCommercialStatus,
   recordDepositReceived,
+  validateDepositPayload,
   advancePartOperation as advancePartOperationDomain,
   advanceModuleUnitStatus as advanceModuleUnitStatusDomain,
   checkAssemblyReadiness,
@@ -259,6 +262,21 @@ export interface ProjectStoreDeps {
       readonly idempotencyKey: string;
     },
   ) => Promise<{ project: Project; customer: Customer }>;
+  /**
+   * #1647 — server-authored commercial commands. Present only when the active
+   * repository is server-backed; guest/local mode keeps the local path.
+   */
+  readonly canRunCommercialCommands?: () => boolean;
+  readonly recordProjectDeposit?: (
+    projectId: string,
+    deposit: DepositCommandInput,
+    idempotencyKey: string,
+  ) => Promise<ProjectEvent>;
+  readonly setProjectCommercialStatus?: (
+    projectId: string,
+    status: CommercialStatus,
+    idempotencyKey: string,
+  ) => Promise<{ commercialStatus: CommercialStatus; event: ProjectEvent }>;
   /** Persists a single project (PUT). */
   readonly saveProject: (project: Project) => Promise<void>;
   /** Deletes a project by id. */
@@ -658,11 +676,12 @@ export interface ProjectState {
     notes?: string,
     actor?: ProjectActor,
   ) => Promise<void>;
+  /** #1647: resolves false when the change was NOT recorded. */
   readonly changeCommercialStatus: (
     projectId: string,
     status: CommercialStatus,
     actor?: ProjectActor,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   readonly recordDeposit: (
     projectId: string,
     params: {
@@ -673,7 +692,7 @@ export interface ProjectState {
       note?: string;
     },
     actor?: ProjectActor,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
 }
 
 
@@ -691,6 +710,39 @@ function defaultNewId(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * #1647 — merges a server-recorded commercial event into local state WITHOUT
+ * persisting (the server already owns it). A late response for a project no
+ * longer in the store (session/tenant switch) is dropped.
+ */
+function applyServerCommercialEvent(
+  set: (partial: Partial<ProjectState>) => void,
+  get: () => ProjectState,
+  projectId: string,
+  event: ProjectEvent,
+  commercialStatus?: CommercialStatus,
+): void {
+  const current = get().projects;
+  if (!current.some((pr) => pr.id === projectId)) return;
+  set({
+    projects: current.map((pr) => {
+      if (pr.id !== projectId) return pr;
+      const events = pr.events ?? [];
+      const merged = events.some((ev) => ev.id === event.id) ? events : [...events, event];
+      return {
+        ...pr,
+        events: merged,
+        ...(commercialStatus !== undefined ? { commercialStatus } : {}),
+      };
+    }),
+  });
+}
+
+function commercialCommandErrorMessage(prefix: string, err: unknown): string {
+  const detail = err instanceof Error && err.message ? err.message : '';
+  return detail ? `${prefix}: ${detail}` : `${prefix}. Revisá tu conexión e intentá de nuevo.`;
+}
+
 export function createProjectStore(options: InternalOptions) {
   const newId = options.deps.newId ?? defaultNewId;
   const persistCreateProject = options.deps.createProject;
@@ -703,6 +755,11 @@ export function createProjectStore(options: InternalOptions) {
   const persistUpdateProjectWithInlineCustomer =
     options.deps.updateProjectWithInlineCustomer;
   const persistSaveProject = options.deps.saveProject;
+  const commercialCommands = {
+    available: options.deps.canRunCommercialCommands,
+    recordDeposit: options.deps.recordProjectDeposit,
+    setStatus: options.deps.setProjectCommercialStatus,
+  };
   const persistDeleteProject = options.deps.deleteProject;
   const persistCreateTemplate = options.deps.createProjectTemplate;
   const persistDeleteTemplate = options.deps.deleteProjectTemplate;
@@ -2382,35 +2439,70 @@ export function createProjectStore(options: InternalOptions) {
 
     changeCommercialStatus: async (projectId, status, actor) => {
       const p = get().projects.find((pr) => pr.id === projectId);
-      if (!p) return;
+      if (!p) return false;
+      if (commercialCommands.available?.() && commercialCommands.setStatus) {
+        // #1647: server-authored command — no optimistic state, no PUT.
+        try {
+          const result = await commercialCommands.setStatus(projectId, status, newIdempotencyKey());
+          applyServerCommercialEvent(set, get, projectId, result.event, result.commercialStatus);
+          toast({ type: 'info', message: `Estado comercial actualizado: ${result.commercialStatus}` });
+          return true;
+        } catch (err) {
+          toast({ type: 'error', message: commercialCommandErrorMessage('No se cambió el estado comercial', err) });
+          return false;
+        }
+      }
       const byUserId = actor?.id ?? 'usuario';
       const result = setProjectCommercialStatus(p, status, byUserId);
       patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
       toast({ type: 'info', message: `Estado comercial actualizado: ${status}` });
+      return true;
     },
 
     recordDeposit: async (projectId, params, actor) => {
       const p = get().projects.find((pr) => pr.id === projectId);
-      if (!p) return;
-      if (!Number.isFinite(params.amount) || params.amount <= 0) {
-        toast({ type: 'error', message: 'El monto del anticipo debe ser mayor a cero.' });
-        return;
+      if (!p) return false;
+      const validation = validateDepositPayload({
+        amount: params.amount,
+        currency: params.currency || p.currency,
+        paymentMethod: params.paymentMethod,
+        reference: params.reference,
+        note: params.note,
+      });
+      if (!validation.ok) {
+        toast({ type: 'error', message: validation.message });
+        return false;
+      }
+      const deposit = validation.value;
+      if (commercialCommands.available?.() && commercialCommands.recordDeposit) {
+        // #1647: server-authored command — the deposit exists only once the
+        // server recorded it; a retry with the same key replays, never duplicates.
+        try {
+          const event = await commercialCommands.recordDeposit(projectId, deposit, newIdempotencyKey());
+          applyServerCommercialEvent(set, get, projectId, event);
+          toast({ type: 'success', message: 'Anticipo registrado en el historial del proyecto.' });
+          return true;
+        } catch (err) {
+          toast({ type: 'error', message: commercialCommandErrorMessage('No se registró el anticipo', err) });
+          return false;
+        }
       }
       const updated = recordDepositReceived(
         p,
         {
-          amount: params.amount,
-          currency: params.currency || p.currency,
-          paymentMethod: params.paymentMethod,
-          reference: params.reference,
+          amount: deposit.amount,
+          currency: deposit.currency,
+          paymentMethod: deposit.paymentMethod,
+          reference: deposit.reference,
         },
         actor?.id,
         undefined,
         'web',
-        params.note,
+        deposit.note,
       );
       patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? updated : pr)));
       toast({ type: 'success', message: 'Anticipo registrado en el historial del proyecto.' });
+      return true;
     },
   }));
 }

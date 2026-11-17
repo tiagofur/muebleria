@@ -58,10 +58,10 @@ export interface LifecyclePanelProps {
     notes?: string
   ) => void | Promise<void>;
   readonly onRequestApproval?: (type: ApprovalType, notes?: string) => void | Promise<void>;
-  readonly onChangeCommercialStatus?: (status: CommercialStatus) => void | Promise<void>;
+  readonly onChangeCommercialStatus?: (status: CommercialStatus) => boolean | void | Promise<boolean | void>;
   readonly onRecordDeposit?: (
     params: { amount: number; currency: string; reference?: string; note?: string },
-  ) => void | Promise<void>;
+  ) => boolean | void | Promise<boolean | void>;
 }
 
 export function LifecyclePanel({
@@ -110,12 +110,15 @@ export function LifecyclePanel({
     if (!Number.isFinite(amount) || amount <= 0) return;
     setBusy(true);
     try {
-      await onRecordDeposit({
+      const recorded = await onRecordDeposit({
         amount,
         currency: project.currency,
         reference: depositReference.trim() || undefined,
         note: depositNote.trim() || undefined,
       });
+      // #1647: a deposit the server did not record keeps the form and its
+      // values so the user can retry; only a recorded one closes it.
+      if (recorded === false) return;
       setDepositAmount('');
       setDepositReference('');
       setDepositNote('');

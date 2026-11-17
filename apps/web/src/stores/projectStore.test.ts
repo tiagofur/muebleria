@@ -4,6 +4,7 @@ import type {
   Catalog,
   Customer,
   Project,
+  ProjectEvent,
   ProjectItem,
   ProjectTemplate,
 } from '@granete/domain';
@@ -1820,6 +1821,113 @@ describe('projectStore — lifecycle & operational core (OC-010..OC-024)', () =>
     expect(deposit?.byUserId).toBe('u1');
     expect((deposit?.payload as { amount: number }).amount).toBe(5000);
     expect(savedProjects.some((p) => p.events?.some((e) => e.type === 'deposit_received'))).toBe(true);
+  });
+
+  // #1647: with a server-backed repository the deposit and the commercial
+  // status are server-authored commands — never a client event in a PUT.
+  describe('server-authored commercial commands (#1647)', () => {
+    const serverEvent = (overrides: Partial<ProjectEvent> = {}): ProjectEvent => ({
+      id: 'evt_server_1',
+      projectId: 'proj-1',
+      type: 'deposit_received',
+      at: '2026-11-17T12:00:00Z',
+      byUserId: 'server-user',
+      source: 'web',
+      payload: { amount: 5000, currency: 'MXN' },
+      ...overrides,
+    });
+
+    it('recordDeposit calls the command, applies the server event and does not PUT', async () => {
+      const recordProjectDeposit = vi.fn(async () => serverEvent());
+      const { deps, savedProjects } = makeDeps({ canRunCommercialCommands: () => true, recordProjectDeposit });
+      const store = createProjectStore({ deps });
+      store.getState().setProjects([readyProject()]);
+
+      const ok = await store.getState().recordDeposit(
+        'proj-1',
+        { amount: 5000, currency: ' MXN ', reference: ' TRF-1 ' },
+        { id: 'client-claimed-user', role: 'vendedor' },
+      );
+
+      expect(ok).toBe(true);
+      expect(recordProjectDeposit).toHaveBeenCalledTimes(1);
+      const [projectId, deposit, key] = recordProjectDeposit.mock.calls[0] as unknown as [string, { currency: string; reference?: string }, string];
+      expect(projectId).toBe('proj-1');
+      expect(deposit).toMatchObject({ amount: 5000, currency: 'MXN', reference: 'TRF-1' });
+      expect(key.length).toBeGreaterThanOrEqual(16);
+      const events = store.getState().projects[0]!.events ?? [];
+      expect(events.filter((e) => e.type === 'deposit_received')).toEqual([serverEvent()]);
+      expect(savedProjects).toHaveLength(0);
+    });
+
+    it('recordDeposit failure leaves no deposit and reports false', async () => {
+      const recordProjectDeposit = vi.fn(async () => {
+        throw new Error('el monto del anticipo debe ser mayor a cero');
+      });
+      const { deps, savedProjects, toasts } = makeDeps({ canRunCommercialCommands: () => true, recordProjectDeposit });
+      const store = createProjectStore({ deps });
+      store.getState().setProjects([readyProject()]);
+
+      const ok = await store.getState().recordDeposit('proj-1', { amount: 10, currency: 'MXN' });
+
+      expect(ok).toBe(false);
+      expect(store.getState().projects[0]!.events?.some((e) => e.type === 'deposit_received')).toBeFalsy();
+      expect(savedProjects).toHaveLength(0);
+      expect(toasts.at(-1)).toMatchObject({ type: 'error', message: expect.stringContaining('No se registró el anticipo') });
+    });
+
+    it('invalid deposit never reaches the server', async () => {
+      const recordProjectDeposit = vi.fn(async () => serverEvent());
+      const { deps } = makeDeps({ canRunCommercialCommands: () => true, recordProjectDeposit });
+      const store = createProjectStore({ deps });
+      store.getState().setProjects([readyProject()]);
+
+      expect(await store.getState().recordDeposit('proj-1', { amount: 10, currency: 'mx' })).toBe(false);
+      expect(recordProjectDeposit).not.toHaveBeenCalled();
+    });
+
+    it('changeCommercialStatus applies the server status and event without PUT', async () => {
+      const setProjectCommercialStatus = vi.fn(async () => ({
+        commercialStatus: 'lost' as const,
+        event: serverEvent({ id: 'evt_server_lost', type: 'quote_lost', payload: { commercialStatus: 'lost' } }),
+      }));
+      const { deps, savedProjects } = makeDeps({ canRunCommercialCommands: () => true, setProjectCommercialStatus });
+      const store = createProjectStore({ deps });
+      store.getState().setProjects([readyProject()]);
+
+      expect(await store.getState().changeCommercialStatus('proj-1', 'lost')).toBe(true);
+      const project = store.getState().projects[0]!;
+      expect(project.commercialStatus).toBe('lost');
+      expect(project.events?.some((e) => e.id === 'evt_server_lost')).toBe(true);
+      expect(savedProjects).toHaveLength(0);
+    });
+
+    it('changeCommercialStatus failure keeps the previous status', async () => {
+      const setProjectCommercialStatus = vi.fn(async () => {
+        throw new Error('no tenés permiso para cambiar el estado comercial');
+      });
+      const { deps } = makeDeps({ canRunCommercialCommands: () => true, setProjectCommercialStatus });
+      const store = createProjectStore({ deps });
+      store.getState().setProjects([readyProject()]);
+
+      expect(await store.getState().changeCommercialStatus('proj-1', 'lost')).toBe(false);
+      expect(store.getState().projects[0]!.commercialStatus).toBe('won');
+    });
+
+    it('drops a late response for a project no longer in the store', async () => {
+      let resolve: (event: ProjectEvent) => void = () => undefined;
+      const recordProjectDeposit = vi.fn(() => new Promise<ProjectEvent>((r) => { resolve = r; }));
+      const { deps } = makeDeps({ canRunCommercialCommands: () => true, recordProjectDeposit });
+      const store = createProjectStore({ deps });
+      store.getState().setProjects([readyProject()]);
+
+      const pending = store.getState().recordDeposit('proj-1', { amount: 10, currency: 'MXN' });
+      store.getState().setProjects([]);
+      resolve(serverEvent());
+      await pending;
+
+      expect(store.getState().projects).toEqual([]);
+    });
   });
 
   it('recordDeposit rejects non-positive amounts without touching the project', async () => {

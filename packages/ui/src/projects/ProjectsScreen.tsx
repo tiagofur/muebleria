@@ -457,11 +457,11 @@ export interface ProjectsScreenProps {
   readonly onChangeCommercialStatus?: (
     projectId: string,
     status: CommercialStatus,
-  ) => void | Promise<void>;
+  ) => boolean | void | Promise<boolean | void>;
   readonly onRecordDeposit?: (
     projectId: string,
     params: import('@granete/domain').DepositReceivedPayload & { note?: string },
-  ) => void | Promise<void>;
+  ) => boolean | void | Promise<boolean | void>;
 }
 
 export function ProjectsScreen({
