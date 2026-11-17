@@ -81,6 +81,8 @@ export interface CustomersScreenProps {
 	 * la pantalla es sólo lectura (contactar por WhatsApp sigue disponible).
 	 */
 	readonly canMutateCustomers?: boolean;
+	/** #1649: cuenta corriente del cliente (server-backed, rendered by the shell). */
+	readonly renderCustomerAccount?: (customerId: string) => ReactNode;
 }
 
 export function CustomersScreen({
@@ -99,6 +101,7 @@ export function CustomersScreen({
 	onOpenProject,
 	workshopName,
 	canMutateCustomers = true,
+	renderCustomerAccount,
 }: CustomersScreenProps): ReactNode {
 	const formId = useId();
 	const [search, setSearch] = useState('');
@@ -363,6 +366,12 @@ export function CustomersScreen({
 										<ActiveBadge active={row.active} />
 									</span>
 								</div>
+								{renderCustomerAccount ? (
+									<div className="catalog-row-detail__field" style={{ gridColumn: '1 / -1', marginTop: '0.5rem' }}>
+										<span className="catalog-row-detail__label">Cuenta corriente</span>
+										{renderCustomerAccount(row.id)}
+									</div>
+								) : null}
 								{(() => {
 									const customerProjects = projects.filter((p) => p.customerId === row.id);
 									if (customerProjects.length === 0) return null;

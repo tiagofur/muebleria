@@ -356,6 +356,8 @@ var projectEventAppendRoles = map[string][]UserRole{
 	"quote_expired":    {RoleAdmin, RoleGerenteVentas, RoleVendedor},
 	"quote_cancelled":  {RoleAdmin, RoleGerenteVentas, RoleVendedor},
 	"deposit_received": {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	// #1649: voiding a recorded deposit is the same commercial authority.
+	"deposit_voided": {RoleAdmin, RoleGerenteVentas, RoleVendedor},
 	// Survey: ventas or ingeniería can be on site.
 	"survey_started":   {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
 	"survey_completed": {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},

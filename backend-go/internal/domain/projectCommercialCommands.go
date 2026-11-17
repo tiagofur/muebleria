@@ -116,7 +116,7 @@ func CommercialStatusEventType(status CommercialStatus) (string, bool) {
 // may only be created by the commercial commands (#1647), never appended as a
 // new event through the generic project aggregate PUT.
 func IsServerAuthoredCommercialEventType(eventType string) bool {
-	if eventType == "deposit_received" {
+	if eventType == "deposit_received" || eventType == "deposit_voided" {
 		return true
 	}
 	for _, t := range commercialStatusEventTypes {

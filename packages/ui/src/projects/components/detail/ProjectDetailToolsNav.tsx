@@ -1,11 +1,12 @@
 import { useRef, type KeyboardEvent, type ReactNode } from 'react';
-import { Activity, Camera, ClipboardList, MessageSquare, Ruler, Wrench } from 'lucide-react';
+import { Activity, Camera, ClipboardList, MessageSquare, Ruler, Wallet, Wrench } from 'lucide-react';
 import { surveyFabricationBlockers } from '@granete/domain';
 import { useProjectDetail } from '../projectDetailContext';
 
 export type QuoteToolsPanel =
   | 'overview'
   | 'lifecycle'
+  | 'payments'
   | 'survey'
   | 'kitchen'
   | 'scenarios'
@@ -19,6 +20,7 @@ export type QuoteToolsPanel =
 export const QUOTE_TOOLS_PANEL_IDS: readonly Exclude<QuoteToolsPanel, null>[] = [
   'overview',
   'lifecycle',
+  'payments',
   'survey',
   'kitchen',
   'scenarios',
@@ -119,6 +121,16 @@ export function ProjectDetailToolsNav({
           <Activity size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
           Ciclo de vida y entregas
         </button>
+        {ctx.renderPaymentsPanel ? (
+          <button
+            type="button"
+            {...tabProps('payments')}
+            data-testid="project-tools-payments"
+          >
+            <Wallet size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
+            Cobros
+          </button>
+        ) : null}
         <button
           type="button"
           {...tabProps('survey')}

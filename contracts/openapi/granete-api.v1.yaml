@@ -2865,6 +2865,180 @@
         }
       }
     },
+    "/projects/receivables": {
+      "get": {
+        "operationId": "listProjectReceivables",
+        "summary": "Accounts receivable of the selling organization (#1649)",
+        "description": "Accepted projects whose sale total the caller may see, with server-computed paid total and balance. Sellers without all-owners visibility only see their own projects.",
+        "responses": {
+          "200": {
+            "description": "Receivables",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectReceivablesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/payments": {
+      "get": {
+        "operationId": "getProjectPaymentSummary",
+        "summary": "Payments and balance of a project (#1649)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPaymentSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "recordProjectPayment",
+        "summary": "Record a later payment (#1649, server-authored)",
+        "description": "Records a payment (kind payment) with the authenticated actor and durable audit in one transaction. Same validation as the deposit command. Requires an Idempotency-Key: a retry replays instead of duplicating.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordProjectDepositRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Recorded payment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPayment"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/payments/{paymentId}/void": {
+      "post": {
+        "operationId": "voidProjectPayment",
+        "summary": "Void a payment with a reason (#1649)",
+        "description": "Append-only cancellation: inserts a void row (and a deposit_voided lifecycle event for a deposit) with the actor and audit in one transaction. A second void answers 409. Requires an Idempotency-Key.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/PaymentId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidProjectPaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The voided payment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPayment"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/projects/{projectId}/furniture-instances": {
       "get": {
         "operationId": "listProjectFurnitureInstances",
@@ -7599,6 +7773,15 @@
       }
     },
     "parameters": {
+      "PaymentId": {
+        "name": "paymentId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
       "IfMatch": {
         "name": "If-Match",
         "in": "header",
@@ -7839,6 +8022,257 @@
       }
     },
     "schemas": {
+      "ProjectPaymentKind": {
+        "type": "string",
+        "enum": [
+          "deposit",
+          "payment"
+        ],
+        "description": "deposit = anticipo (also records the deposit_received lifecycle event); payment = later payment."
+      },
+      "ProjectPaymentVoid": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason",
+          "voidedAt"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "voidedBy": {
+            "type": "string"
+          },
+          "voidedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProjectPayment": {
+        "type": "object",
+        "description": "One amount the customer paid (#1649). Append-only: a mistaken payment is cancelled by a void, never edited or deleted.",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "projectId",
+          "kind",
+          "amount",
+          "currency",
+          "receivedAt",
+          "recordedAt",
+          "origin"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ProjectPaymentKind"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "paymentMethod": {
+            "$ref": "#/components/schemas/ProjectPaymentMethod"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recordedBy": {
+            "type": "string",
+            "description": "Server actor; absent only for payments migrated from legacy events whose author was never recorded."
+          },
+          "projectEventId": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "command",
+              "migrated_event"
+            ]
+          },
+          "void": {
+            "$ref": "#/components/schemas/ProjectPaymentVoid"
+          }
+        }
+      },
+      "AcceptedQuoteAmount": {
+        "type": "object",
+        "description": "Frozen sale total of the exact accepted QuoteRevision the balance is computed against.",
+        "additionalProperties": false,
+        "required": [
+          "quoteRevisionId",
+          "revisionNumber",
+          "saleTotal",
+          "currency"
+        ],
+        "properties": {
+          "quoteRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revisionNumber": {
+            "type": "integer"
+          },
+          "saleTotal": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProjectPaymentSummary": {
+        "type": "object",
+        "description": "Server-computed payment state of one project (#1649): balance = accepted QuoteRevision sale total − non-voided payments in the same currency. balance is absent without an accepted quote.",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "currency",
+          "payments",
+          "paidTotal",
+          "otherCurrencyPayments"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "customerId": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "acceptedQuote": {
+            "$ref": "#/components/schemas/AcceptedQuoteAmount"
+          },
+          "payments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectPayment"
+            }
+          },
+          "paidTotal": {
+            "type": "number"
+          },
+          "balance": {
+            "type": "number"
+          },
+          "otherCurrencyPayments": {
+            "type": "integer",
+            "description": "Non-voided payments in another currency, excluded from the balance (never converted)."
+          }
+        }
+      },
+      "VoidProjectPaymentRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "ProjectReceivable": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "projectName",
+          "currency",
+          "quoteRevisionId",
+          "quoteRevisionNumber",
+          "saleTotal",
+          "paidTotal",
+          "balance"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectName": {
+            "type": "string"
+          },
+          "customerId": {
+            "type": "string"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "quoteRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quoteRevisionNumber": {
+            "type": "integer"
+          },
+          "saleTotal": {
+            "type": "number"
+          },
+          "paidTotal": {
+            "type": "number"
+          },
+          "balance": {
+            "type": "number"
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Real acceptance date of the exact revision (commercial activity), used for ageing."
+          }
+        }
+      },
+      "ProjectReceivablesResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectReceivable"
+            }
+          }
+        }
+      },
       "ProjectPaymentMethod": {
         "type": "string",
         "description": "Closed payment-method vocabulary for deposits (#1647).",

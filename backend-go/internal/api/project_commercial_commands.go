@@ -71,26 +71,12 @@ func respondWithCommercialCommandError(w http.ResponseWriter, err error, op stri
 	respondWithInternalError(w, err, op)
 }
 
-// HandleRecordProjectDeposit serves POST /api/projects/{projectId}/deposits.
-func (s *Server) HandleRecordProjectDeposit(w http.ResponseWriter, r *http.Request) {
-	claims := claimsFromRequest(r)
-	if claims == nil || claims.UserID == "" {
-		respondWithError(w, http.StatusUnauthorized, "invalid token")
-		return
-	}
-	if !requirePermission(w, domain.AnyRole(actorRoles(claims), func(rr domain.UserRole) bool {
-		return domain.RoleCanAppendProjectEvent(rr, "deposit_received")
-	}), "no tenés permiso para registrar anticipos") {
-		return
-	}
-	projectID := r.PathValue("projectId")
-	if !isValidUUID(projectID) {
-		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "obra no encontrada", nil)
-		return
-	}
+// parseProjectPaymentRequest decodes and validates the shared deposit/payment
+// body (#1647/#1649): normalized payload plus the real payment date.
+func parseProjectPaymentRequest(w http.ResponseWriter, r *http.Request) (domain.DepositPayloadInput, time.Time, bool) {
 	var req openapi.RecordProjectDepositRequest
 	if !decodeGeneratedJSONBody(w, r, &req) {
-		return
+		return domain.DepositPayloadInput{}, time.Time{}, false
 	}
 	in := domain.DepositPayloadInput{Amount: req.Amount, Currency: req.Currency}
 	if req.PaymentMethod != nil {
@@ -107,28 +93,64 @@ func (s *Server) HandleRecordProjectDeposit(w http.ResponseWriter, r *http.Reque
 		var fieldErr *domain.DepositFieldError
 		if errors.As(err, &fieldErr) {
 			respondWithFieldError(w, fieldErr.Field, fieldErr.Message)
-			return
+			return payload, time.Time{}, false
 		}
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, err.Error(), nil)
-		return
+		return payload, time.Time{}, false
 	}
 	now := time.Now().UTC()
 	at := now
 	if req.ReceivedAt != nil {
 		parsed, perr := time.Parse(time.RFC3339Nano, *req.ReceivedAt)
 		if perr != nil {
-			respondWithFieldError(w, "receivedAt", "fecha del anticipo inválida")
-			return
+			respondWithFieldError(w, "receivedAt", "fecha del pago inválida")
+			return payload, time.Time{}, false
 		}
 		if verr := domain.ValidateDepositReceivedAt(parsed, now); verr != nil {
 			var fieldErr *domain.DepositFieldError
 			errors.As(verr, &fieldErr)
 			respondWithFieldError(w, fieldErr.Field, fieldErr.Message)
-			return
+			return payload, time.Time{}, false
 		}
 		at = parsed.UTC()
 	}
+	return payload, at, true
+}
 
+// authorizeProjectPaymentWrite checks the commercial authority to record or
+// void money on a project (same roles as deposit_received).
+func authorizeProjectPaymentWrite(w http.ResponseWriter, r *http.Request) (string, bool) {
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.UserID == "" {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return "", false
+	}
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), func(rr domain.UserRole) bool {
+		return domain.RoleCanAppendProjectEvent(rr, "deposit_received")
+	}), "no tenés permiso para registrar cobros") {
+		return "", false
+	}
+	projectID := r.PathValue("projectId")
+	if !isValidUUID(projectID) {
+		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "obra no encontrada", nil)
+		return "", false
+	}
+	return projectID, true
+}
+
+// HandleRecordProjectDeposit serves POST /api/projects/{projectId}/deposits.
+// Since #1649 the deposit is also a payment row of the ledger, written with
+// its deposit_received lifecycle event in the same transaction.
+func (s *Server) HandleRecordProjectDeposit(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := authorizeProjectPaymentWrite(w, r)
+	if !ok {
+		return
+	}
+	payload, at, ok := parseProjectPaymentRequest(w, r)
+	if !ok {
+		return
+	}
+	claims := claimsFromRequest(r)
 	body := map[string]any{"amount": payload.Amount, "currency": payload.Currency}
 	if payload.PaymentMethod != "" {
 		body["paymentMethod"] = payload.PaymentMethod
@@ -136,33 +158,38 @@ func (s *Server) HandleRecordProjectDeposit(w http.ResponseWriter, r *http.Reque
 	if payload.Reference != "" {
 		body["reference"] = payload.Reference
 	}
+	paymentID := newPaymentID()
+	body["paymentId"] = paymentID
 	raw, err := json.Marshal(body)
 	if err != nil {
 		respondWithInternalError(w, err, "deposit payload")
 		return
 	}
+	now := time.Now().UTC()
 	actor := claims.UserID
-	stored, err := s.Store.RecordProjectCommercialEvent(r.Context(), storage.ProjectCommercialEventCommand{
-		Event: domain.ProjectEvent{
-			ID:        newProjectEventID(),
-			ProjectID: projectID,
-			Type:      "deposit_received",
-			At:        at,
-			ByUserID:  &actor,
-			Source:    commercialEventSource(claims.Transport),
-			Note:      payload.Note,
-			Payload:   raw,
-			CreatedAt: now,
-		},
-		AuditEventType: "project_deposit_recorded",
-		IP:             clientIP(r),
-		RequestID:      RequestIDFromContext(r.Context()),
+	event := domain.ProjectEvent{
+		ID:        newProjectEventID(),
+		ProjectID: projectID,
+		Type:      "deposit_received",
+		At:        at,
+		ByUserID:  &actor,
+		Source:    commercialEventSource(claims.Transport),
+		Note:      payload.Note,
+		Payload:   raw,
+		CreatedAt: now,
+	}
+	_, err = s.Store.RecordProjectPayment(r.Context(), storage.RecordProjectPaymentCommand{
+		Payment:      projectPaymentFromInput(paymentID, projectID, domain.ProjectPaymentKindDeposit, payload, at, actor),
+		DepositEvent: &event,
+		IP:           clientIP(r),
+		RequestID:    RequestIDFromContext(r.Context()),
 	})
 	if err != nil {
-		respondWithCommercialCommandError(w, err, "record project deposit")
+		respondWithPaymentCommandError(w, err, "record project deposit")
 		return
 	}
-	respondWithJSON(w, http.StatusCreated, toProjectLifecycleEventDTO(stored))
+	event.Source = domain.NormalizeProjectEventSource(string(event.Source))
+	respondWithJSON(w, http.StatusCreated, toProjectLifecycleEventDTO(&event))
 }
 
 // HandleSetProjectCommercialStatus serves POST /api/projects/{projectId}/commercial-status.

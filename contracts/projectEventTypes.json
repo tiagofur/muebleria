@@ -14,6 +14,7 @@
   "customer_approved",
   "customer_rejected",
   "deposit_received",
+  "deposit_voided",
   "design_approved",
   "design_changes_requested",
   "design_revision_created",

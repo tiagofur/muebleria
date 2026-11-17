@@ -58,6 +58,7 @@ export function SalesDashboard({
   ownerLabels = {},
   onOpenShowcase,
   onNewProject,
+  receivablesPanel,
 }: {
   /** All projects (already role-filtered by caller). */
   readonly projects: readonly ProjectWithCustomer[];
@@ -77,6 +78,8 @@ export function SalesDashboard({
   readonly onOpenShowcase?: () => void;
   /** #1142: salida contextual del pipeline vacío — nueva cotización. */
   readonly onNewProject?: () => void;
+  /** #1649: «Por cobrar» (server-backed, rendered by the shell). */
+  readonly receivablesPanel?: ReactNode;
 }): ReactNode {
   const [selectedVendedor, setSelectedVendedor] = useState<string | null>(null);
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
@@ -465,6 +468,12 @@ export function SalesDashboard({
         </ul>
       </div>
 
+      {receivablesPanel ? (
+        <div className="sales-dashboard__receivables" data-testid="sales-receivables">
+          <h2 className="sales-dashboard__section-title">Por cobrar</h2>
+          {receivablesPanel}
+        </div>
+      ) : null}
     </section>
   );
 }

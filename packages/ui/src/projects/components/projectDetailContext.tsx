@@ -456,6 +456,8 @@ export interface ProjectDetailContextValue {
   readonly onRecordDeposit?: (
     params: import('@granete/domain').DepositReceivedPayload & { note?: string },
   ) => boolean | void | Promise<boolean | void>;
+  /** #1649: «Cobros» panel rendered by the shell (server-backed). */
+  readonly renderPaymentsPanel?: () => import('react').ReactNode;
 }
 
 

@@ -249,6 +249,43 @@ func (s *stubStore) RecordProjectCommercialEvent(_ context.Context, cmd storage.
 	return &ev, nil
 }
 
+func (s *stubStore) RecordProjectPayment(_ context.Context, cmd storage.RecordProjectPaymentCommand) (*domain.ProjectPayment, error) {
+	if s.paymentErr != nil {
+		return nil, s.paymentErr
+	}
+	s.paymentCommands = append(s.paymentCommands, cmd)
+	p := cmd.Payment
+	p.Origin = "command"
+	if cmd.DepositEvent != nil {
+		p.ProjectEventID = cmd.DepositEvent.ID
+	}
+	return &p, nil
+}
+
+func (s *stubStore) VoidProjectPayment(_ context.Context, cmd storage.VoidProjectPaymentCommand) (*domain.ProjectPayment, error) {
+	if s.paymentErr != nil {
+		return nil, s.paymentErr
+	}
+	s.voidCommands = append(s.voidCommands, cmd)
+	return &domain.ProjectPayment{ID: cmd.PaymentID, ProjectID: cmd.ProjectID, Kind: domain.ProjectPaymentKindPayment,
+		Amount: 10, Currency: "MXN", Origin: "command", Void: &domain.ProjectPaymentVoid{Reason: cmd.Reason, VoidedBy: cmd.VoidedBy}}, nil
+}
+
+func (s *stubStore) GetProjectPaymentSummary(_ context.Context, projectID string) (*domain.ProjectPaymentSummary, error) {
+	if s.paymentErr != nil {
+		return nil, s.paymentErr
+	}
+	if s.paymentSummary != nil {
+		return s.paymentSummary, nil
+	}
+	summary := domain.SummarizeProjectPayments(projectID, "", "MXN", nil, nil)
+	return &summary, nil
+}
+
+func (s *stubStore) ListProjectReceivables(context.Context) ([]storage.ProjectReceivable, error) {
+	return s.receivables, s.paymentErr
+}
+
 func (s *stubStore) ListProjectEvents(_ context.Context, _ string) ([]domain.ProjectEvent, error) {
 	if s.listProjectEventsErr != nil {
 		return nil, s.listProjectEventsErr
@@ -311,5 +348,5 @@ func (s *stubStore) UpdateProjectWithInlineCustomer(_ context.Context, _ string,
 
 func (s *stubStore) DeleteProject(context.Context, string) error {
 	s.deleteProjectCalled = true
-	return nil
+	return s.deleteProjectErr
 }

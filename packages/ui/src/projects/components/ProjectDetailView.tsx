@@ -352,6 +352,8 @@ export interface ProjectDetailViewProps {
     projectId: string,
     params: import('@granete/domain').DepositReceivedPayload & { note?: string },
   ) => boolean | void | Promise<boolean | void>;
+  /** #1649: server-backed «Cobros» panel of the project (auth sessions only). */
+  readonly renderPaymentsPanel?: (projectId: string) => import('react').ReactNode;
 }
 
 // ─── Inner component (consumes context) ─────────────────────────────
@@ -881,6 +883,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onRequestApproval,
     onChangeCommercialStatus,
     onRecordDeposit,
+    renderPaymentsPanel,
   } = props;
 
   // #1124: UNA regla compartida de edición de contenido — el header y los
@@ -999,6 +1002,9 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onRecordDeposit: onRecordDeposit
         ? (params) => onRecordDeposit(project.id, params)
         : undefined,
+      renderPaymentsPanel: renderPaymentsPanel
+        ? () => renderPaymentsPanel(project.id)
+        : undefined,
     }),
     [
       project,
@@ -1085,6 +1091,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onRequestApproval,
       onChangeCommercialStatus,
       onRecordDeposit,
+      renderPaymentsPanel,
     ],
   );
 

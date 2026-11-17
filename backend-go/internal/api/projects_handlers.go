@@ -504,6 +504,12 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			err = s.Store.DeleteProject(r.Context(), id)
 		}
 		if err != nil {
+			// #1649: the payment ledger is append-only money history; a
+			// project that received payments cannot be deleted.
+			if storage.IsProjectPaymentsDeleteBlock(err) {
+				respondWithError(w, http.StatusConflict, "la obra tiene cobros registrados y no se puede eliminar")
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}

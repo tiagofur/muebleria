@@ -63,6 +63,8 @@ export function ProjectDetailToolsContent({
         <ProjectOverviewPanel project={project} nav={ctx.overviewNav ?? {}} />
       ) : null}
 
+      {toolsPanel === 'payments' && ctx.renderPaymentsPanel ? ctx.renderPaymentsPanel() : null}
+
       {toolsPanel === 'survey' ? (
         <SiteSurveyPanel
           projectId={project.id}

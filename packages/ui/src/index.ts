@@ -384,6 +384,17 @@ export {
 } from './sales';
 
 export {
+  ProjectPaymentsPanel,
+  ReceivablesPanel,
+  PAYMENT_METHOD_LABELS_ES,
+  formatPaymentMoney,
+  receivableAgeDays,
+  receivableTotalsByCurrency,
+  type ProjectPaymentsPanelProps,
+  type ReceivablesPanelProps,
+} from './payments';
+
+export {
   LoginScreen,
   AcceptInvitationScreen,
   ResetPasswordScreen,

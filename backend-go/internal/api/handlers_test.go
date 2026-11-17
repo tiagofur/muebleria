@@ -481,6 +481,12 @@ type stubStore struct {
 	projectEventsList           []domain.ProjectEvent
 	recordCommercialEventErr    error
 	commercialEventCommands     []storage.ProjectCommercialEventCommand
+	paymentErr                  error
+	deleteProjectErr            error
+	paymentCommands             []storage.RecordProjectPaymentCommand
+	voidCommands                []storage.VoidProjectPaymentCommand
+	paymentSummary              *domain.ProjectPaymentSummary
+	receivables                 []storage.ProjectReceivable
 	projectEventWrites          []domain.ProjectEvent
 	insertProjectEventErr       error
 	listProjectEventsErr        error

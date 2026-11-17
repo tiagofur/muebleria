@@ -1240,6 +1240,7 @@ export {
   deriveProjectStage,
   recordDepositReceived,
   getLatestDeposit,
+  getVoidedDepositEventIds,
   validateDepositPayload,
   DEPOSIT_PAYMENT_METHODS,
   DEPOSIT_MAX_AMOUNT,

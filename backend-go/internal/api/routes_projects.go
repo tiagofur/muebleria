@@ -33,6 +33,11 @@ func registerProjectRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	// come from the server; a retry with the same Idempotency-Key replays.
 	mux.Handle("POST /api/projects/{projectId}/deposits", noStoreMiddleware(authMW(server.RequireIdempotency("project.record-deposit", http.HandlerFunc(server.HandleRecordProjectDeposit)))))
 	mux.Handle("POST /api/projects/{projectId}/commercial-status", noStoreMiddleware(authMW(server.RequireIdempotency("project.set-commercial-status", http.HandlerFunc(server.HandleSetProjectCommercialStatus)))))
+	// #1649: payment ledger (append-only), voids, balance and receivables.
+	mux.Handle("GET /api/projects/receivables", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectReceivables))))
+	mux.Handle("GET /api/projects/{projectId}/payments", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectPaymentSummary))))
+	mux.Handle("POST /api/projects/{projectId}/payments", noStoreMiddleware(authMW(server.RequireIdempotency("project.record-payment", http.HandlerFunc(server.HandleRecordProjectPayment)))))
+	mux.Handle("POST /api/projects/{projectId}/payments/{paymentId}/void", noStoreMiddleware(authMW(server.RequireIdempotency("project.void-payment", http.HandlerFunc(server.HandleVoidProjectPayment)))))
 	mux.Handle("POST /api/projects/{projectId}/furniture-instances", authMW(server.RequireIdempotency("project.create-furniture-instance", http.HandlerFunc(server.HandleProjectFurnitureInstances))))
 	mux.Handle("POST /api/projects/{projectId}/furniture-instances/{instanceCommand...}", authMW(server.RequireIdempotency("project.duplicate-furniture-instance", projectFurnitureInstanceCommandRouter(map[string]http.Handler{
 		"duplicate": http.HandlerFunc(server.HandleFurnitureInstanceDuplicate),

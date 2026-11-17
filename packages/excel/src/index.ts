@@ -23,6 +23,13 @@ export {
 } from './commercialQuoteExport';
 
 export {
+  paymentReceiptPdfExport,
+  paymentReceiptLines,
+  formatReceiptMoney,
+  type PaymentReceiptPdfInput,
+} from './paymentReceiptPdf';
+
+export {
   commercialQuotePdfExport,
   type CommercialQuotePdfInput,
   type CommercialQuotePdfPhoto,

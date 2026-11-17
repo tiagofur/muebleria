@@ -56,6 +56,7 @@ var projectEventTypes = map[string]struct{}{
 	"quote_expired":                {},
 	"quote_cancelled":              {},
 	"deposit_received":             {},
+	"deposit_voided":               {},
 	"survey_started":               {},
 	"survey_completed":             {},
 	"design_revision_created":      {},

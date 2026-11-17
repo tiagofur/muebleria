@@ -22,7 +22,8 @@ export type CommercialEventType =
   | 'quote_lost'
   | 'quote_expired'
   | 'quote_cancelled'
-  | 'deposit_received';
+  | 'deposit_received'
+  | 'deposit_voided';
 
 export type SurveyDesignApprovalEventType =
   | 'survey_started'
@@ -111,6 +112,7 @@ export const PROJECT_EVENT_TYPES: readonly ProjectEventType[] = [
   'quote_expired',
   'quote_cancelled',
   'deposit_received',
+  'deposit_voided',
   'survey_started',
   'survey_completed',
   'design_revision_created',
@@ -252,6 +254,7 @@ export const PROJECT_EVENT_TYPE_LABELS_ES: Readonly<Record<ProjectEventType, str
   quote_expired: 'Cotización vencida',
   quote_cancelled: 'Cotización cancelada',
   deposit_received: 'Anticipo recibido',
+  deposit_voided: 'Anticipo anulado',
   survey_started: 'Levantamiento iniciado',
   survey_completed: 'Levantamiento completado',
   design_revision_created: 'Revisión de diseño creada',
@@ -694,17 +697,35 @@ export function validateDepositPayload(input: DepositCommandInput): DepositValid
 }
 
 /**
- * Get the latest deposit details from the project events.
+ * #1649: ids of deposit_received events cancelled by a later deposit_voided
+ * (server-authored, payload.depositEventId).
+ */
+export function getVoidedDepositEventIds(project: Project): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const ev of project.events ?? []) {
+    if (ev.type !== 'deposit_voided') continue;
+    const target = (ev.payload as { depositEventId?: unknown } | undefined)?.depositEventId;
+    if (typeof target === 'string' && target) ids.add(target);
+  }
+  return ids;
+}
+
+/**
+ * Get the latest NON-voided deposit from the project events (#1649: a voided
+ * deposit no longer satisfies the deposit gate).
  */
 export function getLatestDeposit(
   project: Project,
 ): { readonly event: ProjectEvent<DepositReceivedPayload>; readonly payload: DepositReceivedPayload } | null {
-  const event = findLatestEvent<DepositReceivedPayload>(project, 'deposit_received');
-  if (!event || !event.payload) return null;
-  return {
-    event,
-    payload: event.payload,
-  };
+  const voided = getVoidedDepositEventIds(project);
+  const active = (project.events ?? []).filter(
+    (ev) => ev.type === 'deposit_received' && !voided.has(ev.id) && ev.payload,
+  ) as ProjectEvent<DepositReceivedPayload>[];
+  if (active.length === 0) return null;
+  const event = active.reduce((latest, ev) =>
+    new Date(ev.at).getTime() >= new Date(latest.at).getTime() ? ev : latest,
+  );
+  return { event, payload: event.payload! };
 }
 
 /* ── Legacy Backfill Helper ───────────────────────────────────────────────── */
@@ -1254,9 +1275,8 @@ export function evaluateProductionReleaseGates(
     (project.events ?? []).some((e) => e.type === 'quote_won');
 
   // 2. Deposit received
-  const depositReceived =
-    getLatestDeposit(project) != null ||
-    (project.events ?? []).some((e) => e.type === 'deposit_received');
+  // #1649: only a non-voided deposit satisfies the gate.
+  const depositReceived = getLatestDeposit(project) != null;
 
   // 3. Survey verified — with a structured SiteSurvey (OC-040/OC-041) the soft
   // stamp is not enough: spaces must be captured on site and approved, and the
