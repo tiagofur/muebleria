@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -239,6 +240,103 @@ func TestAuthMiddleware_MapsDeferredTeamInvariantCommitError(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil || body.Code != "LAST_ADMIN" {
 		t.Fatalf("deferred typed error code=%q err=%v body=%s", body.Code, err, rr.Body.String())
 	}
+}
+
+// #1645: a request whose client aborted (context.Canceled) rolls back and is
+// logged as a cancellation at INFO — not as an internal 500 at ERROR — while a
+// server-side deadline keeps the internal-error contract.
+func TestAuthMiddleware_ClientCanceledTenantRequestIsNotAnInternalError(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	newUsers := func() *commitFailingUsers {
+		return &commitFailingUsers{
+			staticUsers: &staticUsers{
+				byID: map[string]*domain.User{
+					"user-1": {ID: "user-1", Email: "user@test.com", AccountStatus: domain.AccountStatusActive},
+				},
+				memberships: map[string]*domain.MembershipWithOrg{
+					"user-1:org-1": {
+						Membership:   domain.Membership{ID: "user-1:org-1", OrganizationID: "org-1", UserID: "user-1", CredentialVersion: 1, Roles: []domain.UserRole{domain.RoleAdmin}, Status: domain.MembershipStatusActive},
+						Organization: domain.Organization{ID: "org-1", Status: domain.OrganizationStatusActive, CredentialVersion: 1},
+					},
+				},
+			},
+			commitErr: errors.New("commit tenant transaction: failed to deallocate cached statement(s): conn closed"),
+		}
+	}
+	token, err := auth.GenerateLegacyWebToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "user-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var logs strings.Builder
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	cases := []struct {
+		name    string
+		ctxErr  func() (context.Context, context.CancelFunc)
+		handler http.HandlerFunc
+	}{
+		{
+			name: "commit fails after client abort",
+			ctxErr: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx, cancel
+			},
+			handler: func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) },
+		},
+		{
+			name: "handler renders 500 after client abort",
+			ctxErr: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx, cancel
+			},
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				respondWithError(w, http.StatusInternalServerError, "context canceled")
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logs.Reset()
+			ctx, cancel := tc.ctxErr()
+			defer cancel()
+			req := httptest.NewRequest(http.MethodGet, "/api/projects/p-1/quote-revisions", nil).WithContext(ctx)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rr := httptest.NewRecorder()
+			AuthMiddleware(mustAuthority(secret), newUsers())(tc.handler).ServeHTTP(rr, req)
+			if rr.Body.Len() != 0 {
+				t.Fatalf("canceled request must not render a response, got %d %s", rr.Code, rr.Body.String())
+			}
+			out := logs.String()
+			if strings.Contains(out, "level=ERROR") {
+				t.Fatalf("client cancellation logged at ERROR: %s", out)
+			}
+			if !strings.Contains(out, "tenant request canceled by client") {
+				t.Fatalf("missing cancellation log: %s", out)
+			}
+		})
+	}
+
+	t.Run("server deadline keeps the internal error", func(t *testing.T) {
+		logs.Reset()
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+		req := httptest.NewRequest(http.MethodGet, "/api/projects/p-1/quote-revisions", nil).WithContext(ctx)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+		AuthMiddleware(mustAuthority(secret), newUsers())(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})).ServeHTTP(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Fatalf("deadline status = %d, want 500", rr.Code)
+		}
+		if strings.Contains(logs.String(), "tenant request canceled by client") {
+			t.Fatalf("deadline misclassified as client cancellation: %s", logs.String())
+		}
+	})
 }
 
 // TestAuthMiddleware_OrgLessTokenFailClosed locks the #327 hardening: an

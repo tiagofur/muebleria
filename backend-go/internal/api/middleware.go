@@ -167,6 +167,10 @@ func AuthMiddleware(tokens *auth.Authority, users MembershipLookup) func(http.Ha
 				err := runner.WithinTenantTx(r.Context(), actor, func(ctx context.Context) error {
 					serveAuthenticatedRequest(buffer, r.WithContext(ctx), next, users, claims, actor)
 					if buffer.status >= http.StatusInternalServerError && !buffer.commitFailureAudit {
+						if requestCanceledByClient(r) {
+							logClientCanceledTenantRequest(r, "handler")
+							return errTenantHandlerFailure
+						}
 						// The captured response is discarded below and replaced
 						// by the generic transaction failure, so log what the
 						// handler actually rendered — its envelope carries the
@@ -183,6 +187,14 @@ func AuthMiddleware(tokens *auth.Authority, users MembershipLookup) func(http.Ha
 					return nil
 				})
 				if err != nil {
+					// #1645: the client abandoned the request (its fetch was
+					// aborted), so the transaction rolled back and nobody reads
+					// a response. Logging it as an internal 500 buried real
+					// failures under cancellation noise in the browser gate.
+					if requestCanceledByClient(r) {
+						logClientCanceledTenantRequest(r, "commit")
+						return
+					}
 					// Deferred Team constraints fire on transaction commit, after the
 					// handler has rendered into the capture writer. Preserve their typed
 					// public contract instead of returning a generic transaction error.
@@ -860,4 +872,23 @@ func flushCapturedResponse(w http.ResponseWriter, buffer *captureWriter) {
 // the contract (same approach as the storage "not found" matching).
 func isCommitRolledBack(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "commit unexpectedly resulted in rollback")
+}
+
+// requestCanceledByClient reports whether the request context was canceled
+// because the client went away (aborted fetch, closed tab). A server-side
+// deadline (context.DeadlineExceeded) is NOT a client cancellation and keeps
+// the internal-error path.
+func requestCanceledByClient(r *http.Request) bool {
+	return errors.Is(r.Context().Err(), context.Canceled)
+}
+
+// logClientCanceledTenantRequest records a client-canceled tenant request at
+// INFO: the transaction rolled back and no response is delivered (#1645).
+func logClientCanceledTenantRequest(r *http.Request, stage string) {
+	slog.Info("tenant request canceled by client; transaction rolled back",
+		"op", "tenant transaction",
+		"stage", stage,
+		"method", r.Method,
+		"path", r.URL.Path,
+		"request_id", RequestIDFromContext(r.Context()))
 }

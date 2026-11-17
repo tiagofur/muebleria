@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -129,7 +130,7 @@ func assembleReleaseInputs(ctx context.Context, store ReleaseServerInputsReader,
 		// Honest degradation (#875/#916 contract): a release whose pinned
 		// blobs cannot load resolves with EMPTY profile inputs (relationships
 		// surface TECHNICAL_PROFILE_REQUIRED) — never with live rows instead.
-		slog.Error("release server inputs: pinned profile load failed", "release", release.ID, "error", err)
+		logPinnedProfileLoadFailure(ctx, release.ID, err)
 		return inputs, nil
 	}
 	for _, profile := range profiles {
@@ -188,7 +189,7 @@ func (s *PostgresStore) HardwareProfilesForRelease(ctx context.Context, releaseI
 	_, manifestBytes, err := s.GetReleaseManifest(ctx, releaseID)
 	if err != nil {
 		if errors.Is(err, ErrManifestNotFound) {
-			return nil, fmt.Errorf("release %s has no manifest; it is not a published release", releaseID)
+			return nil, fmt.Errorf("release %s has no manifest; it is not a published release: %w", releaseID, err)
 		}
 		return nil, fmt.Errorf("load release manifest: %w", err)
 	}
@@ -215,4 +216,30 @@ func (s *PostgresStore) HardwareProfilesForRelease(ctx context.Context, releaseI
 		profiles = append(profiles, profile)
 	}
 	return profiles, nil
+}
+
+// manifestlessReleaseWarned dedupes the manifest-missing warning per release
+// for the life of the process (#1645): the browser gate lends the seeded draft
+// a published status without a manifest, and every resolve used to log the
+// same ERROR, burying real failures. The degradation itself is unchanged.
+var manifestlessReleaseWarned sync.Map
+
+// logPinnedProfileLoadFailure classifies a pinned-profile load failure:
+//   - the client went away (context canceled): INFO, the request is abandoned;
+//   - the release has no manifest: WARN once per release and process;
+//   - anything else (blob/decode/storage failure): ERROR every time.
+func logPinnedProfileLoadFailure(ctx context.Context, releaseID uuid.UUID, err error) {
+	switch {
+	case errors.Is(ctx.Err(), context.Canceled):
+		slog.Info("release server inputs: pinned profile load abandoned; request canceled by client",
+			"release", releaseID)
+	case errors.Is(err, ErrManifestNotFound):
+		if _, seen := manifestlessReleaseWarned.LoadOrStore(releaseID, struct{}{}); seen {
+			return
+		}
+		slog.Warn("release server inputs: release has no manifest; resolving with empty pinned profiles (logged once per release)",
+			"release", releaseID, "error", err)
+	default:
+		slog.Error("release server inputs: pinned profile load failed", "release", releaseID, "error", err)
+	}
 }

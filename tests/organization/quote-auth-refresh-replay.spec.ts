@@ -96,10 +96,17 @@ function observeQuoteRequests(
   ignoreRequest?: () => Request | null,
 ): RequestEvidence[] {
   const evidence: RequestEvidence[] = [];
-  page.on('response', (response: Response) => {
-    const request = response.request();
+  // #1645: count only reads the client completed. The gate serves the Vite dev
+  // build, where React StrictMode mounts the detail twice and the first read is
+  // aborted by its AbortSignal (net::ERR_ABORTED). Under CI load the server can
+  // send headers before that abort lands, so a `response` listener counted an
+  // abandoned read as a second natural GET. `requestfinished` never fires for an
+  // aborted request, which keeps the "exactly one natural read" proof exact.
+  page.on('requestfinished', async (request: Request) => {
     if (request.url() !== quoteEndpoint() || request.method() !== 'GET') return;
     if (request === ignoreRequest?.()) return;
+    const response = await request.response();
+    if (response === null) return;
     evidence.push({
       ordinal: firstOrdinal + evidence.length,
       method: request.method(),
