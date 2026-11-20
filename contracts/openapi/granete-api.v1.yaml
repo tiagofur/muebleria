@@ -58,7 +58,7 @@
       "post": {
         "operationId": "refreshSession",
         "summary": "Rotate the refresh credential (transport-dispatched)",
-        "description": "#460 SEC-4A credential transport contract. Mobile: POST the JSON body {refresh_token, transport:\"mobile\"} and receive the rotated credential in the body. Web: POST with no body; the HttpOnly granete_web_refresh cookie carries the credential, the request must send an exactly-allowed Origin plus the X-Granete-CSRF: 1 header (403 otherwise), and the rotated credential returns only as a fresh Set-Cookie bounded by the session's ORIGINAL absolute expiry. SketchUp/support (compatibility bridge until SEC-6): POST with no body and the Authorization bearer. A JSON body together with the web cookie is rejected as credential mixing.",
+        "description": "#460 SEC-4A credential transport contract. Mobile: POST the JSON body {refresh_token, transport:\"mobile\"} and receive the rotated credential in the body. Web: POST with no body; the HttpOnly granete_web_refresh cookie carries the credential, the request must send an exactly-allowed Origin plus the X-Granete-CSRF: 1 header (403 otherwise), and the rotated credential returns only as a fresh Set-Cookie bounded by the session's ORIGINAL absolute expiry. SketchUp/support (compatibility bridge until SEC-6): POST with no body and the Authorization bearer. A JSON body together with the web cookie is rejected as credential mixing. A request with no body, no web cookie and no Authorization header carries no refresh credential and answers 401 REFRESH_INVALID (#1447).",
         "responses": {
           "200": {
             "description": "Rotated access credential; rotated refresh credential via body (mobile) or Set-Cookie (web)",

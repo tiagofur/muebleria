@@ -131,14 +131,18 @@ func TestRefreshTransitionHandlerPrecedence(t *testing.T) {
 		body    bool
 		cookie  string
 		content string
+		bearer  string
 		want    string
 		status  int
 	}{
-		{"json body only", true, "", "application/json", "opaque", 0},
-		{"json body with content type only", false, "", "application/json", "opaque", 0},
-		{"web cookie only", false, "grt_refresh_v1.x", "", "web-cookie", 0},
-		{"body plus web cookie", true, "grt_refresh_v1.x", "application/json", "", http.StatusBadRequest},
-		{"neither", false, "", "", "legacy", 0},
+		{"json body only", true, "", "application/json", "", "opaque", 0},
+		{"json body with content type only", false, "", "application/json", "", "opaque", 0},
+		{"web cookie only", false, "grt_refresh_v1.x", "", "", "web-cookie", 0},
+		{"body plus web cookie", true, "grt_refresh_v1.x", "application/json", "", "", http.StatusBadRequest},
+		{"bearer only (SketchUp/support bridge)", false, "", "", "Bearer x", "legacy", 0},
+		// #1447: no credential at all is a terminal refresh error, not the bridge.
+		{"neither", false, "", "", "", "", http.StatusUnauthorized},
+		{"blank authorization header", false, "", "", "   ", "", http.StatusUnauthorized},
 	}
 	for _, tc := range requests {
 		var req *http.Request
@@ -154,11 +158,23 @@ func TestRefreshTransitionHandlerPrecedence(t *testing.T) {
 		if tc.cookie != "" {
 			req.Header.Set("Cookie", "granete_web_refresh="+tc.cookie)
 		}
+		if tc.bearer != "" {
+			req.Header.Set("Authorization", tc.bearer)
+		}
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if tc.status != 0 {
 			if rec.Code != tc.status {
 				t.Fatalf("%s: status=%d want=%d", tc.name, rec.Code, tc.status)
+			}
+			if got := rec.Header().Get("X-Handler"); got != "" {
+				t.Fatalf("%s: must not reach a handler, reached %q", tc.name, got)
+			}
+			if tc.status == http.StatusUnauthorized {
+				body := rec.Body.String()
+				if !strings.Contains(body, `"REFRESH_INVALID"`) || strings.Contains(body, "missing authorization header") {
+					t.Fatalf("%s: want terminal REFRESH_INVALID, got %s", tc.name, body)
+				}
 			}
 			continue
 		}

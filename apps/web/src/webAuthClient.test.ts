@@ -745,6 +745,146 @@ describe('scheduleWebAccessRefresh — scheduler por expiry real (§28/§29)', (
   });
 });
 
+describe('#1447 — refresh en background terminal termina la sesión de ESTA pestaña', () => {
+  function expiringSoon(token = 'access-expiring') {
+    applyWebCredential({
+      accessToken: token,
+      accessExpiresAt: new Date(Date.now() + 30_000).toISOString(),
+      absoluteSessionExpiresAt: IN_18H(),
+      sessionId: 'sess-1',
+      userId: 'user-1',
+      organizationId: 'org-1',
+    });
+  }
+
+  it('cookie ausente → REFRESH_INVALID: purga y avisa al app con el código', async () => {
+    vi.useFakeTimers();
+    try {
+      expiringSoon();
+      const ended: string[] = [];
+      const fetchImpl = vi.fn(async () => json({ code: 'REFRESH_INVALID', message: 'x' }, 401));
+      configureWebAuthClient({
+        baseUrl: BASE,
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        onSessionEnded: (code) => ended.push(code),
+      });
+      __resetWebAuthClientForTests();
+
+      scheduleWebAccessRefresh();
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(getCredential()).toBeNull();
+      expect(ended).toEqual(['REFRESH_INVALID']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('REFRESH_REVOKED conserva el código exacto', async () => {
+    vi.useFakeTimers();
+    try {
+      expiringSoon();
+      const ended: string[] = [];
+      configureWebAuthClient({
+        baseUrl: BASE,
+        fetchImpl: (async () => json({ code: 'REFRESH_REVOKED', message: 'x' }, 401)) as unknown as typeof fetch,
+        onSessionEnded: (code) => ended.push(code),
+      });
+      __resetWebAuthClientForTests();
+      scheduleWebAccessRefresh();
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(ended).toEqual(['REFRESH_REVOKED']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('error de red no cierra la sesión', async () => {
+    vi.useFakeTimers();
+    try {
+      expiringSoon('access-keep');
+      const ended: string[] = [];
+      configureWebAuthClient({
+        baseUrl: BASE,
+        fetchImpl: (async () => json({ message: 'boom' }, 503)) as unknown as typeof fetch,
+        onSessionEnded: (code) => ended.push(code),
+      });
+      __resetWebAuthClientForTests();
+      scheduleWebAccessRefresh();
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(ended).toEqual([]);
+      expect(getCredential()?.accessToken).toBe('access-keep');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('si mientras tanto entró otra credencial (login nuevo), no la purga', async () => {
+    vi.useFakeTimers();
+    try {
+      expiringSoon();
+      const ended: string[] = [];
+      const fetchImpl = vi.fn(async () => {
+        // Otra credencial se instala mientras la rotación vieja estaba en vuelo.
+        applyWebCredential({
+          accessToken: 'access-other-login',
+          accessExpiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+          absoluteSessionExpiresAt: IN_18H(),
+          sessionId: 'sess-2',
+          userId: 'user-1',
+          organizationId: 'org-1',
+        });
+        return json({ code: 'REFRESH_INVALID', message: 'x' }, 401);
+      });
+      configureWebAuthClient({
+        baseUrl: BASE,
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        onSessionEnded: (code) => ended.push(code),
+      });
+      __resetWebAuthClientForTests();
+      scheduleWebAccessRefresh();
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(ended).toEqual([]);
+      expect(getCredential()?.accessToken).toBe('access-other-login');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('deadline absoluto: también avisa al app (ABSOLUTE_DEADLINE)', async () => {
+    vi.useFakeTimers();
+    try {
+      applyWebCredential({
+        accessToken: 'access-at-deadline',
+        accessExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        absoluteSessionExpiresAt: new Date(Date.now() - 1_000).toISOString(),
+        sessionId: 'sess-1',
+        userId: 'user-1',
+        organizationId: 'org-1',
+      });
+      const ended: string[] = [];
+      configureWebAuthClient({
+        baseUrl: BASE,
+        fetchImpl: (async () => json(refreshBody())) as unknown as typeof fetch,
+        onSessionEnded: (code) => ended.push(code),
+      });
+      __resetWebAuthClientForTests();
+      scheduleWebAccessRefresh();
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(ended).toEqual(['ABSOLUTE_DEADLINE']);
+      expect(getCredential()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('fail closed del lock de sesión (review Blocker 1)', () => {
   it('refresh: sin primitiva de coordinación NO se llama al server y el outcome es network', async () => {
     seedSession('access-1');

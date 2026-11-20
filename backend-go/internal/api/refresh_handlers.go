@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
@@ -232,8 +233,11 @@ func (s *Server) revokeByRawRefreshCredential(r *http.Request, raw string) error
 //	JSON body (+ no web cookie) → Mobile opaque-body flow
 //	JSON body + web cookie      → rejected: credential mixing (fail closed)
 //	no body + web cookie        → Web HttpOnly-cookie flow (CSRF boundary inside)
-//	no body + no cookie         → legacy bodyless bearer bridge (SketchUp and
+//	no body + no cookie + bearer → legacy bodyless bearer bridge (SketchUp and
 //	                              support sessions only; restricted in HandleRefresh)
+//	no body + no cookie + no bearer → no refresh credential at all: terminal
+//	                              REFRESH_INVALID (#1447), never the bridge's
+//	                              misleading "missing authorization header"
 func refreshTransitionHandler(opaque, webCookie, legacy http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookiePresent := webRefreshCookieValue(r) != ""
@@ -246,6 +250,11 @@ func refreshTransitionHandler(opaque, webCookie, legacy http.Handler) http.Handl
 			opaque.ServeHTTP(w, r)
 		case cookiePresent:
 			webCookie.ServeHTTP(w, r)
+		case strings.TrimSpace(r.Header.Get("Authorization")) == "":
+			// A web client whose HttpOnly cookie is gone (expired, cleared,
+			// blocked) presents nothing: answer the refresh contract's own
+			// terminal error so the client re-logs in explicitly.
+			respondRefreshError(w, storage.ErrRefreshInvalid)
 		default:
 			legacy.ServeHTTP(w, r)
 		}

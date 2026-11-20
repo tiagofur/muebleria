@@ -22,7 +22,7 @@ import {
   applyWebCredential,
   getCredential,
 } from '../webAuthRuntime';
-import { __resetWebAuthClientForTests, coordinatedWebRefresh } from '../webAuthClient';
+import { __resetWebAuthClientForTests, coordinatedWebRefresh, scheduleWebAccessRefresh } from '../webAuthClient';
 import {
   createSessionGeneration,
   sessionScopeFromSession,
@@ -448,6 +448,43 @@ describe('workspaceStore — markSessionEnded', () => {
 
     expect(store.getState().session).toBeNull();
     expect(store.getState().sessionEndReason).toBe('expired');
+  });
+});
+
+describe('workspaceStore — refresh en background terminal (#1447)', () => {
+  it('lleva al login con el motivo exacto en vez de dejar la sesión muerta en pantalla', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(async (input: RequestInfo | URL) =>
+        String(input).endsWith('/auth/refresh')
+          ? new Response(JSON.stringify({ code: 'REFRESH_REVOKED', message: 'x' }), {
+              status: 401,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          : new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      );
+      const store = createWorkspaceStore({ deps: { baseUrl: 'http://test/api', fetchImpl } });
+      seedAuthSession(store);
+      applyWebCredential({
+        accessToken: 'access-expiring',
+        accessExpiresAt: new Date(Date.now() + 30_000).toISOString(),
+        absoluteSessionExpiresAt: new Date(Date.now() + 18 * 3_600_000).toISOString(),
+        sessionId: 'sess-1',
+        userId: AUTH_USER.id,
+        organizationId: null,
+      });
+
+      // Node env (no document): the scheduler timer fires at the 5 s minimum.
+      scheduleWebAccessRefresh();
+      await vi.advanceTimersByTimeAsync(6_000);
+
+      expect(fetchImpl).toHaveBeenCalledWith('http://test/api/auth/refresh', expect.anything());
+      expect(store.getState().session).toBeNull();
+      expect(store.getState().sessionEndReason).toBe('revoked');
+      expect(getCredential()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
