@@ -12,12 +12,15 @@ export interface MaterialExpandedDetailProps {
   readonly row: MaterialBoard;
   readonly edgeNameById: ReadonlyMap<string, string>;
   readonly resolveImageUrl: (url: string | undefined) => string | undefined;
+  /** #1651: price history (server-backed), when the shell provides it. */
+  readonly priceHistory?: ReactNode;
 }
 
 export function MaterialExpandedDetail({
   row,
   edgeNameById,
   resolveImageUrl,
+  priceHistory,
 }: MaterialExpandedDetailProps): ReactNode {
   return (
     <>
@@ -94,6 +97,12 @@ export function MaterialExpandedDetail({
         <div className="catalog-row-detail__field">
           <span className="catalog-row-detail__label">Notas</span>
           <span className="catalog-row-detail__value">{row.notes}</span>
+        </div>
+      ) : null}
+      {priceHistory ? (
+        <div className="catalog-row-detail__field" style={{ gridColumn: '1 / -1' }}>
+          <span className="catalog-row-detail__label">Historial de precio</span>
+          {priceHistory}
         </div>
       ) : null}
     </>

@@ -18,6 +18,10 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 
 	// Catálogo: Política de construcción de fábrica (#1078/#1218) — lectura
 	// del overlay parseado; nil = escalera de librería.
+	// #1651: bulk price updates (preview, all-or-nothing apply) and history.
+	mux.Handle("POST /api/catalog/price-updates/preview", noStoreMiddleware(authMW(http.HandlerFunc(server.HandlePreviewCatalogPriceUpdate))))
+	mux.Handle("POST /api/catalog/price-updates", noStoreMiddleware(authMW(server.RequireIdempotency("catalog.apply-price-update", http.HandlerFunc(server.HandleApplyCatalogPriceUpdate)))))
+	mux.Handle("GET /api/catalog/price-history/{kind}/{resourceId}", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleCatalogPriceHistory))))
 	mux.Handle("GET /api/catalog/construction-policy", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleConstructionPolicy))))
 
 	// Catálogo: Capacidades de apertura (#1134), proyectadas desde los

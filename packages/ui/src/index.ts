@@ -384,6 +384,14 @@ export {
 } from './sales';
 
 export {
+  BulkPriceUpdateDialog,
+  PriceHistoryPanel,
+  type BulkPriceUpdateDialogProps,
+  type PriceListReader,
+  type PriceHistoryPanelProps,
+} from './catalogs/prices';
+
+export {
   ProjectPaymentsPanel,
   ReceivablesPanel,
   PAYMENT_METHOD_LABELS_ES,
