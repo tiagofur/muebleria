@@ -184,13 +184,15 @@ test('1526: el perfil se arma eligiendo herrajes por nombre o código y su BOM r
 
   // Piezas por rol (#1534): pickers por rol con búsqueda — patrón probado
   // en agregados (clic al botón, clic al opción filtrado por nombre).
-  await pickFromPicker(page, 'gola-part-profile', 'Perfil GOLA');
-  await pickFromPicker(page, 'gola-part-supports', 'SU116');
+  // Anchored on the exact code: other specs in the same shard seed look-alike
+  // members (e.g. «8006-1534 — Perfil GOLA L 8006») in the same organization.
+  await pickFromPicker(page, 'gola-part-profile', '^8006 — ');
+  await pickFromPicker(page, 'gola-part-supports', '^SU116 — ');
   await page.getByTestId('gola-part-supports-spacing').fill('600');
   await page.getByTestId('gola-part-supports-dim-0').fill('39.5');
   await page.getByTestId('gola-part-supports-dim-1').fill('16.5');
   await page.getByTestId('gola-part-supports-dim-2').fill('20');
-  await pickFromPicker(page, 'gola-part-endcaps', 'tapas');
+  await pickFromPicker(page, 'gola-part-endcaps', '^CF8006TP — ');
   await uiClick(page, 'gola-profile-save');
   await expect(page.getByTestId('gola-profile-editor')).toHaveCount(0, { timeout: 15_000 });
 
@@ -202,6 +204,24 @@ test('1526: el perfil se arma eligiendo herrajes por nombre o código y su BOM r
   expect(stored.bom_members.profile).toMatchObject({ hardware_id: HW_PROFILE_8006, rule: 'interior_width' });
   expect(stored.bom_members.supports).toMatchObject({ hardware_id: HW_SUPPORT_SU116, rule: 'per_length', spacing_mm: 600, dimensions_mm: [39.5, 16.5, 20] });
   expect(stored.bom_members.endCaps).toMatchObject({ hardware_id: HW_CAPS_CF8006TP, rule: 'per_exposed_end' });
+
+  // New authoring only accepts gola profiles curated by the factory's grip
+  // styles once ANY style offers gola (another spec in the same shard creates
+  // one). Curate this profile explicitly instead of depending on spec order.
+  const curation = await client.request<{ readonly id: string }>('POST', '/catalog/grip-styles', {
+    token,
+    body: {
+      name: `Estilo picker 1526 ${RUN}`,
+      offered: true,
+      isDefault: false,
+      byFurnitureType: {
+        inferior: { mode: 'gola', topProfileId: DERIVED_ID },
+        superior: { mode: 'handle' },
+        alto: { mode: 'handle' },
+      },
+    },
+  });
+  expect(curation.id).toBeTruthy();
 
   // Applied to a design, the server resolves the three BOM lines.
   const bootstrapped = await client.bootstrapProjectDesign(token, {

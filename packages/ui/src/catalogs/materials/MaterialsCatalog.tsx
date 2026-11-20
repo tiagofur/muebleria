@@ -111,6 +111,10 @@ export interface MaterialsCatalogProps {
   readonly onCreateCategory?: (draft: CategoryDraft) => void;
   readonly onUpdateCategory?: (id: string, draft: CategoryDraft) => void;
   readonly onDeleteCategory?: (id: string) => void;
+  /** #1651: «Actualizar precios» (server-backed, rendered by the shell). */
+  readonly priceUpdateAction?: ReactNode;
+  /** #1651: price history of one board in its expanded detail. */
+  readonly renderPriceHistory?: (materialId: string) => ReactNode;
 }
 
 export function MaterialsCatalog({
@@ -127,6 +131,8 @@ export function MaterialsCatalog({
   onSelectionChange,
   requestCreateKey = 0,
   canMutate = true,
+  priceUpdateAction,
+  renderPriceHistory,
   showCosts = true,
   onUploadImage,
   resolveImageUrl = (u) => u,
@@ -508,6 +514,7 @@ export function MaterialsCatalog({
         title="Materiales"
         subtitle="Tableros del catálogo (melamina, MDF, etc.)"
         icon={<Layers size={16} strokeWidth={1.5} />}
+        secondaryActions={canMutate && !isTrulyEmpty ? priceUpdateAction : undefined}
         primaryAction={
           // K5 #1032: ONE creation CTA per state — on the truly-empty state
           // the EmptyState owns the action (same contract as Perfiles).
@@ -647,6 +654,7 @@ export function MaterialsCatalog({
                   row={row}
                   edgeNameById={edgeNameById}
                   resolveImageUrl={resolveImageUrl}
+                  priceHistory={renderPriceHistory?.(row.id)}
                 />
               )}
               getRowActions={

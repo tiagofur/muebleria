@@ -74,6 +74,8 @@ export interface EdgesCatalogProps {
   /** F035: hide ABM when false. */
   readonly canMutate?: boolean;
   readonly showCosts?: boolean;
+  /** #1651: «Actualizar precios» (server-backed, rendered by the shell). */
+  readonly priceUpdateAction?: ReactNode;
 }
 
 export function EdgesCatalog({
@@ -85,6 +87,7 @@ export function EdgesCatalog({
   openEntityId = null,
   onSelectionChange,
   canMutate = true,
+  priceUpdateAction,
   showCosts = true,
 }: EdgesCatalogProps): ReactNode {
   const formId = useId();
@@ -241,6 +244,7 @@ export function EdgesCatalog({
         title="Cantos"
         subtitle="Cintillas y melaminas de canto del taller"
         icon={<Minus size={16} strokeWidth={1.5} />}
+        secondaryActions={canMutate && !isTrulyEmpty ? priceUpdateAction : undefined}
         primaryAction={
           // K5 #1032: ONE creation CTA per state — on the truly-empty state
           // the EmptyState owns the action (same contract as Perfiles).
