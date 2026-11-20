@@ -192,6 +192,8 @@ import {
 import { organizationKeys } from './shared/query/queryKeys';
 import { sessionScopeKey } from './shared/query/sessionScope';
 import { usePaymentRenderers } from './payments/usePaymentRenderers';
+import { usePriceUpdateActions } from './catalog/usePriceUpdateActions';
+import { getUiStoreState } from './stores/uiStore';
 import type { SessionScope } from './shared/query/sessionScope';
 import {
   type QuoteRevisionsQuery,
@@ -896,6 +898,21 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
   const canAccessEmbarques = anyRole(actorRoles, roleCanAccessEmbarquesNav);
   const canAccessShipping = anyRole(actorRoles, roleCanAccessShippingNav);
   // #1649: server-backed Cobros / Por cobrar / cuenta corriente.
+  // #1651: server-backed bulk price updates and price history.
+  const priceUpdateActions = usePriceUpdateActions({
+    enabled: session === 'auth' && canMutateCatalog,
+    baseUrl: DEFAULT_API_BASE,
+    authToken,
+    sessionScope,
+    materialCategories,
+    hardwareCategories,
+    materials,
+    hardware,
+    onApplied: async (applied) => {
+      getUiStoreState().toast({ type: 'success', message: `Precios actualizados: ${applied} cambio(s). Las cotizaciones aceptadas no cambian.` });
+      await useWorkspaceStore.getState().loadWorkspace();
+    },
+  });
   const paymentRenderers = usePaymentRenderers({
     session,
     authToken,
@@ -2023,6 +2040,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       ) : null}
       {navId === 'materials' ? (
         <MaterialsCatalog
+          priceUpdateAction={priceUpdateActions.materialsAction}
+          renderPriceHistory={priceUpdateActions.renderMaterialPriceHistory}
           materials={materials}
           edges={edges}
           materialCategories={materialCategories}
@@ -2050,6 +2069,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       ) : null}
       {navId === 'edges' ? (
         <EdgesCatalog
+          priceUpdateAction={priceUpdateActions.edgesAction}
           edges={edges}
           onCreate={createEdge}
           onUpdate={updateEdge}
@@ -2063,6 +2083,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       ) : null}
       {navId === 'hardware' ? (
         <HardwareCatalog
+          priceUpdateAction={priceUpdateActions.hardwareAction}
           hardware={hardware}
           onCreate={createHardware}
           onCreateKit={createHardwareKit}

@@ -196,6 +196,23 @@ func (s *stubStore) DeactivateEdgeBand(_ context.Context, _ string, _ int64) err
 	return nil
 }
 
+func (s *stubStore) ListPricedItems(_ context.Context, kind domain.PriceResourceKind, filter storage.PriceItemFilter) ([]domain.PricedItem, error) {
+	s.pricedItemsFilter = &filter
+	return s.pricedItems, s.priceErr
+}
+
+func (s *stubStore) ApplyPriceUpdate(_ context.Context, cmd storage.ApplyPriceUpdateCommand) (*storage.ApplyPriceUpdateResult, error) {
+	if s.priceErr != nil {
+		return nil, s.priceErr
+	}
+	s.priceUpdates = append(s.priceUpdates, cmd)
+	return &storage.ApplyPriceUpdateResult{BatchID: "b0000000-0000-4000-8000-000000001651", Applied: len(cmd.Items), }, nil
+}
+
+func (s *stubStore) ListPriceHistory(context.Context, domain.PriceResourceKind, string, int) ([]storage.PriceHistoryEntry, error) {
+	return s.priceHistory, s.priceErr
+}
+
 func (s *stubStore) ListHardwares(context.Context) ([]domain.Hardware, error) {
 	if s.listHardwares != nil {
 		return s.listHardwares, nil

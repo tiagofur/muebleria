@@ -1,0 +1,129 @@
+/* #1651 — actualización masiva de precios e historial. Sólo tokens. */
+
+.bulk-prices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.bulk-prices__modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.bulk-prices__modes label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.bulk-prices__grid {
+  display: grid;
+  grid-template-columns: minmax(140px, auto) 1fr;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+}
+
+.bulk-prices__grid .bulk-prices__muted {
+  grid-column: 1 / -1;
+}
+
+.bulk-prices__preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.bulk-prices__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.bulk-prices__table-wrap {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+}
+
+.bulk-prices__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.bulk-prices__table th,
+.bulk-prices__table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+
+.bulk-prices__table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-card);
+  color: var(--text-secondary);
+}
+
+.bulk-prices__num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bulk-prices__issues {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.bulk-prices__muted {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.bulk-prices__error {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--danger-700);
+}
+
+.bulk-prices__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.price-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.price-history li {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+@media (max-width: 640px) {
+  .bulk-prices__grid,
+  .price-history li {
+    grid-template-columns: 1fr;
+  }
+}

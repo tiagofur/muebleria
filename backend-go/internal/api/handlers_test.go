@@ -479,6 +479,11 @@ type stubStore struct {
 	insertedActivities          []domain.ProductionActivity
 	floorStatusErr              error
 	projectEventsList           []domain.ProjectEvent
+	pricedItems                 []domain.PricedItem
+	pricedItemsFilter           *storage.PriceItemFilter
+	priceErr                    error
+	priceUpdates                []storage.ApplyPriceUpdateCommand
+	priceHistory                []storage.PriceHistoryEntry
 	recordCommercialEventErr    error
 	commercialEventCommands     []storage.ProjectCommercialEventCommand
 	paymentErr                  error

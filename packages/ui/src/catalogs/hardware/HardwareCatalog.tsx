@@ -146,6 +146,8 @@ export interface HardwareCatalogProps {
     /** #1625: insertos de la altura E. */
     readonly insertos?: readonly import('@granete/domain').HardwareKitSystemAccessory[];
   }) => Promise<unknown>;
+  /** #1651: «Actualizar precios» (server-backed, rendered by the shell). */
+  readonly priceUpdateAction?: ReactNode;
 }
 
 // K4 #1032: same workshop-facing labels as the form's shape select — the
@@ -169,6 +171,7 @@ export function HardwareCatalog({
   openEntityId = null,
   onSelectionChange,
   canMutate = true,
+  priceUpdateAction,
   showCosts = true,
   assetService,
   onReload,
@@ -729,6 +732,7 @@ export function HardwareCatalog({
         title="Herrajes"
         subtitle="Bisagras, correderas y demás del catálogo"
         icon={<Settings2 size={16} strokeWidth={1.5} />}
+        secondaryActions={canMutate && !isTrulyEmpty ? priceUpdateAction : undefined}
         primaryAction={
           // #1596 alcance 1: UN «Nuevo» que pregunta el tipo de ítem — los
           // botones «Juego de herraje» y «Nuevo sistema» quedan absorbidos

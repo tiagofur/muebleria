@@ -81,6 +81,26 @@ En cada lista: buscar, filtro de activos, y el patrón es siempre el mismo —
 click para **ver**, botón **Editar** para editar, **Desactivar** para sacar
 sin perder historia.
 
+**Actualizar precios** (Materiales, Cantos y Herrajes; ingeniería y
+administración) cambia muchos precios de una vez:
+
+- **Ajustar por porcentaje:** por ejemplo `12,5` o `-5`. Se puede limitar a
+  una categoría (sólo esa, sin sus subcategorías) y a un fabricante (materiales)
+  o marca (herrajes).
+- **Importar lista del proveedor:** un `.xlsx` o `.csv` con una fila de
+  encabezados. Elegís la columna de código y la de precio; los precios aceptan
+  coma decimal (`1.234,56`). Se empareja **sólo por código exacto**: un código
+  que no existe en tu catálogo se informa y **no se crea**, y las filas sin
+  código, con precio inválido o con el código repetido se descartan.
+- Antes de aplicar ves la **vista previa** (precio actual, nuevo y variación).
+  Al aplicar se cambian **todos o ninguno**: si alguien modificó un precio
+  mientras tanto, no se aplica nada y te pide volver a previsualizar.
+- En materiales el precio es el del **tablero**; el costo por m² se recalcula.
+- Las **cotizaciones ya aceptadas no cambian** (sus precios están congelados);
+  las nuevas usan los precios nuevos.
+- Cada cambio queda en el **Historial de precio** del material (al abrir su
+  fila): fecha, precio anterior y nuevo, origen y nota.
+
 ### 5.1 El zócalo desde la librería
 
 Al crear o editar un mueble, en la pestaña General está **"Zócalo: ¿cómo

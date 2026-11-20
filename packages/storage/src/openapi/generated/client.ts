@@ -3,6 +3,8 @@ import type {
   AcceptInvitationRequest,
   AccountStatusMutationResponse,
   AdminTransferResponse,
+  ApplyPriceUpdateRequest,
+  ApplyPriceUpdateResult,
   ApproveDesignRevisionForProductionRequest,
   AuthDeviceDirectory,
   AuthoringResolveRequest,
@@ -135,6 +137,9 @@ import type {
   PlatformOrganization,
   PlatformUser,
   PrepareDesignPublishRequest,
+  PriceHistoryResponse,
+  PriceUpdatePreview,
+  PriceUpdatePreviewRequest,
   ProductionRelease,
   ProjectCommercialSummary,
   ProjectDesignBootstrapRequest,
@@ -301,6 +306,9 @@ export abstract class GeneratedGraneteApiClient {
   getProjectPaymentSummary(token: string, projectId: string, signal?: AbortSignal): Promise<ProjectPaymentSummary> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/payments`, { schema: "ProjectPaymentSummary", token, signal }); }
   recordProjectPayment(token: string, projectId: string, body: RecordProjectDepositRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ProjectPayment> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/payments`, { schema: "ProjectPayment", token, bodySchema: "RecordProjectDepositRequest", body, idempotencyKey: key, signal }); }
   voidProjectPayment(token: string, projectId: string, paymentId: string, body: VoidProjectPaymentRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ProjectPayment> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/payments/${encodeURIComponent(paymentId)}/void`, { schema: "ProjectPayment", token, bodySchema: "VoidProjectPaymentRequest", body, idempotencyKey: key, signal }); }
+  previewCatalogPriceUpdate(token: string, body: PriceUpdatePreviewRequest, signal?: AbortSignal): Promise<PriceUpdatePreview> { return this.request("POST", "/catalog/price-updates/preview", { schema: "PriceUpdatePreview", token, bodySchema: "PriceUpdatePreviewRequest", body, signal }); }
+  applyCatalogPriceUpdate(token: string, body: ApplyPriceUpdateRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ApplyPriceUpdateResult> { return this.request("POST", "/catalog/price-updates", { schema: "ApplyPriceUpdateResult", token, bodySchema: "ApplyPriceUpdateRequest", body, idempotencyKey: key, signal }); }
+  getCatalogPriceHistory(token: string, kind: "material" | "edge" | "hardware", resourceId: string, signal?: AbortSignal): Promise<PriceHistoryResponse> { return this.request("GET", `/catalog/price-history/${encodeURIComponent(kind)}/${encodeURIComponent(resourceId)}`, { schema: "PriceHistoryResponse", token, signal }); }
   listProjectFurnitureInstances(token: string, projectId: string, signal?: AbortSignal): Promise<ReadonlyArray<FurnitureInstance>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/furniture-instances`, { arrayOf: "FurnitureInstance", token, signal }); }
   createProjectFurnitureInstance(token: string, projectId: string, body: CreateFurnitureInstanceRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<FurnitureInstance> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/furniture-instances`, { schema: "FurnitureInstance", token, bodySchema: "CreateFurnitureInstanceRequest", body, idempotencyKey: key, signal }); }
   duplicateProjectFurnitureInstance(token: string, projectId: string, instanceId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<FurnitureInstance> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/furniture-instances/${encodeURIComponent(instanceId)}:duplicate`, { schema: "FurnitureInstance", token, idempotencyKey: key, signal }); }

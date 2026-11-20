@@ -11,6 +11,11 @@ import (
 // Contrato: catálogo comercial — tableros, ambientes, categorías, cANTON,
 // edge bands, herrajes, perfiles HW (#913) y side assignments (#915).
 type CatalogStore interface {
+	// #1651: bulk price updates (preview read, all-or-nothing apply with
+	// append-only history) and per-resource price history.
+	ListPricedItems(ctx context.Context, kind domain.PriceResourceKind, filter storage.PriceItemFilter) ([]domain.PricedItem, error)
+	ApplyPriceUpdate(ctx context.Context, cmd storage.ApplyPriceUpdateCommand) (*storage.ApplyPriceUpdateResult, error)
+	ListPriceHistory(ctx context.Context, kind domain.PriceResourceKind, resourceID string, limit int) ([]storage.PriceHistoryEntry, error)
 	// #1369/#1393: filas + receta vigente (vive en agregado_revisions) leídas
 	// en UNA transacción — lista sin N+1 de transacciones y detalle sin la
 	// carrera de dos lecturas frente a un PUT concurrente.
