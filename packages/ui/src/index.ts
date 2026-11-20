@@ -530,3 +530,12 @@ export {
 } from './preview3d/usabilityBenchmark';
 
 export type { MachineOutputConfigProps, MachineOutputCatalogView } from './settings/MachineOutputSelectionSection';
+
+// #1648 — entrega comprometida
+export {
+  DeliveryCommitmentCard,
+  DeliveryStatusChip,
+  type DeliveryCommitmentCardProps,
+  type DeliveryCommitResult,
+  type DeliveryStatusChipProps,
+} from './projects/delivery';

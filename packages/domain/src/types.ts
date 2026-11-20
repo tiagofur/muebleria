@@ -1584,6 +1584,11 @@ export interface Project {
    * Planned installation date in Obra (YYYY-MM-DD).
    */
   readonly installationScheduledDate?: string;
+  /**
+   * Delivery date agreed with the customer (#1648, YYYY-MM-DD). Server-authored
+   * through the delivery-commitment command; never written by the aggregate PUT.
+   */
+  readonly committedDeliveryDate?: string;
   readonly currency: string;
 
   readonly marginFactor: number;

@@ -67,6 +67,14 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
   // Catalog: a 600-wide module with 18mm lateral sides (interior 564), the
   // 8006 hardware and the v2 gola profile (workshop discount 40 at the top).
   const catalog = await repository.getCatalog();
+  // Hardware codes are unique per organization and other specs in the same
+  // shard seed the same Cymisa SKUs (opening-bom-quote, the 1526 picker):
+  // adopt the existing row by exact code instead of colliding on it.
+  const hardwareIdByCode = (code: string, fallback: string): string =>
+    catalog.hardware.find((item) => item.code === code)?.id ?? fallback;
+  const hwProfile8006 = hardwareIdByCode('8006', HW_PROFILE_8006);
+  const hwSupportSu116 = hardwareIdByCode('SU116', HW_SUPPORT_SU116);
+  const hwCapsCf8006tp = hardwareIdByCode('CF8006TP', HW_CAPS_CF8006TP);
   const template = catalog.modules.find((module) => module.id === GATE_MODULE_A_ID) ?? catalog.modules[0]!;
   const depthMm = template.externalDims?.depth || 590;
   await repository.saveCatalog({
@@ -137,10 +145,10 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
       },
     ],
     hardware: [
-      ...catalog.hardware.filter((item) => item.id !== HW_PROFILE_8006 && item.id !== HW_SUPPORT_SU116 && item.id !== HW_CAPS_CF8006TP),
-      { id: HW_PROFILE_8006, code: '8006', name: 'Perfil GOLA L 8006', unit: 'meter' as const, costPerUnit: 100, active: true },
-      { id: HW_SUPPORT_SU116, code: 'SU116', name: 'Soporte GOLA atornillar', unit: 'piece' as const, costPerUnit: 10, active: true },
-      { id: HW_CAPS_CF8006TP, code: 'CF8006TP', name: 'Juego tapas terminales', unit: 'piece' as const, costPerUnit: 5, active: true },
+      ...catalog.hardware.filter((item) => item.id !== hwProfile8006 && item.id !== hwSupportSu116 && item.id !== hwCapsCf8006tp),
+      { id: hwProfile8006, code: '8006', name: 'Perfil GOLA L 8006', unit: 'meter' as const, costPerUnit: 100, active: true },
+      { id: hwSupportSu116, code: 'SU116', name: 'Soporte GOLA atornillar', unit: 'piece' as const, costPerUnit: 10, active: true },
+      { id: hwCapsCf8006tp, code: 'CF8006TP', name: 'Juego tapas terminales', unit: 'piece' as const, costPerUnit: 5, active: true },
     ],
     modules: [
       ...catalog.modules,
@@ -176,9 +184,9 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
       datasheet_status: 'verified',
       body_modifiers: [],
       bom_members: {
-        profile: { hardware_id: HW_PROFILE_8006, rule: 'interior_width', unit: 'meter' },
-        supports: { hardware_id: HW_SUPPORT_SU116, rule: 'per_length', spacing_mm: spacingMm },
-        endCaps: { hardware_id: HW_CAPS_CF8006TP, rule: 'per_exposed_end' },
+        profile: { hardware_id: hwProfile8006, rule: 'interior_width', unit: 'meter' },
+        supports: { hardware_id: hwSupportSu116, rule: 'per_length', spacing_mm: spacingMm },
+        endCaps: { hardware_id: hwCapsCf8006tp, rule: 'per_exposed_end' },
       },
       active: true,
     },
@@ -343,9 +351,9 @@ test('1532: el agarre del proyecto hereda, la excepción por mueble manda y la c
       datasheet_status: 'verified',
       body_modifiers: [],
       bom_members: {
-        profile: { hardware_id: HW_PROFILE_8006, rule: 'interior_width', unit: 'meter' },
-        supports: { hardware_id: HW_SUPPORT_SU116, rule: 'per_length', spacing_mm: spacingMm },
-        endCaps: { hardware_id: HW_CAPS_CF8006TP, rule: 'per_exposed_end' },
+        profile: { hardware_id: hwProfile8006, rule: 'interior_width', unit: 'meter' },
+        supports: { hardware_id: hwSupportSu116, rule: 'per_length', spacing_mm: spacingMm },
+        endCaps: { hardware_id: hwCapsCf8006tp, rule: 'per_exposed_end' },
       },
       active: true,
     },

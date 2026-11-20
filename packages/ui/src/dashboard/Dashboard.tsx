@@ -5,7 +5,7 @@
  */
 import '../common/alert.css';
 
-import type { AnalyticsPeriodDays, OpsException, WorkshopAnalytics } from '@granete/domain';
+import type { AnalyticsPeriodDays, DeliveryRiskSummary, OpsException, WorkshopAnalytics } from '@granete/domain';
 import type { ProjectCommercialSummary } from '@granete/storage';
 import type { ReactNode } from 'react';
 import {
@@ -16,6 +16,7 @@ import {
   ImageOff,
   Layers,
   LayoutDashboard,
+  Truck,
   Package,
   Plus,
   Sparkles,
@@ -117,6 +118,13 @@ export type DashboardProps = {
    * decoration later. Omitted for roles without the portfolio dashboard.
    */
   readonly opsExceptions?: readonly OpsException[];
+  /**
+   * #1648: late / due-this-week order counts (portfolio roles). Shown only
+   * once the workshop tracks committed dates (`tracked > 0`).
+   */
+  readonly deliveryRisk?: DeliveryRiskSummary;
+  /** Open Cotizaciones filtered to «Entregas en riesgo». */
+  readonly onOpenDeliveryRisk?: () => void;
   /** Navigate to the quotes list — clickable stat cards (#1116). */
   readonly onOpenQuotes?: () => void;
   /** Tour opt-in (#1116 §4.9): open the onboarding tour on explicit request. */
@@ -164,6 +172,8 @@ export function Dashboard({
   onAnalyticsPeriodChange,
   analyticsLoading = false,
   opsExceptions,
+  deliveryRisk,
+  onOpenDeliveryRisk,
   onOpenQuotes,
   onOpenTour,
   onboardingOffered = false,
@@ -427,6 +437,36 @@ export function Dashboard({
                 data-testid="dashboard-resume-draft-action"
               >
                 Abrir cotización
+              </button>
+            </div>
+          ) : null}
+          {deliveryRisk && deliveryRisk.tracked > 0 ? (
+            <div className="dashboard-delivery" data-testid="dashboard-delivery-risk">
+              <button
+                type="button"
+                className={`stat-card stat-card--button${deliveryRisk.overdue > 0 ? ' stat-card--danger' : ''}`}
+                onClick={onOpenDeliveryRisk}
+                disabled={!onOpenDeliveryRisk}
+                data-testid="stat-delivery-overdue"
+              >
+                <span className="stat-card__icon" aria-hidden>
+                  <Truck size={18} strokeWidth={1.5} />
+                </span>
+                <span className="stat-card__body">
+                  <span className="stat-card__label">Pedidos atrasados</span>
+                  <span className="stat-card__value" data-testid="stat-delivery-overdue-value">
+                    {deliveryRisk.overdue}
+                  </span>
+                  <span className="stat-card__subtext" data-testid="stat-delivery-due-soon">
+                    {deliveryRisk.dueSoon === 1
+                      ? '1 vence esta semana'
+                      : `${deliveryRisk.dueSoon} vencen esta semana`}
+                    {' · '}
+                    {deliveryRisk.tracked === 1
+                      ? '1 pedido con fecha comprometida'
+                      : `${deliveryRisk.tracked} pedidos con fecha comprometida`}
+                  </span>
+                </span>
               </button>
             </div>
           ) : null}

@@ -205,6 +205,7 @@ describe('deriveOpsExceptions (OC-090)', () => {
 
   it('covers the canonical OC-090 vocabulary', () => {
     expect(OPS_EXCEPTION_KINDS).toEqual([
+      'delivery_risk',
       'installation_risk',
       'survey_preliminary',
       'material_shortage',
@@ -220,6 +221,7 @@ describe('deriveOpsExceptions (OC-090)', () => {
         name: 'All signals',
         status: 'accepted',
         installationScheduledDate: '2026-08-19',
+        committedDeliveryDate: '2026-08-19',
         events: [{ id: 'e1', projectId: 'p-all', type: 'quote_won', at: '2026-08-01T10:00:00Z', source: 'web' }],
       }),
       makeProject({

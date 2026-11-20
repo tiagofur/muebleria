@@ -746,3 +746,34 @@ describe('Dashboard S2 (#1116)', () => {
     expect(screen.queryByTestId('dashboard-demo-chip')).toBeNull();
   });
 });
+
+describe('Dashboard — pedidos atrasados (#1648)', () => {
+  it('muestra el conteo y abre Cotizaciones filtradas', async () => {
+    const user = userEvent.setup();
+    const onOpenDeliveryRisk = vi.fn();
+    render(
+      <Dashboard
+        {...baseProps}
+        deliveryRisk={{ overdue: 2, dueSoon: 1, tracked: 5 }}
+        onOpenDeliveryRisk={onOpenDeliveryRisk}
+      />,
+    );
+    const card = screen.getByTestId('stat-delivery-overdue');
+    expect(screen.getByTestId('stat-delivery-overdue-value').textContent).toBe('2');
+    expect(screen.getByTestId('stat-delivery-due-soon').textContent).toBe(
+      '1 vence esta semana · 5 pedidos con fecha comprometida',
+    );
+    expect(card.className).toContain('stat-card--danger');
+    await user.click(card);
+    expect(onOpenDeliveryRisk).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin atrasos no se tiñe de peligro; sin fechas comprometidas no aparece', () => {
+    render(<Dashboard {...baseProps} deliveryRisk={{ overdue: 0, dueSoon: 0, tracked: 3 }} />);
+    expect(screen.getByTestId('stat-delivery-overdue').className).not.toContain('stat-card--danger');
+    expect(screen.getByTestId('stat-delivery-overdue-value').textContent).toBe('0');
+    cleanup();
+    render(<Dashboard {...baseProps} deliveryRisk={{ overdue: 0, dueSoon: 0, tracked: 0 }} />);
+    expect(screen.queryByTestId('dashboard-delivery-risk')).toBeNull();
+  });
+});

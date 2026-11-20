@@ -119,6 +119,8 @@ type ProjectStore interface {
 	// #1647: server-authored commercial commands (deposit, commercial status):
 	// event + optional commercial_status + audit in one transaction.
 	RecordProjectCommercialEvent(ctx context.Context, cmd storage.ProjectCommercialEventCommand) (*domain.ProjectEvent, error)
+	// CommitProjectDelivery sets/changes the committed delivery date (#1648).
+	CommitProjectDelivery(ctx context.Context, cmd storage.CommitProjectDeliveryCommand) (*storage.CommitProjectDeliveryResult, error)
 	// #1649: append-only payment ledger, voids, balance and receivables.
 	RecordProjectPayment(ctx context.Context, cmd storage.RecordProjectPaymentCommand) (*domain.ProjectPayment, error)
 	VoidProjectPayment(ctx context.Context, cmd storage.VoidProjectPaymentCommand) (*domain.ProjectPayment, error)

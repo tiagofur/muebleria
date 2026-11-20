@@ -29,6 +29,7 @@ import {
   releaseAuthorityLabel,
   releaseAuthorityOf,
 } from '@granete/domain';
+import { DeliveryCommitmentCard } from '../delivery';
 import '../projects.css';
 import './projectOverview.css';
 
@@ -43,6 +44,8 @@ export interface ProjectOverviewPanelProps {
   readonly project: Project;
   readonly nav: ProjectOverviewNav;
   readonly testId?: string;
+  /** #1648: committed delivery date command (absent → read-only). */
+  readonly onCommitDelivery?: import('../delivery').DeliveryCommitmentCardProps['onCommit'];
 }
 
 interface BlockerLine {
@@ -83,6 +86,7 @@ export function ProjectOverviewPanel({
   project,
   nav,
   testId = 'project-overview-panel',
+  onCommitDelivery,
 }: ProjectOverviewPanelProps): ReactNode {
   const stage = deriveProjectStage(project);
   // #577: release state from the resolved authority (canonical first).
@@ -160,6 +164,8 @@ export function ProjectOverviewPanel({
           </span>
         </div>
       </div>
+
+      <DeliveryCommitmentCard project={project} onCommit={onCommitDelivery} />
 
       {blockers.length > 0 ? (
         <div className="project-overview__blockers" data-testid="project-overview-blockers">

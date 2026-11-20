@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { KanbanSquare } from 'lucide-react';
 
 import {
@@ -7,8 +7,15 @@ import {
   PIPELINE_SECTORS,
   type ProjectFloorSummary,
 } from '@granete/domain';
-import type { Project } from '@granete/domain';
+import {
+  compareByCommittedDelivery,
+  isDeliveryAttention,
+  localIsoDate,
+  projectDeliveryInfo,
+  type Project,
+} from '@granete/domain';
 import { EmptyState, PageHeader } from '../common';
+import { DeliveryRiskToggle, DeliveryStatusChip } from '../projects/delivery';
 
 /**
  * Estado de Planta (F093 — Fase 1 visibilidad): every project in the
@@ -31,14 +38,27 @@ export function PlantBoardScreen({
   readonly onOpenOrder?: (projectId: string) => void;
   readonly testId?: string;
 }) {
+  // #1648: «Entregas en riesgo» — atrasadas o que vencen esta semana.
+  const [deliveryRiskOnly, setDeliveryRiskOnly] = useState(false);
+  const today = localIsoDate(new Date());
+  const inFactory = useMemo(
+    () => projects.filter((p) => p.status === 'accepted' || p.status === 'produced'),
+    [projects],
+  );
+  const deliveryRiskCount = useMemo(
+    () => inFactory.filter((p) => isDeliveryAttention(projectDeliveryInfo(p, today))).length,
+    [inFactory, today],
+  );
   const rows = useMemo(() => {
-    return projects
-      .filter((p) => p.status === 'accepted' || p.status === 'produced')
+    return inFactory
+      .filter((p) => !deliveryRiskOnly || isDeliveryAttention(projectDeliveryInfo(p, today)))
+      // #1648: urgencia primero — la entrega comprometida más próxima arriba.
+      .sort(compareByCommittedDelivery)
       .map((project) => ({
         project,
         summary: buildProjectFloorSummary(project),
       }));
-  }, [projects]);
+  }, [inFactory, deliveryRiskOnly, today]);
 
   return (
     <section className="plant-board" aria-label="Estado de planta">
@@ -48,7 +68,27 @@ export function PlantBoardScreen({
         icon={<KanbanSquare size={16} strokeWidth={1.5} />}
       />
 
-      {rows.length === 0 ? (
+      {inFactory.length > 0 ? (
+        <div className="plant-board__filters">
+          <DeliveryRiskToggle
+            pressed={deliveryRiskOnly}
+            count={deliveryRiskCount}
+            onChange={setDeliveryRiskOnly}
+            testId="plant-board-delivery-risk-toggle"
+          />
+        </div>
+      ) : null}
+
+      {rows.length === 0 && deliveryRiskOnly ? (
+        <EmptyState
+          variant="no-results"
+          title="Ninguna entrega en riesgo"
+          description="No hay obras en fábrica atrasadas ni que venzan esta semana."
+          actionLabel="Ver todas"
+          onAction={() => setDeliveryRiskOnly(false)}
+          actionTestId="plant-board-delivery-risk-clear"
+        />
+      ) : rows.length === 0 ? (
         <EmptyState
           title="Sin obras en fábrica"
           description="Cuando aceptes una cotización, el avance por sector aparece acá para todo el taller."
@@ -135,6 +175,11 @@ function PlantBoardRow({
           {summary.totalItems}{' '}
           {summary.totalItems === 1 ? 'mueble' : 'muebles'}
         </span>
+        {project.committedDeliveryDate ? (
+          <span className="plant-board__delivery" data-testid={`plant-board-delivery-${project.id}`}>
+            <DeliveryStatusChip info={projectDeliveryInfo(project, localIsoDate(new Date()))} withDays />
+          </span>
+        ) : null}
       </td>
       {summary.stages.map((stage) => {
         const done = stage.done >= stage.total;

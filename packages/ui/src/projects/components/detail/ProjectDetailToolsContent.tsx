@@ -60,7 +60,7 @@ export function ProjectDetailToolsContent({
       data-testid={`project-tools-panel-${toolsPanel}`}
     >
       {toolsPanel === 'overview' ? (
-        <ProjectOverviewPanel project={project} nav={ctx.overviewNav ?? {}} />
+        <ProjectOverviewPanel project={project} nav={ctx.overviewNav ?? {}} onCommitDelivery={ctx.onCommitDelivery} />
       ) : null}
 
       {toolsPanel === 'payments' && ctx.renderPaymentsPanel ? ctx.renderPaymentsPanel() : null}

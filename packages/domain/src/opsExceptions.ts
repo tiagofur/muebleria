@@ -19,8 +19,10 @@ import {
 } from './installation';
 import { openQualityIssues, reworkCostSummary } from './quality';
 import { computeJobCostSummary } from './jobCosting';
+import { localIsoDate, projectDeliveryInfo } from './projectDelivery';
 
 export const OPS_EXCEPTION_KINDS = [
+  'delivery_risk',
   'installation_risk',
   'survey_preliminary',
   'material_shortage',
@@ -46,6 +48,8 @@ export interface OpsException {
 
 export interface OpsExceptionsOptions {
   readonly now?: string;
+  /** Local calendar day (YYYY-MM-DD) for delivery status; defaults to the local day of `now`. */
+  readonly today?: string;
   /** Open shortage lines per project (computed by the shell from stock + planning). */
   readonly shortageLines?: ReadonlyMap<string, number>;
   /** Material consumption inputs for the cost variance roll-up (server-valued). */
@@ -83,6 +87,48 @@ function lastEventAt(project: Project): string | null {
 }
 
 /* ── Per-kind derivations ──────────────────────────────────────────────────── */
+
+/**
+ * #1648: committed delivery date late or due within the week (and no delivery
+ * milestone yet). Applies to any order with a commitment, not only those
+ * already in the factory: a late order that never reached production is the
+ * worst case.
+ */
+function deliveryRiskExceptions(project: Project, today: string): readonly OpsException[] {
+  const info = projectDeliveryInfo(project, today);
+  if (info.status === 'overdue' && info.daysToCommitted !== undefined) {
+    const late = -info.daysToCommitted;
+    return [
+      {
+        kind: 'delivery_risk',
+        severity: 'critical',
+        projectId: project.id,
+        projectName: project.name,
+        message: `Entrega comprometida el ${info.committedDate} atrasada (${late} día${late === 1 ? '' : 's'})`,
+        actionHint: 'Abrir la obra y avisar al cliente o mover la fecha con motivo',
+        truth: 'actual',
+      },
+    ];
+  }
+  if (info.status === 'due_soon' && info.daysToCommitted !== undefined) {
+    const d = info.daysToCommitted;
+    return [
+      {
+        kind: 'delivery_risk',
+        severity: d <= 2 ? 'critical' : 'warning',
+        projectId: project.id,
+        projectName: project.name,
+        message:
+          d === 0
+            ? `Entrega comprometida hoy (${info.committedDate})`
+            : `Entrega comprometida el ${info.committedDate} (faltan ${d} día${d === 1 ? '' : 's'})`,
+        actionHint: 'Abrir la obra y confirmar que llega a tiempo',
+        truth: 'actual',
+      },
+    ];
+  }
+  return [];
+}
 
 function installationRiskExceptions(
   project: Project,
@@ -296,6 +342,9 @@ export function deriveOpsExceptions(
   options: OpsExceptionsOptions = {},
 ): readonly OpsException[] {
   const now = options.now ?? new Date().toISOString();
+  // #1648: the delivery day is the LOCAL calendar day, the same one lists and
+  // chips use (a UTC slice disagrees after 18:00 in UTC-6).
+  const today = options.today ?? localIsoDate(new Date(now));
   const stalledDays = options.stalledDays ?? 14;
   const wipThreshold = options.wipThreshold ?? 20;
   const overrunPercent = options.costOverrunPercent ?? 10;
@@ -305,6 +354,7 @@ export function deriveOpsExceptions(
 
   const out: OpsException[] = [];
   for (const project of projects) {
+    out.push(...deliveryRiskExceptions(project, today));
     if (project.status !== 'accepted' && project.status !== 'produced') continue;
     out.push(...installationRiskExceptions(project, now));
     out.push(...surveyPreliminaryExceptions(project));

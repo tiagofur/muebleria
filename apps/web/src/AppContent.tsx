@@ -416,6 +416,13 @@ export function AppContent({
       }
       return repo.setProjectCommercialStatus(projectId, status, key);
     },
+    commitProjectDeliveryDate: (projectId, input, key) => {
+      const repo = getRepository();
+      if (!repo.commitProjectDeliveryDate) {
+        return Promise.reject(new Error('El repositorio activo no registra la fecha comprometida en el servidor'));
+      }
+      return repo.commitProjectDeliveryDate(projectId, input, key);
+    },
     saveProject: (p) => getRepository().saveProject(p) as Promise<void>,
     deleteProject: (id) => getRepository().deleteProject(id) as Promise<void>,
     createProjectTemplate: (t) =>
@@ -1167,6 +1174,7 @@ export function AppContent({
     warrantyTickets,
     workshopAnalytics,
     opsExceptions,
+    deliveryRisk,
     onDashboardOpenProject,
     onDashboardNewProject,
     onDashboardNewModule,
@@ -1997,6 +2005,7 @@ export function AppContent({
     canApproveSurvey,
     overviewNav,
     opsExceptions,
+    deliveryRisk,
     canOverrideQc: session === 'auth' && anyRole(actorRoles, roleCanSuperviseFloor),
     handleLoadCocinaLopezDemo,
     handleOverridesChange,

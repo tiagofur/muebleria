@@ -33,6 +33,7 @@ func registerProjectRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	// come from the server; a retry with the same Idempotency-Key replays.
 	mux.Handle("POST /api/projects/{projectId}/deposits", noStoreMiddleware(authMW(server.RequireIdempotency("project.record-deposit", http.HandlerFunc(server.HandleRecordProjectDeposit)))))
 	mux.Handle("POST /api/projects/{projectId}/commercial-status", noStoreMiddleware(authMW(server.RequireIdempotency("project.set-commercial-status", http.HandlerFunc(server.HandleSetProjectCommercialStatus)))))
+	mux.Handle("POST /api/projects/{projectId}/delivery-commitment", noStoreMiddleware(authMW(server.RequireIdempotency("project.commit-delivery-date", http.HandlerFunc(server.HandleCommitProjectDeliveryDate)))))
 	// #1649: payment ledger (append-only), voids, balance and receivables.
 	mux.Handle("GET /api/projects/receivables", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectReceivables))))
 	mux.Handle("GET /api/projects/{projectId}/payments", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectPaymentSummary))))

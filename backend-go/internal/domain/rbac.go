@@ -358,6 +358,10 @@ var projectEventAppendRoles = map[string][]UserRole{
 	"deposit_received": {RoleAdmin, RoleGerenteVentas, RoleVendedor},
 	// #1649: voiding a recorded deposit is the same commercial authority.
 	"deposit_voided": {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	// #1648: the committed delivery date is agreed by sales and owned by the
+	// production manager when the plan moves; only the server command writes it.
+	"delivery_date_committed": {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleGerenteProduccion},
+	"delivery_date_changed":   {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleGerenteProduccion},
 	// Survey: ventas or ingeniería can be on site.
 	"survey_started":   {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
 	"survey_completed": {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},

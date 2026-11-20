@@ -51,6 +51,8 @@ import type {
   SurveyElementInput,
   CommercialStatus,
   DepositCommandInput,
+  DeliveryCommitmentInput,
+  DeliveryCommitmentOutcome,
   ProjectEvent,
 } from '@granete/domain';
 
@@ -319,6 +321,12 @@ export interface WorkspaceRepository {
     status: CommercialStatus,
     idempotencyKey: string,
   ): Promise<{ commercialStatus: CommercialStatus; event: ProjectEvent }>;
+  /** #1648 — committed delivery date (server-authored; API adapter only). */
+  commitProjectDeliveryDate?(
+    projectId: string,
+    input: DeliveryCommitmentInput,
+    idempotencyKey: string,
+  ): Promise<DeliveryCommitmentOutcome>;
   /** Update existing project (upsert PUT→POST fallback for other adapters). */
   saveProject(project: Project): Promise<void>;
   deleteProject(projectId: string): Promise<void>;

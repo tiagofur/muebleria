@@ -91,6 +91,10 @@ type Project struct {
 	SurveyCompletedAt *time.Time `json:"survey_completed_at,omitempty"`
 	// InstallationScheduledDate is the planned date for site installation (YYYY-MM-DD).
 	InstallationScheduledDate *string `json:"installation_scheduled_date,omitempty"`
+	// CommittedDeliveryDate is the delivery date agreed with the customer
+	// (#1648, YYYY-MM-DD). Read-only on the aggregate: only the
+	// delivery-commitment command writes it, with a lifecycle event.
+	CommittedDeliveryDate *string `json:"committed_delivery_date,omitempty"`
 	Currency                  string  `json:"currency"`
 
 	MarginFactor     float64           `json:"margin_factor"`

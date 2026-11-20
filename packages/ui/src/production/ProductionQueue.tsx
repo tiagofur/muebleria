@@ -4,7 +4,14 @@
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
-import type { Project } from '@granete/domain';
+import {
+  compareByCommittedDelivery,
+  isDeliveryAttention,
+  localIsoDate,
+  projectDeliveryInfo,
+  type Project,
+} from '@granete/domain';
+import { DeliveryRiskToggle, DeliveryStatusChip } from '../projects/delivery';
 import {
   CheckCircle2,
   ClipboardList,
@@ -85,6 +92,8 @@ export function ProductionQueue({
 }: ProductionQueueProps): ReactNode {
   const [tab, setTab] = useState<'accepted' | 'produced'>('accepted');
   const [expandedBoard, setExpandedBoard] = useState<string | null>(null);
+  // #1648: «Entregas en riesgo» — atrasadas o que vencen esta semana.
+  const [deliveryRiskOnly, setDeliveryRiskOnly] = useState(false);
   /** Hub is the primary workspace: queue cards stay triage-only. */
   const hubWired = Boolean(onOpenOrder);
   /** Board preview on cards only when no hub (legacy) or explicit cutRows. */
@@ -96,18 +105,30 @@ export function ProductionQueue({
     [activeClaims],
   );
 
+  const today = localIsoDate(new Date());
+  const tabRows = useMemo(
+    () =>
+      projects
+        .filter((p) => isProductionQueueStatus(p.status))
+        .filter((p) => (tab === 'accepted' ? !claimedIds.has(p.id) : claimedIds.has(p.id))),
+    [projects, tab, claimedIds],
+  );
+  const deliveryRiskCount = useMemo(
+    () => tabRows.filter((p) => isDeliveryAttention(projectDeliveryInfo(p, today))).length,
+    [tabRows, today],
+  );
   const rows = useMemo(() => {
-    return projects
-      .filter((p) => isProductionQueueStatus(p.status))
-      .filter((p) =>
-        tab === 'accepted' ? !claimedIds.has(p.id) : claimedIds.has(p.id),
-      )
+    return tabRows
+      .filter((p) => !deliveryRiskOnly || isDeliveryAttention(projectDeliveryInfo(p, today)))
       .sort((a, b) => {
+        // #1648: the order promised earliest comes first; then recency.
+        const byDelivery = compareByCommittedDelivery(a, b);
+        if (byDelivery !== 0) return byDelivery;
         if (a.updatedAt < b.updatedAt) return 1;
         if (a.updatedAt > b.updatedAt) return -1;
         return 0;
       });
-  }, [projects, tab, claimedIds]);
+  }, [tabRows, deliveryRiskOnly, today]);
 
   if (loading) {
     return (
@@ -162,12 +183,31 @@ export function ProductionQueue({
         testIdPrefix="prod"
       />
 
+      <div className="prod-queue__filters">
+        <DeliveryRiskToggle
+          pressed={deliveryRiskOnly}
+          count={deliveryRiskCount}
+          onChange={setDeliveryRiskOnly}
+          testId="prod-delivery-risk-toggle"
+        />
+      </div>
+
       <div
         role="tabpanel"
         id={`prod-queue-panel-${tab}`}
         aria-labelledby={`prod-queue-tab-${tab}`}
       >
-        {rows.length === 0 ? (
+        {rows.length === 0 && deliveryRiskOnly ? (
+        <EmptyState
+          variant="no-results"
+          icon={Factory}
+          title="Ninguna entrega en riesgo"
+          description="No hay órdenes atrasadas ni que venzan esta semana en esta pestaña."
+          actionLabel="Ver todas"
+          onAction={() => setDeliveryRiskOnly(false)}
+          actionTestId="prod-delivery-risk-clear"
+        />
+      ) : rows.length === 0 ? (
         <EmptyState
           variant="empty"
           icon={Factory}
@@ -247,6 +287,12 @@ export function ProductionQueue({
                     </p>
                     <p className="prod-queue-card__signals">
                       <ProjectFloorStageChip project={project} />
+                      {project.committedDeliveryDate ? (
+                        <span className="prod-queue-card__signal" data-testid={`prod-signal-delivery-${project.id}`}>
+                          Entrega {formatIsoDate(project.committedDeliveryDate)}{' '}
+                          <DeliveryStatusChip info={projectDeliveryInfo(project, today)} withDays />
+                        </span>
+                      ) : null}
                       {lastExport ? (
                           <span
                             className="prod-queue-card__signal"

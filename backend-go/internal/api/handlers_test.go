@@ -485,6 +485,9 @@ type stubStore struct {
 	priceUpdates                []storage.ApplyPriceUpdateCommand
 	priceHistory                []storage.PriceHistoryEntry
 	recordCommercialEventErr    error
+	deliveryCommands            []storage.CommitProjectDeliveryCommand
+	deliveryErr                 error
+	deliveryCurrent             *string
 	commercialEventCommands     []storage.ProjectCommercialEventCommand
 	paymentErr                  error
 	deleteProjectErr            error

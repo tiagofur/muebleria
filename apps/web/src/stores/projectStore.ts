@@ -45,6 +45,8 @@ import type {
   ApprovalType,
   CommercialStatus,
   DepositCommandInput,
+  DeliveryCommitmentInput,
+  DeliveryCommitmentOutcome,
   ProjectEvent,
   ProductionReleaseOptions,
   ChangeOrderImpact,
@@ -277,6 +279,12 @@ export interface ProjectStoreDeps {
     status: CommercialStatus,
     idempotencyKey: string,
   ) => Promise<{ commercialStatus: CommercialStatus; event: ProjectEvent }>;
+  /** #1648 — server-authored committed delivery date. */
+  readonly commitProjectDeliveryDate?: (
+    projectId: string,
+    input: DeliveryCommitmentInput,
+    idempotencyKey: string,
+  ) => Promise<DeliveryCommitmentOutcome>;
   /** Persists a single project (PUT). */
   readonly saveProject: (project: Project) => Promise<void>;
   /** Deletes a project by id. */
@@ -693,6 +701,14 @@ export interface ProjectState {
     },
     actor?: ProjectActor,
   ) => Promise<boolean>;
+  /**
+   * #1648: commits/moves the delivery date through the server command. The
+   * result carries the server verdict so the form can show it inline.
+   */
+  readonly commitDeliveryDate: (
+    projectId: string,
+    input: DeliveryCommitmentInput,
+  ) => Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
 }
 
 
@@ -759,6 +775,7 @@ export function createProjectStore(options: InternalOptions) {
     available: options.deps.canRunCommercialCommands,
     recordDeposit: options.deps.recordProjectDeposit,
     setStatus: options.deps.setProjectCommercialStatus,
+    commitDelivery: options.deps.commitProjectDeliveryDate,
   };
   const persistDeleteProject = options.deps.deleteProject;
   const persistCreateTemplate = options.deps.createProjectTemplate;
@@ -2435,6 +2452,31 @@ export function createProjectStore(options: InternalOptions) {
       });
       patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
       toast({ type: 'info', message: `Aprobación solicitada (${type}).` });
+    },
+
+    commitDeliveryDate: async (projectId, input) => {
+      if (!get().projects.some((pr) => pr.id === projectId)) {
+        return { ok: false, message: 'La obra ya no está en la lista.' };
+      }
+      if (!commercialCommands.available?.() || !commercialCommands.commitDelivery) {
+        return { ok: false, message: 'La fecha comprometida se registra en el servidor: iniciá sesión con conexión.' };
+      }
+      try {
+        // #1648: server-authored — no optimistic date, no PUT.
+        const result = await commercialCommands.commitDelivery(projectId, input, newIdempotencyKey());
+        applyServerCommercialEvent(set, get, projectId, result.event);
+        const current = get().projects;
+        set({
+          projects: current.map((pr) =>
+            pr.id === projectId ? { ...pr, committedDeliveryDate: result.committedDeliveryDate } : pr,
+          ),
+        });
+        toast({ type: 'success', message: 'Fecha de entrega comprometida registrada.' });
+        return { ok: true };
+      } catch (err) {
+        const detail = err instanceof Error && err.message ? err.message : 'Revisá tu conexión e intentá de nuevo.';
+        return { ok: false, message: `No se guardó la fecha: ${detail}` };
+      }
     },
 
     changeCommercialStatus: async (projectId, status, actor) => {

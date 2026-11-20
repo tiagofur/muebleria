@@ -14,6 +14,7 @@ import type {
   ChangeMembershipRolesRequest,
   ChangeMembershipSectorsRequest,
   CommercialProjection,
+  CommitDeliveryDateRequest,
   ComponentSideAssignment,
   ComponentSideAssignmentRemoved,
   ComponentSideAssignmentWrite,
@@ -30,6 +31,7 @@ import type {
   CreateProductionReleaseRequest,
   CreateStandardReleaseRequest,
   CustomerSummary,
+  DeliveryCommitmentResult,
   DeriveHardwareAssetRevisionRequest,
   Design,
   DesignArtifactGrant,
@@ -302,6 +304,7 @@ export abstract class GeneratedGraneteApiClient {
   refreshProjectGrip(token: string, projectId: string, version: number, body: ProjectGripRefresh, signal?: AbortSignal): Promise<ProjectGrip> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/grip:refresh`, { schema: "ProjectGrip", token, ifMatch: version, bodySchema: "ProjectGripRefresh", body, signal }); }
   recordProjectDeposit(token: string, projectId: string, body: RecordProjectDepositRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ProjectLifecycleEvent> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/deposits`, { schema: "ProjectLifecycleEvent", token, bodySchema: "RecordProjectDepositRequest", body, idempotencyKey: key, signal }); }
   setProjectCommercialStatus(token: string, projectId: string, body: SetProjectCommercialStatusRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<SetProjectCommercialStatusResponse> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/commercial-status`, { schema: "SetProjectCommercialStatusResponse", token, bodySchema: "SetProjectCommercialStatusRequest", body, idempotencyKey: key, signal }); }
+  commitProjectDeliveryDate(token: string, projectId: string, body: CommitDeliveryDateRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DeliveryCommitmentResult> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/delivery-commitment`, { schema: "DeliveryCommitmentResult", token, bodySchema: "CommitDeliveryDateRequest", body, idempotencyKey: key, signal }); }
   listProjectReceivables(token: string, signal?: AbortSignal): Promise<ProjectReceivablesResponse> { return this.request("GET", "/projects/receivables", { schema: "ProjectReceivablesResponse", token, signal }); }
   getProjectPaymentSummary(token: string, projectId: string, signal?: AbortSignal): Promise<ProjectPaymentSummary> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/payments`, { schema: "ProjectPaymentSummary", token, signal }); }
   recordProjectPayment(token: string, projectId: string, body: RecordProjectDepositRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ProjectPayment> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/payments`, { schema: "ProjectPayment", token, bodySchema: "RecordProjectDepositRequest", body, idempotencyKey: key, signal }); }

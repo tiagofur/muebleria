@@ -320,6 +320,8 @@ export interface ProjectsScreenProps {
    * Shell owns navigation; screen reacts via effect.
    */
   readonly openProjectId?: string | null;
+  /** #1648: mount with «Entregas en riesgo» active (dashboard deep link). */
+  readonly initialDeliveryRiskOnly?: boolean;
   /**
    * Incrementing token to open the create-project modal from outside
    * (Dashboard quick action). 0 / undefined = no request.
@@ -464,6 +466,8 @@ export interface ProjectsScreenProps {
   ) => boolean | void | Promise<boolean | void>;
   /** #1649: server-backed «Cobros» panel of the project (auth sessions only). */
   readonly renderPaymentsPanel?: (projectId: string) => import('react').ReactNode;
+  /** #1648: server-authored committed delivery date (absent → read-only). */
+  readonly onCommitDelivery?: (projectId: string, input: import('@granete/domain').DeliveryCommitmentInput) => Promise<import('./delivery').DeliveryCommitResult>;
 }
 
 export function ProjectsScreen({
@@ -550,6 +554,7 @@ export function ProjectsScreen({
   exportBlocked = false,
   projectEstimates = {},
   openProjectId = null,
+  initialDeliveryRiskOnly = false,
   requestCreateKey = 0,
   loading = false,
   workshopSettings = null,
@@ -587,6 +592,7 @@ export function ProjectsScreen({
   onChangeCommercialStatus,
   onRecordDeposit,
   renderPaymentsPanel,
+  onCommitDelivery,
 }: ProjectsScreenProps): ReactNode {
   // #1142 P2: referencia desde la Vitrina — persiste hasta que el usuario la resuelve.
   const [referenceHandoff, setReferenceHandoff] = useState<
@@ -626,6 +632,7 @@ export function ProjectsScreen({
     workshopSettings,
     requestCreateKey,
     openProjectId,
+    initialDeliveryRiskOnly,
     autoPresentId,
     projectTemplates,
     canMutate,
@@ -935,6 +942,7 @@ export function ProjectsScreen({
           onChangeCommercialStatus={onChangeCommercialStatus}
           onRecordDeposit={onRecordDeposit}
           renderPaymentsPanel={renderPaymentsPanel}
+          onCommitDelivery={onCommitDelivery}
         />
       ) : (
         <>
@@ -970,6 +978,10 @@ export function ProjectsScreen({
           commercialFiltersDisabled={state.commercialFiltersDisabled}
           sortKey={state.sortKey}
           onSortChange={state.setSortKey}
+          deliveryRiskOnly={state.deliveryRiskOnly}
+          deliveryRiskCount={state.deliveryRiskCount}
+          onDeliveryRiskOnlyChange={state.setDeliveryRiskOnly}
+          today={state.today}
           isTrulyEmpty={state.isTrulyEmpty}
           isFilterEmpty={state.isFilterEmpty}
           canMutate={canMutate}
@@ -980,6 +992,7 @@ export function ProjectsScreen({
           onClearFilters={() => {
             state.setSearch('');
             state.setStatusFilter('all');
+            state.setDeliveryRiskOnly(false);
           }}
           onNewProject={state.startCreate}
           onFromTemplate={state.startFromTemplate}

@@ -6,7 +6,7 @@
  * geometry, or live catalog defaults.
  */
 
-import type { Customer, Project } from '@granete/domain';
+import { compareByCommittedDelivery, type Customer, type Project } from '@granete/domain';
 import type {
   ProjectCommercialQuoteStatus,
   ProjectCommercialSummary,
@@ -385,7 +385,8 @@ export function filterProjectsByCommercialStatus(
 }
 
 /** #1118: criterios de orden de la lista de Cotizaciones. */
-export type ProjectListSortKey = 'recent' | 'amount' | 'customer';
+/** #1648: 'delivery' = entrega comprometida más próxima primero. */
+export type ProjectListSortKey = 'recent' | 'amount' | 'customer' | 'delivery';
 
 export const PROJECT_LIST_SORT_OPTIONS: readonly {
   readonly value: ProjectListSortKey;
@@ -394,6 +395,7 @@ export const PROJECT_LIST_SORT_OPTIONS: readonly {
   { value: 'recent', label: 'Recientes' },
   { value: 'amount', label: 'Monto' },
   { value: 'customer', label: 'Cliente' },
+  { value: 'delivery', label: 'Entrega comprometida' },
 ];
 
 /**
@@ -425,6 +427,9 @@ export function sortProjectsForList(
       break;
     case 'customer':
       sorted.sort((a, b) => collator.compare(customerName(a), customerName(b)));
+      break;
+    case 'delivery':
+      sorted.sort((a, b) => compareByCommittedDelivery(a, b) || collator.compare(a.name, b.name));
       break;
     case 'recent':
     default:
