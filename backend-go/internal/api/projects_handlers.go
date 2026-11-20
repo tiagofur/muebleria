@@ -355,6 +355,12 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		p.OrganizationID = existing.OrganizationID
 		p.SalesOrganizationID = existing.SalesOrganizationID
 		p.ManufacturingOrganizationID = existing.ManufacturingOrganizationID
+		// #1647: commercial status and commercial lifecycle events (deposits,
+		// quote_*) are server-authored through their own commands. A
+		// client-sent copy is ignored, never persisted; every other NEW event
+		// is stamped with the authenticated actor instead of a client id.
+		p.CommercialStatus = existing.CommercialStatus
+		p.Events = serverOwnProjectEventAppends(r, claims, existing.Events, p.Events)
 		// Sales-organization callers never receive the manufacturing payload;
 		// restore the stored copy so their round-trip PUTs cannot wipe it.
 		if !orgSeesManufacturing(claims, existing) {

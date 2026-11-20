@@ -2755,6 +2755,116 @@
         }
       }
     },
+    "/projects/{projectId}/deposits": {
+      "post": {
+        "operationId": "recordProjectDeposit",
+        "summary": "Record a project deposit (#1647, server-authored)",
+        "description": "Records a deposit_received lifecycle event authored by the server: validated payload, server-generated id, authenticated actor and durable audit in one transaction. Requires an Idempotency-Key: a retry replays the recorded event instead of creating a second deposit. A project outside the caller's tenant answers the uniform 404.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordProjectDepositRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectLifecycleEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/commercial-status": {
+      "post": {
+        "operationId": "setProjectCommercialStatus",
+        "summary": "Set the project commercial status (#1647, server-authored)",
+        "description": "Changes projects.commercial_status and records the matching lifecycle event with the authenticated actor and durable audit in one transaction. The generic project PUT no longer writes this field. Requires an Idempotency-Key.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetProjectCommercialStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetProjectCommercialStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/projects/{projectId}/furniture-instances": {
       "get": {
         "operationId": "listProjectFurnitureInstances",
@@ -7729,6 +7839,150 @@
       }
     },
     "schemas": {
+      "ProjectPaymentMethod": {
+        "type": "string",
+        "description": "Closed payment-method vocabulary for deposits (#1647).",
+        "enum": [
+          "cash",
+          "transfer",
+          "card",
+          "check",
+          "other"
+        ]
+      },
+      "ProjectCommercialStatus": {
+        "type": "string",
+        "description": "Commercial pipeline status of a project (OC-011), separate from QuoteRevision and manufacturing state.",
+        "enum": [
+          "draft",
+          "sent",
+          "won",
+          "lost",
+          "expired",
+          "cancelled"
+        ]
+      },
+      "RecordProjectDepositRequest": {
+        "type": "object",
+        "description": "Server-authored deposit command (#1647). The server validates the payload (rules pinned TS↔Go by contracts/projectDepositPayload.contract.json), stamps the authenticated actor and writes the deposit_received event plus its audit row in one transaction. The client never supplies the event id or the actor.",
+        "additionalProperties": false,
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "properties": {
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000000000000,
+            "description": "Amount received, greater than zero."
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "description": "ISO 4217 currency code."
+          },
+          "paymentMethod": {
+            "$ref": "#/components/schemas/ProjectPaymentMethod"
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "Optional receipt or transfer reference."
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Optional human note."
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Real date of the payment as declared by the user; defaults to the server time and cannot be in the future. Never derived from createdAt."
+          }
+        }
+      },
+      "SetProjectCommercialStatusRequest": {
+        "type": "object",
+        "description": "Server-authored commercial-status command (#1647). The server maps the status to its lifecycle event (quote_created/sent/won/lost/expired/cancelled), stamps the actor and writes the event, projects.commercial_status and the audit row in one transaction.",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ProjectCommercialStatus"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
+      "ProjectLifecycleEvent": {
+        "type": "object",
+        "description": "One immutable project lifecycle event as recorded by the server (OC-010).",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "projectId",
+          "type",
+          "at",
+          "byUserId",
+          "source"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "byUserId": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "web",
+              "desktop",
+              "mobile",
+              "api",
+              "backfill"
+            ]
+          },
+          "note": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "SetProjectCommercialStatusResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commercialStatus",
+          "event"
+        ],
+        "properties": {
+          "commercialStatus": {
+            "$ref": "#/components/schemas/ProjectCommercialStatus"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ProjectLifecycleEvent"
+          }
+        }
+      },
       "ApiErrorCode": {
         "type": "string",
         "enum": [

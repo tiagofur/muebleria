@@ -930,7 +930,9 @@ func (f *fixture) createPilotOrg(name, slug, ownerEmail, currency string, margin
 		ID string `json:"id"`
 	}
 	err = f.request(&evt, http.MethodPost, "/api/projects/"+proj.ID+"/events", tok, map[string]any{
-		"type": "quote_created", "source": "api", "note": "fixture lifecycle event",
+		// #1647: commercial events (quote_*, deposit_received) come only from
+		// their commands; the fixture seeds a non-commercial lifecycle event.
+		"type": "survey_started", "source": "api", "note": "fixture lifecycle event",
 	}, http.StatusCreated)
 	if err != nil {
 		return o, fmt.Errorf("event %s: %w", slug, err)

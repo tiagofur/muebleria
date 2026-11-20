@@ -43,6 +43,9 @@ import type {
   RecipeChangeSimulationResponse,
   Agregado,
   HardwareKitTemplate,
+  CommercialStatus,
+  DepositCommandInput,
+  ProjectEvent,
 } from '@granete/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
@@ -67,7 +70,7 @@ import {
   ProjectInlineUpdateHttpError,
 } from './workspaceRepository';
 import { GraneteApiClient } from './apiClient';
-import type { ApiError } from './openapi/generated/types';
+import type { ApiError, ProjectLifecycleEvent, RecordProjectDepositRequest } from './openapi/generated/types';
 import { parseGenerated } from './openapi/generated/types';
 import { CatalogEntityVersionUnknownError, GraneteApiError, HardwareVersionUnknownError, ModuleVersionUnknownError, GraneteNetworkError } from './apiErrors';
 
@@ -1473,6 +1476,46 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     const text = await res.text().catch(() => '');
     console.error(`API update failed /projects/${project.id}: ${res.status} ${text}`);
     throw new ProjectInlineUpdateHttpError(res.status, text);
+  }
+
+  /** #1647 — server-authored deposit (generated command, idempotent). */
+  async recordProjectDeposit(
+    projectId: string,
+    deposit: DepositCommandInput,
+    idempotencyKey: string,
+  ): Promise<ProjectEvent> {
+    const body: RecordProjectDepositRequest = {
+      amount: deposit.amount,
+      currency: deposit.currency,
+      ...(deposit.paymentMethod ? { paymentMethod: deposit.paymentMethod as RecordProjectDepositRequest['paymentMethod'] } : {}),
+      ...(deposit.reference ? { reference: deposit.reference } : {}),
+      ...(deposit.note ? { note: deposit.note } : {}),
+    };
+    const event = await this.generatedClient.recordProjectDeposit(
+      this.getAccessToken?.() ?? '',
+      projectId,
+      body,
+      idempotencyKey,
+    );
+    return projectLifecycleEventFromApi(event);
+  }
+
+  /** #1647 — server-authored commercial status (generated command, idempotent). */
+  async setProjectCommercialStatus(
+    projectId: string,
+    status: CommercialStatus,
+    idempotencyKey: string,
+  ): Promise<{ commercialStatus: CommercialStatus; event: ProjectEvent }> {
+    const result = await this.generatedClient.setProjectCommercialStatus(
+      this.getAccessToken?.() ?? '',
+      projectId,
+      { status },
+      idempotencyKey,
+    );
+    return {
+      commercialStatus: result.commercialStatus,
+      event: projectLifecycleEventFromApi(result.event),
+    };
   }
 
   async saveProject(project: Project): Promise<void> {
@@ -3452,4 +3495,18 @@ function isConflict(status: number, body: string): boolean {
     return true;
   }
   return false;
+}
+
+/** #1647 — generated lifecycle event DTO → domain ProjectEvent. */
+export function projectLifecycleEventFromApi(event: ProjectLifecycleEvent): ProjectEvent {
+  return {
+    id: event.id,
+    projectId: event.projectId,
+    type: event.type as ProjectEvent['type'],
+    at: event.at,
+    byUserId: event.byUserId,
+    source: event.source,
+    ...(event.note !== undefined ? { note: event.note } : {}),
+    ...(event.payload !== undefined ? { payload: { ...event.payload } } : {}),
+  };
 }

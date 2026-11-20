@@ -3,6 +3,8 @@ import type { Project } from './types';
 // Fixture de paridad TS↔Go (OC-010): backend-go/internal/domain/
 // projectEventsParity_test.go afirma contra el mismo contracts/projectEventTypes.json.
 import eventTypesContract from '../../../contracts/projectEventTypes.json';
+// #1647: paridad TS↔Go del comando de anticipo (projectCommercialCommands_test.go).
+import depositContract from '../../../contracts/projectDepositPayload.contract.json';
 import {
   createProjectEvent,
   appendProjectEvent,
@@ -15,6 +17,7 @@ import {
   deriveProjectStage,
   recordDepositReceived,
   getLatestDeposit,
+  validateDepositPayload,
   inferBackfillEvents,
   calcLifecycleKpis,
   calcBomFingerprint,
@@ -893,3 +896,23 @@ describe('Change orders vs released production state (OC-023 + OC-024)', () => {
   });
 });
 
+
+describe('validateDepositPayload (#1647, paridad TS↔Go)', () => {
+  it.each(depositContract.cases.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+    const result = validateDepositPayload(c.input as Parameters<typeof validateDepositPayload>[0]);
+    if (c.invalidField === null) {
+      expect(result.ok).toBe(true);
+    } else {
+      expect(result).toMatchObject({ ok: false, field: c.invalidField });
+    }
+  });
+
+  it('rechaza montos no finitos y normaliza espacios', () => {
+    expect(validateDepositPayload({ amount: Number.NaN, currency: 'MXN' }).ok).toBe(false);
+    expect(validateDepositPayload({ amount: Number.POSITIVE_INFINITY, currency: 'MXN' }).ok).toBe(false);
+    expect(validateDepositPayload({ amount: 1, currency: ' MXN ', reference: ' r ' })).toEqual({
+      ok: true,
+      value: { amount: 1, currency: 'MXN', paymentMethod: undefined, reference: 'r', note: undefined },
+    });
+  });
+});

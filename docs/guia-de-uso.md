@@ -144,6 +144,14 @@ se mantiene abierto para corregirlo sin perder tus cambios.
    "Desde plantilla".
 5. Estados: **Borrador → Enviar (cotizado) → Aceptar**. Al aceptar se congela
    el diseño para producción.
+6. **Anticipo y estado comercial** (Herramientas → Ciclo de vida): **Registrar
+   anticipo** pide monto (mayor a cero) y, si querés, referencia y nota; el
+   **Estado comercial** se elige en su selector. Los dos los registra el
+   servidor con tu usuario y la fecha, y quedan en el historial de la obra
+   aunque recargues la página. Si no se pudo registrar (sin conexión, sin
+   permiso o monto inválido) aparece un aviso y el formulario conserva lo que
+   escribiste para reintentar: nada se da por registrado hasta que el servidor
+   lo confirma. Reintentar no duplica el anticipo.
 
 ## 7. Proyectar — el ambiente en 3D
 

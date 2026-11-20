@@ -63,6 +63,42 @@ describe('LifecyclePanel — anticipo real (OC-013)', () => {
     );
   });
 
+  it('#1647: si el servidor no registró el anticipo, el formulario sigue abierto con sus valores', async () => {
+    const onRecordDeposit = vi.fn().mockResolvedValue(false);
+    render(
+      <LifecyclePanel
+        project={baseProject}
+        onOpenChangeOrderModal={() => {}}
+        onRecordDeposit={onRecordDeposit}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('btn-record-deposit'));
+    fireEvent.change(screen.getByLabelText(/Monto/), { target: { value: '5000' } });
+    fireEvent.change(screen.getByLabelText(/Referencia/), { target: { value: 'TRANSF-0042' } });
+    fireEvent.click(screen.getByTestId('btn-confirm-deposit'));
+
+    await waitFor(() => expect(onRecordDeposit).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((screen.getByTestId('btn-confirm-deposit') as HTMLButtonElement).disabled).toBe(false));
+    expect((screen.getByLabelText(/Monto/) as HTMLInputElement).value).toBe('5000');
+    expect((screen.getByLabelText(/Referencia/) as HTMLInputElement).value).toBe('TRANSF-0042');
+  });
+
+  it('cierra el formulario cuando el anticipo quedó registrado', async () => {
+    const onRecordDeposit = vi.fn().mockResolvedValue(true);
+    render(
+      <LifecyclePanel
+        project={baseProject}
+        onOpenChangeOrderModal={() => {}}
+        onRecordDeposit={onRecordDeposit}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('btn-record-deposit'));
+    fireEvent.change(screen.getByLabelText(/Monto/), { target: { value: '5000' } });
+    fireEvent.click(screen.getByTestId('btn-confirm-deposit'));
+
+    await waitFor(() => expect(screen.queryByTestId('btn-confirm-deposit')).toBeNull());
+  });
+
   it('deshabilita el botón de confirmar con un monto inválido', () => {
     render(
       <LifecyclePanel

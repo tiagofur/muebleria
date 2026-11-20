@@ -116,4 +116,7 @@ type ProjectStore interface {
 	// Project lifecycle events log (OC-010): immutable append-only events.
 	InsertProjectEvent(ctx context.Context, ev domain.ProjectEvent) error
 	ListProjectEvents(ctx context.Context, projectID string) ([]domain.ProjectEvent, error)
+	// #1647: server-authored commercial commands (deposit, commercial status):
+	// event + optional commercial_status + audit in one transaction.
+	RecordProjectCommercialEvent(ctx context.Context, cmd storage.ProjectCommercialEventCommand) (*domain.ProjectEvent, error)
 }

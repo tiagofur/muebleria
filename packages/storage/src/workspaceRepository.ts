@@ -49,6 +49,9 @@ import type {
   SiteSurvey,
   SurveyGateBlocker,
   SurveyElementInput,
+  CommercialStatus,
+  DepositCommandInput,
+  ProjectEvent,
 } from '@granete/domain';
 
 /** Derived closeout gate check as returned by the installation endpoints. */
@@ -299,6 +302,23 @@ export interface WorkspaceRepository {
       readonly idempotencyKey: string;
     },
   ): Promise<{ project: Project; customer: Customer }>;
+  /**
+   * #1647 — server-authored commercial commands (server adapters only). The
+   * server validates the payload, mints the event id, stamps the actor and
+   * writes event + commercial_status + audit atomically behind the caller's
+   * idempotency key, so a retry replays instead of duplicating. Local/guest
+   * adapters leave these unset and keep their single local store.
+   */
+  recordProjectDeposit?(
+    projectId: string,
+    deposit: DepositCommandInput,
+    idempotencyKey: string,
+  ): Promise<ProjectEvent>;
+  setProjectCommercialStatus?(
+    projectId: string,
+    status: CommercialStatus,
+    idempotencyKey: string,
+  ): Promise<{ commercialStatus: CommercialStatus; event: ProjectEvent }>;
   /** Update existing project (upsert PUT→POST fallback for other adapters). */
   saveProject(project: Project): Promise<void>;
   deleteProject(projectId: string): Promise<void>;

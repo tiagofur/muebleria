@@ -208,6 +208,18 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		}
 		list[i].ProjectLevelChoices = level
 	}
+	// OC-010 / #1647 — the lifecycle log travels with the list too (one query).
+	ids := make([]string, len(list))
+	for i := range list {
+		ids[i] = list[i].ID
+	}
+	eventsByProject, err := s.listProjectEventsByProject(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		list[i].Events = eventsByProject[list[i].ID]
+	}
 	if list == nil {
 		list = []domain.Project{}
 	}

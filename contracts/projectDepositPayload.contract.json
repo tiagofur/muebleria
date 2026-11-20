@@ -1,0 +1,143 @@
+{
+ "comment": "Contract fixture de paridad TS↔Go (#1647): validación del comando de anticipo. Consumido por packages/domain/src/projectLifecycle.test.ts y backend-go/internal/domain/projectCommercialCommands_test.go. invalidField null = válido; si no, el primer campo inválido en el orden amount, currency, paymentMethod, reference, note. Las longitudes cuentan caracteres (code points), no bytes.",
+ "cases": [
+  {
+   "name": "monto entero válido",
+   "input": {
+    "amount": 5000,
+    "currency": "MXN"
+   },
+   "invalidField": null
+  },
+  {
+   "name": "monto decimal con todos los campos",
+   "input": {
+    "amount": 1234.5,
+    "currency": "UYU",
+    "paymentMethod": "transfer",
+    "reference": "TRF-001",
+    "note": "Primer anticipo"
+   },
+   "invalidField": null
+  },
+  {
+   "name": "espacios se recortan",
+   "input": {
+    "amount": 10,
+    "currency": " ARS ",
+    "reference": "  r1  "
+   },
+   "invalidField": null
+  },
+  {
+   "name": "monto cero",
+   "input": {
+    "amount": 0,
+    "currency": "MXN"
+   },
+   "invalidField": "amount"
+  },
+  {
+   "name": "monto negativo",
+   "input": {
+    "amount": -1,
+    "currency": "MXN"
+   },
+   "invalidField": "amount"
+  },
+  {
+   "name": "monto sobre el máximo",
+   "input": {
+    "amount": 1000000000001.0,
+    "currency": "MXN"
+   },
+   "invalidField": "amount"
+  },
+  {
+   "name": "monto en el máximo",
+   "input": {
+    "amount": 1000000000000.0,
+    "currency": "MXN"
+   },
+   "invalidField": null
+  },
+  {
+   "name": "moneda vacía",
+   "input": {
+    "amount": 10,
+    "currency": ""
+   },
+   "invalidField": "currency"
+  },
+  {
+   "name": "moneda en minúsculas",
+   "input": {
+    "amount": 10,
+    "currency": "mxn"
+   },
+   "invalidField": "currency"
+  },
+  {
+   "name": "moneda de cuatro letras",
+   "input": {
+    "amount": 10,
+    "currency": "MXNN"
+   },
+   "invalidField": "currency"
+  },
+  {
+   "name": "medio de pago desconocido",
+   "input": {
+    "amount": 10,
+    "currency": "MXN",
+    "paymentMethod": "crypto"
+   },
+   "invalidField": "paymentMethod"
+  },
+  {
+   "name": "medio de pago cheque",
+   "input": {
+    "amount": 10,
+    "currency": "MXN",
+    "paymentMethod": "check"
+   },
+   "invalidField": null
+  },
+  {
+   "name": "referencia en el límite",
+   "input": {
+    "amount": 10,
+    "currency": "MXN",
+    "reference": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+   },
+   "invalidField": null
+  },
+  {
+   "name": "referencia excedida",
+   "input": {
+    "amount": 10,
+    "currency": "MXN",
+    "reference": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+   },
+   "invalidField": "reference"
+  },
+  {
+   "name": "nota en el límite con acentos",
+   "input": {
+    "amount": 10,
+    "currency": "MXN",
+    "note": "áááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááá"
+   },
+   "invalidField": null
+  },
+  {
+   "name": "nota excedida",
+   "input": {
+    "amount": 10,
+    "currency": "MXN",
+    "note": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+   },
+   "invalidField": "note"
+  }
+ ]
+}

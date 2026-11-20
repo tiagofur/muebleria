@@ -141,7 +141,14 @@ func crossOrgDirection(t *testing.T, d crossDirection) {
 
 	// Foreign writes on subresources also fail closed.
 	fx.want(t, http.MethodPost, "/api/projects/"+d.target.project.id+"/events", tok, map[string]any{
-		"type": "quote_created", "source": "api",
+		"type": "survey_started", "source": "api",
+	}, http.StatusNotFound)
+	// #1647: the server-authored commercial commands fail closed the same way.
+	fx.want(t, http.MethodPost, "/api/projects/"+d.target.project.id+"/deposits", tok, map[string]any{
+		"amount": 100, "currency": "MXN",
+	}, http.StatusNotFound)
+	fx.want(t, http.MethodPost, "/api/projects/"+d.target.project.id+"/commercial-status", tok, map[string]any{
+		"status": "won",
 	}, http.StatusNotFound)
 	fx.want(t, http.MethodPost, "/api/projects/"+d.target.project.id+"/photos", tok, map[string]any{
 		"url": "/api/media/whatever.png",

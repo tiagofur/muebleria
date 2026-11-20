@@ -452,10 +452,10 @@ export interface ProjectDetailContextValue {
   ) => void | Promise<void>;
   readonly onChangeCommercialStatus?: (
     status: import('@granete/domain').CommercialStatus,
-  ) => void | Promise<void>;
+  ) => boolean | void | Promise<boolean | void>;
   readonly onRecordDeposit?: (
     params: import('@granete/domain').DepositReceivedPayload & { note?: string },
-  ) => void | Promise<void>;
+  ) => boolean | void | Promise<boolean | void>;
 }
 
 

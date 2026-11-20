@@ -85,9 +85,9 @@ func TestHandleProjectEvents_Create(t *testing.T) {
 	srv := &Server{Store: store}
 
 	body := []byte(`{
-		"type": "deposit_received",
-		"note": "Anticipo 50%",
-		"payload": {"amount": 2500, "currency": "USD", "reference": "REC-001"}
+		"type": "survey_started",
+		"note": "Visita de medición",
+		"payload": {"surveyor": "u1"}
 	}`)
 
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects/p1/events", bytes.NewReader(body)), "u1", string(domain.RoleAdmin))
@@ -105,8 +105,8 @@ func TestHandleProjectEvents_Create(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if created.Type != "deposit_received" {
-		t.Errorf("expected type deposit_received, got %s", created.Type)
+	if created.Type != "survey_started" {
+		t.Errorf("expected type survey_started, got %s", created.Type)
 	}
 	if created.ByUserID == nil || *created.ByUserID != "u1" {
 		t.Errorf("expected by_user_id 'u1', got %v", created.ByUserID)
@@ -114,8 +114,8 @@ func TestHandleProjectEvents_Create(t *testing.T) {
 	if len(store.projectEventWrites) != 1 {
 		t.Fatalf("expected 1 write to store, got %d", len(store.projectEventWrites))
 	}
-	if store.projectEventWrites[0].Type != "deposit_received" {
-		t.Errorf("expected written type to be deposit_received, got %s", store.projectEventWrites[0].Type)
+	if store.projectEventWrites[0].Type != "survey_started" {
+		t.Errorf("expected written type to be survey_started, got %s", store.projectEventWrites[0].Type)
 	}
 }
 
@@ -161,7 +161,8 @@ func TestHandleProjectEvents_CreateRBAC(t *testing.T) {
 		event    string
 		wantCode int
 	}{
-		{"vendedor puede registrar anticipo", domain.RoleVendedor, "deposit_received", http.StatusCreated},
+		{"#1647: el anticipo no se crea por la ruta genérica", domain.RoleVendedor, "deposit_received", http.StatusBadRequest},
+		{"#1647: el estado comercial no se crea por la ruta genérica", domain.RoleAdmin, "quote_won", http.StatusBadRequest},
 		{"vendedor NO puede liberar a producción", domain.RoleVendedor, "production_released", http.StatusForbidden},
 		{"vendedor NO puede aprobar orden de cambio", domain.RoleVendedor, "change_order_approved", http.StatusForbidden},
 		{"produccion NO puede liberar a producción", domain.RoleProduccion, "production_released", http.StatusForbidden},
