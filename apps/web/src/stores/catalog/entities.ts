@@ -86,6 +86,11 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
         });
         return;
       }
+      // #1511: server first (same contract as #1606) — a failed DELETE
+      // (412/409/5xx/network) never removes the category only on screen. The
+      // server SETs children's category to NULL; the local patch mirrors it.
+      const ok = await ctx.hardDeleteOnAuth(`/catalog/categories/${id}`);
+      if (!ok) return;
       const saved = await ctx.patchSaved((c) => ({
         ...c,
         categories: (c.categories ?? []).filter((cat) => cat.id !== id),
@@ -94,10 +99,7 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
         ),
       }));
       if (!saved) return;
-      const ok = await ctx.hardDeleteOnAuth(`/catalog/categories/${id}`);
-      if (ok) {
-        ctx.toast({ type: 'info', message: 'Categoría eliminada' });
-      }
+      ctx.toast({ type: 'info', message: 'Categoría eliminada' });
     },
 
     // --- Modules ---
@@ -124,16 +126,17 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
     },
 
     deleteModule: async (id, onModuleDeleted) => {
+      // #1511: server first (same contract as #1606) — a failed DELETE never
+      // removes the module only on screen while it survives on the server.
+      const ok = await ctx.hardDeleteOnAuth(`/catalog/modules/${id}`);
+      if (!ok) return;
       const saved = await ctx.patchSaved((c) => ({
         ...c,
         modules: c.modules.filter((m) => m.id !== id),
       }));
       if (!saved) return;
-      const ok = await ctx.hardDeleteOnAuth(`/catalog/modules/${id}`);
-      if (ok) {
-        onModuleDeleted?.(id);
-        ctx.toast({ type: 'info', message: 'Módulo eliminado' });
-      }
+      onModuleDeleted?.(id);
+      ctx.toast({ type: 'info', message: 'Módulo eliminado' });
     },
 
     duplicateModuleById: (id) => {

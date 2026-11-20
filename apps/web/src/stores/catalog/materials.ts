@@ -211,6 +211,11 @@ export function createMaterialsActions(ctx: CatalogStoreCtx): MaterialsSlice {
         });
         return;
       }
+      // #1511: server first (same contract as #1606) — a failed DELETE
+      // (412/409/5xx/network) never removes the category only on screen. The
+      // server SETs children's category to NULL; the local patch mirrors it.
+      const ok = await ctx.hardDeleteOnAuth(`/catalog/material-categories/${id}`);
+      if (!ok) return;
       const saved = await ctx.patchSaved((c) => ({
         ...c,
         materialCategories: (c.materialCategories ?? []).filter((cat) => cat.id !== id),
@@ -219,10 +224,7 @@ export function createMaterialsActions(ctx: CatalogStoreCtx): MaterialsSlice {
         ),
       }));
       if (!saved) return;
-      const ok = await ctx.hardDeleteOnAuth(`/catalog/material-categories/${id}`);
-      if (ok) {
-        ctx.toast({ type: 'info', message: 'Categoría eliminada' });
-      }
+      ctx.toast({ type: 'info', message: 'Categoría eliminada' });
     },
   };
 }
