@@ -13,6 +13,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   computeWorkshopAnalytics,
   deriveOpsExceptions,
+  localIsoDate,
+  summarizeDeliveryRisk,
   calcMaterialCostPerM2,
   type AnalyticsPeriodDays,
   type WarrantyTicket,
@@ -92,6 +94,13 @@ export function useDashboardData({
   const opsExceptions = useMemo(() => {
     if (!canViewPortfolioDashboard) return [];
     return deriveOpsExceptions(projects);
+  }, [canViewPortfolioDashboard, projects]);
+
+  // #1648 scope item 4 — late / due-this-week order counts, same local day
+  // and predicate as Cotizaciones, Producción and Estado de Planta.
+  const deliveryRisk = useMemo(() => {
+    if (!canViewPortfolioDashboard) return undefined;
+    return summarizeDeliveryRisk(projects, localIsoDate(new Date()));
   }, [canViewPortfolioDashboard, projects]);
 
   const onDashboardOpenProject = useCallback(
@@ -261,6 +270,7 @@ export function useDashboardData({
     warrantyTickets,
     workshopAnalytics,
     opsExceptions,
+    deliveryRisk,
     onDashboardOpenProject,
     onDashboardNewProject,
     onDashboardNewModule,

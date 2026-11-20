@@ -43,7 +43,7 @@ import {
   type QuoteCommercialStatusFilter,
 } from '../quoteRevisionPresentation';
 import { CommercialStatusBadge } from './CommercialStatusBadge';
-import { DeliveryStatusChip } from '../delivery';
+import { DeliveryRiskToggle, DeliveryStatusChip } from '../delivery';
 
 function quoteNoun(count: number): string {
   return count === 1 ? 'cotización' : 'cotizaciones';
@@ -255,15 +255,12 @@ export function ProjectsListView({
           contextualControls={
             <div className="project-sort">
               {onDeliveryRiskOnlyChange ? (
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--small project-delivery-toggle"
-                  aria-pressed={deliveryRiskOnly}
-                  onClick={() => onDeliveryRiskOnlyChange(!deliveryRiskOnly)}
-                  data-testid="projects-delivery-risk-toggle"
-                >
-                  Entregas en riesgo ({deliveryRiskCount})
-                </button>
+                <DeliveryRiskToggle
+                  pressed={deliveryRiskOnly}
+                  count={deliveryRiskCount}
+                  onChange={onDeliveryRiskOnlyChange}
+                  testId="projects-delivery-risk-toggle"
+                />
               ) : null}
               <label className="project-sort__label" htmlFor="project-sort">
                 Ordenar

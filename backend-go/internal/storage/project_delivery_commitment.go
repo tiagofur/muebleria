@@ -83,10 +83,16 @@ func (s *PostgresStore) CommitProjectDelivery(ctx context.Context, cmd CommitPro
 		return nil, err
 	}
 
-	if _, err := s.db(ctx).Exec(ctx, `
+	tag, err := s.db(ctx).Exec(ctx, `
 		UPDATE projects SET committed_delivery_date = $2::date, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1`, cmd.ProjectID, decision.Date); err != nil {
+		WHERE id = $1`, cmd.ProjectID, decision.Date)
+	if err != nil {
 		return nil, fmt.Errorf("update committed delivery date: %w", err)
+	}
+	// Fail closed: if RLS hid the row from UPDATE, neither event nor audit
+	// may claim a commitment that was not stored.
+	if tag.RowsAffected() != 1 {
+		return nil, ErrProjectCommercialTargetNotFound
 	}
 
 	payload := map[string]any{"date": decision.Date}

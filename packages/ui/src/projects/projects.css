@@ -2671,10 +2671,3 @@
     transition: none;
   }
 }
-
-/* #1648 — «Entregas en riesgo»: toggle con estado presionado visible. */
-.project-delivery-toggle[aria-pressed='true'] {
-  color: var(--brand-700);
-  background: var(--brand-50);
-  border-color: var(--brand-500);
-}

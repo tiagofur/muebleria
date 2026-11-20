@@ -320,6 +320,8 @@ export interface ProjectsScreenProps {
    * Shell owns navigation; screen reacts via effect.
    */
   readonly openProjectId?: string | null;
+  /** #1648: mount with «Entregas en riesgo» active (dashboard deep link). */
+  readonly initialDeliveryRiskOnly?: boolean;
   /**
    * Incrementing token to open the create-project modal from outside
    * (Dashboard quick action). 0 / undefined = no request.
@@ -552,6 +554,7 @@ export function ProjectsScreen({
   exportBlocked = false,
   projectEstimates = {},
   openProjectId = null,
+  initialDeliveryRiskOnly = false,
   requestCreateKey = 0,
   loading = false,
   workshopSettings = null,
@@ -629,6 +632,7 @@ export function ProjectsScreen({
     workshopSettings,
     requestCreateKey,
     openProjectId,
+    initialDeliveryRiskOnly,
     autoPresentId,
     projectTemplates,
     canMutate,

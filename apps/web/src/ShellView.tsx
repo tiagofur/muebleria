@@ -48,6 +48,7 @@ import type {
   PurchaseOrder,
   Supplier,
   OpsException,
+  DeliveryRiskSummary,
 } from '@granete/domain';
 import {
   generateCutRows,
@@ -421,6 +422,8 @@ export interface ShellViewCtx {
   readonly overviewNav: ProjectOverviewNav;
   /** #305 — OC-090 exception-first list (owner/manager home). */
   readonly opsExceptions: readonly OpsException[];
+  /** #1648 — late / due-this-week counts for the home dashboard (portfolio roles). */
+  readonly deliveryRisk: DeliveryRiskSummary | undefined;
   readonly handleLoadCocinaLopezDemo: () => void;
   readonly handleOverridesChange: (overrides: Readonly<Record<string, unknown>>) => void;
   readonly handleReceivePurchaseOrder: (id: string, lines: readonly PoLineInput[]) => Promise<void>;
@@ -743,6 +746,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     canApproveSurvey,
     overviewNav,
     opsExceptions,
+    deliveryRisk,
     canOverrideQc,
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
@@ -1163,6 +1167,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           }
           analyticsLoading={warrantyTickets === null}
           opsExceptions={workshopAnalytics ? opsExceptions : undefined}
+          deliveryRisk={workshopAnalytics ? deliveryRisk : undefined}
+          onOpenDeliveryRisk={() => navigate('/quotes?entregas=riesgo')}
           onOpenShowcase={
             dashboardHomeMode === 'sales'
               ? onDashboardOpenShowcase
@@ -2844,6 +2850,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           exportBusy={exportBusy}
           projectEstimates={projectEstimates}
           openProjectId={routeProjectId}
+          initialDeliveryRiskOnly={new URLSearchParams(location.search).get('entregas') === 'riesgo'}
           requestCreateKey={projectsCreateKey}
           workshopSettings={workshopSettings}
           canMutate={canMutateProjects}

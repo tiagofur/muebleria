@@ -71,6 +71,8 @@ export interface UseProjectsScreenStateProps {
   readonly workshopSettings?: WorkshopSettings | null;
   readonly requestCreateKey?: number;
   readonly openProjectId?: string | null;
+  /** #1648: start with «Entregas en riesgo» active (dashboard deep link). */
+  readonly initialDeliveryRiskOnly?: boolean;
   readonly autoPresentId?: string | null;
   readonly projectTemplates?: readonly ProjectTemplate[];
   readonly canMutate?: boolean;
@@ -124,6 +126,7 @@ export function useProjectsScreenState({
   workshopSettings = null,
   requestCreateKey = 0,
   openProjectId = null,
+  initialDeliveryRiskOnly = false,
   autoPresentId = null,
   projectTemplates,
   canMutate = true,
@@ -149,7 +152,7 @@ export function useProjectsScreenState({
   // #1118 «¿qué mando hoy?» — actividad comercial descendente por defecto.
   const [sortKey, setSortKey] = useState<ProjectListSortKey>('recent');
   // #1648: «Entregas en riesgo» — atrasadas o que vencen esta semana.
-  const [deliveryRiskOnly, setDeliveryRiskOnly] = useState(false);
+  const [deliveryRiskOnly, setDeliveryRiskOnly] = useState(initialDeliveryRiskOnly);
   const today = localIsoDate(new Date());
   // Deep-link mount (refresh / post-login remount): seed from the URL so the
   // first paint already shows the detail instead of flashing the list.

@@ -182,9 +182,13 @@ se mantiene abierto para corregirlo sin perder tus cambios.
    - En **Cotizaciones** cada tarjeta muestra la entrega, podés ordenar por
      **Entrega comprometida** y filtrar **Entregas en riesgo** (atrasadas o que
      vencen esta semana). En **Producción** y en **Estado de Planta** las
-     órdenes con entrega más próxima van primero, con su chip de estado.
-   - En el **Dashboard**, «Necesita atención» avisa las entregas atrasadas y
-     las que vencen en los próximos días.
+     órdenes con entrega más próxima van primero, con su chip de estado, y el
+     mismo botón **Entregas en riesgo** deja sólo las atrasadas o que vencen
+     esta semana.
+   - En el **Dashboard**, la tarjeta **Pedidos atrasados** muestra cuántos hay,
+     cuántos vencen esta semana y cuántos pedidos tienen fecha; al tocarla abre
+     Cotizaciones ya filtradas. «Necesita atención» detalla cada entrega
+     atrasada y las que vencen en los próximos días.
 
 ## 7. Proyectar — el ambiente en 3D
 

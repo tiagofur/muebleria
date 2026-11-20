@@ -5,6 +5,7 @@ import {
   isDeliveryAttention,
   localIsoDate,
   projectDeliveryInfo,
+  summarizeDeliveryRisk,
 } from './projectDelivery';
 import type { ProjectEvent } from './projectLifecycle';
 
@@ -39,5 +40,28 @@ describe('projectDeliveryInfo (#1648)', () => {
     const sorted = [{ committedDeliveryDate: undefined }, { committedDeliveryDate: '2026-12-01' }, { committedDeliveryDate: '2026-11-25' }].sort(compareByCommittedDelivery);
     expect(sorted.map((p) => p.committedDeliveryDate)).toEqual(['2026-11-25', '2026-12-01', undefined]);
     expect(localIsoDate(new Date(2026, 0, 5, 23, 30))).toBe('2026-01-05');
+  });
+  it('cerrar una obra cancelada no la vuelve «Entregado»; un cierre normal sí cuenta', () => {
+    const closed = [ev('project_closed', '2026-11-10T10:00:00Z')];
+    expect(projectDeliveryInfo({ committedDeliveryDate: '2026-11-01', commercialStatus: 'cancelled', events: closed }, today).status).toBe('closed');
+    expect(projectDeliveryInfo({ committedDeliveryDate: '2026-11-01', commercialStatus: 'lost', events: closed }, today).status).toBe('closed');
+    expect(projectDeliveryInfo({ committedDeliveryDate: '2026-11-01', commercialStatus: 'won', events: closed }, today).status).toBe('delivered');
+    const signed = [ev('client_signed_off', '2026-11-09T10:00:00Z')];
+    expect(projectDeliveryInfo({ committedDeliveryDate: '2026-11-01', commercialStatus: 'cancelled', events: signed }, today).status).toBe('delivered');
+  });
+  it('resume atrasados y vencen esta semana para el dashboard', () => {
+    expect(
+      summarizeDeliveryRisk(
+        [
+          { committedDeliveryDate: '2026-11-18' },
+          { committedDeliveryDate: '2026-11-19' },
+          { committedDeliveryDate: '2026-11-22' },
+          { committedDeliveryDate: '2026-12-20' },
+          { committedDeliveryDate: '2026-11-01', commercialStatus: 'lost' },
+          {},
+        ],
+        today,
+      ),
+    ).toEqual({ overdue: 2, dueSoon: 1, tracked: 4 });
   });
 });

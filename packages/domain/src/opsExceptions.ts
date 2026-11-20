@@ -19,7 +19,7 @@ import {
 } from './installation';
 import { openQualityIssues, reworkCostSummary } from './quality';
 import { computeJobCostSummary } from './jobCosting';
-import { projectDeliveryInfo } from './projectDelivery';
+import { localIsoDate, projectDeliveryInfo } from './projectDelivery';
 
 export const OPS_EXCEPTION_KINDS = [
   'delivery_risk',
@@ -48,6 +48,8 @@ export interface OpsException {
 
 export interface OpsExceptionsOptions {
   readonly now?: string;
+  /** Local calendar day (YYYY-MM-DD) for delivery status; defaults to the local day of `now`. */
+  readonly today?: string;
   /** Open shortage lines per project (computed by the shell from stock + planning). */
   readonly shortageLines?: ReadonlyMap<string, number>;
   /** Material consumption inputs for the cost variance roll-up (server-valued). */
@@ -92,8 +94,8 @@ function lastEventAt(project: Project): string | null {
  * already in the factory: a late order that never reached production is the
  * worst case.
  */
-function deliveryRiskExceptions(project: Project, now: string): readonly OpsException[] {
-  const info = projectDeliveryInfo(project, now.slice(0, 10));
+function deliveryRiskExceptions(project: Project, today: string): readonly OpsException[] {
+  const info = projectDeliveryInfo(project, today);
   if (info.status === 'overdue' && info.daysToCommitted !== undefined) {
     const late = -info.daysToCommitted;
     return [
@@ -340,6 +342,9 @@ export function deriveOpsExceptions(
   options: OpsExceptionsOptions = {},
 ): readonly OpsException[] {
   const now = options.now ?? new Date().toISOString();
+  // #1648: the delivery day is the LOCAL calendar day, the same one lists and
+  // chips use (a UTC slice disagrees after 18:00 in UTC-6).
+  const today = options.today ?? localIsoDate(new Date(now));
   const stalledDays = options.stalledDays ?? 14;
   const wipThreshold = options.wipThreshold ?? 20;
   const overrunPercent = options.costOverrunPercent ?? 10;
@@ -349,7 +354,7 @@ export function deriveOpsExceptions(
 
   const out: OpsException[] = [];
   for (const project of projects) {
-    out.push(...deliveryRiskExceptions(project, now));
+    out.push(...deliveryRiskExceptions(project, today));
     if (project.status !== 'accepted' && project.status !== 'produced') continue;
     out.push(...installationRiskExceptions(project, now));
     out.push(...surveyPreliminaryExceptions(project));

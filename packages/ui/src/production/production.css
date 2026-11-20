@@ -3133,3 +3133,16 @@
   margin: 0;
   font-size: var(--text-sm);
 }
+
+/* #1648 — filtro «Entregas en riesgo» sobre la lista de la pestaña activa. */
+.prod-queue__filters {
+  display: flex;
+  justify-content: flex-end;
+  margin: var(--space-3) 0;
+}
+
+.plant-board__filters {
+  display: flex;
+  justify-content: flex-end;
+  margin: var(--space-3) 0;
+}

@@ -9,7 +9,8 @@ import { required } from './support/api';
  * (POST /delivery-commitment with Idempotency-Key, never the project PUT); a
  * change requires a reason that lands in the lifecycle log; the late order
  * shows as «Atrasado» in the obra, in Cotizaciones (chip + «Entregas en
- * riesgo») and in «Necesita atención» on the home dashboard.
+ * riesgo») and in «Necesita atención» on the home dashboard, whose «Pedidos
+ * atrasados» count opens Cotizaciones already filtered.
  */
 const PROJECT_ID = '46000000-0000-4000-8000-000000016480';
 const CUSTOMER_ID = '46000000-0000-4000-8000-000000016481';
@@ -161,5 +162,16 @@ test.describe.serial('#1648 entrega comprometida', () => {
     const alerts = page.getByTestId('ops-exceptions-panel');
     await expect(alerts).toContainText(PROJECT_NAME);
     await expect(alerts).toContainText('atrasada (2 días)');
+
+    // 4. Dashboard count (#1648 scope item 4) deep-links to the filtered list.
+    const overdueCard = page.getByTestId('stat-delivery-overdue');
+    await expect(overdueCard).toBeVisible();
+    const overdueCount = Number(await page.getByTestId('stat-delivery-overdue-value').textContent());
+    expect(overdueCount).toBeGreaterThanOrEqual(1);
+    await page.getByTestId('dashboard-delivery-risk').screenshot({ path: 'test-results/1648-dashboard-overdue.png' });
+    await overdueCard.click();
+    await expect(page).toHaveURL(/\/quotes\?entregas=riesgo$/);
+    await expect(page.getByTestId('projects-delivery-risk-toggle')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId(`project-card-${PROJECT_ID}`)).toBeVisible();
   });
 });

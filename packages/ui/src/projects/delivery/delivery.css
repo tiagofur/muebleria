@@ -108,3 +108,11 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* «Entregas en riesgo»: toggle con estado presionado visible (Cotizaciones,
+   Producción, Estado de Planta). */
+.delivery-risk-toggle[aria-pressed='true'] {
+  color: var(--brand-700);
+  background: var(--brand-50);
+  border-color: var(--brand-500);
+}

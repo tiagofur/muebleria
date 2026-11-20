@@ -54,11 +54,19 @@ function dayNumber(isoDate: string): number | null {
   return Math.round(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86_400_000);
 }
 
-/** First delivery milestone in the lifecycle log, if any. */
-export function actualDeliveryEvent(events: readonly ProjectEvent[] | undefined): ProjectEvent | undefined {
+/**
+ * First delivery milestone in the lifecycle log, if any. `project_closed`
+ * only counts when the order was not lost or cancelled: closing a cancelled
+ * order is administrative, not a delivery.
+ */
+export function actualDeliveryEvent(
+  events: readonly ProjectEvent[] | undefined,
+  options: { readonly excludeProjectClosed?: boolean } = {},
+): ProjectEvent | undefined {
   let first: ProjectEvent | undefined;
   for (const ev of events ?? []) {
     if (!DELIVERY_DONE_EVENT_TYPES.includes(ev.type)) continue;
+    if (options.excludeProjectClosed && ev.type === 'project_closed') continue;
     if (!first || ev.at < first.at) first = ev;
   }
   return first;
@@ -73,11 +81,10 @@ export function projectDeliveryInfo(
   today: string,
 ): DeliveryInfo {
   const committedDate = project.committedDeliveryDate || undefined;
-  const delivered = actualDeliveryEvent(project.events);
+  const closedCommercially = project.commercialStatus === 'lost' || project.commercialStatus === 'cancelled';
+  const delivered = actualDeliveryEvent(project.events, { excludeProjectClosed: closedCommercially });
   if (delivered) return { status: 'delivered', committedDate, deliveredAt: delivered.at };
-  if (project.commercialStatus === 'lost' || project.commercialStatus === 'cancelled') {
-    return { status: 'closed', committedDate };
-  }
+  if (closedCommercially) return { status: 'closed', committedDate };
   if (!committedDate) return { status: 'none' };
   const due = dayNumber(committedDate);
   const now = dayNumber(today);
@@ -91,6 +98,32 @@ export function projectDeliveryInfo(
 /** True when the order needs attention: late or due within the week. */
 export function isDeliveryAttention(info: DeliveryInfo): boolean {
   return info.status === 'overdue' || info.status === 'due_soon';
+}
+
+/** Late and due-this-week counts for the dashboard (#1648 scope item 4). */
+export interface DeliveryRiskSummary {
+  readonly overdue: number;
+  readonly dueSoon: number;
+  /** Open orders with a committed date (not delivered, not lost/cancelled). */
+  readonly tracked: number;
+}
+
+export function summarizeDeliveryRisk(
+  projects: readonly (Pick<Project, 'committedDeliveryDate' | 'commercialStatus'> & {
+    readonly events?: readonly ProjectEvent[];
+  })[],
+  today: string,
+): DeliveryRiskSummary {
+  let overdue = 0;
+  let dueSoon = 0;
+  let tracked = 0;
+  for (const project of projects) {
+    const { status } = projectDeliveryInfo(project, today);
+    if (status === 'overdue') overdue += 1;
+    else if (status === 'due_soon') dueSoon += 1;
+    if (status === 'overdue' || status === 'due_soon' || status === 'on_track') tracked += 1;
+  }
+  return { overdue, dueSoon, tracked };
 }
 
 /** Comparator: earliest committed date first; projects without date last. */

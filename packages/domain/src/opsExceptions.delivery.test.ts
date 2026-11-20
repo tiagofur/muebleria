@@ -26,4 +26,9 @@ describe('deriveOpsExceptions — delivery_risk (#1648)', () => {
       ),
     ).toHaveLength(0);
   });
+  it('usa el día local explícito, el mismo que las listas', () => {
+    // 2026-11-21T02:00Z ya es día 21 en UTC pero en UTC-6 sigue siendo 20.
+    const late = deriveOpsExceptions([base({ committedDeliveryDate: '2026-11-20' })], { now: '2026-11-21T02:00:00Z', today: '2026-11-20' });
+    expect(late[0]?.message).toBe('Entrega comprometida hoy (2026-11-20)');
+  });
 });
