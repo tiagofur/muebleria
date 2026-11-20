@@ -152,6 +152,23 @@ se mantiene abierto para corregirlo sin perder tus cambios.
    permiso o monto inválido) aparece un aviso y el formulario conserva lo que
    escribiste para reintentar: nada se da por registrado hasta que el servidor
    lo confirma. Reintentar no duplica el anticipo.
+7. **Cobros** (Herramientas → Cobros; sólo ventas y administración): muestra el
+   **total de la cotización aceptada** (la revisión exacta, p. ej. Q2), lo
+   **cobrado** y el **saldo**, todo calculado por el servidor. El anticipo del
+   paso 6 aparece acá como un cobro más.
+   - **Registrar pago:** monto, medio (efectivo, transferencia, tarjeta,
+     cheque u otro), fecha real del pago, referencia y nota.
+   - **Anular:** pide un motivo. El cobro no se borra: queda tachado en el
+     historial y deja de sumar. Anular el anticipo también lo saca del gate de
+     liberación a producción.
+   - **Recibo:** descarga un PDF no fiscal del cobro, con el saldo vigente.
+   - Si se cobró de más, el saldo aparece como **a favor del cliente**. Los
+     cobros en otra moneda se listan pero no se suman (no se convierten).
+   - Una obra con cobros registrados **no se puede eliminar**.
+8. **Por cobrar** (Dashboard de Ventas) lista las obras con saldo pendiente,
+   ordenadas por días desde la aceptación, con el total por moneda. El vendedor
+   ve sólo sus obras. En **Clientes**, cada ficha muestra su **cuenta
+   corriente**: todas sus obras aceptadas con total, cobrado y saldo.
 
 ## 7. Proyectar — el ambiente en 3D
 

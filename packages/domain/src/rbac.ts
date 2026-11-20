@@ -707,6 +707,8 @@ const PROJECT_EVENT_APPEND_ROLES: Readonly<Record<string, readonly UserRole[]>> 
   quote_expired: ['admin', 'gerente_ventas', 'vendedor'],
   quote_cancelled: ['admin', 'gerente_ventas', 'vendedor'],
   deposit_received: ['admin', 'gerente_ventas', 'vendedor'],
+  // #1649: voiding a recorded deposit is the same commercial authority.
+  deposit_voided: ['admin', 'gerente_ventas', 'vendedor'],
   // Survey: ventas or ingeniería can be on site.
   survey_started: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
   survey_completed: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],

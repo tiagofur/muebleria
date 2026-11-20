@@ -34,25 +34,31 @@ func TestRecordProjectDeposit_ServerAuthorsTheEvent(t *testing.T) {
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
 	}
-	if len(store.commercialEventCommands) != 1 {
-		t.Fatalf("store commands = %d", len(store.commercialEventCommands))
+	if len(store.paymentCommands) != 1 {
+		t.Fatalf("store commands = %d", len(store.paymentCommands))
 	}
-	cmd := store.commercialEventCommands[0]
-	ev := cmd.Event
+	cmd := store.paymentCommands[0]
+	if cmd.DepositEvent == nil {
+		t.Fatal("#1649: a deposit must carry its deposit_received lifecycle event")
+	}
+	ev := *cmd.DepositEvent
 	if ev.Type != "deposit_received" || ev.ProjectID != commercialTestProjectID || !strings.HasPrefix(ev.ID, "evt_") {
 		t.Fatalf("event identity: %+v", ev)
 	}
 	if ev.ByUserID == nil || *ev.ByUserID != "user-1647" {
 		t.Fatalf("actor must be the authenticated user, got %v", ev.ByUserID)
 	}
-	if cmd.CommercialStatus != nil || cmd.AuditEventType != "project_deposit_recorded" {
-		t.Fatalf("deposit must not touch commercial status and must audit: %+v", cmd)
+	// #1649: the same deposit is a payment row of the ledger.
+	pay := cmd.Payment
+	if pay.Kind != domain.ProjectPaymentKindDeposit || pay.Amount != 2500 || pay.Currency != "MXN" ||
+		pay.Reference != "TRF-1" || pay.PaymentMethod != "transfer" || pay.RecordedBy != "user-1647" || pay.ID == "" {
+		t.Fatalf("payment row: %+v", pay)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(ev.Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload["amount"] != 2500.0 || payload["currency"] != "MXN" || payload["reference"] != "TRF-1" || payload["paymentMethod"] != "transfer" {
+	if payload["amount"] != 2500.0 || payload["currency"] != "MXN" || payload["reference"] != "TRF-1" || payload["paymentMethod"] != "transfer" || payload["paymentId"] != pay.ID {
 		t.Fatalf("normalized payload: %v", payload)
 	}
 	var dto openapi.ProjectLifecycleEvent
@@ -81,7 +87,7 @@ func TestRecordProjectDeposit_RejectsInvalidInputWithoutWriting(t *testing.T) {
 			if rr.Code != tc.status {
 				t.Fatalf("status %d want %d: %s", rr.Code, tc.status, rr.Body.String())
 			}
-			if len(store.commercialEventCommands) != 0 {
+			if len(store.paymentCommands) != 0 {
 				t.Fatal("invalid command reached the store")
 			}
 			if tc.field != "" {
@@ -95,14 +101,14 @@ func TestRecordProjectDeposit_RejectsInvalidInputWithoutWriting(t *testing.T) {
 }
 
 func TestRecordProjectDeposit_ForeignOrMissingProjectIs404(t *testing.T) {
-	store := &stubStore{recordCommercialEventErr: storage.ErrProjectCommercialTargetNotFound}
+	store := &stubStore{paymentErr: storage.ErrProjectPaymentTargetNotFound}
 	srv := &Server{Store: store}
 	rr := postCommercialCommand(t, srv, srv.HandleRecordProjectDeposit, "/api/projects/x/deposits", string(domain.RoleAdmin), `{"amount":10,"currency":"MXN"}`)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
 	}
 
-	store = &stubStore{recordCommercialEventErr: errors.New("boom")}
+	store = &stubStore{paymentErr: errors.New("boom")}
 	srv = &Server{Store: store}
 	rr = postCommercialCommand(t, srv, srv.HandleRecordProjectDeposit, "/api/projects/x/deposits", string(domain.RoleAdmin), `{"amount":10,"currency":"MXN"}`)
 	if rr.Code != http.StatusInternalServerError {
@@ -227,11 +233,11 @@ func TestRecordProjectDeposit_IdempotentReplay(t *testing.T) {
 	if second.Header().Get("Idempotency-Replayed") != "true" || first.Body.String() != second.Body.String() {
 		t.Fatalf("retry must replay the same recorded event")
 	}
-	if len(store.commercialEventCommands) != 1 {
-		t.Fatalf("retry created %d deposits", len(store.commercialEventCommands))
+	if len(store.paymentCommands) != 1 {
+		t.Fatalf("retry created %d deposits", len(store.paymentCommands))
 	}
 	conflict := send(`{"amount":9999,"currency":"MXN"}`)
-	if conflict.Code != http.StatusConflict || len(store.commercialEventCommands) != 1 {
-		t.Fatalf("different body under the same key: %d (writes=%d)", conflict.Code, len(store.commercialEventCommands))
+	if conflict.Code != http.StatusConflict || len(store.paymentCommands) != 1 {
+		t.Fatalf("different body under the same key: %d (writes=%d)", conflict.Code, len(store.paymentCommands))
 	}
 }

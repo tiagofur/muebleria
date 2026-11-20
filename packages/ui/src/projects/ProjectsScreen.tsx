@@ -462,6 +462,8 @@ export interface ProjectsScreenProps {
     projectId: string,
     params: import('@granete/domain').DepositReceivedPayload & { note?: string },
   ) => boolean | void | Promise<boolean | void>;
+  /** #1649: server-backed «Cobros» panel of the project (auth sessions only). */
+  readonly renderPaymentsPanel?: (projectId: string) => import('react').ReactNode;
 }
 
 export function ProjectsScreen({
@@ -584,6 +586,7 @@ export function ProjectsScreen({
   onRequestApproval,
   onChangeCommercialStatus,
   onRecordDeposit,
+  renderPaymentsPanel,
 }: ProjectsScreenProps): ReactNode {
   // #1142 P2: referencia desde la Vitrina — persiste hasta que el usuario la resuelve.
   const [referenceHandoff, setReferenceHandoff] = useState<
@@ -931,6 +934,7 @@ export function ProjectsScreen({
           onRequestApproval={onRequestApproval}
           onChangeCommercialStatus={onChangeCommercialStatus}
           onRecordDeposit={onRecordDeposit}
+          renderPaymentsPanel={renderPaymentsPanel}
         />
       ) : (
         <>

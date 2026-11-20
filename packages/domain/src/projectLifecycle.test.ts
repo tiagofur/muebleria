@@ -18,6 +18,7 @@ import {
   recordDepositReceived,
   getLatestDeposit,
   validateDepositPayload,
+  getVoidedDepositEventIds,
   inferBackfillEvents,
   calcLifecycleKpis,
   calcBomFingerprint,
@@ -914,5 +915,31 @@ describe('validateDepositPayload (#1647, paridad TS↔Go)', () => {
       ok: true,
       value: { amount: 1, currency: 'MXN', paymentMethod: undefined, reference: 'r', note: undefined },
     });
+  });
+});
+
+describe('anticipo anulado (#1649)', () => {
+  const base = {
+    id: 'p1', name: 'P', customerId: 'c1', currency: 'MXN', marginFactor: 1, laborFixedCost: 0,
+    status: 'accepted', items: [], createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z',
+  } as unknown as Project;
+  const dep = (id: string, at: string, amount: number) => ({
+    id, projectId: 'p1', type: 'deposit_received' as const, at, payload: { amount, currency: 'MXN' },
+  });
+  const voided = (id: string, target: string) => ({
+    id, projectId: 'p1', type: 'deposit_voided' as const, at: '2026-11-05T00:00:00Z', payload: { depositEventId: target },
+  });
+
+  it('el último anticipo ignora los anulados', () => {
+    const project = { ...base, events: [dep('d1', '2026-11-02T00:00:00Z', 100), dep('d2', '2026-11-03T00:00:00Z', 200), voided('v1', 'd2')] };
+    expect(getVoidedDepositEventIds(project)).toEqual(new Set(['d2']));
+    expect(getLatestDeposit(project)?.event.id).toBe('d1');
+  });
+
+  it('sin anticipos vigentes el gate de anticipo no pasa', () => {
+    const project = { ...base, events: [dep('d1', '2026-11-02T00:00:00Z', 100), voided('v1', 'd1')] };
+    expect(getLatestDeposit(project)).toBeNull();
+    const gate = evaluateProductionReleaseGates(project).find((c) => c.code === 'deposit_received');
+    expect(gate?.passed).toBe(false);
   });
 });

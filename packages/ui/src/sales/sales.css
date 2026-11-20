@@ -801,3 +801,18 @@
   background: color-mix(in srgb, var(--brand-50) 50%, transparent);
 }
 
+
+/* #1649 — Por cobrar */
+.sales-dashboard__receivables {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-6, 1.5rem);
+}
+
+.sales-dashboard__section-title {
+  margin: 0;
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 600;
+  color: var(--text-primary);
+}

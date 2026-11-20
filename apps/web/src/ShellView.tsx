@@ -191,6 +191,7 @@ import {
 } from './routes';
 import { organizationKeys } from './shared/query/queryKeys';
 import { sessionScopeKey } from './shared/query/sessionScope';
+import { usePaymentRenderers } from './payments/usePaymentRenderers';
 import type { SessionScope } from './shared/query/sessionScope';
 import {
   type QuoteRevisionsQuery,
@@ -894,6 +895,18 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
   // instalaciones) for every authenticated user.
   const canAccessEmbarques = anyRole(actorRoles, roleCanAccessEmbarquesNav);
   const canAccessShipping = anyRole(actorRoles, roleCanAccessShippingNav);
+  // #1649: server-backed Cobros / Por cobrar / cuenta corriente.
+  const paymentRenderers = usePaymentRenderers({
+    session,
+    authToken,
+    sessionScope,
+    actorRoles,
+    baseUrl: DEFAULT_API_BASE,
+    workshopName: workshopSettings?.workshopName,
+    projects: projectsForRole,
+    customerName: (customerId) => resolveCustomerName(customerId, customers),
+    onOpenProject: (projectId) => navigate(projectPath(projectId)),
+  });
   const canStartInstallation = anyRole(actorRoles, (r) =>
     roleCanAppendProjectEvent(r, 'installation_started'),
   );
@@ -1803,6 +1816,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           vendedores={assignableOwners.map((u) => ({ id: u.id, name: u.name }))}
           ownerLabels={ownerLabels}
           onOpenShowcase={() => navigate(pathForNav('showcase'))}
+          receivablesPanel={paymentRenderers.receivablesPanel}
           onNewProject={
             canMutateProjects ? onDashboardNewProject : undefined
           }
@@ -2176,6 +2190,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           // (admin|gerente_ventas|vendedor — roleCanMutateCustomers), NO
           // canMutateCatalog; sin permiso la pantalla es lectura.
           canMutateCustomers={canMutateCustomers}
+          renderCustomerAccount={paymentRenderers.renderCustomerAccount}
           onCreate={createCustomer}
           onUpdate={updateCustomer}
           onDeactivate={(id) => setCustomerActive(id, false)}
@@ -2903,6 +2918,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onChangeCommercialStatus={(projectId, status) =>
             projectActions.changeCommercialStatus(projectId, status, authUser ? { id: authUser.id, role: authUser.role } : undefined)
           }
+          renderPaymentsPanel={paymentRenderers.renderPaymentsPanel}
           onRecordDeposit={(projectId, params) =>
             projectActions.recordDeposit(projectId, params, authUser ? { id: authUser.id, role: authUser.role } : undefined)
           }
