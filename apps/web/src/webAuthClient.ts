@@ -59,7 +59,17 @@ export interface WebAuthClientDeps {
    * Default mínimo: invalidar S1 y aplicar S2, en ese orden.
    */
   readonly runSessionTransition?: WebSessionTransitionRunner;
+  /**
+   * #1447: THIS tab's session ended outside a business request (scheduled or
+   * wake refresh came back terminal, or the absolute deadline passed). The
+   * BroadcastChannel only reaches OTHER tabs, so without this hook the current
+   * tab kept a dead session on screen until its next request failed.
+   */
+  readonly onSessionEnded?: (code: WebSessionEndCode) => void;
 }
+
+/** Why a web session ended, as reported to `onSessionEnded`. */
+export type WebSessionEndCode = WebRefreshTerminalCode | 'SESSION_ENDED' | 'CSRF_DENIED' | 'ABSOLUTE_DEADLINE';
 
 // --- Errores tipificados -------------------------------------------------------
 
@@ -458,19 +468,32 @@ function maybeRefreshAfterWake(): void {
   const absolute = absoluteSessionExpiresAtMs();
   if (absolute !== null && Date.now() >= absolute) {
     // Deadline absoluto alcanzado: refresh no puede mantener la sesión.
-    clearCredential();
-    broadcastWebSessionEvent({ type: 'session-ended' });
+    endThisTabSession('ABSOLUTE_DEADLINE');
     return;
   }
   const expiresIn = credentialExpiresIn();
   if (expiresIn !== null && expiresIn <= REFRESH_LEAD_MS) {
+    const generationBefore = credential.generation;
     void coordinatedWebRefresh().then((outcome) => {
-      if (outcome.status === 'terminal' || outcome.status === 'network' || outcome.status === 'stale') return;
+      if (outcome.status === 'terminal') {
+        // #1447: a terminal background refresh ends the session NOW and says
+        // so, instead of leaving a silently dead session until the next
+        // request. A newer credential (login/select-org meanwhile) wins.
+        if (getCredential()?.generation === generationBefore) endThisTabSession(outcome.code);
+        return;
+      }
+      if (outcome.status === 'network' || outcome.status === 'stale') return;
       if (outcome.credential !== null) {
         scheduleWebAccessRefresh();
       }
     });
   }
+}
+
+function endThisTabSession(code: WebSessionEndCode): void {
+  clearCredential();
+  broadcastWebSessionEvent({ type: 'session-ended' });
+  deps.onSessionEnded?.(code);
 }
 
 function installWakeListeners(): void {

@@ -872,7 +872,9 @@ family with strict reuse detection, and guarded by the CSRF boundary
 (exact allowed `Origin` + required `X-Granete-CSRF: 1` header) with
 exact-origin credentialed CORS. Web login/refresh/invitation responses carry
 no refresh secret in JSON; mobile keeps the body contract; SketchUp/support
-keep the bodyless bearer bridge, now transport-restricted. The React cutover
+keep the bodyless bearer bridge, now transport-restricted; a bodyless refresh
+with neither web cookie nor bearer answers the terminal `REFRESH_INVALID`
+(#1447) instead of falling into the bridge. The React cutover
 is implemented (SEC-4B): the Web access bearer is a 15-minute rolling mint
 (`min(now+15m, absolute_expires_at)`, structurally registry-capped on every
 web path) that lives ONLY in tab memory behind a canonical credential runtime;

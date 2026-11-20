@@ -1081,6 +1081,15 @@ export function createWorkspaceStore(options?: InternalOptions) {
     baseUrl,
     fetchImpl: safeFetch,
     runSessionTransition: runWebSessionTransition,
+    // #1447: a background refresh that comes back terminal (or the absolute
+    // deadline) ends THIS tab's session explicitly → login with the reason,
+    // never a silently dead session on screen.
+    onSessionEnded: (code) => {
+      if (store.getState().session !== 'auth') return;
+      store.getState().markSessionEnded(
+        code === 'REFRESH_REVOKED' ? 'revoked' : code === 'REFRESH_REUSED' ? 'security' : 'expired',
+      );
+    },
   });
 
   async function runWebSessionTransition(plan: WebSessionTransitionPlan): Promise<void> {
