@@ -2461,6 +2461,46 @@ describe('#1511 — borrado de categorías y muebles: servidor primero bajo If-M
     });
   }
 
+  it('un guardado ya encolado (renombrar) llega al servidor ANTES del DELETE', async () => {
+    const order: string[] = [];
+    let releaseSave!: () => void;
+    const saveGate = new Promise<void>((r) => { releaseSave = r; });
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      order.push(init?.method ?? 'GET');
+      return init?.method === 'DELETE'
+        ? new Response(null, { status: 204 })
+        : new Response('{}', { status: 200, headers: { ETag: '"v2"' } });
+    });
+    const made = makeDeps({
+      getSession: () => 'auth',
+      getAuthToken: () => 'jwt-xyz',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      saveCatalog: async () => {
+        order.push('save:start');
+        await saveGate;
+        order.push('save:end');
+      },
+    });
+    useWorkspaceStore.setState({ session: 'auth' });
+    const store = createCatalogStore({ deps: made.deps });
+    store.getState().setCatalog({
+      ...seedCatalog(),
+      materialCategories: [{ id: CAT_ID, name: 'Vieja', sortOrder: 0 }],
+    } as Catalog);
+
+    // A rename is queued and still saving when the user deletes.
+    void store.getState().updateMaterialCategory(CAT_ID, { name: 'Renombrada', parentId: '', sortOrder: '0' });
+    const deleting = store.getState().deleteMaterialCategory(CAT_ID);
+    await Promise.resolve();
+    expect(order).not.toContain('DELETE');
+    releaseSave();
+    await deleting;
+
+    expect(order.indexOf('save:end')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('DELETE')).toBeGreaterThan(order.indexOf('save:end'));
+    expect(store.getState().catalog!.materialCategories!.some((c) => c.id === CAT_ID)).toBe(false);
+  });
+
   it('mueble: un DELETE fallido no lo quita de la pantalla ni avisa que se eliminó', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

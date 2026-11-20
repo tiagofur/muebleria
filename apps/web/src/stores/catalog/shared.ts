@@ -694,6 +694,11 @@ export function makeCatalogStoreCtx(
     const scope = getContextScope();
     const contextStillValid = () =>
       getContextScope() === scope && useWorkspaceStore.getState().session !== null;
+    // Saves queued BEFORE the delete (e.g. a rename of this same category)
+    // must land first: a PUT arriving after the DELETE would get 404 and the
+    // guarded upsert recreates on 404 — the deleted item would come back.
+    if (saveInFlight) await saveInFlight;
+    if (!contextStillValid()) return false;
     try {
       let ifMatch: string | null = null;
       if (typeof options?.expectedVersion === 'number' && options.expectedVersion > 0) {
