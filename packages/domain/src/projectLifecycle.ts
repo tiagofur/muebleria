@@ -23,7 +23,9 @@ export type CommercialEventType =
   | 'quote_expired'
   | 'quote_cancelled'
   | 'deposit_received'
-  | 'deposit_voided';
+  | 'deposit_voided'
+  | 'delivery_date_committed'
+  | 'delivery_date_changed';
 
 export type SurveyDesignApprovalEventType =
   | 'survey_started'
@@ -113,6 +115,8 @@ export const PROJECT_EVENT_TYPES: readonly ProjectEventType[] = [
   'quote_cancelled',
   'deposit_received',
   'deposit_voided',
+  'delivery_date_committed',
+  'delivery_date_changed',
   'survey_started',
   'survey_completed',
   'design_revision_created',
@@ -255,6 +259,8 @@ export const PROJECT_EVENT_TYPE_LABELS_ES: Readonly<Record<ProjectEventType, str
   quote_cancelled: 'Cotización cancelada',
   deposit_received: 'Anticipo recibido',
   deposit_voided: 'Anticipo anulado',
+  delivery_date_committed: 'Entrega comprometida',
+  delivery_date_changed: 'Fecha de entrega cambiada',
   survey_started: 'Levantamiento iniciado',
   survey_completed: 'Levantamiento completado',
   design_revision_created: 'Revisión de diseño creada',

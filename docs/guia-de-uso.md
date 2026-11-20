@@ -169,6 +169,22 @@ se mantiene abierto para corregirlo sin perder tus cambios.
    ordenadas por días desde la aceptación, con el total por moneda. El vendedor
    ve sólo sus obras. En **Clientes**, cada ficha muestra su **cuenta
    corriente**: todas sus obras aceptadas con total, cobrado y saldo.
+9. **Entrega comprometida** (Herramientas → Resumen de obra): al aceptar el
+   pedido, tocá **Comprometer fecha** y elegí el día acordado con el cliente.
+   Para moverla después usá **Cambiar fecha**: pide un **motivo**, que queda en
+   el historial con tu usuario y la fecha anterior. Pueden hacerlo ventas,
+   gerencia de producción y administración; una obra perdida o cancelada no
+   admite fecha.
+   - El estado se calcula solo: **En fecha**, **Vence esta semana** (7 días o
+     menos), **Atrasado** (la fecha pasó y no hay entrega registrada) o
+     **Entregado** (cuando se registra la instalación terminada, la
+     conformidad del cliente o el cierre de la obra; esa es la fecha real).
+   - En **Cotizaciones** cada tarjeta muestra la entrega, podés ordenar por
+     **Entrega comprometida** y filtrar **Entregas en riesgo** (atrasadas o que
+     vencen esta semana). En **Producción** y en **Estado de Planta** las
+     órdenes con entrega más próxima van primero, con su chip de estado.
+   - En el **Dashboard**, «Necesita atención» avisa las entregas atrasadas y
+     las que vencen en los próximos días.
 
 ## 7. Proyectar — el ambiente en 3D
 

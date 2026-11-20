@@ -1059,6 +1059,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     session === 'auth' && anyRole(actorRoles, roleCanMutateProjects);
   const canAcceptQuoteRevisionsHint =
     session === 'auth' && anyRole(actorRoles, roleCanAcceptQuoteRevisions);
+  // #1648: committed delivery date — server command, same roles as the event.
+  const canCommitDeliveryHint =
+    session === 'auth' && anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'delivery_date_changed'));
 
   return (
 
@@ -2921,6 +2924,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           renderPaymentsPanel={paymentRenderers.renderPaymentsPanel}
           onRecordDeposit={(projectId, params) =>
             projectActions.recordDeposit(projectId, params, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
+          onCommitDelivery={
+            canCommitDeliveryHint ? (projectId, input) => projectActions.commitDeliveryDate(projectId, input) : undefined
           }
         />
 

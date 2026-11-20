@@ -7,8 +7,9 @@ import {
   PIPELINE_SECTORS,
   type ProjectFloorSummary,
 } from '@granete/domain';
-import type { Project } from '@granete/domain';
+import { compareByCommittedDelivery, localIsoDate, projectDeliveryInfo, type Project } from '@granete/domain';
 import { EmptyState, PageHeader } from '../common';
+import { DeliveryStatusChip } from '../projects/delivery';
 
 /**
  * Estado de Planta (F093 — Fase 1 visibilidad): every project in the
@@ -34,6 +35,8 @@ export function PlantBoardScreen({
   const rows = useMemo(() => {
     return projects
       .filter((p) => p.status === 'accepted' || p.status === 'produced')
+      // #1648: urgencia primero — la entrega comprometida más próxima arriba.
+      .sort(compareByCommittedDelivery)
       .map((project) => ({
         project,
         summary: buildProjectFloorSummary(project),
@@ -135,6 +138,11 @@ function PlantBoardRow({
           {summary.totalItems}{' '}
           {summary.totalItems === 1 ? 'mueble' : 'muebles'}
         </span>
+        {project.committedDeliveryDate ? (
+          <span className="plant-board__delivery" data-testid={`plant-board-delivery-${project.id}`}>
+            <DeliveryStatusChip info={projectDeliveryInfo(project, localIsoDate(new Date()))} withDays />
+          </span>
+        ) : null}
       </td>
       {summary.stages.map((stage) => {
         const done = stage.done >= stage.total;

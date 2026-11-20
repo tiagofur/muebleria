@@ -1756,3 +1756,6 @@ export * from "./glbRepresentation";
 export * from "./factoryConstructionPolicy";
 export * from "./hardwareProfile";
 export * from "./drawerFamily";
+
+// Committed delivery date (#1648)
+export * from "./projectDelivery";

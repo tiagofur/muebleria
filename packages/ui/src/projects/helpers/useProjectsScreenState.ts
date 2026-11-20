@@ -29,6 +29,7 @@ import type {
   Structure,
   WorkshopSettings,
 } from '@granete/domain';
+import { isDeliveryAttention, localIsoDate, projectDeliveryInfo } from '@granete/domain';
 import type { ProjectCommercialSummary } from '@granete/storage';
 import { trackUsability } from '../../preview3d/usabilityBenchmark';
 import { useDebouncedValue } from '../../common';
@@ -147,6 +148,9 @@ export function useProjectsScreenState({
     useState<QuoteCommercialStatusFilter>('all');
   // #1118 «¿qué mando hoy?» — actividad comercial descendente por defecto.
   const [sortKey, setSortKey] = useState<ProjectListSortKey>('recent');
+  // #1648: «Entregas en riesgo» — atrasadas o que vencen esta semana.
+  const [deliveryRiskOnly, setDeliveryRiskOnly] = useState(false);
+  const today = localIsoDate(new Date());
   // Deep-link mount (refresh / post-login remount): seed from the URL so the
   // first paint already shows the detail instead of flashing the list.
   const [selectedId, setSelectedIdState] = useState<string | null>(() =>
@@ -230,6 +234,10 @@ export function useProjectsScreenState({
   // Commercial status chips only apply to a READY dataset: while loading or
   // failed, filtering by status would misclassify projects as 'none' (#642/2A).
   const commercialFiltersDisabled = commercialSummariesStatus !== 'ready';
+  const deliveryRiskCount = useMemo(
+    () => projects.filter((p) => isDeliveryAttention(projectDeliveryInfo(p, today))).length,
+    [projects, today],
+  );
   const filtered = useMemo(
     () =>
       sortProjectsForList(
@@ -240,12 +248,12 @@ export function useProjectsScreenState({
           customers,
           commercialSummaries,
           commercialSummariesStatus,
-        ),
+        ).filter((p) => !deliveryRiskOnly || isDeliveryAttention(projectDeliveryInfo(p, today))),
         commercialSummaries,
         commercialSummariesStatus === 'ready',
         sortKey,
       ),
-    [projects, debouncedSearch, statusFilter, customers, commercialSummaries, commercialSummariesStatus, sortKey],
+    [projects, debouncedSearch, statusFilter, customers, commercialSummaries, commercialSummariesStatus, sortKey, deliveryRiskOnly, today],
   );
 
   const selectedProject =
@@ -565,6 +573,10 @@ export function useProjectsScreenState({
     setStatusFilter,
     sortKey,
     setSortKey,
+    deliveryRiskOnly,
+    setDeliveryRiskOnly,
+    deliveryRiskCount,
+    today,
     commercialFiltersDisabled,
     selectedId,
     /** Local intent selection (state + URL). Raw state stays internal. */

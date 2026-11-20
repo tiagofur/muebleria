@@ -102,6 +102,18 @@ type RecordProjectDepositRequest struct {
 	ReceivedAt    *string               `json:"receivedAt,omitempty"`
 }
 
+type CommitDeliveryDateRequest struct {
+	Date   string  `json:"date"`
+	Reason *string `json:"reason,omitempty"`
+}
+
+type DeliveryCommitmentResult struct {
+	ProjectId             string                `json:"projectId"`
+	CommittedDeliveryDate string                `json:"committedDeliveryDate"`
+	PreviousDate          *string               `json:"previousDate,omitempty"`
+	Event                 ProjectLifecycleEvent `json:"event"`
+}
+
 type SetProjectCommercialStatusRequest struct {
 	Status ProjectCommercialStatus `json:"status"`
 	Note   *string                 `json:"note,omitempty"`

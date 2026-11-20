@@ -249,6 +249,25 @@ func (s *stubStore) RecordProjectCommercialEvent(_ context.Context, cmd storage.
 	return &ev, nil
 }
 
+func (s *stubStore) CommitProjectDelivery(_ context.Context, cmd storage.CommitProjectDeliveryCommand) (*storage.CommitProjectDeliveryResult, error) {
+	s.deliveryCommands = append(s.deliveryCommands, cmd)
+	if s.deliveryErr != nil {
+		return nil, s.deliveryErr
+	}
+	decision, err := domain.DecideDeliveryCommitment(s.deliveryCurrent, nil, cmd.Date, cmd.Reason)
+	if err != nil {
+		return nil, err
+	}
+	actor := cmd.ActorUserID
+	return &storage.CommitProjectDeliveryResult{
+		ProjectID:             cmd.ProjectID,
+		CommittedDeliveryDate: decision.Date,
+		PreviousDate:          decision.Previous,
+		Event: domain.ProjectEvent{ID: cmd.EventID, ProjectID: cmd.ProjectID, Type: decision.EventType, At: cmd.At,
+			ByUserID: &actor, Source: cmd.Source},
+	}, nil
+}
+
 func (s *stubStore) RecordProjectPayment(_ context.Context, cmd storage.RecordProjectPaymentCommand) (*domain.ProjectPayment, error) {
 	if s.paymentErr != nil {
 		return nil, s.paymentErr

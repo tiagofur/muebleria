@@ -464,6 +464,8 @@ export interface ProjectsScreenProps {
   ) => boolean | void | Promise<boolean | void>;
   /** #1649: server-backed «Cobros» panel of the project (auth sessions only). */
   readonly renderPaymentsPanel?: (projectId: string) => import('react').ReactNode;
+  /** #1648: server-authored committed delivery date (absent → read-only). */
+  readonly onCommitDelivery?: (projectId: string, input: import('@granete/domain').DeliveryCommitmentInput) => Promise<import('./delivery').DeliveryCommitResult>;
 }
 
 export function ProjectsScreen({
@@ -587,6 +589,7 @@ export function ProjectsScreen({
   onChangeCommercialStatus,
   onRecordDeposit,
   renderPaymentsPanel,
+  onCommitDelivery,
 }: ProjectsScreenProps): ReactNode {
   // #1142 P2: referencia desde la Vitrina — persiste hasta que el usuario la resuelve.
   const [referenceHandoff, setReferenceHandoff] = useState<
@@ -935,6 +938,7 @@ export function ProjectsScreen({
           onChangeCommercialStatus={onChangeCommercialStatus}
           onRecordDeposit={onRecordDeposit}
           renderPaymentsPanel={renderPaymentsPanel}
+          onCommitDelivery={onCommitDelivery}
         />
       ) : (
         <>
@@ -970,6 +974,10 @@ export function ProjectsScreen({
           commercialFiltersDisabled={state.commercialFiltersDisabled}
           sortKey={state.sortKey}
           onSortChange={state.setSortKey}
+          deliveryRiskOnly={state.deliveryRiskOnly}
+          deliveryRiskCount={state.deliveryRiskCount}
+          onDeliveryRiskOnlyChange={state.setDeliveryRiskOnly}
+          today={state.today}
           isTrulyEmpty={state.isTrulyEmpty}
           isFilterEmpty={state.isFilterEmpty}
           canMutate={canMutate}
@@ -980,6 +988,7 @@ export function ProjectsScreen({
           onClearFilters={() => {
             state.setSearch('');
             state.setStatusFilter('all');
+            state.setDeliveryRiskOnly(false);
           }}
           onNewProject={state.startCreate}
           onFromTemplate={state.startFromTemplate}

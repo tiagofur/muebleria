@@ -19,8 +19,10 @@ import {
 } from './installation';
 import { openQualityIssues, reworkCostSummary } from './quality';
 import { computeJobCostSummary } from './jobCosting';
+import { projectDeliveryInfo } from './projectDelivery';
 
 export const OPS_EXCEPTION_KINDS = [
+  'delivery_risk',
   'installation_risk',
   'survey_preliminary',
   'material_shortage',
@@ -83,6 +85,48 @@ function lastEventAt(project: Project): string | null {
 }
 
 /* ── Per-kind derivations ──────────────────────────────────────────────────── */
+
+/**
+ * #1648: committed delivery date late or due within the week (and no delivery
+ * milestone yet). Applies to any order with a commitment, not only those
+ * already in the factory: a late order that never reached production is the
+ * worst case.
+ */
+function deliveryRiskExceptions(project: Project, now: string): readonly OpsException[] {
+  const info = projectDeliveryInfo(project, now.slice(0, 10));
+  if (info.status === 'overdue' && info.daysToCommitted !== undefined) {
+    const late = -info.daysToCommitted;
+    return [
+      {
+        kind: 'delivery_risk',
+        severity: 'critical',
+        projectId: project.id,
+        projectName: project.name,
+        message: `Entrega comprometida el ${info.committedDate} atrasada (${late} día${late === 1 ? '' : 's'})`,
+        actionHint: 'Abrir la obra y avisar al cliente o mover la fecha con motivo',
+        truth: 'actual',
+      },
+    ];
+  }
+  if (info.status === 'due_soon' && info.daysToCommitted !== undefined) {
+    const d = info.daysToCommitted;
+    return [
+      {
+        kind: 'delivery_risk',
+        severity: d <= 2 ? 'critical' : 'warning',
+        projectId: project.id,
+        projectName: project.name,
+        message:
+          d === 0
+            ? `Entrega comprometida hoy (${info.committedDate})`
+            : `Entrega comprometida el ${info.committedDate} (faltan ${d} día${d === 1 ? '' : 's'})`,
+        actionHint: 'Abrir la obra y confirmar que llega a tiempo',
+        truth: 'actual',
+      },
+    ];
+  }
+  return [];
+}
 
 function installationRiskExceptions(
   project: Project,
@@ -305,6 +349,7 @@ export function deriveOpsExceptions(
 
   const out: OpsException[] = [];
   for (const project of projects) {
+    out.push(...deliveryRiskExceptions(project, now));
     if (project.status !== 'accepted' && project.status !== 'produced') continue;
     out.push(...installationRiskExceptions(project, now));
     out.push(...surveyPreliminaryExceptions(project));

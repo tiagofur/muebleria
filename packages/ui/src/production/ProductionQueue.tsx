@@ -4,7 +4,8 @@
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
-import type { Project } from '@granete/domain';
+import { compareByCommittedDelivery, localIsoDate, projectDeliveryInfo, type Project } from '@granete/domain';
+import { DeliveryStatusChip } from '../projects/delivery';
 import {
   CheckCircle2,
   ClipboardList,
@@ -96,6 +97,7 @@ export function ProductionQueue({
     [activeClaims],
   );
 
+  const today = localIsoDate(new Date());
   const rows = useMemo(() => {
     return projects
       .filter((p) => isProductionQueueStatus(p.status))
@@ -103,6 +105,9 @@ export function ProductionQueue({
         tab === 'accepted' ? !claimedIds.has(p.id) : claimedIds.has(p.id),
       )
       .sort((a, b) => {
+        // #1648: the order promised earliest comes first; then recency.
+        const byDelivery = compareByCommittedDelivery(a, b);
+        if (byDelivery !== 0) return byDelivery;
         if (a.updatedAt < b.updatedAt) return 1;
         if (a.updatedAt > b.updatedAt) return -1;
         return 0;
@@ -247,6 +252,12 @@ export function ProductionQueue({
                     </p>
                     <p className="prod-queue-card__signals">
                       <ProjectFloorStageChip project={project} />
+                      {project.committedDeliveryDate ? (
+                        <span className="prod-queue-card__signal" data-testid={`prod-signal-delivery-${project.id}`}>
+                          Entrega {formatIsoDate(project.committedDeliveryDate)}{' '}
+                          <DeliveryStatusChip info={projectDeliveryInfo(project, today)} withDays />
+                        </span>
+                      ) : null}
                       {lastExport ? (
                           <span
                             className="prod-queue-card__signal"

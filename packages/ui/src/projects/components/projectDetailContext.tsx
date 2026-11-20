@@ -458,6 +458,8 @@ export interface ProjectDetailContextValue {
   ) => boolean | void | Promise<boolean | void>;
   /** #1649: «Cobros» panel rendered by the shell (server-backed). */
   readonly renderPaymentsPanel?: () => import('react').ReactNode;
+  /** #1648: committed delivery date command (absent → read-only). */
+  readonly onCommitDelivery?: (input: import('@granete/domain').DeliveryCommitmentInput) => Promise<import('../delivery').DeliveryCommitResult>;
 }
 
 

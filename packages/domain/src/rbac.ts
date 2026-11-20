@@ -709,6 +709,10 @@ const PROJECT_EVENT_APPEND_ROLES: Readonly<Record<string, readonly UserRole[]>> 
   deposit_received: ['admin', 'gerente_ventas', 'vendedor'],
   // #1649: voiding a recorded deposit is the same commercial authority.
   deposit_voided: ['admin', 'gerente_ventas', 'vendedor'],
+  // #1648: committed delivery date — sales agrees it, the production manager
+  // moves it when the plan changes; only the server command writes it.
+  delivery_date_committed: ['admin', 'gerente_ventas', 'vendedor', 'gerente_produccion'],
+  delivery_date_changed: ['admin', 'gerente_ventas', 'vendedor', 'gerente_produccion'],
   // Survey: ventas or ingeniería can be on site.
   survey_started: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
   survey_completed: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],

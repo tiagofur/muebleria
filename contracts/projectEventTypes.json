@@ -13,6 +13,8 @@
   "cost_time_recorded",
   "customer_approved",
   "customer_rejected",
+  "delivery_date_changed",
+  "delivery_date_committed",
   "deposit_received",
   "deposit_voided",
   "design_approved",

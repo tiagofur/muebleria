@@ -2321,6 +2321,8 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     str(raw.survey_completed_at ?? raw.surveyCompletedAt) || undefined;
   const installationScheduledDate =
     str(raw.installation_scheduled_date ?? raw.installationScheduledDate) || undefined;
+  const committedDeliveryDate =
+    str(raw.committed_delivery_date ?? raw.committedDeliveryDate) || undefined;
   return {
     id: str(raw.id),
     name: str(raw.name),
@@ -2334,6 +2336,7 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     technicalStatus: technicalStatusRaw as ProjectTechnicalStatus,
     surveyCompletedAt,
     installationScheduledDate,
+    committedDeliveryDate,
     currency: str(raw.currency, 'MXN'),
     marginFactor: num(raw.margin_factor ?? raw.marginFactor, 1.35),
     laborFixedCost: num(raw.labor_fixed_cost ?? raw.laborFixedCost),

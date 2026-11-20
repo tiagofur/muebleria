@@ -19,7 +19,7 @@ import {
   Plus,
   SearchX,
 } from 'lucide-react';
-import type { Customer, Project, ProjectTemplate } from '@granete/domain';
+import { localIsoDate, projectDeliveryInfo, type Customer, type Project, type ProjectTemplate } from '@granete/domain';
 import type { ProjectCommercialSummary } from '@granete/storage';
 import {
   EmptyState,
@@ -43,6 +43,7 @@ import {
   type QuoteCommercialStatusFilter,
 } from '../quoteRevisionPresentation';
 import { CommercialStatusBadge } from './CommercialStatusBadge';
+import { DeliveryStatusChip } from '../delivery';
 
 function quoteNoun(count: number): string {
   return count === 1 ? 'cotización' : 'cotizaciones';
@@ -68,6 +69,12 @@ export interface ProjectsListViewProps {
   readonly commercialFiltersDisabled?: boolean;
   readonly sortKey?: ProjectListSortKey;
   readonly onSortChange?: (key: ProjectListSortKey) => void;
+  /** #1648: «Entregas en riesgo» (atrasadas o que vencen esta semana). */
+  readonly deliveryRiskOnly?: boolean;
+  readonly deliveryRiskCount?: number;
+  readonly onDeliveryRiskOnlyChange?: (value: boolean) => void;
+  /** Local calendar day (YYYY-MM-DD) used to derive delivery status. */
+  readonly today?: string;
   readonly isTrulyEmpty: boolean;
   readonly isFilterEmpty: boolean;
   readonly canMutate: boolean;
@@ -97,6 +104,10 @@ export function ProjectsListView({
   commercialFiltersDisabled = false,
   sortKey = 'recent',
   onSortChange,
+  deliveryRiskOnly = false,
+  deliveryRiskCount = 0,
+  onDeliveryRiskOnlyChange,
+  today = localIsoDate(new Date()),
   isTrulyEmpty,
   isFilterEmpty,
   canMutate,
@@ -158,7 +169,7 @@ export function ProjectsListView({
     filtered.length > 0 && filtered.length < projects.length;
   const showClearFilters =
     filtered.length > 0 &&
-    (search.trim() !== '' || statusFilter !== 'all' || showsRestrictedSubset);
+    (search.trim() !== '' || statusFilter !== 'all' || deliveryRiskOnly || showsRestrictedSubset);
 
   const cardIdentity = (
     project: Project,
@@ -243,6 +254,17 @@ export function ProjectsListView({
           }
           contextualControls={
             <div className="project-sort">
+              {onDeliveryRiskOnlyChange ? (
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small project-delivery-toggle"
+                  aria-pressed={deliveryRiskOnly}
+                  onClick={() => onDeliveryRiskOnlyChange(!deliveryRiskOnly)}
+                  data-testid="projects-delivery-risk-toggle"
+                >
+                  Entregas en riesgo ({deliveryRiskCount})
+                </button>
+              ) : null}
               <label className="project-sort__label" htmlFor="project-sort">
                 Ordenar
               </label>
@@ -393,6 +415,7 @@ export function ProjectsListView({
               : null;
             const activityDate =
               summariesReady ? (summary?.commercialActivityAt ?? null) : null;
+            const deliveryInfo = projectDeliveryInfo(project, today);
             const formattedTotal =
               summariesReady && summary?.saleTotal != null
                 ? formatMoneyDisplay(summary.saleTotal, { currency: summary.currency })
@@ -429,6 +452,12 @@ export function ProjectsListView({
                     {activityDate != null ? (
                       <span className="project-card__stat">
                         Actualizada {formatIsoDate(activityDate)}
+                      </span>
+                    ) : null}
+                    {deliveryInfo.status !== 'none' && deliveryInfo.committedDate ? (
+                      <span className="project-card__stat" data-testid={`project-card-delivery-${project.id}`}>
+                        Entrega {formatIsoDate(deliveryInfo.committedDate)}{' '}
+                        <DeliveryStatusChip info={deliveryInfo} withDays={deliveryInfo.status === 'overdue' || deliveryInfo.status === 'due_soon'} />
                       </span>
                     ) : null}
                   </div>

@@ -45,6 +45,8 @@ import type {
   HardwareKitTemplate,
   CommercialStatus,
   DepositCommandInput,
+  DeliveryCommitmentInput,
+  DeliveryCommitmentOutcome,
   ProjectEvent,
 } from '@granete/domain';
 import {
@@ -1514,6 +1516,25 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     );
     return {
       commercialStatus: result.commercialStatus,
+      event: projectLifecycleEventFromApi(result.event),
+    };
+  }
+
+  /** #1648 — server-authored committed delivery date (generated command, idempotent). */
+  async commitProjectDeliveryDate(
+    projectId: string,
+    input: DeliveryCommitmentInput,
+    idempotencyKey: string,
+  ): Promise<DeliveryCommitmentOutcome> {
+    const result = await this.generatedClient.commitProjectDeliveryDate(
+      this.getAccessToken?.() ?? '',
+      projectId,
+      input.reason ? { date: input.date, reason: input.reason } : { date: input.date },
+      idempotencyKey,
+    );
+    return {
+      committedDeliveryDate: result.committedDeliveryDate,
+      previousDate: result.previousDate,
       event: projectLifecycleEventFromApi(result.event),
     };
   }
