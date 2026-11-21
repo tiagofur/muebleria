@@ -142,6 +142,7 @@ func toQuoteRevisionDetailDTO(d domain.QuoteRevisionDetail) openapi.QuoteRevisio
 		CreatedAt:                 d.CreatedAt.UTC().Format(time.RFC3339Nano),
 		PublishedAt:               publishedAt,
 		AcceptedAt:                acceptedAt,
+		ValidUntil:                d.ValidUntil,
 		CommercialAmountsWithheld: amountsWithheld,
 		CommercialSnapshot:        toQuoteCommercialSnapshotDTO(d.CommercialSnapshot),
 		Items:                     items,

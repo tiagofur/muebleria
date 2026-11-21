@@ -51,7 +51,10 @@ var (
 	// requested lifecycle state from its current one (#571). Distinct from
 	// ErrQuoteRevisionConflict (stale base / concurrent modification).
 	ErrQuoteRevisionInvalidTransition = errors.New("quote revision invalid transition")
-	ErrInvalidRevisionSnapshot        = errors.New("invalid revision snapshot: corrupt or malformed payload")
+	// ErrQuoteRevisionExpired (#1648): accepting a published quote past its
+	// valid_until requires an explicit acknowledgement (warn, never block).
+	ErrQuoteRevisionExpired    = errors.New("quote revision expired")
+	ErrInvalidRevisionSnapshot = errors.New("invalid revision snapshot: corrupt or malformed payload")
 	// ErrQuoteUnitUnfreezable (#1312): a specific draft unit cannot get its
 	// commercial pricing context frozen — a distinct cause from a corrupt
 	// snapshot payload, so the API surfaces the wrapped unit-level detail
@@ -81,6 +84,10 @@ type QuoteRevision struct {
 	// event was never recorded (honest absence, not fabricated dates).
 	PublishedAt *time.Time `json:"publishedAt,omitempty"`
 	AcceptedAt  *time.Time `json:"acceptedAt,omitempty"`
+	// ValidUntil (#1648) is the YYYY-MM-DD date the published quote holds
+	// until: frozen at the draft → published transition from the factory
+	// default. nil on drafts and on revisions published before #1648.
+	ValidUntil *string `json:"validUntil,omitempty"`
 	// CommercialSnapshot is returned by every exact revision command/read. It
 	// is nil only for legacy revisions that predate canonical capture.
 	CommercialSnapshot *QuoteCommercialSnapshot `json:"commercialSnapshot,omitempty"`

@@ -167,7 +167,7 @@ test.describe.serial('Engineering entry: canonical release → queue + workspace
       notes: 'Entrada a Ingeniería — revisión inicial',
     }, 'eng-entry-q1-create');
     await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'eng-entry-q1-publish');
-    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'eng-entry-q1-accept');
+    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, {}, 'eng-entry-q1-accept');
 
     // R1 approved against the exact accepted Q1 (#502 commercial gate).
     const approved = await client.approveProjectDesignRevisionForProduction(

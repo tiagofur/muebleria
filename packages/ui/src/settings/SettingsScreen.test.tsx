@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SettingsScreen } from './SettingsScreen';
-import type { WorkshopSettings } from '@granete/domain';
+import { resolveWorkshopSettings, type WorkshopSettings } from '@granete/domain';
 
 afterEach(() => cleanup());
 
@@ -49,6 +49,8 @@ describe('SettingsScreen (#37 / F044)', () => {
       defaultTrimMargins: { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
       defaultDeductEdgeBand: true,
       navMode: 'departmental',
+      quoteValidityDays: 15,
+      timeZone: 'America/Mexico_City',
     });
   });
 
@@ -92,6 +94,8 @@ describe('SettingsScreen (#37 / F044)', () => {
       defaultTrimMargins: { topMm: 15, bottomMm: 10, leftMm: 10, rightMm: 10 },
       defaultDeductEdgeBand: false,
       navMode: 'departmental',
+      quoteValidityDays: 15,
+      timeZone: 'America/Mexico_City',
     });
   });
 
@@ -199,5 +203,26 @@ describe('SettingsScreen — Red de Ventas (#326)', () => {
     expect(new Headers(createCall?.[1]?.headers).get('Idempotency-Key')).toMatch(/^web:/);
     await user.click(screen.getByTestId('sales-network-enter'));
     expect(onEnterOrg).toHaveBeenCalledWith('org-store-9', 'Tienda Monterrey');
+  });
+});
+
+describe('SettingsScreen — vigencia de cotizaciones (#1648)', () => {
+  it('guarda los días de vigencia y rechaza valores fuera de 1..365', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsScreen settings={resolveWorkshopSettings({})} onSave={onSave} />);
+    const input = screen.getByTestId('settings-quote-validity-days');
+    expect((input as HTMLInputElement).value).toBe('15');
+
+    await user.clear(input);
+    await user.type(input, '400');
+    await user.click(screen.getByRole('button', { name: /Guardar/i }));
+    // Out of range never reaches the server (native min/max + our guard).
+    expect(onSave).not.toHaveBeenCalled();
+
+    await user.clear(input);
+    await user.type(input, '30');
+    await user.click(screen.getByRole('button', { name: /Guardar/i }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ quoteValidityDays: 30 }));
   });
 });

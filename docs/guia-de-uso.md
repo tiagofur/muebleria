@@ -209,6 +209,18 @@ se mantiene abierto para corregirlo sin perder tus cambios.
      cuántos vencen esta semana y cuántos pedidos tienen fecha; al tocarla abre
      Cotizaciones ya filtradas. «Necesita atención» detalla cada entrega
      atrasada y las que vencen en los próximos días.
+10. **Vigencia de la cotización** (reconciliación de la obra → Ciclo comercial):
+   al **publicar** una revisión queda **«Vigente hasta»** hoy más los días de
+   vigencia del taller (15 por defecto; se cambia en **Ajustes → General y
+   Comercial**, junto con la **zona horaria del taller**, que define qué día es
+   «hoy»). La fecha también sale en el PDF y el XLSX de la cotización.
+   - Si la cotización **vence** antes de que el cliente la acepte, la pantalla
+     lo avisa. Se puede crear una nueva cotización cuando hay cambios para
+     incorporar, o **aceptarla igual**: el sistema pide marcar «Entiendo que
+     está vencida y la acepto igual» y deja esa confirmación registrada con tu
+     usuario.
+   - Las cotizaciones publicadas antes de esta función figuran «Sin vigencia
+     registrada» y se aceptan como siempre.
 
 ## 7. Proyectar — el ambiente en 3D
 

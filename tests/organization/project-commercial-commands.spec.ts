@@ -55,7 +55,7 @@ async function prepareAcceptedQuote(): Promise<void> {
   await client.materializeQuoteLineFurniture(token, PROJECT_ID, QUOTE_LINE_ID, 'gate-1647-materialize');
   const q1 = await client.createInitialProjectQuoteRevision(token, PROJECT_ID, { notes: 'Anticipo E2E' }, 'gate-1647-q1-create');
   await client.publishProjectQuoteRevision(token, PROJECT_ID, q1.id, 'gate-1647-q1-publish');
-  await client.acceptProjectQuoteRevision(token, PROJECT_ID, q1.id, 'gate-1647-q1-accept');
+  await client.acceptProjectQuoteRevision(token, PROJECT_ID, q1.id, {}, 'gate-1647-q1-accept');
 }
 
 async function readServerProject(): Promise<{ commercialStatus?: string; events: Array<{ type: string; by_user_id?: string | null; payload?: Record<string, unknown> }> }> {

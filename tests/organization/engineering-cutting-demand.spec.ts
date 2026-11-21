@@ -284,7 +284,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     // Q1 accepted over R1's 600 mm world.
     const q1 = await client.createInitialProjectQuoteRevision(token, PROJECT_ID, { notes: 'Q1 739' }, 'eng739-q1-cutting');
     await client.publishProjectQuoteRevision(token, PROJECT_ID, q1.id, 'eng739-q1-pub-cutting');
-    await client.acceptProjectQuoteRevision(token, PROJECT_ID, q1.id, 'eng739-q1-acc-cutting');
+    await client.acceptProjectQuoteRevision(token, PROJECT_ID, q1.id, {}, 'eng739-q1-acc-cutting');
 
     // R2: unit 3 grows to 650 mm (the manufacturing truth P1 will freeze).
     await putWorkingCopyCurrent(client, token, design.id, {
@@ -305,7 +305,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     );
     const q2Id = requote.quoteRevision.id;
     await client.publishProjectQuoteRevision(token, PROJECT_ID, q2Id, 'eng739-q2-pub-cutting');
-    await client.acceptProjectQuoteRevision(token, PROJECT_ID, q2Id, 'eng739-q2-acc-cutting');
+    await client.acceptProjectQuoteRevision(token, PROJECT_ID, q2Id, {}, 'eng739-q2-acc-cutting');
     const approved = await client.approveProjectDesignRevisionForProduction(
       token,
       PROJECT_ID,

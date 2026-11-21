@@ -56,7 +56,8 @@ func (s *PostgresStore) ListQuoteRevisionsByProject(ctx context.Context, project
 		SELECT id, organization_id, project_id, revision_number, status, source_type,
 			COALESCE(notes, ''), COALESCE(created_by::text, ''),
 			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, ''),
-			created_at, published_at, accepted_at, COALESCE(commercial_snapshot, 'null'::jsonb)
+			created_at, published_at, accepted_at, COALESCE(commercial_snapshot, 'null'::jsonb),
+			to_char(valid_until, 'YYYY-MM-DD')
 		FROM quote_revisions
 		WHERE project_id = $1
 		ORDER BY revision_number ASC
@@ -86,6 +87,7 @@ func (s *PostgresStore) ListQuoteRevisionsByProject(ctx context.Context, project
 			&d.PublishedAt,
 			&d.AcceptedAt,
 			&commercialSnapshot,
+			&d.ValidUntil,
 		); err != nil {
 			return nil, err
 		}

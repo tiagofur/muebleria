@@ -4,6 +4,22 @@
 
 import type { WorkshopSettings, Workspace } from './types';
 
+/** #1648 — matches Go domain.DefaultQuoteValidityDays. */
+export const DEFAULT_QUOTE_VALIDITY_DAYS = 15;
+export const QUOTE_VALIDITY_DAYS_MAX = 365;
+/** #1648 — matches Go domain.DefaultWorkshopTimeZone. */
+export const DEFAULT_WORKSHOP_TIME_ZONE = 'America/Mexico_City';
+
+/** True when the runtime knows this IANA zone (mirrors Go time.LoadLocation). */
+export function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const DEFAULT_WORKSHOP_SETTINGS: WorkshopSettings = {
   defaultMarginFactor: 1.35,
   defaultLaborFixedCost: 0,
@@ -19,6 +35,8 @@ export const DEFAULT_WORKSHOP_SETTINGS: WorkshopSettings = {
   defaultDeductEdgeBand: true,
   defaultCutStrategy: 'saw-guillotine',
   navMode: 'departmental',
+  quoteValidityDays: DEFAULT_QUOTE_VALIDITY_DAYS,
+  timeZone: DEFAULT_WORKSHOP_TIME_ZONE,
 };
 
 /** Merge partial/legacy settings with product defaults. */
@@ -87,6 +105,20 @@ export function resolveWorkshopSettings(
       settings.navMode === 'simplified'
         ? 'simplified'
         : DEFAULT_WORKSHOP_SETTINGS.navMode,
+    // #1648: out-of-range falls back to the default (Go normalize + DB CHECK).
+    quoteValidityDays:
+      typeof settings.quoteValidityDays === 'number' &&
+      Number.isInteger(settings.quoteValidityDays) &&
+      settings.quoteValidityDays >= 1 &&
+      settings.quoteValidityDays <= QUOTE_VALIDITY_DAYS_MAX
+        ? settings.quoteValidityDays
+        : DEFAULT_QUOTE_VALIDITY_DAYS,
+    timeZone:
+      typeof settings.timeZone === 'string' &&
+      settings.timeZone.trim() !== '' &&
+      isValidTimeZone(settings.timeZone.trim())
+        ? settings.timeZone.trim()
+        : DEFAULT_WORKSHOP_TIME_ZONE,
   };
 }
 

@@ -265,7 +265,7 @@ test('2A: Q2 accepted wins, identity stays frozen, Q3 draft stays secondary, vie
   }, 'gate-qla-requote-q2');
   seeded.q2Id = requote.quoteRevision.id;
   await client.publishProjectQuoteRevision(seeded.token, seeded.projectId, seeded.q2Id, 'gate-qla-publish-q2');
-  await client.acceptProjectQuoteRevision(seeded.token, seeded.projectId, seeded.q2Id, 'gate-qla-accept-q2');
+  await client.acceptProjectQuoteRevision(seeded.token, seeded.projectId, seeded.q2Id, {}, 'gate-qla-accept-q2');
 
   // Deliberate historical mutation AFTER Q2: mutable identity changes must
   // not relabel the frozen commercial history.

@@ -1544,6 +1544,76 @@ describe('Quote revision lifecycle UI (#571 / WEB-DT-4)', () => {
     });
   });
 
+  it('#1648 cotización vencida: avisa, el modal exige la confirmación explícita y la envía', async () => {
+    const publishedQuote: QuoteRevisionDetail = {
+      ...mockQuoteRevisions[1]!,
+      revisionNumber: 2,
+      status: 'published',
+      validUntil: '2020-01-10',
+    };
+    const fetchMock = setupFetchMock({ quoteRevisions: [mockQuoteRevisions[0]!, publishedQuote] });
+    renderScreen({
+      initialContext: { quoteRevisionId: publishedQuote.id, designId: DESIGN_1_ID, designRevisionId: REV_1_ID },
+      canAcceptQuote: true,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('quote-validity')).toHaveAttribute('data-status', 'expired');
+    });
+    expect(screen.getByTestId('quote-validity')).toHaveTextContent('Vencida el 10/01/2020');
+
+    await userEvent.click(screen.getByTestId('accept-quote-btn'));
+    await waitFor(() => expect(screen.getByTestId('accept-quote-modal')).toBeVisible());
+    expect(screen.getByTestId('accept-quote-expired-warning')).toHaveTextContent('venció el 10/01/2020');
+    // Blocked until the explicit acknowledgement.
+    expect(screen.getByTestId('confirm-accept-quote-btn')).toBeDisabled();
+    await userEvent.click(screen.getByTestId('accept-quote-expired-ack'));
+    expect(screen.getByTestId('confirm-accept-quote-btn')).toBeEnabled();
+    await userEvent.click(screen.getByTestId('confirm-accept-quote-btn'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/projects/${PROJECT_ID}/quote-revisions/${publishedQuote.id}:accept`),
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ acknowledgeExpired: true }) }),
+      );
+    });
+  });
+
+  it('#1648 cotización vigente: muestra hasta cuándo y acepta sin confirmación extra', async () => {
+    const publishedQuote: QuoteRevisionDetail = {
+      ...mockQuoteRevisions[1]!,
+      revisionNumber: 2,
+      status: 'published',
+      validUntil: '2099-12-31',
+    };
+    const fetchMock = setupFetchMock({ quoteRevisions: [mockQuoteRevisions[0]!, publishedQuote] });
+    renderScreen({
+      initialContext: { quoteRevisionId: publishedQuote.id, designId: DESIGN_1_ID, designRevisionId: REV_1_ID },
+      canAcceptQuote: true,
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('quote-validity')).toHaveAttribute('data-status', 'valid');
+    });
+    expect(screen.getByTestId('quote-validity')).toHaveTextContent('Vigente hasta el 31/12/2099');
+    await userEvent.click(screen.getByTestId('accept-quote-btn'));
+    await waitFor(() => expect(screen.getByTestId('accept-quote-modal')).toBeVisible());
+    expect(screen.queryByTestId('accept-quote-expired-ack')).toBeNull();
+    await userEvent.click(screen.getByTestId('confirm-accept-quote-btn'));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`:accept`),
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({}) }),
+      );
+    });
+  });
+
+  it('#1648 el veredicto QUOTE_EXPIRED del servidor se traduce a «Cotización vencida»', () => {
+    const view = describeCommandError(
+      new GraneteApiError(409, { code: 'QUOTE_EXPIRED', message: 'La cotización está vencida.' } as ApiError),
+    );
+    expect(view).toMatchObject({ kind: 'expired', title: 'Cotización vencida' });
+  });
+
   it('shows permission hint when role cannot accept quote revisions', async () => {
     const publishedQuote: QuoteRevisionDetail = {
       ...mockQuoteRevisions[1]!,

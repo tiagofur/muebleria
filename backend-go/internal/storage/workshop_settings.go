@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -17,7 +18,8 @@ func (s *PostgresStore) GetWorkshopSettings(ctx context.Context) (domain.Worksho
 	// of failing the read.
 	var cutStrategy, navMode *string
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, nav_mode
+		SELECT default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, nav_mode,
+			quote_validity_days, time_zone
 		FROM workshop_settings
 		WHERE organization_id = $1
 	`, OrgFromCtx(ctx)).Scan(
@@ -27,6 +29,8 @@ func (s *PostgresStore) GetWorkshopSettings(ctx context.Context) (domain.Worksho
 		&ws.VendedorCanViewCosts,
 		&cutStrategy,
 		&navMode,
+		&ws.QuoteValidityDays,
+		&ws.TimeZone,
 	)
 	if err != nil {
 		// Table empty or not migrated yet — safe defaults (COST-01: hide costs).
@@ -62,8 +66,8 @@ func (s *PostgresStore) UpsertWorkshopSettingsForOrganization(ctx context.Contex
 	ws = normalizeWorkshopSettings(ws)
 	_, err := s.db(ctx).Exec(ctx, `
 		INSERT INTO workshop_settings (
-			organization_id, default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, nav_mode, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+			organization_id, default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, nav_mode, quote_validity_days, time_zone, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
 		ON CONFLICT (organization_id) DO UPDATE SET
 			default_margin_factor = EXCLUDED.default_margin_factor,
 			default_labor_fixed_cost = EXCLUDED.default_labor_fixed_cost,
@@ -71,6 +75,8 @@ func (s *PostgresStore) UpsertWorkshopSettingsForOrganization(ctx context.Contex
 			vendedor_can_view_costs = EXCLUDED.vendedor_can_view_costs,
 			default_cut_strategy = EXCLUDED.default_cut_strategy,
 			nav_mode = EXCLUDED.nav_mode,
+			quote_validity_days = EXCLUDED.quote_validity_days,
+			time_zone = EXCLUDED.time_zone,
 			updated_at = NOW()
 	`,
 		organizationID,
@@ -80,6 +86,8 @@ func (s *PostgresStore) UpsertWorkshopSettingsForOrganization(ctx context.Contex
 		ws.VendedorCanViewCosts,
 		ws.DefaultCutStrategy,
 		ws.NavMode,
+		ws.QuoteValidityDays,
+		ws.TimeZone,
 	)
 	if err != nil {
 		return domain.WorkshopSettings{}, fmt.Errorf("upsert workshop_settings: %w", err)
@@ -112,6 +120,19 @@ func normalizeWorkshopSettings(ws domain.WorkshopSettings) domain.WorkshopSettin
 	// resolveWorkshopSettings).
 	if ws.NavMode != "simplified" && ws.NavMode != "departmental" {
 		ws.NavMode = def.NavMode
+	}
+	// #1648: out-of-range validity falls back to the default (matches TS
+	// resolveWorkshopSettings and the DB CHECK 1..365).
+	if ws.QuoteValidityDays < 1 || ws.QuoteValidityDays > 365 {
+		ws.QuoteValidityDays = def.QuoteValidityDays
+	}
+	// #1648: only a loadable IANA zone persists; anything else falls back to
+	// the default (the SQL `AT TIME ZONE` must never receive garbage).
+	ws.TimeZone = strings.TrimSpace(ws.TimeZone)
+	if ws.TimeZone == "" || ws.TimeZone == "Local" {
+		ws.TimeZone = def.TimeZone
+	} else if _, err := time.LoadLocation(ws.TimeZone); err != nil {
+		ws.TimeZone = def.TimeZone
 	}
 	return ws
 }

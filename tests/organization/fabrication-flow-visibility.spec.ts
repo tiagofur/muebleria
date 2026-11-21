@@ -199,7 +199,7 @@ test.describe.serial('Preparación para fabricar: stepper compacto Ingeniería/P
       notes: 'Flujo de fabricación — revisión inicial',
     }, 'flow-768-q1-create');
     await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'flow-768-q1-publish');
-    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'flow-768-q1-accept');
+    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, {}, 'flow-768-q1-accept');
 
     const approved = await client.approveProjectDesignRevisionForProduction(
       owner.token,

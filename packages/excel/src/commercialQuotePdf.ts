@@ -340,6 +340,7 @@ export async function commercialQuotePdfExport(
   drawKeyValue(ctx, 'Revisión', `Q${model.revisionNumber}`);
   drawKeyValue(ctx, 'Estado', model.statusLabel);
   drawKeyValue(ctx, 'Precios', `Congelados (revisión Q${model.revisionNumber})`);
+  if (model.validityLabel) drawKeyValue(ctx, 'Vigencia', model.validityLabel);
 
   ctx.y -= 10;
 

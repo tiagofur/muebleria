@@ -149,7 +149,7 @@ test.beforeAll(async () => {
     notes: 'Export exacto — revisión inicial',
   }, 'gate-exact-export-q1-create');
   await client.publishProjectQuoteRevision(token, PROJECT_ID, q1.id, 'gate-exact-export-q1-publish');
-  await client.acceptProjectQuoteRevision(token, PROJECT_ID, q1.id, 'gate-exact-export-q1-accept');
+  await client.acceptProjectQuoteRevision(token, PROJECT_ID, q1.id, {}, 'gate-exact-export-q1-accept');
 
   // Real commercial change 600 → 650 through design provenance (R1), then
   // the Q2 requote that incorporates it.
@@ -175,7 +175,7 @@ test.beforeAll(async () => {
     designRevisionId: r1.id,
   }, 'gate-exact-export-requote-q2');
   await client.publishProjectQuoteRevision(token, PROJECT_ID, requote.quoteRevision.id, 'gate-exact-export-q2-publish');
-  await client.acceptProjectQuoteRevision(token, PROJECT_ID, requote.quoteRevision.id, 'gate-exact-export-q2-accept');
+  await client.acceptProjectQuoteRevision(token, PROJECT_ID, requote.quoteRevision.id, {}, 'gate-exact-export-q2-accept');
 
   // Deliberate post-freeze mutations (#642 §13): obra, cliente y catálogo
   // cambian DESPUÉS de congelar Q2. The exports must keep using the frozen
@@ -287,6 +287,9 @@ test('exports XLSX + PDF of the exact Q2 with frozen identity after mutations', 
   expect(sheet.getCell('B4').value).toBe(FROZEN_CUSTOMER_NAME);
   expect(sheet.getCell('D4').value).toBe('MXN');
   expect(sheet.getCell('B6').value).toBe('Congelados (revisión Q2)');
+  // #1648: the validity frozen at publication travels to the document.
+  expect(sheet.getCell('C6').value).toBe('Vigencia');
+  expect(String(sheet.getCell('D6').value)).toMatch(/^Válida hasta el \d{2}\/\d{2}\/\d{4}$/);
   // Exact frozen line: module descriptor + 650 mm dimensions of Q2.
   expect(sheet.getCell('A9').value).toBe(q2Snapshot.units[0]!.moduleCode);
   expect(sheet.getCell('B9').value).toBe(q2Snapshot.units[0]!.moduleName);

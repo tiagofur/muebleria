@@ -277,7 +277,7 @@ test.describe.serial('Operational physical gate: Ingeniería → materiales → 
       notes: 'Gate físico — revisión inicial',
     }, 'gate-phys-q1-create');
     await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'gate-phys-q1-publish');
-    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'gate-phys-q1-accept');
+    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, {}, 'gate-phys-q1-accept');
 
     const approved = await client.approveProjectDesignRevisionForProduction(
       owner.token,

@@ -174,7 +174,7 @@ test('Inicio matches the Cotizaciones authority for an accepted Q1 (Project stay
   const q1 = await client.createInitialProjectQuoteRevision(seeded.token, seeded.projectId, {}, 'gate-hca-create-q1');
   seeded.q1Id = q1.id;
   await client.publishProjectQuoteRevision(seeded.token, seeded.projectId, seeded.q1Id, 'gate-hca-publish-q1');
-  await client.acceptProjectQuoteRevision(seeded.token, seeded.projectId, seeded.q1Id, 'gate-hca-accept-q1');
+  await client.acceptProjectQuoteRevision(seeded.token, seeded.projectId, seeded.q1Id, {}, 'gate-hca-accept-q1');
 
   await loginToA(page);
 
@@ -225,7 +225,7 @@ test('mutable rows stay invisible and an accepted Q2 wins on Inicio exactly as o
   }, 'gate-hca-requote-q2');
   seeded.q2Id = requote.quoteRevision.id;
   await client.publishProjectQuoteRevision(seeded.token, seeded.projectId, seeded.q2Id, 'gate-hca-publish-q2');
-  await client.acceptProjectQuoteRevision(seeded.token, seeded.projectId, seeded.q2Id, 'gate-hca-accept-q2');
+  await client.acceptProjectQuoteRevision(seeded.token, seeded.projectId, seeded.q2Id, {}, 'gate-hca-accept-q2');
 
   // Deliberate mutable mutation AFTER Q2: the Inicio card must keep the
   // frozen commercial identity, and its updatedAt bump must not relabel

@@ -76,6 +76,36 @@ const SETTINGS_TABS: readonly TabDefinition<SettingsTabId>[] = [
   },
 ];
 
+/** #1648: common factory zones + the current value and the browser's zone. */
+const COMMON_TIME_ZONES: ReadonlyArray<{ readonly value: string; readonly label: string }> = [
+  { value: 'America/Mexico_City', label: 'México (Centro)' },
+  { value: 'America/Monterrey', label: 'México (Monterrey)' },
+  { value: 'America/Cancun', label: 'México (Quintana Roo)' },
+  { value: 'America/Chihuahua', label: 'México (Chihuahua)' },
+  { value: 'America/Hermosillo', label: 'México (Sonora)' },
+  { value: 'America/Tijuana', label: 'México (Baja California)' },
+  { value: 'America/Bogota', label: 'Colombia' },
+  { value: 'America/Lima', label: 'Perú' },
+  { value: 'America/Santiago', label: 'Chile' },
+  { value: 'America/Argentina/Buenos_Aires', label: 'Argentina' },
+  { value: 'America/Montevideo', label: 'Uruguay' },
+  { value: 'Europe/Madrid', label: 'España' },
+];
+
+function timeZoneOptions(current: string): ReadonlyArray<{ readonly value: string; readonly label: string }> {
+  const options = [...COMMON_TIME_ZONES];
+  let browser: string | undefined;
+  try {
+    browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    browser = undefined;
+  }
+  for (const zone of [current, browser]) {
+    if (zone && !options.some((o) => o.value === zone)) options.push({ value: zone, label: zone });
+  }
+  return options;
+}
+
 export function SettingsScreen({
   settings,
   onSave,
@@ -100,6 +130,11 @@ export function SettingsScreen({
   const [margin, setMargin] = useState(String(settings.defaultMarginFactor));
   const [labor, setLabor] = useState(String(settings.defaultLaborFixedCost));
   const [currency, setCurrency] = useState(settings.defaultCurrency);
+  // #1648: default validity of a sent quote (days).
+  const [quoteValidityDays, setQuoteValidityDays] = useState(
+    String(settings.quoteValidityDays ?? 15),
+  );
+  const [timeZone, setTimeZone] = useState(settings.timeZone ?? 'America/Mexico_City');
   const [vendedorCanViewCosts, setVendedorCanViewCosts] = useState(
     settings.vendedorCanViewCosts,
   );
@@ -130,6 +165,8 @@ export function SettingsScreen({
     setMargin(String(settings.defaultMarginFactor));
     setLabor(String(settings.defaultLaborFixedCost));
     setCurrency(settings.defaultCurrency);
+    setQuoteValidityDays(String(settings.quoteValidityDays ?? 15));
+    setTimeZone(settings.timeZone ?? 'America/Mexico_City');
     setVendedorCanViewCosts(settings.vendedorCanViewCosts);
     setWorkshopName(settings.workshopName ?? '');
     setCutStrategy(settings.defaultCutStrategy ?? 'saw-guillotine');
@@ -165,6 +202,11 @@ export function SettingsScreen({
       setError('Indicá una moneda válida (ej. MXN).');
       return;
     }
+    const validityDays = Number(quoteValidityDays);
+    if (!Number.isInteger(validityDays) || validityDays < 1 || validityDays > 365) {
+      setError('La vigencia de las cotizaciones debe ser un número entero de días entre 1 y 365.');
+      return;
+    }
     if (!Number.isFinite(kerfVal) || kerfVal < 0) {
       setError('El espesor del disco (kerf) debe ser un número mayor o igual a 0.');
       return;
@@ -185,6 +227,8 @@ export function SettingsScreen({
         defaultMarginFactor: marginFactor,
         defaultLaborFixedCost: laborFixedCost,
         defaultCurrency: cur,
+        quoteValidityDays: validityDays,
+        timeZone,
         vendedorCanViewCosts,
         workshopName: workshopName.trim() || undefined,
         defaultCutStrategy: cutStrategy,
@@ -293,6 +337,43 @@ export function SettingsScreen({
                   autoComplete="off"
                 />
                 <span className="settings-hint">Código de moneda (ej. MXN).</span>
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="settings-quote-validity">Vigencia de las cotizaciones (días)</label>
+                <input
+                  id="settings-quote-validity"
+                  type="number"
+                  min={1}
+                  max={365}
+                  step={1}
+                  value={quoteValidityDays}
+                  onChange={(e) => setQuoteValidityDays(e.target.value)}
+                  required
+                  data-testid="settings-quote-validity-days"
+                />
+                <span className="settings-hint">
+                  Al publicar una cotización queda «válida hasta» hoy más estos días. Si vence, se puede
+                  aceptar igual con una confirmación que queda registrada, o re-cotizar.
+                </span>
+              </div>
+              <div className="catalog-form__field">
+                <label htmlFor="settings-time-zone">Zona horaria del taller</label>
+                <select
+                  id="settings-time-zone"
+                  className="input"
+                  value={timeZone}
+                  onChange={(e) => setTimeZone(e.target.value)}
+                  data-testid="settings-time-zone"
+                >
+                  {timeZoneOptions(timeZone).map((zone) => (
+                    <option key={zone.value} value={zone.value}>
+                      {zone.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="settings-hint">
+                  Define qué día es «hoy» para la vigencia de las cotizaciones.
+                </span>
               </div>
             </fieldset>
 

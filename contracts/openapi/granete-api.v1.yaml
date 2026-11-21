@@ -3894,7 +3894,7 @@
       "post": {
         "operationId": "acceptProjectQuoteRevision",
         "summary": "Accept an exact published QuoteRevision, atomically superseding the previous accepted one (#571 / WEB-DT-4)",
-        "description": "Explicit published → accepted transition on the exact quoteRevisionId (never latest). Acceptance is one server-side transaction: the target transitions to accepted AND every other accepted revision of the project transitions to superseded atomically — never two client calls, never two accepted revisions (partial unique index backstop). A draft revision rejects with a typed 409 telling the user to publish first; a superseded revision is terminal history. History stays immutable: the superseded revision is preserved read-only, never edited in place. The revision must belong to the projectId — a revision of another project answers the uniform 404. Requires an Idempotency-Key: a retry replays the same acceptance. Durable audit (quote_revision_accepted + quote_revision_superseded) is written in the same transaction.",
+        "description": "Explicit published → accepted transition on the exact quoteRevisionId (never latest). Acceptance is one server-side transaction: the target transitions to accepted AND every other accepted revision of the project transitions to superseded atomically — never two client calls, never two accepted revisions (partial unique index backstop). A draft revision rejects with a typed 409 telling the user to publish first; a superseded revision is terminal history. History stays immutable: the superseded revision is preserved read-only, never edited in place. The revision must belong to the projectId — a revision of another project answers the uniform 404. Requires an Idempotency-Key: a retry replays the same acceptance. Durable audit (quote_revision_accepted + quote_revision_superseded) is written in the same transaction. #1648: a revision past its validUntil is not blocked, but the request must carry acknowledgeExpired=true (otherwise 409 QUOTE_EXPIRED); the acknowledgement is recorded in the acceptance audit.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProjectId"
@@ -3906,6 +3906,16 @@
             "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptQuoteRevisionRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "The accepted revision (the previously accepted revision, if any, is now superseded)",
@@ -9060,6 +9070,7 @@
           "PASSWORD_RESET_TOKEN_INVALID",
           "SESSION_REVOKED",
           "TOKEN_TYPE_MISMATCH",
+          "QUOTE_EXPIRED",
           "REFRESH_INVALID",
           "REFRESH_EXPIRED",
           "REFRESH_REVOKED",
@@ -15382,6 +15393,14 @@
             "format": "date-time",
             "description": "Real draft → published lifecycle event (#642). Never derived from createdAt; NULL on legacy revisions whose event was never recorded."
           },
+          "validUntil": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "#1648: calendar date (YYYY-MM-DD) the published quote holds until. Frozen at the draft → published transition from the factory default (workshop quote_validity_days); immutable afterwards. NULL on drafts and on revisions published before #1648 (never backfilled)."
+          },
           "acceptedAt": {
             "type": [
               "string",
@@ -15434,6 +15453,17 @@
           },
           "lifecycleStatus": {
             "$ref": "#/components/schemas/FurnitureInstanceLifecycleStatus"
+          }
+        }
+      },
+      "AcceptQuoteRevisionRequest": {
+        "type": "object",
+        "description": "#1648: optional acceptance options.",
+        "additionalProperties": false,
+        "properties": {
+          "acknowledgeExpired": {
+            "type": "boolean",
+            "description": "Explicitly accept a quote past its validUntil (prices may be outdated). Recorded in the acceptance audit."
           }
         }
       },
@@ -15502,6 +15532,14 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "validUntil": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "#1648: calendar date (YYYY-MM-DD) the published quote holds until. Frozen at the draft → published transition from the factory default (workshop quote_validity_days); immutable afterwards. NULL on drafts and on revisions published before #1648 (never backfilled)."
           },
           "acceptedAt": {
             "type": [

@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -212,12 +214,32 @@ func (s *Server) HandleQuoteRevisionAccept(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// #1648: optional body {acknowledgeExpired}. An empty body keeps the
+	// pre-#1648 contract (no acknowledgement).
+	var body openapi.AcceptQuoteRevisionRequest
+	if r.Body != nil && r.ContentLength != 0 {
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
+		if err != nil {
+			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "cuerpo inválido", nil)
+			return
+		}
+		if len(bytes.TrimSpace(raw)) > 0 {
+			dec := json.NewDecoder(bytes.NewReader(raw))
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&body); err != nil {
+				respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "cuerpo inválido", nil)
+				return
+			}
+		}
+	}
+
 	result, err := s.Store.AcceptQuoteRevision(r.Context(), storage.QuoteRevisionLifecycleCommand{
-		ProjectID:       projectID,
-		QuoteRevisionID: quoteRevisionID,
-		ActorUserID:     claims.UserID,
-		IP:              clientIP(r),
-		RequestID:       RequestIDFromContext(r.Context()),
+		ProjectID:          projectID,
+		QuoteRevisionID:    quoteRevisionID,
+		ActorUserID:        claims.UserID,
+		IP:                 clientIP(r),
+		RequestID:          RequestIDFromContext(r.Context()),
+		AcknowledgeExpired: body.AcknowledgeExpired != nil && *body.AcknowledgeExpired,
 	})
 	if err != nil {
 		respondWithQuoteLifecycleError(w, err, "accept")
@@ -249,8 +271,11 @@ func respondWithQuoteLifecycleError(w http.ResponseWriter, err error, command st
 	case errors.Is(err, domain.ErrQuoteRevisionInvalidTransition):
 		if command == "accept" {
 			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La cotización no puede aceptarse desde su estado actual: publicá el borrador primero. Una cotización aceptada o reemplazada es histórico inmutable.", nil)
+			return
 		}
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La cotización no puede publicarse desde su estado actual: sólo un borrador se publica, y lo publicado/aceptado/reemplazado es histórico inmutable.", nil)
+	case errors.Is(err, domain.ErrQuoteRevisionExpired):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeQuoteExpired, "La cotización está vencida: los precios pueden estar desactualizados. Re-cotizá, o confirmá explícitamente que la aceptás igual.", nil)
 	case errors.Is(err, domain.ErrQuoteCommercialSnapshotMissing):
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "Esta revisión no congeló su verdad comercial (legado): creá una nueva revisión de cotización para publicar. Nunca se recalcula la histórica.", nil)
 	case errors.Is(err, domain.ErrQuoteRevisionNotLegacy):

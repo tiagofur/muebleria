@@ -147,6 +147,20 @@ describe('buildExactCommercialQuoteExportModel (#642)', () => {
     expect(model.dateLabel).toMatch(/11\/09\/2026/);
   });
 
+  it('#1648 la vigencia sale sólo de validUntil congelado (nunca de fechas del ciclo)', () => {
+    const snapshot = snapshotFixture();
+    const published = buildExactCommercialQuoteExportModel({
+      revision: { ...revisionFixture(), validUntil: '2026-12-05' },
+      snapshot,
+    });
+    expect(published.validityLabel).toBe('Válida hasta el 05/12/2026');
+    const legacy = buildExactCommercialQuoteExportModel({
+      revision: { ...revisionFixture(), validUntil: null },
+      snapshot,
+    });
+    expect(legacy.validityLabel).toBeUndefined();
+  });
+
   it('maps line amounts to absence when the actor is not authorized (never a fake 0)', () => {
     const model = buildExactCommercialQuoteExportModel(
       { revision: revisionFixture(), snapshot: snapshotFixture() },

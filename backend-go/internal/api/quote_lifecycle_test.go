@@ -458,3 +458,46 @@ func TestHandleCreateQuoteRevision_IdempotentReplayPreservesExactCommercialPaylo
 		t.Fatalf("replayed response lost line authority: %+v", response.CommercialSnapshot)
 	}
 }
+
+// #1648: an expired quote answers a typed 409 QUOTE_EXPIRED (warn, never a
+// silent block); the optional body forwards the explicit acknowledgement; an
+// empty body keeps the pre-#1648 contract; unknown fields are rejected.
+func TestHandleQuoteRevisionAccept_ExpiredAcknowledgement(t *testing.T) {
+	target := "/api/projects/" + quoteLifecycleTestProjectID + "/quote-revisions/" + quoteLifecycleTestRevID + ":accept"
+	withBody := func(body string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
+		req.SetPathValue("projectId", quoteLifecycleTestProjectID)
+		req.SetPathValue("quoteRevisionId", quoteLifecycleTestRevID)
+		return withTestClaims(req, "user-1", []domain.UserRole{domain.RoleAdmin})
+	}
+
+	store := &stubStore{acceptQuoteRevisionErr: domain.ErrQuoteRevisionExpired}
+	server := &Server{Store: store}
+	w := httptest.NewRecorder()
+	server.HandleQuoteRevisionAccept(w, newQuoteLifecycleCommandRequest(target, "user-1", []domain.UserRole{domain.RoleAdmin}))
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), `"QUOTE_EXPIRED"`) {
+		t.Fatalf("expired accept: %d %s", w.Code, w.Body.String())
+	}
+	if store.acceptQuoteRevisionCmd == nil || store.acceptQuoteRevisionCmd.AcknowledgeExpired {
+		t.Fatalf("empty body must not acknowledge: %+v", store.acceptQuoteRevisionCmd)
+	}
+
+	store = &stubStore{}
+	server = &Server{Store: store}
+	w = httptest.NewRecorder()
+	server.HandleQuoteRevisionAccept(w, withBody(`{"acknowledgeExpired":true}`))
+	if w.Code != http.StatusOK {
+		t.Fatalf("acknowledged accept: %d %s", w.Code, w.Body.String())
+	}
+	if store.acceptQuoteRevisionCmd == nil || !store.acceptQuoteRevisionCmd.AcknowledgeExpired {
+		t.Fatalf("acknowledgement not forwarded: %+v", store.acceptQuoteRevisionCmd)
+	}
+
+	store = &stubStore{}
+	server = &Server{Store: store}
+	w = httptest.NewRecorder()
+	server.HandleQuoteRevisionAccept(w, withBody(`{"acknowledgeExpired":true,"actorUserId":"spoof"}`))
+	if w.Code != http.StatusBadRequest || store.acceptQuoteRevisionCalls != 0 {
+		t.Fatalf("unknown field must reject before the store: %d calls=%d", w.Code, store.acceptQuoteRevisionCalls)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/storage"
 	"log/slog"
 	"net/http"
+	"strings"
 )
 
 // Contrato: utilidades operativas — seed demo, owners asignables (F035),
@@ -123,6 +124,22 @@ func (s *Server) HandleWorkshopSettings(w http.ResponseWriter, r *http.Request) 
 		var ws domain.WorkshopSettings
 		if !decodeJSONBody(w, r, &ws) {
 			return
+		}
+		// #1648: a client that predates quote_validity_days omits it (0).
+		// Keep the stored value instead of silently resetting it to the
+		// default on every settings save.
+		if ws.QuoteValidityDays == 0 || strings.TrimSpace(ws.TimeZone) == "" {
+			current, err := s.Store.GetWorkshopSettings(r.Context())
+			if err != nil {
+				respondWithInternalError(w, err, "handler")
+				return
+			}
+			if ws.QuoteValidityDays == 0 {
+				ws.QuoteValidityDays = current.QuoteValidityDays
+			}
+			if strings.TrimSpace(ws.TimeZone) == "" {
+				ws.TimeZone = current.TimeZone
+			}
 		}
 		saved, err := s.Store.UpsertWorkshopSettings(r.Context(), ws)
 		if err != nil {

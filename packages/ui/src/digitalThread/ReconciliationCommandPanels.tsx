@@ -1,4 +1,10 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  formatQuoteValidityDate,
+  quoteValidityInfo,
+  quoteValidityLabelEs,
+  type QuoteValidityInfo,
+} from '@granete/domain';
 import {
   CheckCircle2,
   Factory,
@@ -45,7 +51,8 @@ export interface CommandErrorView {
     | 'preflight'
     | 'validation'
     | 'network'
-    | 'server';
+    | 'server'
+    | 'expired';
   readonly title: string;
   readonly message: string;
 }
@@ -95,6 +102,15 @@ export function describeCommandError(err: unknown): CommandErrorView {
         message: reason
           ? `Unidad ${unit ?? 'afectada'}: ${reason}. Corregí el diseño y publicá una nueva revisión antes de liberar.`
           : 'La revisión no puede resolverse para fabricación. Corregí el diseño y publicá una nueva revisión antes de liberar.',
+      };
+    }
+    if (err.code === 'QUOTE_EXPIRED') {
+      // #1648: warn, never block — the modal switches to the explicit
+      // acknowledgement (covers a day boundary the client did not see yet).
+      return {
+        kind: 'expired',
+        title: 'Cotización vencida',
+        message: err.message,
       };
     }
     if (err.status === 409 || err.code === 'CONFLICT') {
@@ -732,6 +748,67 @@ export interface QuoteLifecyclePanelProps {
   readonly acceptError: CommandErrorView | null;
   readonly onPublish: () => void;
   readonly onOpenAccept: () => void;
+  /** #1648: local calendar day (YYYY-MM-DD) for the validity status. */
+  readonly today?: string;
+  /** #1648: factory default days, shown on drafts (frozen at publish). */
+  readonly quoteValidityDays?: number;
+  /** #1648: open a new revision when the published quote expired. */
+  readonly onRequote?: () => void;
+}
+
+/** #1648: validity line + expired path, shared by the panel. */
+function QuoteValidityBlock({
+  quoteRevision,
+  validity,
+  quoteValidityDays,
+  onRequote,
+}: {
+  readonly quoteRevision: QuoteRevisionDetail;
+  readonly validity: QuoteValidityInfo;
+  readonly quoteValidityDays?: number;
+  readonly onRequote?: () => void;
+}): ReactNode {
+  if (quoteRevision.status === 'draft') {
+    return (
+      <p className="pr-panel__why" data-testid="quote-validity">
+        {quoteValidityDays
+          ? `Al publicarla queda vigente ${quoteValidityDays} días (ajuste del taller).`
+          : 'La vigencia se fija al publicarla, según el ajuste del taller.'}
+      </p>
+    );
+  }
+  if (validity.status === 'none') {
+    return (
+      <p className="pr-panel__why" data-testid="quote-validity" data-status="none">
+        Sin vigencia registrada (publicada antes de que existiera la vigencia).
+      </p>
+    );
+  }
+  const label = quoteValidityLabelEs(validity);
+  if (validity.status === 'expired' && quoteRevision.status === 'published') {
+    return (
+      <div className="pd-alert pd-alert--warning" role="status" data-testid="quote-validity" data-status="expired">
+        <strong>{label}.</strong>{' '}
+        <span>
+          {onRequote
+            ? 'Los precios pueden estar desactualizados. Podés crear una nueva cotización con los cambios y precios al día, o aceptarla igual confirmando el vencimiento (queda registrado).'
+            : 'Los precios pueden estar desactualizados: revisalos con el cliente antes de aceptarla. Si la aceptás igual, la confirmación del vencimiento queda registrada.'}
+        </span>
+        {onRequote ? (
+          <div>
+            <button type="button" className="btn btn--small" data-testid="quote-expired-requote-btn" onClick={onRequote}>
+              Nueva cotización
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <p className="pr-panel__why" data-testid="quote-validity" data-status={validity.status}>
+      {label}
+    </p>
+  );
 }
 
 export function QuoteLifecyclePanel({
@@ -745,6 +822,9 @@ export function QuoteLifecyclePanel({
   acceptError,
   onPublish,
   onOpenAccept,
+  today,
+  quoteValidityDays,
+  onRequote,
 }: QuoteLifecyclePanelProps): ReactNode {
   if (!quoteRevision) {
     return (
@@ -805,6 +885,13 @@ export function QuoteLifecyclePanel({
         </p>
       )}
 
+      <QuoteValidityBlock
+        quoteRevision={quoteRevision}
+        validity={quoteValidityInfo(quoteRevision, today ?? localToday())}
+        quoteValidityDays={quoteValidityDays}
+        onRequote={onRequote}
+      />
+
       {previousAcceptedRevision && isPublished && (
         <p className="pr-panel__why" data-testid="quote-will-supersede-hint">
           Al aceptar Q{quoteRevision.revisionNumber}, la cotización actual aceptada (Q{previousAcceptedRevision.revisionNumber}) pasará a estar reemplazada (superseded) automáticamente.
@@ -860,7 +947,15 @@ export interface AcceptQuoteModalProps {
   readonly previousAcceptedRevision?: QuoteRevisionDetail | null;
   readonly submitting: boolean;
   readonly error: CommandErrorView | null;
-  readonly onConfirm: () => void;
+  /** #1648: `acknowledgeExpired` is true only after the explicit checkbox. */
+  readonly onConfirm: (acknowledgeExpired: boolean) => void;
+  /** #1648: local calendar day (YYYY-MM-DD) for the validity status. */
+  readonly today?: string;
+}
+
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function AcceptQuoteModal({
@@ -871,9 +966,19 @@ export function AcceptQuoteModal({
   submitting,
   error,
   onConfirm,
+  today,
 }: AcceptQuoteModalProps): ReactNode {
+  const [acknowledged, setAcknowledged] = useState(false);
+  useEffect(() => {
+    if (!open) setAcknowledged(false);
+  }, [open, quoteRevision?.id]);
   if (!open || !quoteRevision) return null;
   const revNum = quoteRevision.revisionNumber;
+  const validity = quoteValidityInfo(quoteRevision, today ?? localToday());
+  // The server is the authority: a QUOTE_EXPIRED verdict also switches the
+  // modal to the acknowledgement (day boundary not yet seen by this client).
+  const expired = validity.status === 'expired' || error?.kind === 'expired';
+  const blockedByAck = expired && !acknowledged;
   return (
     <Modal
       open={open}
@@ -900,7 +1005,30 @@ export function AcceptQuoteModal({
         <p className="pr-pin-note">
           El diseño y las aprobaciones de producción posteriores usarán Q{revNum} como base comercial exacta.
         </p>
-        <CommandErrorAlert error={error} />
+        {expired ? (
+          <div className="pd-alert pd-alert--warning" data-testid="accept-quote-expired-warning">
+            <strong>
+              {validity.validUntil
+                ? `Esta cotización venció el ${formatQuoteValidityDate(validity.validUntil)}.`
+                : 'Esta cotización está vencida.'}
+            </strong>{' '}
+            <span>Los precios pueden estar desactualizados. Si la aceptás igual, la confirmación queda registrada.</span>
+            <label className="pr-ack" style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(e) => setAcknowledged(e.target.checked)}
+                data-testid="accept-quote-expired-ack"
+              />
+              <span>Entiendo que está vencida y la acepto igual</span>
+            </label>
+          </div>
+        ) : validity.status !== 'none' ? (
+          <p className="pr-panel__why" data-testid="accept-quote-validity">
+            {quoteValidityLabelEs(validity)}
+          </p>
+        ) : null}
+        <CommandErrorAlert error={error?.kind === 'expired' ? null : error} />
         <div className="modal-actions">
           <button
             type="button"
@@ -915,8 +1043,8 @@ export function AcceptQuoteModal({
             type="button"
             className="btn btn--primary"
             data-testid="confirm-accept-quote-btn"
-            disabled={submitting}
-            onClick={onConfirm}
+            disabled={submitting || blockedByAck}
+            onClick={() => onConfirm(expired && acknowledged)}
           >
             {submitting ? <RefreshCw size={14} className="spin" /> : <CheckCircle2 size={14} />}
             <span>{submitting ? 'Aceptando…' : `Confirmar aceptación de Q${revNum}`}</span>

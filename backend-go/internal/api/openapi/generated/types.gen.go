@@ -272,6 +272,7 @@ const (
 	ApiErrorCodePasswordResetTokenInvalid      ApiErrorCode = "PASSWORD_RESET_TOKEN_INVALID"
 	ApiErrorCodeSessionRevoked                 ApiErrorCode = "SESSION_REVOKED"
 	ApiErrorCodeTokenTypeMismatch              ApiErrorCode = "TOKEN_TYPE_MISMATCH"
+	ApiErrorCodeQuoteExpired                   ApiErrorCode = "QUOTE_EXPIRED"
 	ApiErrorCodeRefreshInvalid                 ApiErrorCode = "REFRESH_INVALID"
 	ApiErrorCodeRefreshExpired                 ApiErrorCode = "REFRESH_EXPIRED"
 	ApiErrorCodeRefreshRevoked                 ApiErrorCode = "REFRESH_REVOKED"
@@ -1995,6 +1996,7 @@ type QuoteRevision struct {
 	Notes                  *string                  `json:"notes,omitempty"`
 	CreatedBy              *string                  `json:"createdBy,omitempty"`
 	PublishedAt            *string                  `json:"publishedAt,omitempty"`
+	ValidUntil             *string                  `json:"validUntil,omitempty"`
 	AcceptedAt             *string                  `json:"acceptedAt,omitempty"`
 	CommercialSnapshot     *QuoteCommercialSnapshot `json:"commercialSnapshot,omitempty"`
 }
@@ -2006,6 +2008,10 @@ type QuoteRevisionItem struct {
 	Parameters            map[string]any                   `json:"parameters"`
 	MaterialChoices       map[string]string                `json:"materialChoices"`
 	LifecycleStatus       FurnitureInstanceLifecycleStatus `json:"lifecycleStatus"`
+}
+
+type AcceptQuoteRevisionRequest struct {
+	AcknowledgeExpired *bool `json:"acknowledgeExpired,omitempty"`
 }
 
 type QuoteRevisionDetail struct {
@@ -2020,6 +2026,7 @@ type QuoteRevisionDetail struct {
 	CreatedBy                 *string                  `json:"createdBy,omitempty"`
 	CreatedAt                 string                   `json:"createdAt"`
 	PublishedAt               *string                  `json:"publishedAt,omitempty"`
+	ValidUntil                *string                  `json:"validUntil,omitempty"`
 	AcceptedAt                *string                  `json:"acceptedAt,omitempty"`
 	CommercialSnapshot        *QuoteCommercialSnapshot `json:"commercialSnapshot,omitempty"`
 	CommercialAmountsWithheld *bool                    `json:"commercialAmountsWithheld,omitempty"`

@@ -241,7 +241,19 @@ type WorkshopSettings struct {
 	// 'simplified' reduces the sidebar for small shops; 'departmental' keeps
 	// the full surface. Presentation only — RBAC keeps filtering on top.
 	NavMode string `json:"nav_mode,omitempty"`
+	// QuoteValidityDays is the factory default validity of a sent quote
+	// (#1648): days from publication until valid_until. 1..365, default 15.
+	QuoteValidityDays int `json:"quote_validity_days"`
+	// TimeZone is the factory's IANA time zone (#1648): the calendar day used
+	// to freeze and to expire quote validity. Default America/Mexico_City.
+	TimeZone string `json:"time_zone"`
 }
+
+// DefaultWorkshopTimeZone matches TS DEFAULT_WORKSHOP_TIME_ZONE (#1648).
+const DefaultWorkshopTimeZone = "America/Mexico_City"
+
+// DefaultQuoteValidityDays matches TS DEFAULT_QUOTE_VALIDITY_DAYS (#1648).
+const DefaultQuoteValidityDays = 15
 
 // DefaultWorkshopSettings matches TS DEFAULT_WORKSHOP_SETTINGS.
 func DefaultWorkshopSettings() WorkshopSettings {
@@ -252,6 +264,8 @@ func DefaultWorkshopSettings() WorkshopSettings {
 		VendedorCanViewCosts:  false,
 		DefaultCutStrategy:    "saw-guillotine",
 		NavMode:               "departmental",
+		QuoteValidityDays:     DefaultQuoteValidityDays,
+		TimeZone:              DefaultWorkshopTimeZone,
 	}
 }
 

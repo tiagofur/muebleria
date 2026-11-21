@@ -223,7 +223,7 @@ test.describe.serial('#642 legacy quote recovery', () => {
     // Walk Q2 through the normal modern lifecycle (draft → published →
     // accepted); acceptance atomically supersedes the legacy baseline.
     await client.publishProjectQuoteRevision(token, PROJECT_ID, q2!.id, 'gate-legacy-q2-publish');
-    const acceptedResponse = await client.acceptProjectQuoteRevision(token, PROJECT_ID, q2!.id, 'gate-legacy-q2-accept');
+    const acceptedResponse = await client.acceptProjectQuoteRevision(token, PROJECT_ID, q2!.id, {}, 'gate-legacy-q2-accept');
     expect(acceptedResponse.status).toBe('accepted');
     const acceptedViaApi = await client.listProjectQuoteRevisions(token, PROJECT_ID);
     expect(acceptedViaApi.find((r) => r.id === q2!.id)?.status).toBe('accepted');

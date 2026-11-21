@@ -64,6 +64,17 @@ async function loadSheet(bytes: Uint8Array): Promise<ExcelJS.Worksheet> {
 }
 
 describe('commercialQuoteExport — exact QuoteRevision model (#642)', () => {
+  it('#1648 escribe la vigencia de la revisión cuando existe, y no la inventa cuando falta', async () => {
+    const withValidity = await loadSheet(
+      await commercialQuoteExport({ ...q2Model, validityLabel: 'Válida hasta el 05/12/2026' }),
+    );
+    expect(withValidity.getCell('C6').value).toBe('Vigencia');
+    expect(withValidity.getCell('D6').value).toBe('Válida hasta el 05/12/2026');
+    const without = await loadSheet(await commercialQuoteExport(q2Model));
+    expect(without.getCell('C6').value).toBeNull();
+    expect(without.getCell('D6').value).toBeNull();
+  });
+
   it('writes the exact revision identity block (QN, status, frozen parties)', async () => {
     const sheet = await loadSheet(await commercialQuoteExport(q2Model));
     expect(sheet.getCell('A1').value).toBe('Cotización Q2');
