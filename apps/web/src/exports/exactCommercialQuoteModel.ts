@@ -10,7 +10,7 @@
  * fallback.
  */
 
-import type { ExportIssue } from '@granete/domain';
+import { quoteValidityDocumentLabelEs, type ExportIssue } from '@granete/domain';
 import type { ExactCommercialQuoteExportModel } from '@granete/excel';
 import {
   buildRevisionLines,
@@ -96,6 +96,7 @@ export function buildExactCommercialQuoteExportModel(
     revisionNumber: revision.revisionNumber,
     statusLabel: REVISION_STATUS_LABELS[revision.status] ?? revision.status,
     dateLabel: formatCommercialDateLabel(commercialLifecycleTimestamp(revision)),
+    validityLabel: quoteValidityDocumentLabelEs(revision.validUntil),
     projectName: snapshot.project.name,
     customerName: snapshot.customer.name,
     currency: snapshot.currency,

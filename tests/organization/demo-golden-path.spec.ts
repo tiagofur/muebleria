@@ -466,7 +466,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     expect(q1.status).toBe('draft');
 
     expect((await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'golden-q1-publish')).status).toBe('published');
-    expect((await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'golden-q1-accept')).status).toBe('accepted');
+    expect((await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, {}, 'golden-q1-accept')).status).toBe('accepted');
 
     // Exact readback: the accepted QuoteRevision exists and is identifiable.
     const revisions = await client.listProjectQuoteRevisions(owner.token, PROJECT_ID);
@@ -855,7 +855,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     expect(requote.quoteRevision.revisionNumber).toBe(2);
     expect(requote.quoteRevision.status).toBe('draft');
     expect((await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, track.q2Id, 'golden-q2-publish')).status).toBe('published');
-    expect((await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, track.q2Id, 'golden-q2-accept')).status).toBe('accepted');
+    expect((await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, track.q2Id, {}, 'golden-q2-accept')).status).toBe('accepted');
 
     // #571 semantics: accepting Q2 atomically supersedes Q1 — exactly one
     // accepted commercial baseline per project at any time.

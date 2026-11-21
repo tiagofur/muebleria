@@ -460,7 +460,7 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     const r1 = await client.publishDesignRevision(token, design.id, { source_type: 'manual', base_revision_id: null }, 'freeze-publish-r1');
     const q1 = await client.createInitialProjectQuoteRevision(token, FREEZE_PROJECT, { notes: 'Congelado' }, 'freeze-q1-create');
     await client.publishProjectQuoteRevision(token, FREEZE_PROJECT, q1.id, 'freeze-q1-publish');
-    await client.acceptProjectQuoteRevision(token, FREEZE_PROJECT, q1.id, 'freeze-q1-accept');
+    await client.acceptProjectQuoteRevision(token, FREEZE_PROJECT, q1.id, {}, 'freeze-q1-accept');
     let approved;
     try {
       approved = await client.approveProjectDesignRevisionForProduction(token, FREEZE_PROJECT, design.id, r1.id, { quoteRevisionId: q1.id }, 'freeze-approve-r1-q1');

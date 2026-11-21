@@ -177,7 +177,7 @@ async function prepareQuoteFixture(): Promise<void> {
     throw err;
   });
   await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'gate-460-q1-publish');
-  await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'gate-460-q1-accept');
+  await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, {}, 'gate-460-q1-accept');
 }
 
 test.describe.serial('#460 generated quote read refresh replay', () => {

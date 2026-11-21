@@ -52,7 +52,7 @@ async function prepareAcceptedQuote(): Promise<void> {
   await client.materializeQuoteLineFurniture(owner.token, PROJECT_ID, QUOTE_LINE_ID, 'gate-1649-materialize');
   const q1 = await client.createInitialProjectQuoteRevision(owner.token, PROJECT_ID, { notes: 'Cobros E2E' }, 'gate-1649-q1-create');
   await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'gate-1649-q1-publish');
-  await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'gate-1649-q1-accept');
+  await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, {}, 'gate-1649-q1-accept');
 }
 
 async function loginToA(page: Page): Promise<void> {

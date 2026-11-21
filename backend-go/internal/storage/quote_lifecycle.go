@@ -457,6 +457,9 @@ type QuoteRevisionLifecycleCommand struct {
 	ActorUserID     string
 	IP              string
 	RequestID       string
+	// AcknowledgeExpired (#1648, accept only): the actor explicitly accepts a
+	// quote past its valid_until. Recorded in the acceptance audit.
+	AcknowledgeExpired bool
 }
 
 // loadQuoteRevisionForLifecycle loads the exact revision, enforcing
@@ -490,7 +493,8 @@ func (s *PostgresStore) readQuoteRevision(ctx context.Context, revisionID, proje
 	query := `
 		SELECT id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
 			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, ''),
-			COALESCE(commercial_snapshot, 'null'::jsonb), published_at, accepted_at
+			COALESCE(commercial_snapshot, 'null'::jsonb), published_at, accepted_at,
+			to_char(valid_until, 'YYYY-MM-DD')
 		FROM quote_revisions
 		WHERE id = $1 AND project_id = $2`
 	if forUpdate {
@@ -512,6 +516,7 @@ func (s *PostgresStore) readQuoteRevision(ctx context.Context, revisionID, proje
 		&commercialSnapshot,
 		&rev.PublishedAt,
 		&rev.AcceptedAt,
+		&rev.ValidUntil,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -568,9 +573,17 @@ func (s *PostgresStore) PublishQuoteRevision(ctx context.Context, cmd QuoteRevis
 		return nil, fmt.Errorf("%w: una cotización reemplazada es histórico y no puede publicarse", domain.ErrQuoteRevisionInvalidTransition)
 	}
 
+	// #1648: publishing (sending the quote) freezes its validity from the
+	// factory default, in the same statement as the transition.
+	settings, err := s.GetWorkshopSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
 	rev, err = s.UpdateQuoteRevisionStatus(ctx, UpdateQuoteRevisionStatusCommand{
 		QuoteRevisionID: cmd.QuoteRevisionID,
 		Status:          "published",
+		ValidityDays:    settings.QuoteValidityDays,
+		TimeZone:        settings.TimeZone,
 	})
 	if err != nil {
 		return nil, err
@@ -587,6 +600,7 @@ func (s *PostgresStore) PublishQuoteRevision(ctx context.Context, cmd QuoteRevis
 			"quote_revision_id": rev.ID,
 			"revision_number":   rev.RevisionNumber,
 			"status":            rev.Status,
+			"valid_until":       derefString(rev.ValidUntil),
 		},
 	})
 	if auditErr != nil {
@@ -638,6 +652,24 @@ func (s *PostgresStore) AcceptQuoteRevision(ctx context.Context, cmd QuoteRevisi
 		default:
 			return nil, fmt.Errorf("%w: una cotización reemplazada no puede aceptarse de nuevo", domain.ErrQuoteRevisionInvalidTransition)
 		}
+	}
+
+	// #1648: an expired quote is not blocked, but accepting it requires the
+	// actor's explicit acknowledgement (prices may be outdated). Day boundary
+	// = the factory's calendar day, the same zone that froze valid_until.
+	expired := false
+	if rev.ValidUntil != nil {
+		settings, err := s.GetWorkshopSettings(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.db(ctx).QueryRow(ctx,
+			`SELECT $1::date < (NOW() AT TIME ZONE $2::text)::date`, *rev.ValidUntil, settings.TimeZone).Scan(&expired); err != nil {
+			return nil, err
+		}
+	}
+	if expired && !cmd.AcknowledgeExpired {
+		return nil, fmt.Errorf("%w: la cotización venció el %s", domain.ErrQuoteRevisionExpired, *rev.ValidUntil)
 	}
 
 	// Supersede the previously accepted revision(s) FIRST — the partial
@@ -702,6 +734,9 @@ func (s *PostgresStore) AcceptQuoteRevision(ctx context.Context, cmd QuoteRevisi
 			"revision_number":           rev.RevisionNumber,
 			"status":                    rev.Status,
 			"superseded_quote_revision": supersededRevisionDetails(superseded),
+			"valid_until":               derefString(rev.ValidUntil),
+			"accepted_expired":          expired,
+			"expired_acknowledged":      expired && cmd.AcknowledgeExpired,
 		},
 	})
 	if auditErr != nil {

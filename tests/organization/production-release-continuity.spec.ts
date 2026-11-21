@@ -247,7 +247,7 @@ test.describe.serial('Continuidad P1→P2: nueva revisión sin retarget implíci
       notes: 'Continuidad — revisión inicial',
     }, 'cont-741-q1-create');
     await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'cont-741-q1-publish');
-    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'cont-741-q1-accept');
+    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, {}, 'cont-741-q1-accept');
 
     const approved = await client.approveProjectDesignRevisionForProduction(
       owner.token,
@@ -333,7 +333,7 @@ test.describe.serial('Continuidad P1→P2: nueva revisión sin retarget implíci
       includeFurnitureInstanceIds: instanceIds,
     }, 'cont-741-requote-q2');
     await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, requote.quoteRevision.id, 'cont-741-q2-publish');
-    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, requote.quoteRevision.id, 'cont-741-q2-accept');
+    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, requote.quoteRevision.id, {}, 'cont-741-q2-accept');
     const approvedR2 = await client.approveProjectDesignRevisionForProduction(
       owner.token,
       PROJECT_ID,

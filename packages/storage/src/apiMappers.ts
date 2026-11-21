@@ -3709,6 +3709,8 @@ export function workshopSettingsFromApi(raw: unknown): WorkshopSettings {
     defaultCutStrategy: (row.default_cut_strategy ??
       row.defaultCutStrategy) as WorkshopSettings['defaultCutStrategy'],
     navMode: (row.nav_mode ?? row.navMode) as WorkshopSettings['navMode'],
+    quoteValidityDays: num(row.quote_validity_days ?? row.quoteValidityDays, Number.NaN),
+    timeZone: str(row.time_zone ?? row.timeZone),
   });
 }
 
@@ -3734,6 +3736,8 @@ export function workshopSettingsToApi(
     default_deduct_edge_band: s.defaultDeductEdgeBand,
     default_cut_strategy: s.defaultCutStrategy,
     nav_mode: s.navMode,
+    quote_validity_days: s.quoteValidityDays,
+    time_zone: s.timeZone,
   };
 }
 

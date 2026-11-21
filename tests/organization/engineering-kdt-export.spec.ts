@@ -294,7 +294,7 @@ test.describe.serial('Descarga de programas KDT nunca queda muda (#1070)', () =>
     const r1 = await client.publishDesignRevision(token, design.id, { source_type: 'manual', base_revision_id: null }, 'kdt-1070-publish-r1');
     const q1 = await client.createInitialProjectQuoteRevision(token, PROJECT_ID, { notes: 'KDT 1070' }, 'kdt-1070-q1-create');
     await client.publishProjectQuoteRevision(token, PROJECT_ID, q1.id, 'kdt-1070-q1-publish-rev');
-    await client.acceptProjectQuoteRevision(token, PROJECT_ID, q1.id, 'kdt-1070-q1-accept-rev');
+    await client.acceptProjectQuoteRevision(token, PROJECT_ID, q1.id, {}, 'kdt-1070-q1-accept-rev');
     const approved = await client.approveProjectDesignRevisionForProduction(
       token, PROJECT_ID, design.id, r1.id, { quoteRevisionId: q1.id }, 'kdt-1070-approve-r1-q1',
     );

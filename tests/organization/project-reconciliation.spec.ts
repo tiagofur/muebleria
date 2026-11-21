@@ -471,6 +471,7 @@ async function publishRevisionWithItemIds(options: {
         lifecycleOwner.token,
         seeded.projectId,
         q2DraftValue!,
+        {},
         'gate-pr-accept-draft-negative',
       );
     } catch (err) {
@@ -484,6 +485,7 @@ async function publishRevisionWithItemIds(options: {
         lifecycleOwner.token,
         '99999999-9999-4999-9999-999999999999',
         q2DraftValue!,
+        {},
         'gate-pr-accept-foreign-negative',
       );
     } catch (err) {
@@ -583,6 +585,7 @@ async function publishRevisionWithItemIds(options: {
         lifecycleOwner.token,
         seeded.projectId,
         q2DraftValue!,
+        {},
         'gate-pr-accept-double-negative',
       );
     } catch (err) {

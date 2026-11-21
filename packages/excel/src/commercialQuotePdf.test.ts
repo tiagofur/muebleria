@@ -111,6 +111,18 @@ function extractPdfText(bytes: Uint8Array): string {
 }
 
 describe('commercialQuotePdfExport — exact QuoteRevision model (#642)', () => {
+  it('#1648 muestra la vigencia en el encabezado cuando la revisión la tiene', async () => {
+    const withValidity = extractPdfText(
+      await commercialQuotePdfExport({
+        model: { ...q2Model, validityLabel: 'Válida hasta el 05/12/2026' },
+        variant: 'summary',
+      }),
+    );
+    expect(withValidity).toContain('Vigencia: Válida hasta el 05/12/2026');
+    const without = extractPdfText(await commercialQuotePdfExport({ model: q2Model, variant: 'summary' }));
+    expect(without).not.toContain('Vigencia');
+  });
+
   it('identifies the exact revision in title, header and metadata', async () => {
     const input: CommercialQuotePdfInput = { model: q2Model, variant: 'detailed' };
     const bytes = await commercialQuotePdfExport(input);

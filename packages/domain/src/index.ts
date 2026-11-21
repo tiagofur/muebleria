@@ -127,7 +127,11 @@ export * from './metrics/workshopMetrics';
 
 
 export {
+  DEFAULT_QUOTE_VALIDITY_DAYS,
   DEFAULT_WORKSHOP_SETTINGS,
+  DEFAULT_WORKSHOP_TIME_ZONE,
+  QUOTE_VALIDITY_DAYS_MAX,
+  isValidTimeZone,
   resolveWorkshopSettings,
   withWorkshopSettings,
 } from './workshopSettings';
@@ -1759,3 +1763,4 @@ export * from "./drawerFamily";
 
 // Committed delivery date (#1648)
 export * from "./projectDelivery";
+export * from "./quoteValidity";

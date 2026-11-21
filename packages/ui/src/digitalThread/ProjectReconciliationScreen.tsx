@@ -1,3 +1,4 @@
+import { isoDateInTimeZone } from '@granete/domain';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import {
@@ -155,6 +156,10 @@ export interface ProjectReconciliationScreenProps {
   readonly onOpenInEngineering?: (projectId: string, releaseId: string) => void;
   /** Role hints (server remains the authority for every command). */
   readonly canRequote?: boolean;
+  /** #1648: factory default quote validity (days), shown on drafts. */
+  readonly quoteValidityDays?: number;
+  /** #1648: factory IANA zone — "today" for validity is its calendar day. */
+  readonly workshopTimeZone?: string;
   readonly canApprove?: boolean;
   readonly canRelease?: boolean;
   readonly canMutateQuote?: boolean;
@@ -181,6 +186,8 @@ export function ProjectReconciliationScreen({
   onOpenInProduction,
   onOpenInEngineering,
   canRequote = false,
+  quoteValidityDays,
+  workshopTimeZone,
   canApprove = false,
   canRelease = false,
   canMutateQuote = false,
@@ -514,15 +521,18 @@ export function ProjectReconciliationScreen({
     }
   };
 
-  const handleConfirmAcceptQuote = async () => {
+  const handleConfirmAcceptQuote = async (acknowledgeExpired: boolean) => {
     if (!selectedQuoteRevision) return;
     setAcceptQuoteSubmitting(true);
     setAcceptQuoteError(null);
     try {
+      // #1648: the explicit acknowledgement travels only when the user ticked
+      // it for an expired quote; the server records it in the audit.
       const accepted = await api.acceptProjectQuoteRevision(
         token,
         projectId,
         selectedQuoteRevision.id,
+        acknowledgeExpired ? { acknowledgeExpired: true } : {},
       );
       await invalidateQuoteRevisionReads();
       if (activeDesignId && designRevisionId) {
@@ -1302,6 +1312,9 @@ export function ProjectReconciliationScreen({
                   publishError={publishQuoteError}
                   acceptError={acceptQuoteError}
                   onPublish={() => void handlePublishQuote()}
+                  quoteValidityDays={quoteValidityDays}
+                  today={workshopTimeZone ? isoDateInTimeZone(new Date(), workshopTimeZone) : undefined}
+                  onRequote={canRequote && incorporableItems.length > 0 ? handleOpenRequote : undefined}
                   onOpenAccept={() => {
                     setAcceptQuoteError(null);
                     setAcceptModalOpen(true);
@@ -1418,7 +1431,8 @@ export function ProjectReconciliationScreen({
         )}
         submitting={acceptQuoteSubmitting}
         error={acceptQuoteError}
-        onConfirm={() => void handleConfirmAcceptQuote()}
+        onConfirm={(ack) => void handleConfirmAcceptQuote(ack)}
+        today={workshopTimeZone ? isoDateInTimeZone(new Date(), workshopTimeZone) : undefined}
       />
       <ReleaseReviewModal
         open={releaseOpen}

@@ -1984,6 +1984,16 @@ export interface WorkshopSettings {
    * duplicated domain.
    */
   readonly navMode?: 'simplified' | 'departmental';
+  /**
+   * #1648: default validity of a sent quote, in days (1..365, default 15).
+   * Frozen into each revision's `validUntil` when it is published.
+   */
+  readonly quoteValidityDays?: number;
+  /**
+   * #1648: the factory's IANA time zone (default America/Mexico_City). Its
+   * calendar day freezes and expires quote validity on the server.
+   */
+  readonly timeZone?: string;
 }
 
 export interface Workspace {

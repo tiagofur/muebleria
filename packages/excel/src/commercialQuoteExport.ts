@@ -52,6 +52,11 @@ export type ExactCommercialQuoteExportModel = {
   readonly statusLabel: string;
   /** Commercial lifecycle date label (acceptedAt → publishedAt → createdAt). */
   readonly dateLabel: string;
+  /**
+   * #1648: «Válida hasta el dd/mm/aaaa» from the frozen revision validity.
+   * Absent on drafts and on revisions published before #1648 (never derived).
+   */
+  readonly validityLabel?: string;
   readonly projectName: string;
   readonly customerName: string;
   readonly currency: string;
@@ -189,6 +194,13 @@ export async function commercialQuoteExport(
   sheet.getCell('A6').font = LABEL_FONT;
   sheet.getCell('B6').value = `Congelados (revisión Q${input.revisionNumber})`;
   sheet.getCell('B6').font = DATA_FONT;
+
+  if (input.validityLabel) {
+    sheet.getCell('C6').value = 'Vigencia';
+    sheet.getCell('C6').font = LABEL_FONT;
+    sheet.getCell('D6').value = input.validityLabel;
+    sheet.getCell('D6').font = DATA_FONT;
+  }
 
   // Line items table
   const headerRowIndex = 8;

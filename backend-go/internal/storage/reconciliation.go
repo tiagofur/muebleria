@@ -311,6 +311,12 @@ func marshalQuoteCommercialSnapshot(snapshot *domain.QuoteCommercialSnapshot) (a
 type UpdateQuoteRevisionStatusCommand struct {
 	QuoteRevisionID string
 	Status          string
+	// ValidityDays (#1648, draft → published only): valid_until is frozen to
+	// CURRENT_DATE + ValidityDays in the same statement. 0 leaves it NULL.
+	ValidityDays int
+	// TimeZone (#1648): the factory zone whose calendar day anchors
+	// valid_until. Empty = the default workshop zone.
+	TimeZone string
 }
 
 // UpdateQuoteRevisionStatus transitions the status of a QuoteRevision.
@@ -420,12 +426,14 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 		UPDATE quote_revisions
 		SET status = $2,
 			published_at = CASE WHEN $2 = 'published' THEN NOW() ELSE published_at END,
-			accepted_at = CASE WHEN $2 = 'accepted' THEN NOW() ELSE accepted_at END
+			accepted_at = CASE WHEN $2 = 'accepted' THEN NOW() ELSE accepted_at END,
+			valid_until = CASE WHEN $2 = 'published' AND $3::int > 0
+				THEN (NOW() AT TIME ZONE $4::text)::date + $3::int ELSE valid_until END
 		WHERE id = $1
 		RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
 			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, ''),
-			published_at, accepted_at
-	`, cmd.QuoteRevisionID, targetStatus).Scan(
+			published_at, accepted_at, to_char(valid_until, 'YYYY-MM-DD')
+	`, cmd.QuoteRevisionID, targetStatus, cmd.ValidityDays, nonEmptyOrDefault(cmd.TimeZone, domain.DefaultWorkshopTimeZone)).Scan(
 		&rev.ID,
 		&rev.OrganizationID,
 		&rev.ProjectID,
@@ -437,6 +445,7 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 		&rev.SourceDesignRevisionID,
 		&rev.PublishedAt,
 		&rev.AcceptedAt,
+		&rev.ValidUntil,
 	)
 	if err != nil {
 		return nil, err

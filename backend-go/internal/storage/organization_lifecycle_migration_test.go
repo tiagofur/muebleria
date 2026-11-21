@@ -139,7 +139,11 @@ func TestOrganizationLifecycleMigration_NormalizesHistoricalPartialFixture(t *te
 
 func TestOrganizationLifecycleStorage_TransitionsEpochAndReadiness(t *testing.T) {
 	pool := multiOrgFreshMigrationDB(t)
-	identityApplyThrough(t, pool, 167)
+	// This test drives the CURRENT storage code (organization lifecycle +
+	// workshop settings bootstrap), so the schema must include every column
+	// that code writes — #1648 added workshop_settings.quote_validity_days and
+	// time_zone in 000190.
+	identityApplyThrough(t, pool, 190)
 	ctx := context.Background()
 	store := &storage.PostgresStore{Pool: pool}
 	const (

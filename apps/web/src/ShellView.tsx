@@ -2611,6 +2611,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               baseUrl={DEFAULT_API_BASE}
               token={authToken}
               projectId={projectReconciliationRoute.projectId}
+              quoteValidityDays={workshopSettings.quoteValidityDays}
+              workshopTimeZone={workshopSettings.timeZone}
               queryKeys={projectReconciliationQueryKeys(
                 sessionScopeKey(sessionScope),
                 projectReconciliationRoute.projectId,

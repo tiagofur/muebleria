@@ -228,7 +228,7 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
       notes: 'Estado de Ingeniería — revisión inicial',
     }, 'eng-state-q1-create');
     await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'eng-state-q1-publish');
-    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'eng-state-q1-accept');
+    await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, {}, 'eng-state-q1-accept');
 
     const approved = await client.approveProjectDesignRevisionForProduction(
       owner.token,
