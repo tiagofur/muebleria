@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -26,11 +27,16 @@ type HardwareUsage struct {
 	ComponentPlacements int64
 	Agregados           int64
 	HardwareProfiles    int64
+	// OpeningProfiles (#1615 review B2): gola/opening BOM members
+	// (profile/supports/endCaps) and grip styles whose handle is this
+	// hardware — quotes price that demand against the live catalog.
+	OpeningProfiles int64
+	GripStyles      int64
 }
 
 // Total is the number of references across every family.
 func (u HardwareUsage) Total() int64 {
-	return u.TemplateLines + u.QuoteChoices + u.DesignAssets + u.ComponentPlacements + u.Agregados + u.HardwareProfiles
+	return u.TemplateLines + u.QuoteChoices + u.DesignAssets + u.ComponentPlacements + u.Agregados + u.HardwareProfiles + u.OpeningProfiles + u.GripStyles
 }
 
 // Describe renders the non-zero families in Spanish.
@@ -49,6 +55,8 @@ func (u HardwareUsage) Describe() string {
 	add(u.ComponentPlacements, "ubicación en componentes", "ubicaciones en componentes")
 	add(u.Agregados, "agregado", "agregados")
 	add(u.HardwareProfiles, "perfil de herraje", "perfiles de herraje")
+	add(u.OpeningProfiles, "perfil de apertura (gola)", "perfiles de apertura (gola)")
+	add(u.GripStyles, "estilo de agarre", "estilos de agarre")
 	return strings.Join(parts, ", ")
 }
 
@@ -76,11 +84,18 @@ func (e *HardwareInUseError) Is(target error) bool { return target == ErrHardwar
 var ErrHardwareKitGroupsReferenced = errors.New("grupos de opciones usan el herraje como juego")
 
 // HardwareKitGroupsError lists the referencing groups.
-type HardwareKitGroupsError struct{ Groups []string }
+type HardwareKitGroupsError struct {
+	Part   string // set when the referenced hardware is a kit part
+	Groups []string
+}
 
 func (e *HardwareKitGroupsError) Error() string {
-	return fmt.Sprintf("%s: %s; eliminá o cambiá esos grupos antes de eliminar el herraje",
-		ErrHardwareKitGroupsReferenced.Error(), strings.Join(e.Groups, ", "))
+	subject := ""
+	if e.Part != "" {
+		subject = fmt.Sprintf(" (parte %s)", e.Part)
+	}
+	return fmt.Sprintf("%s%s: %s; eliminá o cambiá esos grupos antes de eliminar el herraje",
+		ErrHardwareKitGroupsReferenced.Error(), subject, strings.Join(e.Groups, ", "))
 }
 func (e *HardwareKitGroupsError) Is(target error) bool {
 	return target == ErrHardwareKitGroupsReferenced
@@ -95,10 +110,26 @@ func (e *HardwareKitPartsError) Error() string {
 }
 func (e *HardwareKitPartsError) Is(target error) bool { return target == ErrHardwareKitHasParts }
 
+// canonicalHardwareID returns the lowercase canonical UUID text (#1615 review
+// B1): uuid::text is always lowercase, so text/LIKE comparisons against an
+// uppercase id would count zero references and let a delete through.
+func canonicalHardwareID(id string) (string, bool) {
+	parsed, err := uuid.Parse(strings.TrimSpace(id))
+	if err != nil {
+		return "", false
+	}
+	return parsed.String(), true
+}
+
 // HardwareUsageOf counts every live reference that pins the hardware.
 func (s *PostgresStore) HardwareUsageOf(ctx context.Context, id string) (HardwareUsage, error) {
 	var u HardwareUsage
 	org := OrgFromCtx(ctx)
+	canonical, ok := canonicalHardwareID(id)
+	if !ok {
+		return u, fmt.Errorf("hardware not found")
+	}
+	id = canonical
 	err := s.db(ctx).QueryRow(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM hardware_lines hl
@@ -129,9 +160,13 @@ func (s *PostgresStore) HardwareUsageOf(ctx context.Context, id string) (Hardwar
 			(SELECT COUNT(*) FROM hardware_profiles hp
 			 WHERE hp.organization_id = $2
 			   AND (hp.items::text LIKE '%' || $1 || '%'
-			        OR COALESCE(hp.recipe_ref::text, '') LIKE '%' || $1 || '%'))`,
+			        OR COALESCE(hp.recipe_ref::text, '') LIKE '%' || $1 || '%')),
+			(SELECT COUNT(*) FROM opening_profiles op
+			 WHERE op.organization_id = $2 AND op.bom_members::text LIKE '%' || $1 || '%'),
+			(SELECT COUNT(*) FROM grip_styles gs
+			 WHERE gs.organization_id = $2 AND gs.by_furniture_type::text LIKE '%' || $1 || '%')`,
 		id, org,
-	).Scan(&u.TemplateLines, &u.QuoteChoices, &u.DesignAssets, &u.ComponentPlacements, &u.Agregados, &u.HardwareProfiles)
+	).Scan(&u.TemplateLines, &u.QuoteChoices, &u.DesignAssets, &u.ComponentPlacements, &u.Agregados, &u.HardwareProfiles, &u.OpeningProfiles, &u.GripStyles)
 	return u, err
 }
 
@@ -158,9 +193,11 @@ type DeleteHardwareResult struct {
 // parts) in one tenant transaction: guards → membership cleanup → If-Match
 // DELETE → audit. Nothing is deleted partially.
 func (s *PostgresStore) DeleteHardware(ctx context.Context, cmd DeleteHardwareCommand) (*DeleteHardwareResult, error) {
-	if !isValidUUID(cmd.ID) {
+	canonical, ok := canonicalHardwareID(cmd.ID)
+	if !ok {
 		return nil, fmt.Errorf("hardware not found")
 	}
+	cmd.ID = canonical
 	if transactionFromContext(ctx) == nil {
 		var result *DeleteHardwareResult
 		actor, _ := TenantActorFromCtx(ctx)
@@ -251,7 +288,7 @@ func (s *PostgresStore) DeleteHardware(ctx context.Context, cmd DeleteHardwareCo
 			return nil, err
 		}
 		if len(partGroups) > 0 {
-			return nil, &HardwareKitGroupsError{Groups: partGroups}
+			return nil, &HardwareKitGroupsError{Part: p.code, Groups: partGroups}
 		}
 		ids = append(ids, p.id)
 	}

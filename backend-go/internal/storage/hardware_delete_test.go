@@ -116,6 +116,30 @@ func TestHardwareDelete_GuardsCascadeAndMemberships(t *testing.T) {
 		org, "ZZ-HWDEL-PRF-"+suffix, fmt.Sprintf(`[{"hardwareId":"%s","quantity":1}]`, hwProfile.ID))
 	expectInUse(hwProfile, "perfil de herraje")
 
+	// 5b. Gola/opening profile BOM member and grip style handle (review B2).
+	hwGola := create("ZZ-HWDEL-GOLA", nil)
+	exec(`INSERT INTO opening_profiles (id, organization_id, code, name, grip_type, bom_members) VALUES ($1, $2, $3, 'Gola', 'gola', $4::jsonb)`,
+		"op-"+suffix, org, "ZZ-HWDEL-OP-"+suffix, fmt.Sprintf(`{"profile":{"hardware_id":"%s"}}`, hwGola.ID))
+	expectInUse(hwGola, "perfil de apertura (gola)")
+	hwHandle := create("ZZ-HWDEL-HANDLE", nil)
+	exec(`INSERT INTO grip_styles (organization_id, name, by_furniture_type) VALUES ($1, $2, $3::jsonb)`,
+		org, "Estilo "+suffix, fmt.Sprintf(`{"inferior":{"kind":"handle","handleHardwareId":"%s"},"superior":{"kind":"none"},"alto":{"kind":"none"}}`, hwHandle.ID))
+	expectInUse(hwHandle, "estilo de agarre")
+
+	// 5c. An UPPERCASE id must hit the same guard (review B1): uuid::text is
+	// lowercase, so an uncanonicalized id would count zero references.
+	upper := *hwAgregadoLine
+	upper.ID = strings.ToUpper(hwAgregadoLine.ID)
+	if _, err := del(&upper, false); !errors.Is(err, storage.ErrHardwareInUse) {
+		t.Fatalf("uppercase id must be refused in use, got %v", err)
+	}
+	if !exists(hwAgregadoLine.ID) {
+		t.Fatalf("uppercase delete must keep the row")
+	}
+	if err := store.DeactivateHardware(ctx, strings.ToUpper(hwAgregadoLine.ID), hwAgregadoLine.Version); !errors.Is(err, storage.ErrHardwareInUse) {
+		t.Fatalf("uppercase deactivation must be refused, got %v", err)
+	}
+
 	// 6. Option group using it as kit: refused, group listed.
 	hwKitOfGroup := create("ZZ-HWDEL-KITG", nil)
 	groupCode := "ZZ-HWDEL-G-" + suffix

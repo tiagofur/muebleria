@@ -1033,6 +1033,8 @@ func respondWithHardwareDeleteError(w http.ResponseWriter, err error) {
 				"componentPlacements": inUse.Usage.ComponentPlacements,
 				"agregados":           inUse.Usage.Agregados,
 				"hardwareProfiles":    inUse.Usage.HardwareProfiles,
+				"openingProfiles":     inUse.Usage.OpeningProfiles,
+				"gripStyles":          inUse.Usage.GripStyles,
 			},
 		})
 	case errors.As(err, &groups):
