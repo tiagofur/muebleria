@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -454,13 +455,13 @@ func TestHandleHardwareByID_IfMatchGuardsWrites(t *testing.T) {
 		if rr.Code != http.StatusPreconditionRequired {
 			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 		}
-		if store.deactivateHardwareCalled {
+		if store.deleteHardwareCmd != nil {
 			t.Fatal("store must not be reached without If-Match")
 		}
 	})
 
 	t.Run("DELETE stale responde 412 y vigente desactiva", func(t *testing.T) {
-		store := &stubStore{deactivateHardwareErr: storage.ErrVersionConflict}
+		store := &stubStore{deleteHardwareErr: storage.ErrVersionConflict}
 		srv := newSrv(store)
 		req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/hardware/h1", nil), "eng", string(domain.RoleIngeniero))
 		req.Header.Set("If-Match", `"v1"`)
@@ -480,8 +481,8 @@ func TestHandleHardwareByID_IfMatchGuardsWrites(t *testing.T) {
 		if rr2.Code != http.StatusOK {
 			t.Fatalf("status = %d body=%s", rr2.Code, rr2.Body.String())
 		}
-		if !okStore.deactivateHardwareCalled || okStore.deactivateHardwareExpectedVer != 2 {
-			t.Fatalf("deactivate not called with expected version: called=%v v=%d", okStore.deactivateHardwareCalled, okStore.deactivateHardwareExpectedVer)
+		if okStore.deleteHardwareCmd == nil || okStore.deleteHardwareCmd.ExpectedVersion != 2 {
+			t.Fatalf("delete not called with expected version: %+v", okStore.deleteHardwareCmd)
 		}
 	})
 }
@@ -592,4 +593,49 @@ func TestHandleHardwareDimensionsValidation(t *testing.T) {
 			t.Fatal("a complete dimensions object must persist")
 		}
 	})
+}
+
+// #1615: physical DELETE — per-family counts, kit groups and kit parts are
+// typed 409s with details; deleteParts=true is forwarded; 404 uniform.
+func TestHandleHardwareDelete_Physical(t *testing.T) {
+	do := func(store *stubStore, target string) *httptest.ResponseRecorder {
+		req := withClaims(httptest.NewRequest(http.MethodDelete, target, nil), "eng", string(domain.RoleIngeniero))
+		req.Header.Set("If-Match", `"v3"`)
+		req.SetPathValue("id", "h1")
+		rr := httptest.NewRecorder()
+		(&Server{Store: store}).HandleHardwareByID(rr, req)
+		return rr
+	}
+	store := &stubStore{}
+	rr := do(store, "/api/catalog/hardware/h1?deleteParts=true")
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"deleted_ids"`) {
+		t.Fatalf("delete: %d %s", rr.Code, rr.Body.String())
+	}
+	if store.deleteHardwareCmd == nil || !store.deleteHardwareCmd.DeleteParts || store.deleteHardwareCmd.ExpectedVersion != 3 || store.deleteHardwareCmd.ActorUserID != "eng" {
+		t.Fatalf("command not forwarded: %+v", store.deleteHardwareCmd)
+	}
+	for _, tc := range []struct {
+		err  error
+		want []string
+	}{
+		{&storage.HardwareInUseError{Code: "BIS-1", Usage: storage.HardwareUsage{ComponentPlacements: 2, Agregados: 1}, Action: "eliminarlo"}, []string{`"reason":"in_use"`, `"componentPlacements":2`, `"agregados":1`, "2 ubicaciones en componentes"}},
+		{&storage.HardwareKitGroupsError{Groups: []string{"INSERTOS"}}, []string{`"reason":"kit_groups"`, "INSERTOS"}},
+		{&storage.HardwareKitPartsError{Parts: []string{"PARTE-A"}}, []string{`"reason":"kit_parts"`, "PARTE-A"}},
+	} {
+		rr := do(&stubStore{deleteHardwareErr: tc.err}, "/api/catalog/hardware/h1")
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("%v: status %d", tc.err, rr.Code)
+		}
+		for _, want := range tc.want {
+			if !strings.Contains(rr.Body.String(), want) {
+				t.Fatalf("%v: body missing %q: %s", tc.err, want, rr.Body.String())
+			}
+		}
+	}
+	if rr := do(&stubStore{deleteHardwareErr: errors.New("hardware not found")}, "/api/catalog/hardware/h1"); rr.Code != http.StatusNotFound {
+		t.Fatalf("not found: %d", rr.Code)
+	}
+	if rr := do(&stubStore{deleteHardwareErr: storage.ErrVersionConflict}, "/api/catalog/hardware/h1"); rr.Code != http.StatusPreconditionFailed {
+		t.Fatalf("stale: %d", rr.Code)
+	}
 }

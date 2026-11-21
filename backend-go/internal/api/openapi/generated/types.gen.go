@@ -3283,8 +3283,10 @@ type HardwareWrite struct {
 	Active              bool                `json:"active"`
 }
 
-type HardwareDeactivation struct {
-	Message string `json:"message"`
+type HardwareDeletion struct {
+	DeletedIds        []string `json:"deleted_ids"`
+	RemovedFromGroups int64    `json:"removed_from_groups"`
+	UpdatedGroupIds   []string `json:"updated_group_ids,omitempty"`
 }
 
 type HardwareDimensions struct {

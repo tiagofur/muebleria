@@ -81,6 +81,20 @@ En cada lista: buscar, filtro de activos, y el patrón es siempre el mismo —
 click para **ver**, botón **Editar** para editar, **Desactivar** para sacar
 sin perder historia.
 
+**Desactivar o eliminar un herraje.** **Desactivar** lo saca de uso pero se
+puede reactivar (filtro «Inactivos»). **Eliminar** (ícono de papelera, al
+final de la fila) lo borra del catálogo para siempre — sirve para limpiar
+herrajes viejos que ya no se usan, incluso desactivados:
+- Sólo se elimina si **no está en uso**: muebles plantilla, obras/cotizaciones,
+  diseños, ubicaciones en componentes, agregados o perfiles de herraje. Si lo
+  está, el sistema lo rechaza y dice dónde.
+- Si pertenece a **grupos de opciones**, se lo quita de ellos automáticamente.
+- Si es un **juego** con partes de diseño vinculadas, el diálogo ofrece
+  «Eliminar también sus partes»; si alguna parte está en uso, no se borra nada.
+- Si un grupo de insertos lo usa como juego, hay que cambiar o eliminar ese
+  grupo antes.
+- Las versiones ya publicadas de la biblioteca no se rompen: guardan su copia.
+
 **Actualizar precios** (Materiales, Cantos y Herrajes; ingeniería y
 administración) cambia muchos precios de una vez:
 
@@ -756,4 +770,4 @@ el catálogo sin publicar.
 - Duplicá cotizaciones y muebles en vez de arrancar de cero.
 - El buscador `Cmd/Ctrl + K` llega a todo.
 - En Proyectar, "Sacar del plano" no borra el mueble de la cotización.
-- Todo lo que desactivás se puede reactivar: no hay que borrar para ordenar.
+- Todo lo que desactivás se puede reactivar: no hay que borrar para ordenar. Eliminar (herrajes) es definitivo.

@@ -39,12 +39,13 @@ import type { HardwareAssetService, WorkshopKitTemplateRow } from '@granete/stor
 import type { CategoryDraft } from '../../modules/moduleHelpers';
 import { CategoryTree } from '../ambient/AmbientCategoryTree';
 import { HardwareCategoryModals } from './HardwareCategoryModals';
-import { Copy, Eye, EyeOff, PackagePlus, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, PackagePlus, Pencil, Plus, SearchX, Settings2, Trash2 } from 'lucide-react';
 import {
   ConfirmDialog,
   CatalogImage,
   EmptyState,
   formatMoneyDisplay,
+  Modal,
   PageHeader,
   PageToolbar,
   SearchInput,
@@ -86,6 +87,8 @@ export interface HardwareCatalogProps {
   readonly onUpdate: (id: string, draft: HardwareDraft) => void | Promise<void>;
   readonly onDeactivate: (id: string) => void | Promise<void>;
   readonly onReactivate: (id: string) => void | Promise<void>;
+  /** #1615: physical delete; omitted when the role cannot mutate the catalog. */
+  readonly onDelete?: (id: string, options: { readonly deleteParts: boolean }) => void | Promise<void>;
   readonly openEntityId?: string | null;
   readonly onSelectionChange?: (id: string | null) => void;
   /** F035: hide ABM when false. */
@@ -168,6 +171,7 @@ export function HardwareCatalog({
   onUpdate,
   onDeactivate,
   onReactivate,
+  onDelete,
   openEntityId = null,
   onSelectionChange,
   canMutate = true,
@@ -222,6 +226,9 @@ export function HardwareCatalog({
   const [saving, setSaving] = useState(false);
   // K2 #1032: destructive actions ask first; the row button only requests.
   const [confirmDeactivate, setConfirmDeactivate] = useState<Hardware | null>(null);
+  // #1615: physical delete confirmation (kit parts cascade is explicit).
+  const [confirmDelete, setConfirmDelete] = useState<Hardware | null>(null);
+  const [deleteParts, setDeleteParts] = useState(false);
   // K4 #1032: saved identity for the modal title (stable while fields change).
   const editingHardware = editingId
     ? (hardware.find((h) => h.id === editingId) ?? null)
@@ -1178,6 +1185,23 @@ export function HardwareCatalog({
                         Reactivar
                       </button>
                     )}
+                    {onDelete ? (
+                      <button
+                        type="button"
+                        className="btn btn--small btn--ghost btn--danger"
+                        aria-label={`Eliminar ${row.code}`}
+                        title="Eliminar del catálogo"
+                        data-testid={`hardware-delete-${row.id}`}
+                        onClick={() => {
+                          setDeleteParts(false);
+                          setConfirmDelete(row);
+                        }}
+                      >
+                        {/* Icon-only: the row already carries Editar/Duplicar/
+                            Desactivar; a fourth labelled button overflowed. */}
+                        <Trash2 size={14} strokeWidth={1.5} aria-hidden />
+                      </button>
+                    ) : null}
                   </>
                 )
                 : undefined
@@ -1352,6 +1376,22 @@ export function HardwareCatalog({
         />
       ) : null}
 
+      {confirmDelete ? (
+        <HardwareDeleteDialog
+          target={confirmDelete}
+          parts={hardware.filter((h) => h.kitHardwareId === confirmDelete.id)}
+          groups={(optionGroups ?? []).filter((g) => g.optionIds.includes(confirmDelete.id))}
+          deleteParts={deleteParts}
+          onDeletePartsChange={setDeleteParts}
+          onClose={() => setConfirmDelete(null)}
+          onConfirm={() => {
+            const target = confirmDelete;
+            setConfirmDelete(null);
+            void onDelete?.(target.id, { deleteParts });
+          }}
+        />
+      ) : null}
+
       <ConfirmDialog
         open={confirmDeactivate != null}
         onClose={() => setConfirmDeactivate(null)}
@@ -1368,5 +1408,79 @@ export function HardwareCatalog({
         }}
       />
     </section>
+  );
+}
+
+/**
+ * #1615 — physical delete confirmation: irreversible, lists the option groups
+ * it will be removed from and, for a kit, offers the explicit cascade of its
+ * linked design parts (unchecked: the server refuses and lists them).
+ */
+function HardwareDeleteDialog({
+  target,
+  parts,
+  groups,
+  deleteParts,
+  onDeletePartsChange,
+  onClose,
+  onConfirm,
+}: {
+  readonly target: Hardware;
+  readonly parts: readonly Hardware[];
+  readonly groups: readonly OptionGroup[];
+  readonly deleteParts: boolean;
+  readonly onDeletePartsChange: (next: boolean) => void;
+  readonly onClose: () => void;
+  readonly onConfirm: () => void;
+}): ReactNode {
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Eliminar herraje"
+      size="sm"
+      dataTestId="hardware-delete-confirm"
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="btn btn--danger"
+            data-testid="hardware-delete-confirm-confirm"
+            onClick={onConfirm}
+          >
+            Eliminar definitivamente
+          </button>
+        </>
+      }
+    >
+      <p>
+        Vas a eliminar <strong>{target.code} — {target.name}</strong> del catálogo. Esta acción no se puede
+        deshacer. Si querés poder recuperarlo, usá Desactivar.
+      </p>
+      {groups.length > 0 ? (
+        <p data-testid="hardware-delete-groups">
+          Se quitará de {groups.length === 1 ? '1 grupo de opciones' : `${groups.length} grupos de opciones`}:{' '}
+          {groups.map((g) => g.name || g.code).join(', ')}.
+        </p>
+      ) : null}
+      {parts.length > 0 ? (
+        <label style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-start' }}>
+          <input
+            type="checkbox"
+            checked={deleteParts}
+            onChange={(e) => onDeletePartsChange(e.target.checked)}
+            data-testid="hardware-delete-parts"
+          />
+          <span>
+            Eliminar también {parts.length === 1 ? 'su parte de diseño vinculada' : `sus ${parts.length} partes de diseño vinculadas`}{' '}
+            ({parts.map((p) => p.code).join(', ')})
+          </span>
+        </label>
+      ) : null}
+      <p className="settings-hint">Si está en uso en muebles, obras, agregados o perfiles, el servidor lo rechaza y te dice dónde.</p>
+    </Modal>
   );
 }

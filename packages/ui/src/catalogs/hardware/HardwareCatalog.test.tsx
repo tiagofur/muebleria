@@ -725,3 +725,46 @@ describe('HardwareCatalog — pestaña «Familias de cajón» (#1633 s2c-2)', ()
     expect(screen.getByRole('dialog').textContent).toContain('SYS-M');
   });
 });
+
+describe('HardwareCatalog — eliminar (#1615)', () => {
+  const kit: Hardware = { ...sampleHardware, id: 'hw-kit', code: 'KIT-1615', name: 'Juego corredera' };
+  const part: Hardware = { ...sampleHardware, id: 'hw-part', code: 'PART-1615', name: 'Riel izq', kitHardwareId: 'hw-kit' };
+
+  function renderWithDelete(onDelete = vi.fn()) {
+    render(
+      <HardwareCatalog
+        hardware={[kit, part]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onDelete={onDelete}
+        optionGroups={[{ id: 'og-1', code: 'CORREDERA', name: 'Correderas', kind: 'hardware', required: true, optionIds: ['hw-kit'] }]}
+      />,
+    );
+    return onDelete;
+  }
+
+  it('advierte que es irreversible, lista los grupos y ofrece eliminar las partes del juego', async () => {
+    const user = userEvent.setup();
+    const onDelete = renderWithDelete();
+    await user.click(screen.getByTestId('hardware-delete-hw-kit'));
+    const dialog = screen.getByTestId('hardware-delete-confirm');
+    expect(dialog.textContent).toContain('no se puede deshacer');
+    expect(screen.getByTestId('hardware-delete-groups').textContent).toContain('Correderas');
+    await user.click(screen.getByTestId('hardware-delete-parts'));
+    await user.click(screen.getByTestId('hardware-delete-confirm-confirm'));
+    expect(onDelete).toHaveBeenCalledWith('hw-kit', { deleteParts: true });
+  });
+
+  it('sin marcar la casilla no pide cascada; sin permiso no hay botón', async () => {
+    const user = userEvent.setup();
+    const onDelete = renderWithDelete();
+    await user.click(screen.getByTestId('hardware-delete-hw-kit'));
+    await user.click(screen.getByTestId('hardware-delete-confirm-confirm'));
+    expect(onDelete).toHaveBeenCalledWith('hw-kit', { deleteParts: false });
+    cleanup();
+    setup([kit]);
+    expect(screen.queryByTestId('hardware-delete-hw-kit')).toBeNull();
+  });
+});

@@ -223,6 +223,8 @@ export interface CatalogStoreDeps {
    * save, so deletes that pin a version read it from here.
    */
   readonly getKnownEntityVersion?: (family: string, id: string) => number | undefined;
+  /** #1615: forget cached versions of entities the server changed as a side effect. */
+  readonly forgetEntityVersions?: (family: string, ids: readonly string[]) => void;
   /** Base URL of the backend API. */
   readonly baseUrl: string;
   /** #1369: dry-run de cambio de receta de un agregado (backend dry-run, sin mutar). */
@@ -271,6 +273,8 @@ export interface CatalogState {
   ) => Promise<string>;
   readonly updateHardware: (id: string, draft: HardwareDraft) => Promise<void>;
   readonly setHardwareActive: (id: string, active: boolean) => Promise<void>;
+  /** #1615: physical delete (auth: DELETE under If-Match; guest: local). */
+  readonly deleteHardware: (id: string, options?: { readonly deleteParts?: boolean }) => Promise<void>;
   // #1507: subgrupos de herrajes (mismo patrón que los tableros F142).
   readonly createHardwareCategory: (draft: CategoryDraft) => void;
   readonly updateHardwareCategory: (id: string, draft: CategoryDraft) => void;
@@ -759,6 +763,18 @@ export function makeCatalogStoreCtx(
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         console.error(`Error deleting ${path}: ${res.status} ${text}`);
+        // #1615: a TYPED 409 (details.reason) carries the actionable Spanish
+        // reason (where the item is in use, which groups/parts) — show it
+        // verbatim. Untyped 409s may carry raw technical text: keep the copy.
+        let serverMessage = '';
+        try {
+          const parsed = JSON.parse(text) as { message?: unknown; details?: { reason?: unknown } };
+          if (typeof parsed.message === 'string' && typeof parsed.details?.reason === 'string') {
+            serverMessage = parsed.message.trim();
+          }
+        } catch {
+          serverMessage = '';
+        }
         toast({
           type: 'error',
           // #1659: deletes go to the server first, so a refusal never removes
@@ -767,7 +783,7 @@ export function makeCatalogStoreCtx(
             res.status === 412
               ? 'El elemento cambió en el servidor. Recargá la página antes de eliminarlo.'
               : res.status === 409
-                ? 'No se puede eliminar: está en uso. Quitalo de donde se usa y probá de nuevo.'
+                ? serverMessage || 'No se puede eliminar: está en uso. Quitalo de donde se usa y probá de nuevo.'
                 : 'No se pudo eliminar en el servidor; no se borró nada. Probá de nuevo.',
         });
         return false;

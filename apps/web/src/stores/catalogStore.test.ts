@@ -2718,3 +2718,58 @@ describe('#1659 — estructuras/agregados servidor primero y grupo de opciones s
     });
   });
 });
+
+describe('#1615 — eliminar herraje físicamente', () => {
+  function authStore(fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>, extra: Partial<CatalogStoreDeps> = {}) {
+    const made = makeDeps({ getSession: () => 'auth', getAuthToken: () => 'jwt', fetchImpl: fetchImpl as unknown as typeof fetch, ...extra });
+    useWorkspaceStore.setState({ session: 'auth' });
+    return { store: createCatalogStore({ deps: made.deps }), ...made };
+  }
+  function seedWithKit(store: ReturnType<typeof createCatalogStore>) {
+    const cat = seedCatalog();
+    const kit = { ...cat.hardware[0]!, id: 'hw-kit-1615', code: 'KIT-1615' };
+    const part = { ...cat.hardware[0]!, id: 'hw-part-1615', code: 'PART-1615', kitHardwareId: kit.id };
+    const group = { ...cat.optionGroups[0]!, id: 'og-1615', optionIds: [kit.id, part.id, 'otro'] };
+    store.getState().setCatalog({ ...cat, hardware: [...cat.hardware, kit, part], optionGroups: [group, ...cat.optionGroups.slice(1)] });
+    return { kit, part, group };
+  }
+
+  it('con partes: DELETE ?deleteParts=true, quita kit + partes y las membresías, y olvida la versión de los grupos tocados', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('{}', { status: 200, headers: { ETag: '"v2"' } }))
+      .mockResolvedValueOnce(new Response('{"deleted_ids":[]}', { status: 200 }));
+    const forgotten: Array<[string, readonly string[]]> = [];
+    const { store, toasts } = authStore(fetchImpl, { forgetEntityVersions: (family, ids) => forgotten.push([family, ids]) });
+    const { kit, part, group } = seedWithKit(store);
+
+    await store.getState().deleteHardware(kit.id, { deleteParts: true });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      `http://test/api/catalog/hardware/${kit.id}?deleteParts=true`,
+      expect.objectContaining({ method: 'DELETE', headers: expect.objectContaining({ 'If-Match': '"v2"' }) }),
+    );
+    const catalog = store.getState().catalog!;
+    expect(catalog.hardware.some((h) => h.id === kit.id || h.id === part.id)).toBe(false);
+    expect(catalog.optionGroups.find((g) => g.id === group.id)!.optionIds).toEqual(['otro']);
+    expect(forgotten).toEqual([['option-groups', [group.id]]]);
+    expect(toasts.at(-1)).toMatchObject({ type: 'info', message: 'Herraje y 1 parte(s) eliminados' });
+  });
+
+  it('en uso (409): muestra el motivo del servidor y no toca nada', async () => {
+    const message = 'herraje en uso: el herraje KIT-1615 está en uso en 2 ubicaciones en componentes; quitá o reasigná esas referencias antes de eliminarlo';
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('{}', { status: 200, headers: { ETag: '"v2"' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 'CONFLICT', message, details: { reason: 'in_use' } }), { status: 409 }));
+    const { store, saved, toasts } = authStore(fetchImpl);
+    const { kit } = seedWithKit(store);
+
+    await store.getState().deleteHardware(kit.id);
+
+    expect(store.getState().catalog!.hardware.some((h) => h.id === kit.id)).toBe(true);
+    expect(saved).toHaveLength(0);
+    expect(toasts.at(-1)).toMatchObject({ type: 'error', message });
+  });
+});

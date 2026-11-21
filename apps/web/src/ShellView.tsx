@@ -534,6 +534,7 @@ export interface ShellViewCtx {
   readonly setEdgeActive: (id: string, active: boolean) => void;
   readonly setEditingModuleId: Dispatch<SetStateAction<string | null>>;
   readonly setHardwareActive: (id: string, active: boolean) => void;
+  readonly deleteHardware: (id: string, options?: { readonly deleteParts?: boolean }) => Promise<void>;
   readonly setItemFloorStatus: (projectId: string, itemId: string, status: ItemFloorStatus) => void;
   readonly setMaterialActive: (id: string, active: boolean) => void;
   readonly setShowOnboardingTour: Dispatch<SetStateAction<boolean>>;
@@ -848,6 +849,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     setEdgeActive,
     setEditingModuleId,
     setHardwareActive,
+    deleteHardware,
     setItemFloorStatus,
     setMaterialActive,
     setShowOnboardingTour,
@@ -2107,6 +2109,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onUpdate={updateHardware}
           onDeactivate={(id) => setHardwareActive(id, false)}
           onReactivate={(id) => setHardwareActive(id, true)}
+          onDelete={canMutateCatalog ? (id, options) => deleteHardware(id, options) : undefined}
           openEntityId={routeEntityId}
           onSelectionChange={(id) => onEntitySelectionChange('hardware', id)}
           canMutate={canMutateCatalog}
