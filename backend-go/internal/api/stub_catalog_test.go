@@ -389,8 +389,28 @@ func (s *stubStore) DeleteGripStyle(_ context.Context, id string, expectedVersio
 }
 
 func (s *stubStore) GetProjectGrip(_ context.Context, _ string) (*storage.ProjectGrip, error) {
+	if s.projectGrip != nil {
+		return s.projectGrip, nil
+	}
 	s.stubNotUsed("GetProjectGrip")
 	return nil, nil
+}
+
+// ProjectGripLineageChoices (#1680): the injected lineage (or the fn) the
+// grip report composes from — empty maps by default, the pre-#1680 world.
+func (s *stubStore) ProjectGripLineageChoices(ctx context.Context, projectID string) (map[string]storage.GripLineageChoices, map[string]string, error) {
+	if s.gripLineageFn != nil {
+		return s.gripLineageFn(ctx, projectID)
+	}
+	lineage := s.gripLineage
+	if lineage == nil {
+		lineage = map[string]storage.GripLineageChoices{}
+	}
+	level := s.gripLevelChoices
+	if level == nil {
+		level = map[string]string{}
+	}
+	return lineage, level, nil
 }
 
 // GetFurnitureEffectiveGrip (#1536 golden): the seeded facade state IS the
