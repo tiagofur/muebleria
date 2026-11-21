@@ -36,11 +36,16 @@ type HardwareUsage struct {
 	// project or of one of its furniture instances (000182) — the quote
 	// prices the gola BOM demand from THAT copy, not from the live profile.
 	ProjectGrips int64
+	// DesignChoices (#1615 review round 3): option choices of designs — the
+	// live working copy, its authoring defaults and non-superseded revisions.
+	// Design resolve and the release gate check them against the live
+	// catalog, so a deleted choice breaks the design for good.
+	DesignChoices int64
 }
 
 // Total is the number of references across every family.
 func (u HardwareUsage) Total() int64 {
-	return u.TemplateLines + u.QuoteChoices + u.DesignAssets + u.ComponentPlacements + u.Agregados + u.HardwareProfiles + u.OpeningProfiles + u.GripStyles + u.ProjectGrips
+	return u.TemplateLines + u.QuoteChoices + u.DesignAssets + u.ComponentPlacements + u.Agregados + u.HardwareProfiles + u.OpeningProfiles + u.GripStyles + u.ProjectGrips + u.DesignChoices
 }
 
 // Describe renders the non-zero families in Spanish.
@@ -62,6 +67,7 @@ func (u HardwareUsage) Describe() string {
 	add(u.OpeningProfiles, "perfil de apertura (gola)", "perfiles de apertura (gola)")
 	add(u.GripStyles, "estilo de agarre", "estilos de agarre")
 	add(u.ProjectGrips, "agarre congelado de obra", "agarres congelados de obras")
+	add(u.DesignChoices, "elección en diseños", "elecciones en diseños")
 	return strings.Join(parts, ", ")
 }
 
@@ -135,6 +141,9 @@ func (s *PostgresStore) HardwareUsageOf(ctx context.Context, id string) (Hardwar
 		return u, fmt.Errorf("hardware not found")
 	}
 	id = canonical
+	// Non-superseded quote revisions freeze choices that the release applies
+	// (#1627) and price refresh re-resolves (#1662): they count as quote use.
+	var quoteRevisionChoices int64
 	err := s.db(ctx).QueryRow(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM hardware_lines hl
@@ -174,9 +183,22 @@ func (s *PostgresStore) HardwareUsageOf(ctx context.Context, id string) (Hardwar
 			 WHERE p.organization_id = $2 AND COALESCE(p.grip_snapshot::text, '') LIKE '%' || $1 || '%')
 			+ (SELECT COUNT(*) FROM furniture_instances fi
 			 JOIN projects p ON p.id = fi.project_id
-			 WHERE p.organization_id = $2 AND COALESCE(fi.grip_snapshot::text, '') LIKE '%' || $1 || '%')`,
+			 WHERE p.organization_id = $2 AND COALESCE(fi.grip_snapshot::text, '') LIKE '%' || $1 || '%'),
+			(SELECT COUNT(*) FROM design_working_items dwi
+			 WHERE dwi.organization_id = $2 AND dwi.material_choices::text LIKE '%' || $1 || '%')
+			+ (SELECT COUNT(*) FROM design_working_copies dwc
+			 WHERE dwc.organization_id = $2 AND dwc.authoring_defaults::text LIKE '%' || $1 || '%')
+			+ (SELECT COUNT(*) FROM design_revision_items dri
+			 JOIN design_revisions dr ON dr.id = dri.design_revision_id
+			 WHERE dri.organization_id = $2 AND dr.status <> 'superseded'
+			   AND dri.material_choices::text LIKE '%' || $1 || '%'),
+			(SELECT COUNT(*) FROM quote_revision_items qri
+			 JOIN quote_revisions qr ON qr.id = qri.quote_revision_id
+			 WHERE qri.organization_id = $2 AND qr.status <> 'superseded'
+			   AND qri.material_choices::text LIKE '%' || $1 || '%')`,
 		id, org,
-	).Scan(&u.TemplateLines, &u.QuoteChoices, &u.DesignAssets, &u.ComponentPlacements, &u.Agregados, &u.HardwareProfiles, &u.OpeningProfiles, &u.GripStyles, &u.ProjectGrips)
+	).Scan(&u.TemplateLines, &u.QuoteChoices, &u.DesignAssets, &u.ComponentPlacements, &u.Agregados, &u.HardwareProfiles, &u.OpeningProfiles, &u.GripStyles, &u.ProjectGrips, &u.DesignChoices, &quoteRevisionChoices)
+	u.QuoteChoices += quoteRevisionChoices
 	return u, err
 }
 

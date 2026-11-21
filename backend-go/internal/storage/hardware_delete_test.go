@@ -141,6 +141,18 @@ func TestHardwareDelete_GuardsCascadeAndMemberships(t *testing.T) {
 		org, projectID, fmt.Sprintf(`{"bomMembers":{"supports":{"hardwareId":"%s"}}}`, hwInstanceGrip.ID))
 	expectInUse(hwInstanceGrip, "agarre congelado de obra")
 
+	// 5e. A design's option choice (review round 3): design resolve and the
+	// release gate check it against the live catalog.
+	hwDesignChoice := create("ZZ-HWDEL-DCH", nil)
+	designID := uuid.NewString()
+	exec(`INSERT INTO designs (id, organization_id, project_id, name) VALUES ($1, $2, $3, 'Diseño elección')`, designID, org, projectID)
+	instanceID := uuid.NewString()
+	exec(`INSERT INTO furniture_instances (id, organization_id, project_id, origin) VALUES ($1, $2, $3, 'design')`, instanceID, org, projectID)
+	exec(`INSERT INTO design_working_items (organization_id, project_id, design_id, furniture_instance_id, material_choices, transform)
+		VALUES ($1, $2, $3, $4, $5::jsonb, '{}'::jsonb)`,
+		org, projectID, designID, instanceID, fmt.Sprintf(`{"BISAGRA":"%s"}`, hwDesignChoice.ID))
+	expectInUse(hwDesignChoice, "elección en diseños")
+
 	// 5c. An UPPERCASE id must hit the same guard (review B1): uuid::text is
 	// lowercase, so an uncanonicalized id would count zero references.
 	upper := *hwAgregadoLine
