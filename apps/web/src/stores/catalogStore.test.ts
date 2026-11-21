@@ -827,9 +827,11 @@ describe('catalogStore — modules', () => {
   });
 
   it('deleteModule (auth) calls backend DELETE with token', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
-      new Response('{}', { status: 200 }),
-    );
+    // #1511: version probe (GET) then DELETE under If-Match.
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('{}', { status: 200, headers: { ETag: '"v1"' } }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }));
     const { deps } = makeDeps({
       getSession: () => 'auth',
       getAuthToken: () => 'jwt-xyz',
@@ -1956,22 +1958,22 @@ describe('catalogStore — save serialization (P1-4)', () => {
       expect(store.getState().catalog?.hardware).toHaveLength(0);
     });
 
-    it('R2 — consumidor de patchSaved devuelve false y no autoriza operaciones dependientes tras invalidar contexto', async () => {
-      let resolveSave!: () => void;
-      const savePromise = new Promise<void>((r) => { resolveSave = r; });
-
-      let hardDeleteCalled = false;
-      const { deps } = makeDeps({
-        saveCatalog: async () => {
-          await savePromise;
+    it('R2 — si el contexto cambia mientras el DELETE está en vuelo, no se toca el catálogo nuevo ni se avisa éxito (#1511)', async () => {
+      let resolveDelete!: (res: Response) => void;
+      const deleteInFlight = new Promise<Response>((r) => { resolveDelete = r; });
+      const saves: Catalog[] = [];
+      const { deps, toasts } = makeDeps({
+        saveCatalog: async (c) => {
+          saves.push(c);
         },
-        fetchImpl: (async () => {
-          hardDeleteCalled = true;
-          return new Response(null, { status: 204 });
-        }) as unknown as typeof fetch,
+        fetchImpl: (async (_input: RequestInfo | URL, init?: RequestInit) =>
+          init?.method === 'DELETE'
+            ? deleteInFlight
+            : new Response('{}', { status: 200, headers: { ETag: '"v1"' } })) as unknown as typeof fetch,
         getSession: () => 'auth',
         getAuthToken: () => 'token-test',
       });
+      useWorkspaceStore.setState({ session: 'auth' });
 
       const store = createCatalogStore({ deps });
       const initialCat: Catalog = {
@@ -1981,16 +1983,20 @@ describe('catalogStore — save serialization (P1-4)', () => {
       store.getState().setCatalog(initialCat);
 
       const deletePromise = store.getState().deleteCategory('cat-to-delete');
+      await Promise.resolve();
+      await Promise.resolve();
 
-      // User logs out or changes org while local save is in flight
+      // User logs out or changes org while the server DELETE is in flight.
       useWorkspaceStore.setState({ session: null });
-      store.getState().setCatalog(null);
+      const otherOrg: Catalog = { ...seedCatalog(), categories: [{ id: 'other', name: 'Otra org', sortOrder: 0 }] };
+      store.getState().setCatalog(otherOrg);
 
-      resolveSave();
+      resolveDelete(new Response(null, { status: 204 }));
       await deletePromise;
 
-      // hardDeleteOnAuth must NOT have been called because patchSaved must return false when context is invalidated!
-      expect(hardDeleteCalled).toBe(false);
+      expect(store.getState().catalog).toBe(otherOrg);
+      expect(saves).toHaveLength(0);
+      expect(toasts.some((t) => t.message === 'Categoría eliminada')).toBe(false);
     });
   });
 });
@@ -2352,5 +2358,187 @@ describe('catalogStore — createComponent/createAgregado awaitable persistence 
       hardwareLines: [],
     };
     await expect(store.getState().createAgregado(agregado)).rejects.toThrow('409 duplicate code');
+  });
+});
+
+describe('#1511 — borrado de categorías y muebles: servidor primero bajo If-Match', () => {
+  type Family = {
+    readonly name: string;
+    readonly path: string;
+    readonly listKey: 'categories' | 'materialCategories' | 'hardwareCategories' | 'ambientCategories';
+    readonly childKey?: 'modules' | 'materials' | 'hardware' | 'ambientMaterials';
+    readonly run: (store: ReturnType<typeof createCatalogStore>, id: string) => Promise<void>;
+  };
+  const families: readonly Family[] = [
+    { name: 'muebles (categorías)', path: 'categories', listKey: 'categories', childKey: 'modules', run: (s, id) => s.getState().deleteCategory(id) },
+    { name: 'tableros', path: 'material-categories', listKey: 'materialCategories', childKey: 'materials', run: (s, id) => s.getState().deleteMaterialCategory(id) },
+    { name: 'herrajes', path: 'hardware-categories', listKey: 'hardwareCategories', childKey: 'hardware', run: (s, id) => s.getState().deleteHardwareCategory(id) },
+    { name: 'ambiente', path: 'ambient-categories', listKey: 'ambientCategories', run: (s, id) => s.getState().deleteAmbientCategory(id) },
+  ];
+  const CAT_ID = 'cat-1511';
+
+  function authStore(fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>) {
+    const made = makeDeps({
+      getSession: () => 'auth',
+      getAuthToken: () => 'jwt-xyz',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    useWorkspaceStore.setState({ session: 'auth' });
+    return { store: createCatalogStore({ deps: made.deps }), ...made };
+  }
+
+  function seedWithCategory(store: ReturnType<typeof createCatalogStore>, family: Family): string | undefined {
+    const cat = seedCatalog();
+    const node = { id: CAT_ID, name: 'Categoría 1511', parentId: undefined, sortOrder: 0 };
+    let childId: string | undefined;
+    const next: Record<string, unknown> = { ...cat, [family.listKey]: [node] };
+    if (family.childKey) {
+      const list = (cat[family.childKey] ?? []) as ReadonlyArray<{ id: string; categoryId?: string }>;
+      const first = list[0];
+      if (first) {
+        childId = first.id;
+        next[family.childKey] = [{ ...first, categoryId: CAT_ID }, ...list.slice(1)];
+      }
+    }
+    store.getState().setCatalog(next as unknown as Catalog);
+    return childId;
+  }
+
+  for (const family of families) {
+    it(`${family.name}: DELETE con la versión del servidor y recién después se quita de la pantalla`, async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: CAT_ID, version: 3 }), {
+            status: 200,
+            headers: { ETag: '"v3"', 'Content-Type': 'application/json' },
+          }),
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      const { store, toasts } = authStore(fetchImpl);
+      const childId = seedWithCategory(store, family);
+
+      await family.run(store, CAT_ID);
+
+      expect(fetchImpl).toHaveBeenNthCalledWith(
+        2,
+        `http://test/api/catalog/${family.path}/${CAT_ID}`,
+        expect.objectContaining({ method: 'DELETE', headers: expect.objectContaining({ 'If-Match': '"v3"' }) }),
+      );
+      const catalog = store.getState().catalog as unknown as Record<string, ReadonlyArray<{ id: string; categoryId?: string }>>;
+      expect((catalog[family.listKey] ?? []).some((c) => c.id === CAT_ID)).toBe(false);
+      if (family.childKey && childId) {
+        expect(catalog[family.childKey]!.find((c) => c.id === childId)?.categoryId).toBeUndefined();
+      }
+      expect(toasts.at(-1)).toMatchObject({ type: 'info', message: 'Categoría eliminada' });
+    });
+
+    it(`${family.name}: si el servidor rechaza (412) la categoría sigue en pantalla y nada se guarda`, async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: CAT_ID, version: 3 }), {
+            status: 200,
+            headers: { ETag: '"v3"', 'Content-Type': 'application/json' },
+          }),
+        )
+        .mockResolvedValueOnce(new Response('{"message":"stale"}', { status: 412 }));
+      const { store, saved, toasts } = authStore(fetchImpl);
+      const childId = seedWithCategory(store, family);
+
+      await family.run(store, CAT_ID);
+
+      const catalog = store.getState().catalog as unknown as Record<string, ReadonlyArray<{ id: string; categoryId?: string }>>;
+      expect((catalog[family.listKey] ?? []).some((c) => c.id === CAT_ID)).toBe(true);
+      if (family.childKey && childId) {
+        expect(catalog[family.childKey]!.find((c) => c.id === childId)?.categoryId).toBe(CAT_ID);
+      }
+      expect(saved).toHaveLength(0);
+      expect(toasts.at(-1)).toMatchObject({
+        type: 'error',
+        message: 'El elemento cambió en el servidor. Recargá la página antes de eliminarlo.',
+      });
+    });
+  }
+
+  it('un guardado ya encolado (renombrar) llega al servidor ANTES del DELETE', async () => {
+    const order: string[] = [];
+    let releaseSave!: () => void;
+    const saveGate = new Promise<void>((r) => { releaseSave = r; });
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      order.push(init?.method ?? 'GET');
+      return init?.method === 'DELETE'
+        ? new Response(null, { status: 204 })
+        : new Response('{}', { status: 200, headers: { ETag: '"v2"' } });
+    });
+    const made = makeDeps({
+      getSession: () => 'auth',
+      getAuthToken: () => 'jwt-xyz',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      saveCatalog: async () => {
+        order.push('save:start');
+        await saveGate;
+        order.push('save:end');
+      },
+    });
+    useWorkspaceStore.setState({ session: 'auth' });
+    const store = createCatalogStore({ deps: made.deps });
+    store.getState().setCatalog({
+      ...seedCatalog(),
+      materialCategories: [{ id: CAT_ID, name: 'Vieja', sortOrder: 0 }],
+    } as Catalog);
+
+    // A rename is queued and still saving when the user deletes.
+    void store.getState().updateMaterialCategory(CAT_ID, { name: 'Renombrada', parentId: '', sortOrder: '0' });
+    const deleting = store.getState().deleteMaterialCategory(CAT_ID);
+    await Promise.resolve();
+    expect(order).not.toContain('DELETE');
+    releaseSave();
+    await deleting;
+
+    expect(order.indexOf('save:end')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('DELETE')).toBeGreaterThan(order.indexOf('save:end'));
+    expect(store.getState().catalog!.materialCategories!.some((c) => c.id === CAT_ID)).toBe(false);
+  });
+
+  it('mueble: un DELETE fallido no lo quita de la pantalla ni avisa que se eliminó', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ version: 2 }), {
+          status: 200,
+          headers: { ETag: '"v2"', 'Content-Type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(new Response('{"message":"boom"}', { status: 500 }));
+    const { store, saved, toasts } = authStore(fetchImpl);
+    const cat = seedCatalog();
+    store.getState().setCatalog(cat);
+    const target = cat.modules[0]!;
+    const onDeleted = vi.fn();
+
+    await store.getState().deleteModule(target.id, onDeleted);
+
+    expect(store.getState().catalog!.modules.some((m) => m.id === target.id)).toBe(true);
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(saved).toHaveLength(0);
+    expect(toasts.at(-1)?.type).toBe('error');
+  });
+
+  it('mueble: borrado correcto llama al callback y lo quita', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ version: 2 }), { status: 200, headers: { ETag: '"v2"' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const { store } = authStore(fetchImpl);
+    const cat = seedCatalog();
+    store.getState().setCatalog(cat);
+    const target = cat.modules[0]!;
+    const onDeleted = vi.fn();
+
+    await store.getState().deleteModule(target.id, onDeleted);
+
+    expect(store.getState().catalog!.modules.some((m) => m.id === target.id)).toBe(false);
+    expect(onDeleted).toHaveBeenCalledWith(target.id);
   });
 });

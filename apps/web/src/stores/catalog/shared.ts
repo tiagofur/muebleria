@@ -688,6 +688,17 @@ export function makeCatalogStoreCtx(
     if (getSession() !== 'auth') return true;
     const token = getAuthToken();
     if (!token) return true;
+    // #1511: callers delete on the server FIRST and only then patch locally.
+    // If the session/org changed while the DELETE was in flight, the local
+    // follow-up must not touch the new context's catalog (nor claim success).
+    const scope = getContextScope();
+    const contextStillValid = () =>
+      getContextScope() === scope && useWorkspaceStore.getState().session !== null;
+    // Saves queued BEFORE the delete (e.g. a rename of this same category)
+    // must land first: a PUT arriving after the DELETE would get 404 and the
+    // guarded upsert recreates on 404 — the deleted item would come back.
+    if (saveInFlight) await saveInFlight;
+    if (!contextStillValid()) return false;
     try {
       let ifMatch: string | null = null;
       if (typeof options?.expectedVersion === 'number' && options.expectedVersion > 0) {
@@ -703,7 +714,7 @@ export function makeCatalogStoreCtx(
         });
         if (getRes.status === 404) {
           // Already gone on server
-          return true;
+          return contextStillValid();
         }
         if (getRes.ok) {
           const etag = getRes.headers.get('ETag');
@@ -731,7 +742,7 @@ export function makeCatalogStoreCtx(
         headers,
       });
       if (res.status === 404) {
-        return true;
+        return contextStillValid();
       }
       if (!res.ok) {
         const text = await res.text().catch(() => '');
@@ -745,7 +756,7 @@ export function makeCatalogStoreCtx(
         });
         return false;
       }
-      return true;
+      return contextStillValid();
     } catch (err) {
       console.error(`Error deleting ${path}:`, err);
       toast({
