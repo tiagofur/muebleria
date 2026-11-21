@@ -50,6 +50,7 @@ export const QUOTE_SOURCE_TYPE_LABELS: Readonly<Record<QuoteRevisionSourceType, 
   imported: 'Importación',
   requote: 'Re-cotización',
   system: 'Sistema',
+  price_refresh: 'Re-cotización por precios',
 };
 
 /**

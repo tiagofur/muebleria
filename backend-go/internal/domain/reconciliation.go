@@ -53,8 +53,15 @@ var (
 	ErrQuoteRevisionInvalidTransition = errors.New("quote revision invalid transition")
 	// ErrQuoteRevisionExpired (#1648): accepting a published quote past its
 	// valid_until requires an explicit acknowledgement (warn, never block).
-	ErrQuoteRevisionExpired    = errors.New("quote revision expired")
-	ErrInvalidRevisionSnapshot = errors.New("invalid revision snapshot: corrupt or malformed payload")
+	ErrQuoteRevisionExpired = errors.New("quote revision expired")
+	// ErrPriceRefreshNoChange (#1662): the current catalog yields the same
+	// total — a price-only requote would be an empty revision.
+	ErrPriceRefreshNoChange = errors.New("price refresh: total unchanged")
+	// ErrPriceRefreshConfigurationChanged (#1662): the frozen opening section
+	// would change shape under the current project grip — a configuration
+	// change that belongs to the design requote, not a price refresh.
+	ErrPriceRefreshConfigurationChanged = errors.New("price refresh: opening configuration changed")
+	ErrInvalidRevisionSnapshot          = errors.New("invalid revision snapshot: corrupt or malformed payload")
 	// ErrQuoteUnitUnfreezable (#1312): a specific draft unit cannot get its
 	// commercial pricing context frozen — a distinct cause from a corrupt
 	// snapshot payload, so the API surfaces the wrapped unit-level detail

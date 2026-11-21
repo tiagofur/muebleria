@@ -3890,6 +3890,99 @@
         }
       }
     },
+    "/projects/{projectId}/quote-revisions/{quoteRevisionId}:price-refresh-preview": {
+      "post": {
+        "operationId": "previewProjectQuotePriceRefresh",
+        "summary": "Preview the price-only requote of an exact published/accepted QuoteRevision (#1662)",
+        "description": "Read-only: re-prices the EXACT units of the revision (same instances, configuration, options and frozen pricing context) against the current catalog and project envelope, and returns the previous and new sale totals. Nothing is written. Only the owning organization; only a published or accepted revision. A frozen opening section whose shape would change under the current project grip answers 409 PRICE_REFRESH_CONFIGURATION_CHANGED (that is a design requote).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/QuoteRevisionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Previous and new totals of the price refresh",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotePriceRefreshPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/quote-revisions/{quoteRevisionId}:price-refresh": {
+      "post": {
+        "operationId": "priceRefreshProjectQuote",
+        "summary": "Create the next draft QuoteRevision re-priced with the current catalog (#1662)",
+        "description": "Explicit price-only requote from the exact published/accepted revision, which must be the latest (stale base answers 409). The new draft (source_type price_refresh, baseQuoteRevisionId = the source) freezes the same units and configuration with the current prices; the source revision stays immutable. An unchanged total answers 409 PRICE_REFRESH_NO_CHANGE; an opening configuration change answers 409 PRICE_REFRESH_CONFIGURATION_CHANGED. Requires an Idempotency-Key. Audit quote_revision_created_price_refresh is written in the same transaction.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/QuoteRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The created draft revision plus previous and new totals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotePriceRefreshResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/projects/{projectId}/quote-revisions/{quoteRevisionId}:accept": {
       "post": {
         "operationId": "acceptProjectQuoteRevision",
@@ -9070,6 +9163,8 @@
           "PASSWORD_RESET_TOKEN_INVALID",
           "SESSION_REVOKED",
           "TOKEN_TYPE_MISMATCH",
+          "PRICE_REFRESH_NO_CHANGE",
+          "PRICE_REFRESH_CONFIGURATION_CHANGED",
           "QUOTE_EXPIRED",
           "REFRESH_INVALID",
           "REFRESH_EXPIRED",
@@ -15336,7 +15431,8 @@
           "manual",
           "imported",
           "requote",
-          "system"
+          "system",
+          "price_refresh"
         ]
       },
       "QuoteRevision": {
@@ -15453,6 +15549,60 @@
           },
           "lifecycleStatus": {
             "$ref": "#/components/schemas/FurnitureInstanceLifecycleStatus"
+          }
+        }
+      },
+      "QuotePriceRefreshPreview": {
+        "type": "object",
+        "description": "#1662: totals of a price-only requote (preview, nothing written).",
+        "additionalProperties": false,
+        "required": [
+          "baseRevisionNumber",
+          "currency",
+          "previousSaleTotal",
+          "newSaleTotal",
+          "changed"
+        ],
+        "properties": {
+          "baseRevisionNumber": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "previousSaleTotal": {
+            "type": "number"
+          },
+          "newSaleTotal": {
+            "type": "number"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "QuotePriceRefreshResult": {
+        "type": "object",
+        "description": "#1662: the created price-refresh draft plus its totals.",
+        "additionalProperties": false,
+        "required": [
+          "quoteRevision",
+          "currency",
+          "previousSaleTotal",
+          "newSaleTotal"
+        ],
+        "properties": {
+          "quoteRevision": {
+            "$ref": "#/components/schemas/QuoteRevision"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "previousSaleTotal": {
+            "type": "number"
+          },
+          "newSaleTotal": {
+            "type": "number"
           }
         }
       },

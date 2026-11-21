@@ -263,6 +263,7 @@ export const mockReleases: ProductionRelease[] = [
 ];
 
 interface FetchMockOptions {
+  priceRefreshPreviewResponse?: () => Response;
   quoteRevisions?: QuoteRevisionDetail[];
   designs?: Design[];
   revisionsByDesign?: Record<string, DesignRevision[]>;
@@ -441,6 +442,30 @@ export function setupFetchMock(options: FetchMockOptions = {}) {
         sourceType: 'requote',
         createdBy: '66666666-0000-4000-8000-000000000001',
       });
+    }
+
+    // #1662: price-only requote (preview + command).
+    if (/^\/projects\/[^/]+\/quote-revisions\/[^/]+:price-refresh-preview$/.test(path) && method === 'POST') {
+      if (options.priceRefreshPreviewResponse) return options.priceRefreshPreviewResponse();
+      return json({ baseRevisionNumber: 2, currency: 'MXN', previousSaleTotal: 10000, newSaleTotal: 11500, changed: true });
+    }
+    if (/^\/projects\/[^/]+\/quote-revisions\/[^/]+:price-refresh$/.test(path) && method === 'POST') {
+      return json(
+        {
+          quoteRevision: {
+            id: '16620000-0000-4000-8000-0000000000c3',
+            projectId: PROJECT_ID,
+            revisionNumber: 3,
+            status: 'draft',
+            sourceType: 'price_refresh',
+            baseQuoteRevisionId: QUOTE_2_ID,
+          },
+          currency: 'MXN',
+          previousSaleTotal: 10000,
+          newSaleTotal: 11500,
+        },
+        201,
+      );
     }
 
     return apiError(404, 'NOT_FOUND', `Unhandled ${method} ${path}`);
@@ -1612,6 +1637,82 @@ describe('Quote revision lifecycle UI (#571 / WEB-DT-4)', () => {
       new GraneteApiError(409, { code: 'QUOTE_EXPIRED', message: 'La cotización está vencida.' } as ApiError),
     );
     expect(view).toMatchObject({ kind: 'expired', title: 'Cotización vencida' });
+  });
+
+  it('#1662 cotización vencida: «Nueva cotización con precios actuales» muestra la diferencia y crea Q3', async () => {
+    const publishedQuote: QuoteRevisionDetail = {
+      ...mockQuoteRevisions[1]!,
+      revisionNumber: 2,
+      status: 'published',
+      validUntil: '2020-01-10',
+      commercialSnapshot: {
+        schema: 'granete.quote-commercial-snapshot.v1',
+        capturedAt: '2026-01-02T09:00:00Z',
+        currency: 'MXN',
+        customer: { id: 'cust-1', name: 'Cliente' },
+        project: { id: PROJECT_ID, name: 'Obra' },
+        breakdown: { materialsCost: 100, edgeTotal: 10, hardwareTotal: 20, directCost: 130, laborModular: 0, laborFixedCost: 0, marginFactor: 1.3, salePrice: 10000 },
+        lines: [],
+        units: [],
+      },
+    };
+    const fetchMock = setupFetchMock({ quoteRevisions: [mockQuoteRevisions[0]!, publishedQuote] });
+    renderScreen({
+      initialContext: { quoteRevisionId: publishedQuote.id, designId: DESIGN_1_ID, designRevisionId: REV_1_ID },
+      canAcceptQuote: true,
+    });
+    await waitFor(() => expect(screen.getByTestId('quote-expired-price-refresh-btn')).toBeVisible());
+    await userEvent.click(screen.getByTestId('quote-expired-price-refresh-btn'));
+    await waitFor(() => expect(screen.getByTestId('price-refresh-preview')).toBeVisible());
+    expect(screen.getByTestId('price-refresh-previous')).toHaveTextContent('$10,000.00 MXN');
+    expect(screen.getByTestId('price-refresh-new')).toHaveTextContent('$11,500.00 MXN');
+    expect(screen.getByTestId('price-refresh-delta')).toHaveTextContent('+$1,500.00 MXN, +15.0 %');
+    // The preview wrote nothing: only the read-only preview endpoint was hit.
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith(':price-refresh'))).toBe(false);
+
+    await userEvent.click(screen.getByTestId('confirm-price-refresh-btn'));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/quote-revisions/${publishedQuote.id}:price-refresh`),
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+    await waitFor(() => expect(screen.queryByTestId('price-refresh-modal')).toBeNull());
+  });
+
+  it('#1662 si los precios no cambiaron, no deja crear una revisión vacía', async () => {
+    const publishedQuote: QuoteRevisionDetail = {
+      ...mockQuoteRevisions[1]!,
+      revisionNumber: 2,
+      status: 'published',
+      validUntil: '2099-12-31',
+      commercialSnapshot: {
+        schema: 'granete.quote-commercial-snapshot.v1',
+        capturedAt: '2026-01-02T09:00:00Z',
+        currency: 'MXN',
+        customer: { id: 'cust-1', name: 'Cliente' },
+        project: { id: PROJECT_ID, name: 'Obra' },
+        breakdown: { materialsCost: 100, edgeTotal: 10, hardwareTotal: 20, directCost: 130, laborModular: 0, laborFixedCost: 0, marginFactor: 1.3, salePrice: 10000 },
+        lines: [],
+        units: [],
+      },
+    };
+    setupFetchMock({
+      quoteRevisions: [mockQuoteRevisions[0]!, publishedQuote],
+      priceRefreshPreviewResponse: () =>
+        new Response(
+          JSON.stringify({ baseRevisionNumber: 2, currency: 'MXN', previousSaleTotal: 10000, newSaleTotal: 10000, changed: false }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+    });
+    renderScreen({
+      initialContext: { quoteRevisionId: publishedQuote.id, designId: DESIGN_1_ID, designRevisionId: REV_1_ID },
+      canAcceptQuote: true,
+    });
+    await waitFor(() => expect(screen.getByTestId('quote-price-refresh-btn')).toBeVisible());
+    await userEvent.click(screen.getByTestId('quote-price-refresh-btn'));
+    await waitFor(() => expect(screen.getByTestId('price-refresh-unchanged')).toBeVisible());
+    expect(screen.getByTestId('confirm-price-refresh-btn')).toBeDisabled();
   });
 
   it('shows permission hint when role cannot accept quote revisions', async () => {

@@ -39,6 +39,11 @@ func registerCommercialRoutes(server *Server, mux *http.ServeMux, authMW func(ht
 	mux.Handle("POST /api/projects/{projectId}/quote-revisions/{quoteRevisionCommand...}", noStoreMiddleware(authMW(quoteRevisionCommandRouter(map[string]http.Handler{
 		"publish": server.RequireIdempotency("quote.publish-revision", http.HandlerFunc(server.HandleQuoteRevisionPublish)),
 		"accept":  server.RequireIdempotency("quote.accept-revision", http.HandlerFunc(server.HandleQuoteRevisionAccept)),
+		// #1662: price-only requote — read-only preview, and the explicit
+		// command (idempotent: a lost response replays, never a second
+		// revision).
+		"price-refresh-preview": http.HandlerFunc(server.HandleQuotePriceRefreshPreview),
+		"price-refresh":         server.RequireIdempotency("quote.price-refresh", http.HandlerFunc(server.HandleQuotePriceRefresh)),
 	}))))
 	// #500 / WEB-DT-1: authoritative contextual projection of the Project
 	// Furniture matrix (placed/pending, commercial grouping provenance,

@@ -40,6 +40,8 @@ import {
   preflightIssuesFromError,
   quoteStatusLabelOf,
   type CommandErrorView,
+  PriceRefreshModal,
+  type PriceRefreshPreviewView,
 } from './ReconciliationCommandPanels';
 import {
   PREFLIGHT_STATUS_LABELS,
@@ -550,6 +552,54 @@ export function ProjectReconciliationScreen({
       setAcceptQuoteError(describeCommandError(err));
     } finally {
       setAcceptQuoteSubmitting(false);
+    }
+  };
+
+  // #1662: price-only requote — preview first (nothing written), then the
+  // explicit command; continue on the exact new draft the server created.
+  const [priceRefreshOpen, setPriceRefreshOpen] = useState(false);
+  const [priceRefreshPreview, setPriceRefreshPreview] = useState<PriceRefreshPreviewView | null>(null);
+  const [priceRefreshLoading, setPriceRefreshLoading] = useState(false);
+  const [priceRefreshSubmitting, setPriceRefreshSubmitting] = useState(false);
+  const [priceRefreshError, setPriceRefreshError] = useState<CommandErrorView | null>(null);
+
+  const handleOpenPriceRefresh = async () => {
+    if (!selectedQuoteRevision) return;
+    setPriceRefreshOpen(true);
+    setPriceRefreshPreview(null);
+    setPriceRefreshError(null);
+    setPriceRefreshLoading(true);
+    try {
+      const preview = await api.previewProjectQuotePriceRefresh(token, projectId, selectedQuoteRevision.id);
+      setPriceRefreshPreview(preview);
+    } catch (err) {
+      setPriceRefreshError(describeCommandError(err));
+    } finally {
+      setPriceRefreshLoading(false);
+    }
+  };
+
+  const handleConfirmPriceRefresh = async () => {
+    if (!selectedQuoteRevision) return;
+    setPriceRefreshSubmitting(true);
+    setPriceRefreshError(null);
+    try {
+      const result = await api.priceRefreshProjectQuote(token, projectId, selectedQuoteRevision.id);
+      await invalidateQuoteRevisionReads();
+      setQuoteRevisionId(result.quoteRevision.id);
+      onContextChange?.({
+        quoteRevisionId: result.quoteRevision.id,
+        designId: activeDesignId,
+        designRevisionId,
+      });
+      setPriceRefreshOpen(false);
+      setQuoteLifecycleNotice(
+        `Revisión Q${result.quoteRevision.revisionNumber} creada en borrador con los precios de hoy. Revisala y publicala para enviarla.`,
+      );
+    } catch (err) {
+      setPriceRefreshError(describeCommandError(err));
+    } finally {
+      setPriceRefreshSubmitting(false);
     }
   };
 
@@ -1315,6 +1365,14 @@ export function ProjectReconciliationScreen({
                   quoteValidityDays={quoteValidityDays}
                   today={workshopTimeZone ? isoDateInTimeZone(new Date(), workshopTimeZone) : undefined}
                   onRequote={canRequote && incorporableItems.length > 0 ? handleOpenRequote : undefined}
+                  onPriceRefresh={
+                    canRequote &&
+                    selectedQuoteRevision &&
+                    selectedQuoteRevision.commercialSnapshot &&
+                    latestQuoteRevision?.id === selectedQuoteRevision.id
+                      ? () => void handleOpenPriceRefresh()
+                      : undefined
+                  }
                   onOpenAccept={() => {
                     setAcceptQuoteError(null);
                     setAcceptModalOpen(true);
@@ -1433,6 +1491,15 @@ export function ProjectReconciliationScreen({
         error={acceptQuoteError}
         onConfirm={(ack) => void handleConfirmAcceptQuote(ack)}
         today={workshopTimeZone ? isoDateInTimeZone(new Date(), workshopTimeZone) : undefined}
+      />
+      <PriceRefreshModal
+        open={priceRefreshOpen}
+        onClose={() => setPriceRefreshOpen(false)}
+        preview={priceRefreshPreview}
+        loadingPreview={priceRefreshLoading}
+        submitting={priceRefreshSubmitting}
+        error={priceRefreshError}
+        onConfirm={() => void handleConfirmPriceRefresh()}
       />
       <ReleaseReviewModal
         open={releaseOpen}

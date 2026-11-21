@@ -23,6 +23,7 @@ import {
   type ReconciliationItem,
 } from '@granete/storage';
 import { Modal } from '../common';
+import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
 import {
   formatFingerprint,
   formatQuoteRevisionLabel,
@@ -754,6 +755,8 @@ export interface QuoteLifecyclePanelProps {
   readonly quoteValidityDays?: number;
   /** #1648: open a new revision when the published quote expired. */
   readonly onRequote?: () => void;
+  /** #1662: open the price-only requote (latest published/accepted only). */
+  readonly onPriceRefresh?: () => void;
 }
 
 /** #1648: validity line + expired path, shared by the panel. */
@@ -762,11 +765,13 @@ function QuoteValidityBlock({
   validity,
   quoteValidityDays,
   onRequote,
+  onPriceRefresh,
 }: {
   readonly quoteRevision: QuoteRevisionDetail;
   readonly validity: QuoteValidityInfo;
   readonly quoteValidityDays?: number;
   readonly onRequote?: () => void;
+  readonly onPriceRefresh?: () => void;
 }): ReactNode {
   if (quoteRevision.status === 'draft') {
     return (
@@ -790,15 +795,22 @@ function QuoteValidityBlock({
       <div className="pd-alert pd-alert--warning" role="status" data-testid="quote-validity" data-status="expired">
         <strong>{label}.</strong>{' '}
         <span>
-          {onRequote
-            ? 'Los precios pueden estar desactualizados. Podés crear una nueva cotización con los cambios y precios al día, o aceptarla igual confirmando el vencimiento (queda registrado).'
+          {onPriceRefresh || onRequote
+            ? 'Los precios pueden estar desactualizados. Podés crear una nueva cotización con los precios de hoy, o aceptarla igual confirmando el vencimiento (queda registrado).'
             : 'Los precios pueden estar desactualizados: revisalos con el cliente antes de aceptarla. Si la aceptás igual, la confirmación del vencimiento queda registrada.'}
         </span>
-        {onRequote ? (
-          <div>
-            <button type="button" className="btn btn--small" data-testid="quote-expired-requote-btn" onClick={onRequote}>
-              Nueva cotización
-            </button>
+        {onPriceRefresh || onRequote ? (
+          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: 'var(--space-2)' }}>
+            {onPriceRefresh ? (
+              <button type="button" className="btn btn--small" data-testid="quote-expired-price-refresh-btn" onClick={onPriceRefresh}>
+                Nueva cotización con precios actuales
+              </button>
+            ) : null}
+            {onRequote ? (
+              <button type="button" className="btn btn--small btn--ghost" data-testid="quote-expired-requote-btn" onClick={onRequote}>
+                Nueva cotización con los cambios del diseño
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -825,6 +837,7 @@ export function QuoteLifecyclePanel({
   today,
   quoteValidityDays,
   onRequote,
+  onPriceRefresh,
 }: QuoteLifecyclePanelProps): ReactNode {
   if (!quoteRevision) {
     return (
@@ -890,6 +903,7 @@ export function QuoteLifecyclePanel({
         validity={quoteValidityInfo(quoteRevision, today ?? localToday())}
         quoteValidityDays={quoteValidityDays}
         onRequote={onRequote}
+        onPriceRefresh={onPriceRefresh}
       />
 
       {previousAcceptedRevision && isPublished && (
@@ -925,6 +939,18 @@ export function QuoteLifecyclePanel({
           <span>{accepting ? 'Aceptando…' : `Aceptar Q${quoteRevision.revisionNumber}`}</span>
         </button>
       )}
+
+      {onPriceRefresh && (isPublished || isAccepted) &&
+      quoteValidityInfo(quoteRevision, today ?? localToday()).status !== 'expired' ? (
+        <button
+          type="button"
+          className="btn btn--ghost btn--small"
+          data-testid="quote-price-refresh-btn"
+          onClick={onPriceRefresh}
+        >
+          Actualizar precios (nueva revisión)
+        </button>
+      ) : null}
 
       {isDraft && !canMutateQuote && (
         <p className="pr-panel__why" data-testid="quote-publish-forbidden-hint">
@@ -1048,6 +1074,97 @@ export function AcceptQuoteModal({
           >
             {submitting ? <RefreshCw size={14} className="spin" /> : <CheckCircle2 size={14} />}
             <span>{submitting ? 'Aceptando…' : `Confirmar aceptación de Q${revNum}`}</span>
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+export interface PriceRefreshPreviewView {
+  readonly baseRevisionNumber: number;
+  readonly currency: string;
+  readonly previousSaleTotal: number;
+  readonly newSaleTotal: number;
+  readonly changed: boolean;
+}
+
+export interface PriceRefreshModalProps {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly preview: PriceRefreshPreviewView | null;
+  readonly loadingPreview: boolean;
+  readonly submitting: boolean;
+  readonly error: CommandErrorView | null;
+  readonly onConfirm: () => void;
+}
+
+/**
+ * #1662 — price-only requote: shows the server preview (previous vs current
+ * total) BEFORE creating the next draft; nothing is written until confirm.
+ */
+export function PriceRefreshModal({
+  open,
+  onClose,
+  preview,
+  loadingPreview,
+  submitting,
+  error,
+  onConfirm,
+}: PriceRefreshModalProps): ReactNode {
+  if (!open) return null;
+  const delta = preview ? preview.newSaleTotal - preview.previousSaleTotal : 0;
+  const pct = preview && preview.previousSaleTotal > 0 ? (delta / preview.previousSaleTotal) * 100 : null;
+  const money = (n: number) => formatMoneyDisplay(n, { currency: preview?.currency });
+  return (
+    <Modal open={open} onClose={onClose} title="Nueva cotización con precios actuales">
+      <div className="pr-modal-flow" data-testid="price-refresh-modal">
+        <p className="pr-panel__hint">
+          Se crea una revisión nueva en borrador con los mismos muebles y configuración, y los precios del
+          catálogo de hoy. La cotización actual no se modifica.
+        </p>
+        {loadingPreview ? (
+          <p className="pr-panel__why" data-testid="price-refresh-loading">
+            <RefreshCw size={14} className="spin" /> Calculando con los precios de hoy…
+          </p>
+        ) : preview ? (
+          <div data-testid="price-refresh-preview">
+            <p className="pr-panel__why">
+              Total actual (Q{preview.baseRevisionNumber}):{' '}
+              <strong data-testid="price-refresh-previous">{money(preview.previousSaleTotal)}</strong>
+            </p>
+            <p className="pr-panel__why">
+              Con los precios de hoy: <strong data-testid="price-refresh-new">{money(preview.newSaleTotal)}</strong>
+              {preview.changed ? (
+                <span data-testid="price-refresh-delta">
+                  {' '}
+                  ({delta > 0 ? '+' : '−'}
+                  {money(Math.abs(delta))}
+                  {pct !== null ? `, ${delta > 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)} %` : ''})
+                </span>
+              ) : null}
+            </p>
+            {!preview.changed ? (
+              <div className="pd-alert pd-alert--info" data-testid="price-refresh-unchanged">
+                Los precios del catálogo no cambiaron el total: no hace falta una nueva cotización.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <CommandErrorAlert error={error} />
+        <div className="modal-actions">
+          <button type="button" className="btn" data-testid="cancel-price-refresh-btn" disabled={submitting} onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="btn btn--primary"
+            data-testid="confirm-price-refresh-btn"
+            disabled={submitting || loadingPreview || !preview?.changed}
+            onClick={onConfirm}
+          >
+            {submitting ? <RefreshCw size={14} className="spin" /> : <CheckCircle2 size={14} />}
+            <span>{submitting ? 'Creando…' : 'Crear nueva cotización'}</span>
           </button>
         </div>
       </div>

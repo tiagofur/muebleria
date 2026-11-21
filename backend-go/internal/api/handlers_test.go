@@ -199,6 +199,9 @@ type stubStore struct {
 	acceptQuoteRevisionErr                error
 	acceptQuoteRevisionCalls              int
 	acceptQuoteRevisionCmd                *storage.QuoteRevisionLifecycleCommand
+	priceRefreshCmds                      []storage.PriceRefreshQuoteCommand
+	priceRefreshErr                       error
+	priceRefreshResult                    *storage.PriceRefreshQuoteResult
 	// DesignRevision approval + ProductionRelease (#395 / DT-11)
 	approveDesignRevisionResult   *domain.DesignRevision
 	approveDesignRevisionErr      error
