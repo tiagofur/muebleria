@@ -201,11 +201,24 @@ func TestComposeGripLineageChoicesPrecedence(t *testing.T) {
 	}
 
 	// Without override and without design default, the project-level choice
-	// beats the definition fallback.
+	// beats the definition fallback — with a DISCRIMINATING value (level
+	// hw-pull-b ≠ the fallback's first option hw-pull-a) so the relation is
+	// proven, not just compatible with both outcomes.
 	lineage = storage.GripLineageChoices{Defaults: domain.DesignAuthoringDefaults{MaterialChoices: map[string]string{}}}
-	choices = composeGripLineageChoices(module, catalog, lineage, level)
-	if choices["JALADERA"] != "hw-pull-a" {
+	choices = composeGripLineageChoices(module, catalog, lineage, map[string]string{"JALADERA": "hw-pull-b", "FRENTE": "mat-1"})
+	if choices["JALADERA"] != "hw-pull-b" {
 		t.Fatalf("project level must beat the fallback, got %q", choices["JALADERA"])
+	}
+
+	// A design default beats the project-level choice for the SAME role —
+	// the discriminant case: hw-pull-b is neither the level choice (hw-pull-a)
+	// nor the fallback, so only the default can produce it.
+	lineage = storage.GripLineageChoices{
+		Defaults: domain.DesignAuthoringDefaults{MaterialChoices: map[string]string{"JALADERA": "hw-pull-b"}},
+	}
+	choices = composeGripLineageChoices(module, catalog, lineage, level)
+	if choices["JALADERA"] != "hw-pull-b" {
+		t.Fatalf("design default must beat the project level, got %q", choices["JALADERA"])
 	}
 
 	// With no statements at all, the definition fallback is the first
