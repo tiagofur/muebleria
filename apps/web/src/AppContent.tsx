@@ -276,6 +276,7 @@ export function AppContent({
   ensureCatalogStore({
     newId,
     saveCatalog: (c) => getRepository().saveCatalog(c) as Promise<void>,
+    getKnownEntityVersion: (family, id) => getRepository().knownEntityVersion?.(family, id),
     getAuthToken: () => useWorkspaceStore.getState().getAuthToken(),
     getSession: () => useWorkspaceStore.getState().session,
     getDraftProjectsCount: () =>

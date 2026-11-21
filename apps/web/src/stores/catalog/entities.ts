@@ -190,15 +190,16 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
     },
 
     deleteStructure: async (id) => {
+      // #1659: server first (contract #1606/#1511) — a refused DELETE never
+      // removes the structure only on screen.
+      const ok = await ctx.hardDeleteOnAuth(`/catalog/structures/${id}`);
+      if (!ok) return;
       const saved = await ctx.patchSaved((c) => ({
         ...c,
         structures: (c.structures ?? []).filter((s) => s.id !== id),
       }));
       if (!saved) return;
-      const ok = await ctx.hardDeleteOnAuth(`/catalog/structures/${id}`);
-      if (ok) {
-        ctx.toast({ type: 'info', message: 'Estructura eliminada' });
-      }
+      ctx.toast({ type: 'info', message: 'Estructura eliminada' });
     },
 
     setStructureActive: (id, active) => {
@@ -339,15 +340,16 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
     },
 
     deleteAgregado: async (id) => {
+      // #1659: server first (contract #1606/#1511) — a refused DELETE never
+      // removes the agregado only on screen.
+      const ok = await ctx.hardDeleteOnAuth(`/catalog/agregados/${id}`);
+      if (!ok) return;
       const saved = await ctx.patchSaved((c) => ({
         ...c,
         agregados: (c.agregados ?? []).filter((a) => a.id !== id),
       }));
       if (!saved) return;
-      const ok = await ctx.hardDeleteOnAuth(`/catalog/agregados/${id}`);
-      if (ok) {
-        ctx.toast({ type: 'info', message: 'Agregado eliminado' });
-      }
+      ctx.toast({ type: 'info', message: 'Agregado eliminado' });
     },
   };
 }

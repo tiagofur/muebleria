@@ -1347,6 +1347,23 @@ describe('APIWorkspaceRepository auth dependency (SEC-4B)', () => {
     expect(headers.get('Authorization')).toBeNull();
   });
 
+  it('#1659 knownEntityVersion expone la versión que el catálogo sembró del servidor', async () => {
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      if (String(input).endsWith('/catalog/option-groups')) {
+        return { ok: true, json: async () => [{ id: 'og-1659', code: 'G', name: 'Grupo', kind: 'agregado', required: false, option_ids: [], version: 3 }] } as Response;
+      }
+      return catalogOk(input);
+    });
+    const repo = new APIWorkspaceRepository('http://test/api', {
+      getAccessToken: () => 'memory-token',
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+    expect(repo.knownEntityVersion('option-groups', 'og-1659')).toBeUndefined();
+    await repo.getCatalog();
+    expect(repo.knownEntityVersion('option-groups', 'og-1659')).toBe(3);
+    expect(repo.knownEntityVersion('option-groups', 'otro')).toBeUndefined();
+  });
+
   it('uploadProjectPhoto usa la misma dependencia de memoria (multipart sin storage)', async () => {
     const storage = memoryStorage({ granete_token: 'FAKE-STORAGE-TOKEN' });
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });

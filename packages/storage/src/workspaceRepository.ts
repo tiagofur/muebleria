@@ -321,6 +321,12 @@ export interface WorkspaceRepository {
     status: CommercialStatus,
     idempotencyKey: string,
   ): Promise<{ commercialStatus: CommercialStatus; event: ProjectEvent }>;
+  /**
+   * #1659: version this session last confirmed with the server for a catalog
+   * entity (the If-Match cache the guarded upserts refresh after every
+   * accepted write). Undefined when the session never learned it.
+   */
+  knownEntityVersion?(family: string, id: string): number | undefined;
   /** #1648 — committed delivery date (server-authored; API adapter only). */
   commitProjectDeliveryDate?(
     projectId: string,

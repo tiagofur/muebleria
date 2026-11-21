@@ -780,6 +780,11 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     return `${family}:${id}`;
   }
 
+  /** #1659: last server-confirmed version of a catalog entity this session. */
+  knownEntityVersion(family: string, id: string): number | undefined {
+    return this.entityVersions.get(this.versionKey(family, id));
+  }
+
   private rememberEntityVersion(family: string, id: string, saved: { readonly version?: unknown }): void {
     const version = saved.version;
     if (typeof version === 'number' && version > 0) {

@@ -883,9 +883,11 @@ describe('catalogStore — modules', () => {
 
 describe('catalogStore — structures', () => {
   it('deleteStructure (auth) calls backend DELETE with token', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
-      new Response('{}', { status: 200 }),
-    );
+    // #1659: version probe (GET) then DELETE under If-Match.
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('{}', { status: 200, headers: { ETag: '"v1"' } }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }));
     const { deps } = makeDeps({
       getSession: () => 'auth',
       getAuthToken: () => 'jwt-xyz',
@@ -2540,5 +2542,140 @@ describe('#1511 — borrado de categorías y muebles: servidor primero bajo If-M
 
     expect(store.getState().catalog!.modules.some((m) => m.id === target.id)).toBe(false);
     expect(onDeleted).toHaveBeenCalledWith(target.id);
+  });
+});
+
+describe('#1659 — estructuras/agregados servidor primero y grupo de opciones sin falso 412', () => {
+  function authStore(fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>, extra: Partial<CatalogStoreDeps> = {}) {
+    const made = makeDeps({
+      getSession: () => 'auth',
+      getAuthToken: () => 'jwt-xyz',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      ...extra,
+    });
+    useWorkspaceStore.setState({ session: 'auth' });
+    return { store: createCatalogStore({ deps: made.deps }), ...made };
+  }
+  const probeThen = (deleteRes: Response) =>
+    vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('{}', { status: 200, headers: { ETag: '"v4"' } }))
+      .mockResolvedValueOnce(deleteRes);
+
+  for (const kind of ['structure', 'agregado'] as const) {
+    const listKey = kind === 'structure' ? 'structures' : 'agregados';
+    const path = kind === 'structure' ? 'structures' : 'agregados';
+    const run = (store: ReturnType<typeof createCatalogStore>, id: string) =>
+      kind === 'structure' ? store.getState().deleteStructure(id) : store.getState().deleteAgregado(id);
+    const seed = (store: ReturnType<typeof createCatalogStore>): string => {
+      const cat = seedCatalog();
+      const list = (cat[listKey] ?? []) as ReadonlyArray<{ id: string }>;
+      const item = list[0] ?? ({ id: `${kind}-1659` } as { id: string });
+      const next = { ...cat, [listKey]: list.length ? list : [item] } as unknown as Catalog;
+      store.getState().setCatalog(next);
+      return item.id;
+    };
+
+    it(`${kind}: un DELETE rechazado deja el elemento en pantalla, sin guardar ni avisar éxito`, async () => {
+      const fetchImpl = probeThen(new Response('{"message":"en uso"}', { status: 409 }));
+      const { store, saved, toasts } = authStore(fetchImpl);
+      const id = seed(store);
+
+      await run(store, id);
+
+      const list = (store.getState().catalog as unknown as Record<string, ReadonlyArray<{ id: string }>>)[listKey] ?? [];
+      expect(list.some((x) => x.id === id)).toBe(true);
+      expect(saved).toHaveLength(0);
+      expect(toasts.at(-1)?.type).toBe('error');
+    });
+
+    it(`${kind}: borrado correcto con If-Match y recién después se quita`, async () => {
+      const fetchImpl = probeThen(new Response(null, { status: 204 }));
+      const { store } = authStore(fetchImpl);
+      const id = seed(store);
+
+      await run(store, id);
+
+      expect(fetchImpl).toHaveBeenNthCalledWith(
+        2,
+        `http://test/api/catalog/${path}/${id}`,
+        expect.objectContaining({ method: 'DELETE', headers: expect.objectContaining({ 'If-Match': '"v4"' }) }),
+      );
+      const list = (store.getState().catalog as unknown as Record<string, ReadonlyArray<{ id: string }>>)[listKey] ?? [];
+      expect(list.some((x) => x.id === id)).toBe(false);
+    });
+  }
+
+  it('grupo de opciones: usa la versión confirmada por el servidor (caché del repositorio), no la del dominio', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const known = new Map<string, number>();
+    const { store } = authStore(fetchImpl, { getKnownEntityVersion: (family, id) => known.get(`${family}:${id}`) });
+    const cat = seedCatalog();
+    const group = { ...cat.optionGroups[0]!, version: 1 };
+    store.getState().setCatalog({ ...cat, optionGroups: [group, ...cat.optionGroups.slice(1)] });
+    // An edit in this session was saved: the repository now knows v2; the
+    // domain copy still says v1.
+    known.set(`option-groups:${group.id}`, 2);
+
+    await store.getState().deleteOptionGroup(group.id);
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://test/api/catalog/option-groups/${group.id}`,
+      expect.objectContaining({ method: 'DELETE', headers: expect.objectContaining({ 'If-Match': '"v2"' }) }),
+    );
+    expect(store.getState().catalog!.optionGroups.some((g) => g.id === group.id)).toBe(false);
+  });
+
+  it('grupo de opciones: la versión se lee DESPUÉS de que aterrice el guardado encolado', async () => {
+    let releaseSave!: () => void;
+    const saveGate = new Promise<void>((r) => { releaseSave = r; });
+    const known = new Map<string, number>();
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+    const cat = seedCatalog();
+    const group = { ...cat.optionGroups[0]!, version: 1 };
+    known.set(`option-groups:${group.id}`, 1);
+    const { store } = authStore(fetchImpl, {
+      getKnownEntityVersion: (family, id) => known.get(`${family}:${id}`),
+      saveCatalog: async () => {
+        await saveGate;
+        known.set(`option-groups:${group.id}`, 2); // the save bumped it
+      },
+    });
+    store.getState().setCatalog({ ...cat, optionGroups: [group, ...cat.optionGroups.slice(1)] });
+
+    void store.getState().updateOptionGroup(group.id, {
+      code: group.code,
+      name: `${group.name} editado`,
+      kind: group.kind,
+      required: group.required,
+      optionIds: [...group.optionIds],
+      kitHardwareId: group.kitHardwareId ?? '',
+    });
+    const deleting = store.getState().deleteOptionGroup(group.id);
+    await Promise.resolve();
+    expect(fetchImpl).not.toHaveBeenCalled();
+    releaseSave();
+    await deleting;
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://test/api/catalog/option-groups/${group.id}`,
+      expect.objectContaining({ method: 'DELETE', headers: expect.objectContaining({ 'If-Match': '"v2"' }) }),
+    );
+  });
+
+  it('grupo de opciones: un cambio de OTRA sesión sigue dando 412 y el grupo queda', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response('{"message":"stale"}', { status: 412 }));
+    const { store, toasts } = authStore(fetchImpl, { getKnownEntityVersion: () => 2 });
+    const cat = seedCatalog();
+    const group = { ...cat.optionGroups[0]!, version: 2 };
+    store.getState().setCatalog({ ...cat, optionGroups: [group, ...cat.optionGroups.slice(1)] });
+
+    await store.getState().deleteOptionGroup(group.id);
+
+    expect(store.getState().catalog!.optionGroups.some((g) => g.id === group.id)).toBe(true);
+    expect(toasts.at(-1)).toMatchObject({
+      type: 'error',
+      message: 'El elemento cambió en el servidor. Recargá la página antes de eliminarlo.',
+    });
   });
 });
