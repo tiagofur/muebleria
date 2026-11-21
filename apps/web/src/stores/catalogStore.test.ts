@@ -2663,6 +2663,45 @@ describe('#1659 — estructuras/agregados servidor primero y grupo de opciones s
     );
   });
 
+  it('grupo de opciones: si la sesión no conoce la versión (invalidada), consulta la vigente en vez de mandar la vieja del dominio', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('{}', { status: 200, headers: { ETag: '"v5"' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const { store } = authStore(fetchImpl, { getKnownEntityVersion: () => undefined });
+    const cat = seedCatalog();
+    const group = { ...cat.optionGroups[0]!, version: 1 };
+    store.getState().setCatalog({ ...cat, optionGroups: [group, ...cat.optionGroups.slice(1)] });
+
+    await store.getState().deleteOptionGroup(group.id);
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, `http://test/api/catalog/option-groups/${group.id}`, expect.objectContaining({ method: 'GET' }));
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      `http://test/api/catalog/option-groups/${group.id}`,
+      expect.objectContaining({ method: 'DELETE', headers: expect.objectContaining({ 'If-Match': '"v5"' }) }),
+    );
+  });
+
+  it('el rechazo por estar en uso (409) lo dice, sin prometer que «reaparece»', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('{}', { status: 200, headers: { ETag: '"v4"' } }))
+      .mockResolvedValueOnce(new Response('{"message":"agregado in use"}', { status: 409 }));
+    const { store, toasts } = authStore(fetchImpl);
+    const cat = seedCatalog();
+    const id = (cat.agregados ?? [])[0]?.id ?? 'agr-1659';
+    if (!(cat.agregados ?? []).length) store.getState().setCatalog({ ...cat, agregados: [{ id } as never] });
+    else store.getState().setCatalog(cat);
+
+    await store.getState().deleteAgregado(id);
+
+    expect(toasts.at(-1)).toMatchObject({
+      type: 'error',
+      message: 'No se puede eliminar: está en uso. Quitalo de donde se usa y probá de nuevo.',
+    });
+  });
+
   it('grupo de opciones: un cambio de OTRA sesión sigue dando 412 y el grupo queda', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response('{"message":"stale"}', { status: 412 }));
     const { store, toasts } = authStore(fetchImpl, { getKnownEntityVersion: () => 2 });

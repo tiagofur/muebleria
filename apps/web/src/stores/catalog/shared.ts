@@ -761,10 +761,14 @@ export function makeCatalogStoreCtx(
         console.error(`Error deleting ${path}: ${res.status} ${text}`);
         toast({
           type: 'error',
+          // #1659: deletes go to the server first, so a refusal never removes
+          // anything — the copy must not promise it «may reappear».
           message:
             res.status === 412
               ? 'El elemento cambió en el servidor. Recargá la página antes de eliminarlo.'
-              : 'Error al eliminar en el servidor (puede reaparecer al recargar)',
+              : res.status === 409
+                ? 'No se puede eliminar: está en uso. Quitalo de donde se usa y probá de nuevo.'
+                : 'No se pudo eliminar en el servidor; no se borró nada. Probá de nuevo.',
         });
         return false;
       }

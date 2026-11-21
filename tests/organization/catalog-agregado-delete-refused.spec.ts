@@ -92,6 +92,8 @@ test('#1659 agregado: borrado correcto con If-Match y, si el servidor lo rechaza
   }
   const refused = await deleteFromUi('Agregado 1659 en uso', AGR_REFUSED);
   expect(refused.ok(), `server must refuse: ${refused.status()}`).toBe(false);
+  expect(refused.status()).toBe(409);
+  await expect(page.getByText('No se puede eliminar: está en uso.', { exact: false })).toBeVisible();
   await expect(page.getByText('Agregado 1659 en uso').first()).toBeVisible();
   await expect(page.getByText('Agregado eliminado')).toHaveCount(0);
   expect((await api(`/catalog/agregados/${AGR_REFUSED}`)).status).toBe(200);
