@@ -55,6 +55,11 @@ type CatalogStore interface {
 	RefreshProjectGrip(ctx context.Context, projectID string, includeOverrides bool, expectedVersion int64, meta storage.ProjectGripWriteMeta) error
 	GetFurnitureEffectiveGrip(ctx context.Context, projectID, furnitureInstanceID string) (*domain.GripSnapshot, error)
 	ListFurnitureInstanceSummariesByProject(ctx context.Context, projectID string, withPresentation bool) ([]storage.FurnitureInstanceSummary, error)
+	// ProjectGripLineageChoices (#1680): the design-lineage statements a
+	// resolve outside the commercial truth composes from — working-item
+	// overrides + design authoring defaults per instance, plus the
+	// project-wide option defaults.
+	ProjectGripLineageChoices(ctx context.Context, projectID string) (map[string]storage.GripLineageChoices, map[string]string, error)
 	CreateGripStyle(ctx context.Context, style *domain.GripStyle, meta storage.GripStyleWriteMeta) error
 	UpdateGripStyle(ctx context.Context, id string, expectedVersion int64, style *domain.GripStyle, meta storage.GripStyleWriteMeta) error
 	DeleteGripStyle(ctx context.Context, id string, expectedVersion int64, meta storage.GripStyleWriteMeta) error

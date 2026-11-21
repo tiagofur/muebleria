@@ -11,6 +11,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
@@ -302,6 +303,14 @@ func (s *Server) projectGripReport(r *http.Request, projectID string, grip *stor
 	if err != nil {
 		return nil
 	}
+	// #1680: the design-lineage statements compose the choices of a furniture
+	// the commercial truth does not cover yet (no quote line, no frozen
+	// snapshot). A read error degrades to the pre-#1680 behavior — those
+	// units keep reporting their honest blocked state, never a guessed map.
+	lineage, levelChoices, lineageErr := s.Store.ProjectGripLineageChoices(r.Context(), projectID)
+	if lineageErr != nil {
+		lineage, levelChoices = nil, nil
+	}
 	report := &projectGripReportPayload{Items: make([]projectGripReportItem, 0, len(summaries))}
 	for _, summary := range summaries {
 		instance := summary.Instance
@@ -350,13 +359,21 @@ func (s *Server) projectGripReport(r *http.Request, projectID string, grip *stor
 			report.Items = append(report.Items, item)
 			continue
 		}
+		// #1680: the frozen/live quote truth wins untouched (#821); only a
+		// furniture the commercial truth does not cover composes its choices
+		// from the design lineage — the same statements the render and a new
+		// quote would resolve with, never an invented role.
+		choices := summary.DisplayMaterialChoices
+		if choices == nil {
+			choices = composeGripLineageChoices(*module, catalog, lineage[instance.ID], levelChoices)
+		}
 		resolution, stackErr := engine.OpeningFrontStackReport(*module, catalog, engine.LayoutDims{
 			WidthMm: summary.DisplayDims.WidthMm, HeightMm: summary.DisplayDims.HeightMm, DepthMm: summary.DisplayDims.DepthMm,
-		}, summary.DisplayMaterialChoices, grips)
+		}, choices, grips)
 		layout := &projectGripReportItemLayout{}
 		if stackErr != nil {
 			layout.State = "blocked"
-			layout.Reason = stackErr.Error()
+			layout.Reason = workshopBlockedReason(stackErr.Error())
 		} else if resolution == nil {
 			layout.State = "resolved"
 			layout.Rows = []engine.OpeningEdgeStackResolvedRow{}
@@ -386,4 +403,50 @@ func catalogModuleByID(catalog domain.Catalog, definitionID string) *domain.Modu
 		}
 	}
 	return nil
+}
+
+// composeGripLineageChoices (#1680) builds the choice map of a furniture the
+// commercial truth does not cover: working-item override ‖ design default ‖
+// project-level choice ‖ definition fallback — the exact composition the
+// render serves (override ‖ design default ‖ first curated option,
+// design_composition.go) with the quote's project-level seed (F029) layered
+// under the design defaults. Roles the definition does not consume carry no
+// statement; the engine's fail-closed semantics stay untouched.
+func composeGripLineageChoices(module domain.Module, catalog domain.Catalog, lineage storage.GripLineageChoices, levelChoices map[string]string) map[string]string {
+	roleSpecs := definitionRoleSpecs(
+		buildMaterialRoles(module, catalog),
+		buildHardwareRoles(module, catalog),
+		buildAgregadoRoles(module, catalog),
+	)
+	mergedDefaults := make(map[string]string, len(levelChoices))
+	for code, choiceID := range levelChoices {
+		mergedDefaults[code] = choiceID
+	}
+	if lineage.Defaults.MaterialChoices != nil {
+		// A design default is more specific than the project-level seed: it
+		// wins for the roles it declares.
+		for code, choiceID := range lineage.Defaults.MaterialChoices {
+			mergedDefaults[code] = choiceID
+		}
+	}
+	defaults := domain.DesignAuthoringDefaults{}.Normalize()
+	defaults.MaterialChoices = mergedDefaults
+	overrides := lineage.Overrides
+	if overrides == nil {
+		overrides = map[string]string{}
+	}
+	return domain.ComposeEffectiveDefinitionMaterials(module.ID, roleSpecs, defaults, overrides).MaterialChoices
+}
+
+// placementDetailRe matches the engine's host-id detail of a role-placement
+// failure («(placement en <instance-id>)») — a wire identity the workshop
+// copy never shows.
+var placementDetailRe = regexp.MustCompile(`\s*\(placement en [^)]*\)`)
+
+// workshopBlockedReason (#1680) strips engine internals from a blocked stack
+// reason: the workshop copy names the missing group, never the placement's
+// wire id. The engine's own error keeps the full detail for logs and admin
+// surfaces — only the report's user-facing sentence is sanitized.
+func workshopBlockedReason(raw string) string {
+	return placementDetailRe.ReplaceAllString(raw, "")
 }

@@ -70,60 +70,8 @@ func (s *Server) HandleDesignEffectiveMaterials(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// 3. Convert the definition's consumable option roles to domain specs:
-	// board roles, hardware groups (#1153) and agregado groups (#1482). A kind=hardware
-	// or kind=agregado group is a choice of the same map (optionRole → concrete id);
-	// without them here the composition silently drops an insert's overrides/defaults and
-	// the resolve fails closed ("grupo sin elección").
-	roleSpecs := make([]domain.DefinitionRoleOptionSpec, 0, len(def.MaterialRoles)+len(def.HardwareRoles)+len(def.AgregadoRoles))
-	for _, mr := range def.MaterialRoles {
-		roleSpecs = append(roleSpecs, domain.DefinitionRoleOptionSpec{
-			Role:      mr.Role,
-			Label:     mr.Label,
-			OptionIDs: mr.OptionIDs,
-		})
-	}
-	for _, hr := range def.HardwareRoles {
-		roleSpecs = append(roleSpecs, domain.DefinitionRoleOptionSpec{
-			Role:      hr.Code,
-			Label:     hr.Name,
-			OptionIDs: hr.OptionIDs,
-		})
-	}
-	for _, ar := range def.AgregadoRoles {
-		roleSpecs = append(roleSpecs, domain.DefinitionRoleOptionSpec{
-			Role:      ar.Code,
-			Label:     ar.Name,
-			OptionIDs: ar.OptionIDs,
-		})
-	}
-	// #1555: the kit accessory groups (galería/boxcap/boxcover) of every
-	// agregado option are choices of the SAME map — without them here the
-	// composition silently drops the plugin's accessory override and the
-	// connected resolve never sees the choice (optional: lost quote line;
-	// required: accessory_choice_required despite the user's pick). They are
-	// ExplicitChoiceOnly: an override or a compatible Design default passes;
-	// without one no statement travels and the engine mounts the group's
-	// first active option (engine.effectiveAccessoryChoice). Deduped by
-	// code (the same group can surface under several agregado options).
-	seenAccessory := make(map[string]bool)
-	for _, ar := range def.AgregadoRoles {
-		for _, opt := range ar.Options {
-			for _, acc := range opt.AccessoryGroups {
-				code := strings.TrimSpace(acc.Code)
-				if code == "" || seenAccessory[code] {
-					continue
-				}
-				seenAccessory[code] = true
-				roleSpecs = append(roleSpecs, domain.DefinitionRoleOptionSpec{
-					Role:               code,
-					Label:              acc.Name,
-					OptionIDs:          acc.OptionIDs,
-					ExplicitChoiceOnly: true,
-				})
-			}
-		}
-	}
+	// 3. Convert the definition's consumable option roles to domain specs.
+	roleSpecs := definitionRoleSpecs(def.MaterialRoles, def.HardwareRoles, def.AgregadoRoles)
 
 	// 4. Pure composition rule in domain.
 	effective := domain.ComposeEffectiveDefinitionMaterials(
