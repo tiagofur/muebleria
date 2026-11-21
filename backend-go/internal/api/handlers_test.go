@@ -544,6 +544,13 @@ type stubStore struct {
 	// and the write the PUT captures.
 	designGripFacadeState *storage.DesignOpeningFacadeState
 	designGripFacadeApply *designGripFacadeApplyCapture
+
+	// #1680 — project grip report stubs: the stored grip the GET serves and
+	// the design-lineage choices the report composes from.
+	projectGrip          *storage.ProjectGrip
+	gripLineage          map[string]storage.GripLineageChoices
+	gripLevelChoices     map[string]string
+	gripLineageFn        func(context.Context, string) (map[string]storage.GripLineageChoices, map[string]string, error)
 }
 
 // designGripFacadeApplyCapture records one facade write (#1532).
