@@ -99,15 +99,24 @@ func TestQuoteValidity_FrozenAtPublish_ExpiredAcceptNeedsAcknowledgement(t *test
 
 	// Simulate the passage of time: the immutability trigger forbids moving
 	// valid_until, so this single fixture write runs with user triggers
-	// disabled (admin connection, disposable test database only).
-	if _, err := fx.admin.Exec(ctx, `ALTER TABLE quote_revisions DISABLE TRIGGER USER`); err != nil {
-		t.Fatalf("disable trigger: %v", err)
+	// disabled INSIDE one admin transaction (disposable test DB only): a
+	// failure rolls the ALTER back, never leaving the trigger off.
+	expireTx, err := fx.admin.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin expire fixture: %v", err)
 	}
-	if _, err := fx.admin.Exec(ctx, `UPDATE quote_revisions SET valid_until = (NOW() AT TIME ZONE 'America/Montevideo')::date - 1 WHERE id = $1`, revisionID); err != nil {
-		t.Fatalf("expire fixture: %v", err)
+	defer func() { _ = expireTx.Rollback(ctx) }()
+	for _, stmt := range []string{
+		`ALTER TABLE quote_revisions DISABLE TRIGGER USER`,
+		`UPDATE quote_revisions SET valid_until = (NOW() AT TIME ZONE 'America/Montevideo')::date - 1 WHERE id = '` + revisionID + `'`,
+		`ALTER TABLE quote_revisions ENABLE TRIGGER USER`,
+	} {
+		if _, err := expireTx.Exec(ctx, stmt); err != nil {
+			t.Fatalf("expire fixture %q: %v", stmt, err)
+		}
 	}
-	if _, err := fx.admin.Exec(ctx, `ALTER TABLE quote_revisions ENABLE TRIGGER USER`); err != nil {
-		t.Fatalf("enable trigger: %v", err)
+	if err := expireTx.Commit(ctx); err != nil {
+		t.Fatalf("commit expire fixture: %v", err)
 	}
 
 	accept := func(ack bool) (*storage.AcceptQuoteRevisionResult, error) {

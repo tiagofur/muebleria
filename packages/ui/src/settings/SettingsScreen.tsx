@@ -372,7 +372,8 @@ export function SettingsScreen({
                   ))}
                 </select>
                 <span className="settings-hint">
-                  Define qué día es «hoy» para la vigencia de las cotizaciones.
+                  Define qué día es «hoy» para la vigencia de las cotizaciones. Si la cambiás, las
+                  cotizaciones ya publicadas pueden vencer un día antes o después.
                 </span>
               </div>
             </fieldset>

@@ -221,6 +221,9 @@ se mantiene abierto para corregirlo sin perder tus cambios.
      usuario.
    - Las cotizaciones publicadas antes de esta función figuran «Sin vigencia
      registrada» y se aceptan como siempre.
+   - Si cambiás la zona horaria del taller, las cotizaciones ya publicadas
+     pueden vencer un día antes o después (la fecha «válida hasta» no cambia;
+     cambia qué día es «hoy»).
 
 ## 7. Proyectar — el ambiente en 3D
 
