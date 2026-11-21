@@ -66,9 +66,20 @@ export function createOptionGroupsActions(ctx: CatalogStoreCtx): OptionGroupsSli
     deleteOptionGroup: async (id) => {
       // #1606: hardDeleteOnAuth first under If-Match — if backend fails (e.g. 428/412/500/network),
       // the group is NOT removed from local state (never disappears "sólo en pantalla").
-      const group = ctx.get().catalog?.optionGroups.find((g) => g.id === id);
+      // #1659: the version this session last confirmed with the server (the
+      // repository cache refreshed after every save), read after queued saves
+      // land — the domain copy is never refreshed, so an edit-then-delete in
+      // the same session no longer answers a false 412. A change made by
+      // another session still does.
+      // When the session does not know it (e.g. the #1626 invalidation after
+      // adding a height to this group), resolve undefined so hardDeleteOnAuth
+      // probes the current version — never the stale domain copy. Without the
+      // repository dependency (other adapters) the domain version is kept.
       const ok = await ctx.hardDeleteOnAuth(`/catalog/option-groups/${id}`, {
-        expectedVersion: group?.version,
+        expectedVersion: () =>
+          ctx.deps.getKnownEntityVersion
+            ? ctx.deps.getKnownEntityVersion('option-groups', id)
+            : ctx.get().catalog?.optionGroups.find((g) => g.id === id)?.version,
       });
       if (!ok) return;
       await ctx.patchSaved((c) => ({

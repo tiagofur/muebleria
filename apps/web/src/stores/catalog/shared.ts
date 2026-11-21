@@ -217,6 +217,12 @@ export interface CatalogStoreDeps {
   readonly getDraftProjectsCount: () => number;
   /** Fetch impl for catalog hard-delete (structures, option groups, modules, categories). */
   readonly fetchImpl?: typeof fetch;
+  /**
+   * #1659: last server-confirmed version of a catalog entity (repository
+   * If-Match cache). The domain copy of `version` is not refreshed after a
+   * save, so deletes that pin a version read it from here.
+   */
+  readonly getKnownEntityVersion?: (family: string, id: string) => number | undefined;
   /** Base URL of the backend API. */
   readonly baseUrl: string;
   /** #1369: dry-run de cambio de receta de un agregado (backend dry-run, sin mutar). */
@@ -464,7 +470,7 @@ export interface CatalogStoreCtx {
    */
   hardDeleteOnAuth(
     path: string,
-    options?: { expectedVersion?: number },
+    options?: { expectedVersion?: number | (() => number | undefined) },
   ): Promise<boolean>;
 
   /**
@@ -683,7 +689,7 @@ export function makeCatalogStoreCtx(
 
   async function hardDeleteOnAuth(
     path: string,
-    options?: { expectedVersion?: number },
+    options?: { expectedVersion?: number | (() => number | undefined) },
   ): Promise<boolean> {
     if (getSession() !== 'auth') return true;
     const token = getAuthToken();
@@ -701,8 +707,14 @@ export function makeCatalogStoreCtx(
     if (!contextStillValid()) return false;
     try {
       let ifMatch: string | null = null;
-      if (typeof options?.expectedVersion === 'number' && options.expectedVersion > 0) {
-        ifMatch = `"v${options.expectedVersion}"`;
+      // #1659: a function is resolved AFTER the save-queue wait, so a save of
+      // this same entity that landed first contributes its fresh version.
+      const expectedVersion =
+        typeof options?.expectedVersion === 'function'
+          ? options.expectedVersion()
+          : options?.expectedVersion;
+      if (typeof expectedVersion === 'number' && expectedVersion > 0) {
+        ifMatch = `"v${expectedVersion}"`;
       } else {
         // #1606: The backend requires `If-Match: "v<version>"` for catalog DELETE endpoints (#1091).
         // Probe GET to learn the current ETag/version (or detect 404 if already deleted).
@@ -749,10 +761,14 @@ export function makeCatalogStoreCtx(
         console.error(`Error deleting ${path}: ${res.status} ${text}`);
         toast({
           type: 'error',
+          // #1659: deletes go to the server first, so a refusal never removes
+          // anything — the copy must not promise it «may reappear».
           message:
             res.status === 412
               ? 'El elemento cambió en el servidor. Recargá la página antes de eliminarlo.'
-              : 'Error al eliminar en el servidor (puede reaparecer al recargar)',
+              : res.status === 409
+                ? 'No se puede eliminar: está en uso. Quitalo de donde se usa y probá de nuevo.'
+                : 'No se pudo eliminar en el servidor; no se borró nada. Probá de nuevo.',
         });
         return false;
       }
