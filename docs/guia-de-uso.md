@@ -86,8 +86,9 @@ puede reactivar (filtro «Inactivos»). **Eliminar** (ícono de papelera, al
 final de la fila) lo borra del catálogo para siempre — sirve para limpiar
 herrajes viejos que ya no se usan, incluso desactivados:
 - Sólo se elimina si **no está en uso**: muebles plantilla, obras/cotizaciones,
-  diseños, ubicaciones en componentes, agregados o perfiles de herraje. Si lo
-  está, el sistema lo rechaza y dice dónde.
+  diseños, ubicaciones en componentes, agregados, perfiles de herraje, perfiles
+  de apertura (gola), estilos de agarre o el agarre ya aplicado a una obra. Si
+  lo está, el sistema lo rechaza y dice dónde. Lo mismo vale para Desactivar.
 - Si pertenece a **grupos de opciones**, se lo quita de ellos automáticamente.
 - Si es un **juego** con partes de diseño vinculadas, el diálogo ofrece
   «Eliminar también sus partes»; si alguna parte está en uso, no se borra nada.

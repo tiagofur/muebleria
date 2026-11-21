@@ -126,6 +126,21 @@ func TestHardwareDelete_GuardsCascadeAndMemberships(t *testing.T) {
 		org, "Estilo "+suffix, fmt.Sprintf(`{"inferior":{"kind":"handle","handleHardwareId":"%s"},"superior":{"kind":"none"},"alto":{"kind":"none"}}`, hwHandle.ID))
 	expectInUse(hwHandle, "estilo de agarre")
 
+	// 5d. Frozen grip snapshots of a project and of a furniture instance
+	// (review round 2): the quote prices the gola demand from these copies.
+	customerID := uuid.NewString()
+	exec(`INSERT INTO customers (id, organization_id, name, active) VALUES ($1, $2, 'Cliente grip', true)`, customerID, org)
+	hwProjectGrip := create("ZZ-HWDEL-PGRIP", nil)
+	projectID := uuid.NewString()
+	exec(`INSERT INTO projects (id, organization_id, name, customer_id, currency, margin_factor, labor_fixed_cost, status, grip_snapshot)
+		VALUES ($1, $2, 'Obra grip', $3, 'MXN', 1.35, 0, 'draft', $4::jsonb)`,
+		projectID, org, customerID, fmt.Sprintf(`{"byFurnitureType":{"inferior":{"bomMembers":{"profile":{"hardwareId":"%s"}}}}}`, hwProjectGrip.ID))
+	expectInUse(hwProjectGrip, "agarre congelado de obra")
+	hwInstanceGrip := create("ZZ-HWDEL-IGRIP", nil)
+	exec(`INSERT INTO furniture_instances (organization_id, project_id, origin, grip_snapshot) VALUES ($1, $2, 'manual', $3::jsonb)`,
+		org, projectID, fmt.Sprintf(`{"bomMembers":{"supports":{"hardwareId":"%s"}}}`, hwInstanceGrip.ID))
+	expectInUse(hwInstanceGrip, "agarre congelado de obra")
+
 	// 5c. An UPPERCASE id must hit the same guard (review B1): uuid::text is
 	// lowercase, so an uncanonicalized id would count zero references.
 	upper := *hwAgregadoLine

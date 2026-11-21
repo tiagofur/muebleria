@@ -32,11 +32,15 @@ type HardwareUsage struct {
 	// hardware — quotes price that demand against the live catalog.
 	OpeningProfiles int64
 	GripStyles      int64
+	// ProjectGrips (#1615 review round 2): the frozen grip snapshot of a
+	// project or of one of its furniture instances (000182) — the quote
+	// prices the gola BOM demand from THAT copy, not from the live profile.
+	ProjectGrips int64
 }
 
 // Total is the number of references across every family.
 func (u HardwareUsage) Total() int64 {
-	return u.TemplateLines + u.QuoteChoices + u.DesignAssets + u.ComponentPlacements + u.Agregados + u.HardwareProfiles + u.OpeningProfiles + u.GripStyles
+	return u.TemplateLines + u.QuoteChoices + u.DesignAssets + u.ComponentPlacements + u.Agregados + u.HardwareProfiles + u.OpeningProfiles + u.GripStyles + u.ProjectGrips
 }
 
 // Describe renders the non-zero families in Spanish.
@@ -57,6 +61,7 @@ func (u HardwareUsage) Describe() string {
 	add(u.HardwareProfiles, "perfil de herraje", "perfiles de herraje")
 	add(u.OpeningProfiles, "perfil de apertura (gola)", "perfiles de apertura (gola)")
 	add(u.GripStyles, "estilo de agarre", "estilos de agarre")
+	add(u.ProjectGrips, "agarre congelado de obra", "agarres congelados de obras")
 	return strings.Join(parts, ", ")
 }
 
@@ -164,9 +169,14 @@ func (s *PostgresStore) HardwareUsageOf(ctx context.Context, id string) (Hardwar
 			(SELECT COUNT(*) FROM opening_profiles op
 			 WHERE op.organization_id = $2 AND op.bom_members::text LIKE '%' || $1 || '%'),
 			(SELECT COUNT(*) FROM grip_styles gs
-			 WHERE gs.organization_id = $2 AND gs.by_furniture_type::text LIKE '%' || $1 || '%')`,
+			 WHERE gs.organization_id = $2 AND gs.by_furniture_type::text LIKE '%' || $1 || '%'),
+			(SELECT COUNT(*) FROM projects p
+			 WHERE p.organization_id = $2 AND COALESCE(p.grip_snapshot::text, '') LIKE '%' || $1 || '%')
+			+ (SELECT COUNT(*) FROM furniture_instances fi
+			 JOIN projects p ON p.id = fi.project_id
+			 WHERE p.organization_id = $2 AND COALESCE(fi.grip_snapshot::text, '') LIKE '%' || $1 || '%')`,
 		id, org,
-	).Scan(&u.TemplateLines, &u.QuoteChoices, &u.DesignAssets, &u.ComponentPlacements, &u.Agregados, &u.HardwareProfiles, &u.OpeningProfiles, &u.GripStyles)
+	).Scan(&u.TemplateLines, &u.QuoteChoices, &u.DesignAssets, &u.ComponentPlacements, &u.Agregados, &u.HardwareProfiles, &u.OpeningProfiles, &u.GripStyles, &u.ProjectGrips)
 	return u, err
 }
 
