@@ -23,6 +23,8 @@ type QuoteReleaseStore interface {
 	// #394 / DT-10: explicit re-quote — creates the next draft QuoteRevision
 	// from an exact base quote revision and an exact design revision.
 	RequoteProjectQuote(ctx context.Context, cmd storage.RequoteProjectQuoteCommand) (*storage.RequoteProjectQuoteResult, error)
+	// #1662: price-only requote (preview with DryRun, or create the draft).
+	PriceRefreshQuoteRevision(ctx context.Context, cmd storage.PriceRefreshQuoteCommand) (*storage.PriceRefreshQuoteResult, error)
 	// #571 / WEB-DT-4: commercial QuoteRevision lifecycle — the canonical Q1
 	// entry snapshotting the project's editable commercial state, the explicit
 	// draft→published transition and the atomic published→accepted transition

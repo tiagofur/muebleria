@@ -161,6 +161,10 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 	if sourceDesignRevisionID != "" && !isValidUUID(sourceDesignRevisionID) {
 		return nil, domain.ErrInvalidRevisionID
 	}
+	if sourceType == "price_refresh" && cmd.BaseRevisionID == "" {
+		// #1662: a price-only requote always re-prices an exact base.
+		return nil, fmt.Errorf("%w: price_refresh revisions require baseQuoteRevisionId", domain.ErrInvalidRevisionSnapshot)
+	}
 	if sourceType == "requote" {
 		// A requote without exact provenance would break the commercial
 		// traceability contract (#394 §36) — fail closed.

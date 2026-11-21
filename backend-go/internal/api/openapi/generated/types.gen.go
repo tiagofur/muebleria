@@ -231,65 +231,67 @@ type SetProjectCommercialStatusResponse struct {
 type ApiErrorCode string
 
 const (
-	ApiErrorCodeBadRequest                     ApiErrorCode = "BAD_REQUEST"
-	ApiErrorCodeUnauthorized                   ApiErrorCode = "UNAUTHORIZED"
-	ApiErrorCodeForbidden                      ApiErrorCode = "FORBIDDEN"
-	ApiErrorCodeNotFound                       ApiErrorCode = "NOT_FOUND"
-	ApiErrorCodeMethodNotAllowed               ApiErrorCode = "METHOD_NOT_ALLOWED"
-	ApiErrorCodeVersionConflict                ApiErrorCode = "VERSION_CONFLICT"
-	ApiErrorCodeConflict                       ApiErrorCode = "CONFLICT"
-	ApiErrorCodeInternalError                  ApiErrorCode = "INTERNAL_ERROR"
-	ApiErrorCodePreconditionRequired           ApiErrorCode = "PRECONDITION_REQUIRED"
-	ApiErrorCodeMembershipNotFound             ApiErrorCode = "MEMBERSHIP_NOT_FOUND"
-	ApiErrorCodeMembershipNotSelectable        ApiErrorCode = "MEMBERSHIP_NOT_SELECTABLE"
-	ApiErrorCodeMembershipVersionConflict      ApiErrorCode = "MEMBERSHIP_VERSION_CONFLICT"
-	ApiErrorCodeRoleNotAllowed                 ApiErrorCode = "ROLE_NOT_ALLOWED"
-	ApiErrorCodeLastAdmin                      ApiErrorCode = "LAST_ADMIN"
-	ApiErrorCodeSeatLimitReached               ApiErrorCode = "SEAT_LIMIT_REACHED"
-	ApiErrorCodeInvitationExpired              ApiErrorCode = "INVITATION_EXPIRED"
-	ApiErrorCodeInvitationAlreadyUsed          ApiErrorCode = "INVITATION_ALREADY_USED"
-	ApiErrorCodeOrganizationProvisioning       ApiErrorCode = "ORGANIZATION_PROVISIONING"
-	ApiErrorCodeRelationshipNotActive          ApiErrorCode = "RELATIONSHIP_NOT_ACTIVE"
-	ApiErrorCodeFactoryNotAuthorized           ApiErrorCode = "FACTORY_NOT_AUTHORIZED"
-	ApiErrorCodeCatalogVersionUnavailable      ApiErrorCode = "CATALOG_VERSION_UNAVAILABLE"
-	ApiErrorCodeIdempotencyConflict            ApiErrorCode = "IDEMPOTENCY_CONFLICT"
-	ApiErrorCodeInvitationNotFound             ApiErrorCode = "INVITATION_NOT_FOUND"
-	ApiErrorCodeInvitationRevoked              ApiErrorCode = "INVITATION_REVOKED"
-	ApiErrorCodeInvitationTokenRotated         ApiErrorCode = "INVITATION_TOKEN_ROTATED"
-	ApiErrorCodeAccountDisabled                ApiErrorCode = "ACCOUNT_DISABLED"
-	ApiErrorCodeMembershipAlreadyActive        ApiErrorCode = "MEMBERSHIP_ALREADY_ACTIVE"
-	ApiErrorCodeAccountNotFound                ApiErrorCode = "ACCOUNT_NOT_FOUND"
-	ApiErrorCodeOffboardingBlocked             ApiErrorCode = "OFFBOARDING_BLOCKED"
-	ApiErrorCodeReassignmentRequired           ApiErrorCode = "REASSIGNMENT_REQUIRED"
-	ApiErrorCodeSectorNotAllowed               ApiErrorCode = "SECTOR_NOT_ALLOWED"
-	ApiErrorCodeAdminTransferInvalid           ApiErrorCode = "ADMIN_TRANSFER_INVALID"
-	ApiErrorCodeImpactVersionConflict          ApiErrorCode = "IMPACT_VERSION_CONFLICT"
-	ApiErrorCodeOrganizationStatusConflict     ApiErrorCode = "ORGANIZATION_STATUS_CONFLICT"
-	ApiErrorCodeOrganizationNotReady           ApiErrorCode = "ORGANIZATION_NOT_READY"
-	ApiErrorCodeOrganizationOffboardingBlocked ApiErrorCode = "ORGANIZATION_OFFBOARDING_BLOCKED"
-	ApiErrorCodeOrganizationSlugConflict       ApiErrorCode = "ORGANIZATION_SLUG_CONFLICT"
-	ApiErrorCodeOrganizationRecoveryOnly       ApiErrorCode = "ORGANIZATION_RECOVERY_ONLY"
-	ApiErrorCodePasswordResetTokenInvalid      ApiErrorCode = "PASSWORD_RESET_TOKEN_INVALID"
-	ApiErrorCodeSessionRevoked                 ApiErrorCode = "SESSION_REVOKED"
-	ApiErrorCodeTokenTypeMismatch              ApiErrorCode = "TOKEN_TYPE_MISMATCH"
-	ApiErrorCodeQuoteExpired                   ApiErrorCode = "QUOTE_EXPIRED"
-	ApiErrorCodeRefreshInvalid                 ApiErrorCode = "REFRESH_INVALID"
-	ApiErrorCodeRefreshExpired                 ApiErrorCode = "REFRESH_EXPIRED"
-	ApiErrorCodeRefreshRevoked                 ApiErrorCode = "REFRESH_REVOKED"
-	ApiErrorCodeRefreshReused                  ApiErrorCode = "REFRESH_REUSED"
-	ApiErrorCodeSessionNotFound                ApiErrorCode = "SESSION_NOT_FOUND"
-	ApiErrorCodeMediaAccessExpired             ApiErrorCode = "MEDIA_ACCESS_EXPIRED"
-	ApiErrorCodeMediaAccessInvalid             ApiErrorCode = "MEDIA_ACCESS_INVALID"
-	ApiErrorCodeArtifactMissing                ApiErrorCode = "ARTIFACT_MISSING"
-	ApiErrorCodeArtifactIntegrityMismatch      ApiErrorCode = "ARTIFACT_INTEGRITY_MISMATCH"
-	ApiErrorCodeStepUpRequired                 ApiErrorCode = "STEP_UP_REQUIRED"
-	ApiErrorCodeStepUpExpired                  ApiErrorCode = "STEP_UP_EXPIRED"
-	ApiErrorCodeMfaRequired                    ApiErrorCode = "MFA_REQUIRED"
-	ApiErrorCodeMfaInvalid                     ApiErrorCode = "MFA_INVALID"
-	ApiErrorCodeMfaEnrollmentExpired           ApiErrorCode = "MFA_ENROLLMENT_EXPIRED"
-	ApiErrorCodeMfaFactorNotFound              ApiErrorCode = "MFA_FACTOR_NOT_FOUND"
-	ApiErrorCodeMfaRecoveryInvalid             ApiErrorCode = "MFA_RECOVERY_INVALID"
-	ApiErrorCodeHardwareCategoryInvalid        ApiErrorCode = "HARDWARE_CATEGORY_INVALID"
+	ApiErrorCodeBadRequest                       ApiErrorCode = "BAD_REQUEST"
+	ApiErrorCodeUnauthorized                     ApiErrorCode = "UNAUTHORIZED"
+	ApiErrorCodeForbidden                        ApiErrorCode = "FORBIDDEN"
+	ApiErrorCodeNotFound                         ApiErrorCode = "NOT_FOUND"
+	ApiErrorCodeMethodNotAllowed                 ApiErrorCode = "METHOD_NOT_ALLOWED"
+	ApiErrorCodeVersionConflict                  ApiErrorCode = "VERSION_CONFLICT"
+	ApiErrorCodeConflict                         ApiErrorCode = "CONFLICT"
+	ApiErrorCodeInternalError                    ApiErrorCode = "INTERNAL_ERROR"
+	ApiErrorCodePreconditionRequired             ApiErrorCode = "PRECONDITION_REQUIRED"
+	ApiErrorCodeMembershipNotFound               ApiErrorCode = "MEMBERSHIP_NOT_FOUND"
+	ApiErrorCodeMembershipNotSelectable          ApiErrorCode = "MEMBERSHIP_NOT_SELECTABLE"
+	ApiErrorCodeMembershipVersionConflict        ApiErrorCode = "MEMBERSHIP_VERSION_CONFLICT"
+	ApiErrorCodeRoleNotAllowed                   ApiErrorCode = "ROLE_NOT_ALLOWED"
+	ApiErrorCodeLastAdmin                        ApiErrorCode = "LAST_ADMIN"
+	ApiErrorCodeSeatLimitReached                 ApiErrorCode = "SEAT_LIMIT_REACHED"
+	ApiErrorCodeInvitationExpired                ApiErrorCode = "INVITATION_EXPIRED"
+	ApiErrorCodeInvitationAlreadyUsed            ApiErrorCode = "INVITATION_ALREADY_USED"
+	ApiErrorCodeOrganizationProvisioning         ApiErrorCode = "ORGANIZATION_PROVISIONING"
+	ApiErrorCodeRelationshipNotActive            ApiErrorCode = "RELATIONSHIP_NOT_ACTIVE"
+	ApiErrorCodeFactoryNotAuthorized             ApiErrorCode = "FACTORY_NOT_AUTHORIZED"
+	ApiErrorCodeCatalogVersionUnavailable        ApiErrorCode = "CATALOG_VERSION_UNAVAILABLE"
+	ApiErrorCodeIdempotencyConflict              ApiErrorCode = "IDEMPOTENCY_CONFLICT"
+	ApiErrorCodeInvitationNotFound               ApiErrorCode = "INVITATION_NOT_FOUND"
+	ApiErrorCodeInvitationRevoked                ApiErrorCode = "INVITATION_REVOKED"
+	ApiErrorCodeInvitationTokenRotated           ApiErrorCode = "INVITATION_TOKEN_ROTATED"
+	ApiErrorCodeAccountDisabled                  ApiErrorCode = "ACCOUNT_DISABLED"
+	ApiErrorCodeMembershipAlreadyActive          ApiErrorCode = "MEMBERSHIP_ALREADY_ACTIVE"
+	ApiErrorCodeAccountNotFound                  ApiErrorCode = "ACCOUNT_NOT_FOUND"
+	ApiErrorCodeOffboardingBlocked               ApiErrorCode = "OFFBOARDING_BLOCKED"
+	ApiErrorCodeReassignmentRequired             ApiErrorCode = "REASSIGNMENT_REQUIRED"
+	ApiErrorCodeSectorNotAllowed                 ApiErrorCode = "SECTOR_NOT_ALLOWED"
+	ApiErrorCodeAdminTransferInvalid             ApiErrorCode = "ADMIN_TRANSFER_INVALID"
+	ApiErrorCodeImpactVersionConflict            ApiErrorCode = "IMPACT_VERSION_CONFLICT"
+	ApiErrorCodeOrganizationStatusConflict       ApiErrorCode = "ORGANIZATION_STATUS_CONFLICT"
+	ApiErrorCodeOrganizationNotReady             ApiErrorCode = "ORGANIZATION_NOT_READY"
+	ApiErrorCodeOrganizationOffboardingBlocked   ApiErrorCode = "ORGANIZATION_OFFBOARDING_BLOCKED"
+	ApiErrorCodeOrganizationSlugConflict         ApiErrorCode = "ORGANIZATION_SLUG_CONFLICT"
+	ApiErrorCodeOrganizationRecoveryOnly         ApiErrorCode = "ORGANIZATION_RECOVERY_ONLY"
+	ApiErrorCodePasswordResetTokenInvalid        ApiErrorCode = "PASSWORD_RESET_TOKEN_INVALID"
+	ApiErrorCodeSessionRevoked                   ApiErrorCode = "SESSION_REVOKED"
+	ApiErrorCodeTokenTypeMismatch                ApiErrorCode = "TOKEN_TYPE_MISMATCH"
+	ApiErrorCodePriceRefreshNoChange             ApiErrorCode = "PRICE_REFRESH_NO_CHANGE"
+	ApiErrorCodePriceRefreshConfigurationChanged ApiErrorCode = "PRICE_REFRESH_CONFIGURATION_CHANGED"
+	ApiErrorCodeQuoteExpired                     ApiErrorCode = "QUOTE_EXPIRED"
+	ApiErrorCodeRefreshInvalid                   ApiErrorCode = "REFRESH_INVALID"
+	ApiErrorCodeRefreshExpired                   ApiErrorCode = "REFRESH_EXPIRED"
+	ApiErrorCodeRefreshRevoked                   ApiErrorCode = "REFRESH_REVOKED"
+	ApiErrorCodeRefreshReused                    ApiErrorCode = "REFRESH_REUSED"
+	ApiErrorCodeSessionNotFound                  ApiErrorCode = "SESSION_NOT_FOUND"
+	ApiErrorCodeMediaAccessExpired               ApiErrorCode = "MEDIA_ACCESS_EXPIRED"
+	ApiErrorCodeMediaAccessInvalid               ApiErrorCode = "MEDIA_ACCESS_INVALID"
+	ApiErrorCodeArtifactMissing                  ApiErrorCode = "ARTIFACT_MISSING"
+	ApiErrorCodeArtifactIntegrityMismatch        ApiErrorCode = "ARTIFACT_INTEGRITY_MISMATCH"
+	ApiErrorCodeStepUpRequired                   ApiErrorCode = "STEP_UP_REQUIRED"
+	ApiErrorCodeStepUpExpired                    ApiErrorCode = "STEP_UP_EXPIRED"
+	ApiErrorCodeMfaRequired                      ApiErrorCode = "MFA_REQUIRED"
+	ApiErrorCodeMfaInvalid                       ApiErrorCode = "MFA_INVALID"
+	ApiErrorCodeMfaEnrollmentExpired             ApiErrorCode = "MFA_ENROLLMENT_EXPIRED"
+	ApiErrorCodeMfaFactorNotFound                ApiErrorCode = "MFA_FACTOR_NOT_FOUND"
+	ApiErrorCodeMfaRecoveryInvalid               ApiErrorCode = "MFA_RECOVERY_INVALID"
+	ApiErrorCodeHardwareCategoryInvalid          ApiErrorCode = "HARDWARE_CATEGORY_INVALID"
 )
 
 type ApiError struct {
@@ -1979,10 +1981,11 @@ const (
 type QuoteRevisionSourceType string
 
 const (
-	QuoteRevisionSourceTypeManual   QuoteRevisionSourceType = "manual"
-	QuoteRevisionSourceTypeImported QuoteRevisionSourceType = "imported"
-	QuoteRevisionSourceTypeRequote  QuoteRevisionSourceType = "requote"
-	QuoteRevisionSourceTypeSystem   QuoteRevisionSourceType = "system"
+	QuoteRevisionSourceTypeManual       QuoteRevisionSourceType = "manual"
+	QuoteRevisionSourceTypeImported     QuoteRevisionSourceType = "imported"
+	QuoteRevisionSourceTypeRequote      QuoteRevisionSourceType = "requote"
+	QuoteRevisionSourceTypeSystem       QuoteRevisionSourceType = "system"
+	QuoteRevisionSourceTypePriceRefresh QuoteRevisionSourceType = "price_refresh"
 )
 
 type QuoteRevision struct {
@@ -2008,6 +2011,21 @@ type QuoteRevisionItem struct {
 	Parameters            map[string]any                   `json:"parameters"`
 	MaterialChoices       map[string]string                `json:"materialChoices"`
 	LifecycleStatus       FurnitureInstanceLifecycleStatus `json:"lifecycleStatus"`
+}
+
+type QuotePriceRefreshPreview struct {
+	BaseRevisionNumber int64   `json:"baseRevisionNumber"`
+	Currency           string  `json:"currency"`
+	PreviousSaleTotal  float64 `json:"previousSaleTotal"`
+	NewSaleTotal       float64 `json:"newSaleTotal"`
+	Changed            bool    `json:"changed"`
+}
+
+type QuotePriceRefreshResult struct {
+	QuoteRevision     QuoteRevision `json:"quoteRevision"`
+	Currency          string        `json:"currency"`
+	PreviousSaleTotal float64       `json:"previousSaleTotal"`
+	NewSaleTotal      float64       `json:"newSaleTotal"`
 }
 
 type AcceptQuoteRevisionRequest struct {

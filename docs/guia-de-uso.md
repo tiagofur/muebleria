@@ -215,10 +215,18 @@ se mantiene abierto para corregirlo sin perder tus cambios.
    Comercial**, junto con la **zona horaria del taller**, que define qué día es
    «hoy»). La fecha también sale en el PDF y el XLSX de la cotización.
    - Si la cotización **vence** antes de que el cliente la acepte, la pantalla
-     lo avisa. Se puede crear una nueva cotización cuando hay cambios para
-     incorporar, o **aceptarla igual**: el sistema pide marcar «Entiendo que
-     está vencida y la acepto igual» y deja esa confirmación registrada con tu
-     usuario.
+     lo avisa. Podés crear una **nueva cotización con precios actuales** (ver
+     abajo), una nueva con los cambios del diseño si los hay, o **aceptarla
+     igual**: el sistema pide marcar «Entiendo que está vencida y la acepto
+     igual» y deja esa confirmación registrada con tu usuario.
+   - **Actualizar precios (nueva revisión):** desde la última cotización
+     publicada o aceptada, el botón calcula primero —sin guardar nada— el total
+     actual y el total con los precios de hoy, con la diferencia. Al confirmar
+     se crea la revisión siguiente en **borrador**, con los mismos muebles y
+     configuración y los precios del catálogo vigente; la cotización anterior
+     no se modifica. Si los precios no cambiaron el total, no deja crear una
+     revisión vacía. Si cambió la configuración de aperturas/agarres de la
+     obra, pide re-cotizar desde el diseño.
    - Las cotizaciones publicadas antes de esta función figuran «Sin vigencia
      registrada» y se aceptan como siempre.
    - Si cambiás la zona horaria del taller, las cotizaciones ya publicadas

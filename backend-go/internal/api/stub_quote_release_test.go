@@ -363,3 +363,19 @@ func (s *stubStore) ResolveProjectReleaseAuthority(_ context.Context, _ string, 
 
 // --- #667 M1: hardware 3D asset stubs (no behavior; API tests use the real
 // PostgreSQL store for the asset flow) ---
+
+// #1662: price-only requote stub.
+func (s *stubStore) PriceRefreshQuoteRevision(_ context.Context, cmd storage.PriceRefreshQuoteCommand) (*storage.PriceRefreshQuoteResult, error) {
+	s.priceRefreshCmds = append(s.priceRefreshCmds, cmd)
+	if s.priceRefreshErr != nil {
+		return nil, s.priceRefreshErr
+	}
+	if s.priceRefreshResult != nil {
+		return s.priceRefreshResult, nil
+	}
+	result := &storage.PriceRefreshQuoteResult{BaseRevisionNumber: 1, Currency: "MXN", PreviousSaleTotal: 1000, NewSaleTotal: 1100, Changed: true}
+	if !cmd.DryRun {
+		result.Revision = &domain.QuoteRevision{ID: "16620000-0000-4000-8000-000000000002", ProjectID: cmd.ProjectID, RevisionNumber: 2, Status: "draft", SourceType: "price_refresh", BaseQuoteRevisionID: cmd.BaseQuoteRevisionID}
+	}
+	return result, nil
+}
