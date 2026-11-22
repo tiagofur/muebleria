@@ -54,11 +54,7 @@ module Granete
             logger: logger
           )
           @library_store = library_store
-          # #1599: while dev mode is ON every request says so; the server
-          # marks the project it creates or syncs (recommendation only).
-          if @transport.respond_to?(:library_mode_provider=)
-            @transport.library_mode_provider = -> { library_store.dev_mode? ? 'draft' : nil }
-          end
+          wire_library_mode_header(library_store)
           resolved_catalog_provider.library_pin_provider = lambda do
             # Dev mode (bibliotecario tool): NO pin → the server resolves the
             # authoring state (the draft), exactly like the pre-release
@@ -284,6 +280,14 @@ module Granete
       attr_reader :model_binding_connector, :duplicate_resolver, :entities_observer
 
       private
+
+      # #1599: while dev mode is ON every request says so; the server marks
+      # the project it creates or syncs (recommendation only).
+      def wire_library_mode_header(library_store)
+        return unless @transport.respond_to?(:library_mode_provider=)
+
+        @transport.library_mode_provider = -> { library_store.dev_mode? ? 'draft' : nil }
+      end
 
       # #498 / SU-HOST-1: the ONE shared host mutation coordinator every
       # managed authoring mutation flows through (#466–#471 plug commands

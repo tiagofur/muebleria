@@ -313,7 +313,8 @@ class ApplicationTest < Minitest::Test
 
   def test_library_dev_mode_state_reaches_every_request_through_the_transport
     transport = ModeRecordingTransport.new
-    with_library_dev_mode_application(capabilities: { 'can_use_library_dev_mode' => true }, transport: transport) do |application, store|
+    capabilities = { 'can_use_library_dev_mode' => true }
+    with_library_dev_mode_application(capabilities: capabilities, transport: transport) do |application, store|
       application.start
       refute_nil transport.library_mode_provider
       assert_nil transport.library_mode_provider.call
