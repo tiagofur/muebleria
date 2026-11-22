@@ -125,7 +125,7 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
 
   // Re-render when the oldest still-fresh queued email crosses the stale
   // mark: polling stops then, so nothing else would refresh its label.
-  const [, setStaleTick] = useState(0);
+  const [staleTick, setStaleTick] = useState(0);
   useEffect(() => {
     const now = Date.now();
     const pending = (query.data?.items ?? [])
@@ -134,7 +134,9 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
     if (pending.length === 0) return undefined;
     const timer = setTimeout(() => setStaleTick((n) => n + 1), Math.max(0, Math.min(...pending)) + 1000);
     return () => clearTimeout(timer);
-  }, [query.data]);
+    // staleTick re-arms the timer for the next queued email (identical
+    // refetches keep query.data's reference stable).
+  }, [query.data, staleTick]);
 
   // Notify the shell once per delivery that reaches sent/confirmed.
   const seenSent = useRef<Set<string> | null>(null);
