@@ -166,10 +166,19 @@ func TestOpeningNotchFailsClosedWhenItDoesNotFit(t *testing.T) {
 		Effect: OpeningModifierEffectNotch, Role: "lateral", ProfileID: "p", Boundary: "between:z1:z2",
 		NotchHeightMm: 10, NotchDepthMm: 19,
 	}}
-	if _, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
+	// #1685: a single-front furniture has no between edges — the boundary
+	// does not exist here, so the notch is truthful absence (the resolve
+	// keeps going, nothing is cut), never a failed resolve.
+	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
 		fronts: openingPassFront("top", 40), openingBodyModifiers: betweenBoundary,
-	}); err == nil || !strings.Contains(err.Error(), "no tiene frentes apilados") {
-		t.Fatalf("a between-boundary notch on a single front has no edge and must fail closed, got %v", err)
+	})
+	if err != nil {
+		t.Fatalf("a between-boundary notch on a single front is truthful absence, got %v", err)
+	}
+	for _, component := range layout.Components {
+		if len(component.Notches) > 0 {
+			t.Fatalf("a between notch with no between edges must cut nothing, got %+v", component.Notches)
+		}
 	}
 
 	offset := []ResolvedOpeningBodyModifier{{
