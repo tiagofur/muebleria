@@ -805,7 +805,11 @@ func (s *Server) HandleOrgCreateInvitation(w http.ResponseWriter, r *http.Reques
 		respondWithInternalError(w, err, "audit invitation creation")
 		return
 	}
-	respondWithJSON(w, http.StatusCreated, openapi.CreateInvitationResponse{Invitation: invitationToOpenAPI(*inv), InvitationToken: token, AcceptURL: "/accept-invitation?token=" + token})
+	if err = s.enqueueInvitationEmail(r.Context(), claims.OrgID, org.Name, inv, token); err != nil {
+		respondWithInternalError(w, err, "queue invitation email")
+		return
+	}
+	respondWithJSON(w, http.StatusCreated, openapi.CreateInvitationResponse{Invitation: invitationToOpenAPI(*inv), InvitationToken: token, AcceptURL: "/accept-invitation?token=" + token, EmailDelivery: s.emailDeliveryState()})
 }
 
 func (s *Server) HandleOrgResendInvitation(w http.ResponseWriter, r *http.Request) {
@@ -833,8 +837,12 @@ func (s *Server) HandleOrgResendInvitation(w http.ResponseWriter, r *http.Reques
 		respondWithInternalError(w, err, "audit invitation resend")
 		return
 	}
+	if err = s.enqueueInvitationEmail(r.Context(), claims.OrgID, org.Name, inv, token); err != nil {
+		respondWithInternalError(w, err, "queue invitation email")
+		return
+	}
 	w.Header().Set("ETag", FormatVersionETag(inv.Version))
-	respondWithJSON(w, http.StatusOK, openapi.ResendInvitationResponse{Invitation: invitationToOpenAPI(*inv), InvitationToken: token, AcceptURL: "/accept-invitation?token=" + token})
+	respondWithJSON(w, http.StatusOK, openapi.ResendInvitationResponse{Invitation: invitationToOpenAPI(*inv), InvitationToken: token, AcceptURL: "/accept-invitation?token=" + token, EmailDelivery: s.emailDeliveryState()})
 }
 
 // HandleOrgInvitationCommand adapts the OpenAPI action-suffix routes to Go's

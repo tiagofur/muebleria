@@ -10,9 +10,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/mail"
 )
 
 // Config holds all server configuration sourced from the environment.
@@ -70,6 +72,24 @@ type Config struct {
 	// into "log the raw credential". Enabling it together with
 	// GRANETE_ENV=production refuses the boot.
 	DevLogPasswordResetLink bool
+	// SMTP is the outbound email transport (#1646). Nil means email delivery
+	// is NOT configured: password-reset links and invitation emails are not
+	// sent (production logs an explicit warning at boot and the API tells
+	// the owner). Built from SMTP_HOST/PORT/USERNAME/PASSWORD/FROM/TLS.
+	SMTP *mail.SMTPConfig
+	// PublicAppURL is the absolute Web origin (APP_PUBLIC_URL) used to build
+	// links inside emails. Required whenever SMTP is configured: a link is
+	// never derived from the request Host header.
+	PublicAppURL string
+	// EmailLocation prints expiry times inside emails (GRANETE_EMAIL_TIMEZONE,
+	// default UTC).
+	EmailLocation *time.Location
+	// EmailOutboxPollInterval is how often the outbox worker looks for due
+	// messages (GRANETE_EMAIL_OUTBOX_POLL_INTERVAL, Go duration, 1s–5m,
+	// default 10s).
+	EmailOutboxPollInterval time.Duration
+	// Production mirrors GRANETE_ENV=production.
+	Production bool
 }
 
 const minJWTSecretBytes = 32
@@ -177,6 +197,26 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	smtpConfig, publicAppURL, err := parseEmailDelivery()
+	if err != nil {
+		return Config{}, err
+	}
+	graneteEnv, err := normalizeGraneteEnv()
+	if err != nil {
+		return Config{}, err
+	}
+	emailLocation, err := parseEmailLocation()
+	if err != nil {
+		return Config{}, err
+	}
+	outboxPoll := 10 * time.Second
+	if raw := strings.TrimSpace(os.Getenv("GRANETE_EMAIL_OUTBOX_POLL_INTERVAL")); raw != "" {
+		parsed, parseErr := time.ParseDuration(raw)
+		if parseErr != nil || parsed < time.Second || parsed > 5*time.Minute {
+			return Config{}, fmt.Errorf("GRANETE_EMAIL_OUTBOX_POLL_INTERVAL must be a duration between 1s and 5m, got %q", raw)
+		}
+		outboxPoll = parsed
+	}
 
 	return Config{
 		Port:                 port,
@@ -197,6 +237,11 @@ func LoadConfig() (Config, error) {
 
 		WebRefreshCookieInsecureLocalDev: cookieInsecure,
 		DevLogPasswordResetLink:          devLogResetLink,
+		SMTP:                             smtpConfig,
+		PublicAppURL:                     publicAppURL,
+		EmailLocation:                    emailLocation,
+		EmailOutboxPollInterval:          outboxPoll,
+		Production:                       graneteEnv == "production",
 	}, nil
 }
 
@@ -236,6 +281,123 @@ func parseDevLogPasswordResetLink() (bool, error) {
 		return false, errors.New("production (GRANETE_ENV=production) must never log the raw password-reset link: GRANETE_DEV_LOG_PASSWORD_RESET_LINK cannot be enabled")
 	}
 	return enabled, nil
+}
+
+// parseEmailDelivery resolves the outbound email transport (#1646). An unset
+// SMTP_HOST means "not configured" (nil, no error); a half configuration
+// (SMTP_* values without a host, a host without a sender, credentials
+// without a password, a link base that is not an absolute URL) refuses the
+// boot instead of silently dropping mail. Plain-text SMTP (SMTP_TLS=none)
+// exists only for local test sinks and is refused in production.
+func parseEmailDelivery() (*mail.SMTPConfig, string, error) {
+	env, err := normalizeGraneteEnv()
+	if err != nil {
+		return nil, "", err
+	}
+	production := env == "production"
+	publicURL, err := parsePublicAppURL(os.Getenv("APP_PUBLIC_URL"), production)
+	if err != nil {
+		return nil, "", err
+	}
+	host := strings.TrimSpace(os.Getenv("SMTP_HOST"))
+	if host == "" {
+		for _, key := range []string{"SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_TLS"} {
+			if strings.TrimSpace(os.Getenv(key)) != "" {
+				return nil, "", fmt.Errorf("%s is set but SMTP_HOST is empty: configure the SMTP host or remove the partial SMTP settings", key)
+			}
+		}
+		return nil, publicURL, nil
+	}
+	tlsMode := mail.TLSMode(strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_TLS"))))
+	if tlsMode == "" {
+		tlsMode = mail.TLSStartTLS
+	}
+	defaultPort := 587
+	switch tlsMode {
+	case mail.TLSStartTLS:
+	case mail.TLSImplicit:
+		defaultPort = 465
+	case mail.TLSNone:
+		if production {
+			return nil, "", errors.New("production (GRANETE_ENV=production) must not send email in plain text: SMTP_TLS=none is only for local test mailboxes")
+		}
+		defaultPort = 25
+	default:
+		return nil, "", fmt.Errorf("SMTP_TLS must be \"starttls\", \"tls\" or \"none\", got %q", tlsMode)
+	}
+	port := defaultPort
+	if raw := strings.TrimSpace(os.Getenv("SMTP_PORT")); raw != "" {
+		parsed, convErr := strconv.Atoi(raw)
+		if convErr != nil || parsed <= 0 || parsed > 65535 {
+			return nil, "", fmt.Errorf("SMTP_PORT must be a TCP port, got %q", raw)
+		}
+		port = parsed
+	}
+	username := strings.TrimSpace(os.Getenv("SMTP_USERNAME"))
+	password := os.Getenv("SMTP_PASSWORD")
+	if username != "" && password == "" {
+		return nil, "", errors.New("SMTP_USERNAME is set but SMTP_PASSWORD is empty")
+	}
+	if username == "" && password != "" {
+		return nil, "", errors.New("SMTP_PASSWORD is set but SMTP_USERNAME is empty")
+	}
+	from := strings.TrimSpace(os.Getenv("SMTP_FROM"))
+	if from == "" {
+		return nil, "", errors.New("SMTP_FROM is required when SMTP_HOST is set (for example \"Granete <no-reply@tu-dominio.com>\")")
+	}
+	if publicURL == "" {
+		return nil, "", errors.New("APP_PUBLIC_URL is required when SMTP_HOST is set: email links are built from it, never from the request Host header")
+	}
+	cfg := mail.SMTPConfig{
+		Host:     host,
+		Port:     port,
+		Username: username,
+		Password: password,
+		From:     from,
+		TLS:      tlsMode,
+	}
+	// NewSMTPSender validates the sender address and the remaining fields.
+	if _, err := mail.NewSMTPSender(cfg); err != nil {
+		return nil, "", fmt.Errorf("invalid SMTP configuration: %w", err)
+	}
+	return &cfg, publicURL, nil
+}
+
+// parsePublicAppURL validates APP_PUBLIC_URL: an absolute http(s) origin
+// (optionally with a base path), https in production, normalized without a
+// trailing slash. Empty is allowed here; parseEmailDelivery requires it when
+// SMTP is configured.
+func parsePublicAppURL(raw string, production bool) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", fmt.Errorf("APP_PUBLIC_URL must be an absolute http(s) URL, got %q", raw)
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil || strings.Trim(parsed.Path, "/") != "" {
+		return "", fmt.Errorf("APP_PUBLIC_URL must be the Web origin only (no path, credentials, query or fragment), got %q", raw)
+	}
+	if production && parsed.Scheme != "https" {
+		return "", errors.New("production (GRANETE_ENV=production) requires an https APP_PUBLIC_URL")
+	}
+	return parsed.Scheme + "://" + parsed.Host, nil
+}
+
+// parseEmailLocation resolves GRANETE_EMAIL_TIMEZONE (IANA name, for example
+// America/Argentina/Buenos_Aires) used to print expiry times inside emails.
+// Unset means UTC; the rendered time always carries its zone label.
+func parseEmailLocation() (*time.Location, error) {
+	raw := strings.TrimSpace(os.Getenv("GRANETE_EMAIL_TIMEZONE"))
+	if raw == "" {
+		return time.UTC, nil
+	}
+	loc, err := time.LoadLocation(raw)
+	if err != nil {
+		return nil, fmt.Errorf("GRANETE_EMAIL_TIMEZONE must be an IANA time zone, got %q", raw)
+	}
+	return loc, nil
 }
 
 // parseHardwareAssetLimitsEnv reads the optional HARDWARE_ASSET_MAX_*_BYTES

@@ -1,8 +1,9 @@
 /**
  * ForgotPasswordScreen — solicitud pública de restablecimiento (#1178).
- * Honesta por diseño: mientras Granete no envía correos, el endpoint registra
- * la solicitud con resultado uniforme (anti-enumeración) y la UI dirige al
- * administrador del taller, que emite el enlace desde Usuarios.
+ * Resultado uniforme (anti-enumeración). Con email configurado en el
+ * servidor (#1646) el enlace llega por correo; sin él la UI lo dice y dirige
+ * al administrador del taller, que emite el enlace desde Usuarios. El
+ * indicador `email_delivery` refleja configuración, nunca si la cuenta existe.
  */
 
 import { useState, type ReactNode } from 'react';
@@ -25,6 +26,7 @@ export function ForgotPasswordScreen({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [emailDelivery, setEmailDelivery] = useState<'queued' | 'not_configured' | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +37,8 @@ export function ForgotPasswordScreen({
     setLoading(true);
     setError(null);
     try {
-      await new GraneteApiClient(baseUrl, fetchImpl).requestPasswordReset({ email: email.trim() });
+      const response = await new GraneteApiClient(baseUrl, fetchImpl).requestPasswordReset({ email: email.trim() });
+      setEmailDelivery(response.email_delivery === 'queued' ? 'queued' : 'not_configured');
       setSubmitted(true);
     } catch {
       setError('No se pudo registrar la solicitud. Revisá tu conexión y probá de nuevo.');
@@ -54,16 +57,22 @@ export function ForgotPasswordScreen({
           <h1 id="forgot-title" className="accept-invitation-card__title">
             Recuperar contraseña
           </h1>
-          {submitted ? (
+          {submitted && emailDelivery === 'queued' ? (
+            <p className="accept-invitation-card__subtitle">
+              Si el email pertenece a una cuenta activa de Granete, en unos minutos te llega
+              un correo con un enlace para elegir una nueva contraseña. <strong>El enlace vence
+              en una hora y sirve una sola vez.</strong> Revisá también la carpeta de spam.
+            </p>
+          ) : submitted ? (
             <p className="accept-invitation-card__subtitle">
               Si el email pertenece a una cuenta de Granete, registramos la solicitud.
-              Todavía no enviamos correos: <strong>pedile a tu administrador del taller un
-              enlace de restablecimiento</strong> y abrilo desde acá.
+              Este servidor todavía no envía correos: <strong>pedile a tu administrador del
+              taller un enlace de restablecimiento</strong> y abrilo desde acá.
             </p>
           ) : (
             <p className="accept-invitation-card__subtitle">
-              Dejanos tu email para registrar la solicitud. Todavía no enviamos correos:
-              la vía rápida es pedirle el enlace a tu administrador del taller.
+              Dejanos tu email y te enviamos un enlace para elegir una nueva contraseña. Si no
+              llega, tu administrador del taller también puede generarlo desde Usuarios.
             </p>
           )}
         </div>
@@ -100,7 +109,7 @@ export function ForgotPasswordScreen({
               </div>
             </div>
             <button type="submit" className="btn btn--primary" disabled={loading || !email.trim()} aria-busy={loading}>
-              {loading ? 'Enviando…' : 'Registrar solicitud'}
+              {loading ? 'Enviando…' : 'Pedir enlace'}
             </button>
           </form>
         )}

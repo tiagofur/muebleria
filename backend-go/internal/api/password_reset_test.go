@@ -46,6 +46,57 @@ func TestRequestPasswordResetUniformOutcome(t *testing.T) {
 	}
 }
 
+func TestRequestPasswordResetWithEmailDeliveryQueuesOnlyForKnownAccounts(t *testing.T) {
+	// #1646: with SMTP configured, a known account gets exactly one queued
+	// message addressed to the STORED email with an absolute one-time link;
+	// an unknown/disabled account gets nothing — and both responses stay
+	// byte-identical (email_delivery reflects configuration, not the account).
+	var bodies [][]byte
+	for _, issuance := range []*storage.PasswordResetIssuance{nil, {Token: "raw-token", ExpiresAt: time.Now().Add(time.Hour)}} {
+		store := &stubStore{passwordResetIssuance: issuance}
+		server := NewServer(store, "secret", nil, 1, 1)
+		server.EmailDelivery = &EmailDeliveryConfig{PublicAppURL: "https://app.granete.test", Location: time.UTC}
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/password-resets", bytes.NewBufferString(`{"email":"Alguien@Example.com"}`))
+		rec := httptest.NewRecorder()
+		server.HandleRequestPasswordReset(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		bodies = append(bodies, rec.Body.Bytes())
+		var payload openapi.PasswordResetRequestResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil || payload.EmailDelivery != "queued" {
+			t.Fatalf("payload=%+v err=%v", payload, err)
+		}
+		if issuance == nil {
+			if len(store.enqueuedEmails) != 0 {
+				t.Fatalf("unknown account must not queue mail: %+v", store.enqueuedEmails)
+			}
+			continue
+		}
+		if len(store.enqueuedEmails) != 1 {
+			t.Fatalf("known account must queue exactly one message, got %d", len(store.enqueuedEmails))
+		}
+		msg := store.enqueuedEmails[0].Message
+		if msg.To != "stored@example.com" || !strings.Contains(msg.Text, "https://app.granete.test/reset-password?token=raw-token") {
+			t.Fatalf("unexpected message: to=%q text=%q", msg.To, msg.Text)
+		}
+	}
+	if !bytes.Equal(bodies[0], bodies[1]) {
+		t.Fatalf("responses diverge: %s vs %s", bodies[0], bodies[1])
+	}
+}
+
+func TestRequestPasswordResetWithoutEmailDeliverySaysSo(t *testing.T) {
+	server := NewServer(&stubStore{}, "secret", nil, 1, 1)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password-resets", bytes.NewBufferString(`{"email":"alguien@example.com"}`))
+	rec := httptest.NewRecorder()
+	server.HandleRequestPasswordReset(rec, req)
+	var payload openapi.PasswordResetRequestResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil || payload.EmailDelivery != "not_configured" {
+		t.Fatalf("payload=%+v err=%v", payload, err)
+	}
+}
+
 func TestRequestPasswordResetRequiresEmail(t *testing.T) {
 	server := NewServer(&stubStore{}, "secret", nil, 1, 1)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/password-resets", bytes.NewBufferString(`{"email":"  "}`))

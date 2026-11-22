@@ -57,6 +57,11 @@ type Server struct {
 	// behind GRANETE_DEV_LOG_PASSWORD_RESET_LINK, which config refuses to
 	// combine with GRANETE_ENV=production.
 	DevLogPasswordResetLink bool
+	// EmailDelivery is set when SMTP is configured (#1646): reset links and
+	// invitations are enqueued in the email outbox, in the same transaction
+	// that mints their credential. Nil = not configured (the responses say
+	// so via email_delivery="not_configured").
+	EmailDelivery *EmailDeliveryConfig
 	// MediaTokens signs/validates resource-scoped media read grants under the
 	// dedicated MEDIA_SIGNING_KEY (#460 SEC-3). Nil fails closed: a server
 	// built without one neither mints nor accepts media grants.

@@ -161,6 +161,9 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRoles, setInviteRoles] = useState<ProductRole[]>(['vendedor']);
   const [createdInviteLink, setCreatedInviteLink] = useState<string | null>(null);
+  // #1646: address the invitation email was queued to (null = not emailed;
+  // the copy-link path is the only channel).
+  const [inviteEmailedTo, setInviteEmailedTo] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
@@ -488,6 +491,7 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
           roles: inviteRoles,
         });
         setCreatedInviteLink(`${window.location.origin}${data.accept_url}`);
+        setInviteEmailedTo(data.email_delivery === 'queued' ? data.invitation.email : null);
       });
       showToast('✓ Invitación creada');
     } catch (err) {
@@ -522,6 +526,7 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
       await mutation.mutateAsync(async () => {
         const data = await api.resendInvitation(token, invitation.id, invitation.version);
         setCreatedInviteLink(`${window.location.origin}${data.accept_url}`);
+        setInviteEmailedTo(data.email_delivery === 'queued' ? data.invitation.email : null);
       });
       setShowInviteModal(true);
       showToast('✓ Enlace rotado. El enlace anterior ya no sirve.');
@@ -608,6 +613,7 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
               setInviteEmail('');
               setInviteRoles([invitationRoles[0]!]);
               setCreatedInviteLink(null);
+              setInviteEmailedTo(null);
               setInviteError(null);
               setShowInviteModal(true);
             }}
@@ -695,6 +701,7 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
               setInviteEmail('');
               setInviteRoles([invitationRoles[0]!]);
               setCreatedInviteLink(null);
+              setInviteEmailedTo(null);
               setInviteError(null);
               setShowInviteModal(true);
             } : undefined}
@@ -956,11 +963,15 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
         {createdInviteLink ? (
           <div className="users-modal-stack">
             <div className="users-invitation-success" role="status">
-              ✓ Invitación generada exitosamente.
+              {inviteEmailedTo
+                ? `✓ Invitación generada. Le enviamos un email a ${inviteEmailedTo} con el enlace.`
+                : '✓ Invitación generada exitosamente.'}
             </div>
 
             <p className="users-modal-copy">
-              Copiá el enlace y envíaselo al miembro por WhatsApp o email para que cree su contraseña y acceda:
+              {inviteEmailedTo
+                ? 'Si no le llega en unos minutos (revisá spam), copiá el enlace y mandáselo por WhatsApp:'
+                : 'Granete todavía no envía emails desde este servidor. Copiá el enlace y envíaselo al miembro por WhatsApp o email para que cree su contraseña y acceda:'}
             </p>
 
             <div className="users-invitation-link">

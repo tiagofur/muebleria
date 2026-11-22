@@ -532,3 +532,40 @@ func TestOrgTeamDirectoryReturnsAuthoritativeSummaryAndCapabilities(t *testing.T
 		t.Fatalf("summary = %#v", summary)
 	}
 }
+
+func TestInvitationEmailQueuedOnlyWhenDeliveryConfigured(t *testing.T) {
+	// #1646: with SMTP configured the invitation email is enqueued (same
+	// request transaction) with an absolute accept link built from
+	// APP_PUBLIC_URL; without it nothing is queued and the response says so.
+	for _, configured := range []bool{false, true} {
+		srv, store := teamCapabilityServer(domain.OrganizationTypeFactory, nil)
+		store.getOrgByID.Name = "Taller <Norte>"
+		if configured {
+			srv.EmailDelivery = &EmailDeliveryConfig{PublicAppURL: "https://app.granete.test", Location: time.UTC}
+		}
+		rr := httptest.NewRecorder()
+		srv.HandleOrgCreateInvitation(rr, teamCapabilityRequest(http.MethodPost, "/api/org/invitations", "actor", []string{string(domain.RoleGerenteVentas)}, `{"email":"seller@example.com","roles":["vendedor"]}`))
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var payload openapi.CreateInvitationResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if !configured {
+			if payload.EmailDelivery != "not_configured" || len(store.enqueuedEmails) != 0 {
+				t.Fatalf("unconfigured: delivery=%q queued=%d", payload.EmailDelivery, len(store.enqueuedEmails))
+			}
+			continue
+		}
+		if payload.EmailDelivery != "queued" || len(store.enqueuedEmails) != 1 {
+			t.Fatalf("configured: delivery=%q queued=%d", payload.EmailDelivery, len(store.enqueuedEmails))
+		}
+		queued := store.enqueuedEmails[0]
+		wantLink := "https://app.granete.test/accept-invitation?token=" + payload.InvitationToken
+		if queued.Kind != storage.EmailKindInvitation || queued.OrganizationID != "org-1" || queued.Message.To != "seller@example.com" ||
+			!strings.Contains(queued.Message.Text, wantLink) || !strings.Contains(queued.Message.HTML, "Taller &lt;Norte&gt;") {
+			t.Fatalf("unexpected queued invitation: %+v", queued)
+		}
+	}
+}

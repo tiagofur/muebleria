@@ -28,6 +28,8 @@ type stubStore struct {
 	// #1178 password reset: configurable issuance outcome, org team fixture
 	// and capture of the issued reset target.
 	passwordResetIssuance *storage.PasswordResetIssuance
+	// #1646: messages the handlers enqueued in the email outbox.
+	enqueuedEmails []storage.OutboundEmail
 	orgTeam               []storage.OrgTeamMember
 	issuedResetUserID     string
 	issuedResetVia        string

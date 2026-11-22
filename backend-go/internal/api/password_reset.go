@@ -1,10 +1,10 @@
 package api
 
-// #1178 password reset — an honest bootstrap without email infrastructure:
-// admin-issued links travel copy/paste exactly like invitations; the public
-// forgot endpoint is anti-enumeration (uniform 204) and delivers nowhere
-// until an email adapter lands (link only in server logs, and never in
-// production). Confirmation consumes the token in one transaction and cuts
+// #1178 password reset: admin-issued links travel copy/paste exactly like
+// invitations; the public forgot endpoint is anti-enumeration (uniform
+// response). With SMTP configured (#1646) the link is emailed through the
+// durable outbox; without it the link is withheld (dev may opt into logging
+// it, production never). Confirmation consumes the token in one transaction and cuts
 // every live session of the identity.
 
 import (
@@ -34,15 +34,25 @@ func (s *Server) HandleRequestPasswordReset(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	ip := clientIP(r)
-	issuance, err := s.Store.RequestPasswordReset(r.Context(), email, ip, RequestIDFromContext(r.Context()))
+	var compose storage.PasswordResetEmailComposer
+	if s.EmailDelivery != nil {
+		compose = s.EmailDelivery.passwordResetMessage
+	}
+	issuance, err := s.Store.RequestPasswordReset(r.Context(), email, ip, RequestIDFromContext(r.Context()), compose)
 	if err != nil {
 		respondWithInternalError(w, err, "password reset request")
 		return
 	}
 	if issuance != nil {
-		deliverPasswordResetLink(s.DevLogPasswordResetLink, email, issuance, ip)
+		if s.EmailDelivery != nil {
+			// The message is already in the outbox (same transaction as the
+			// token). Never log the address, the link or the token.
+			slog.Info("password reset requested: email queued", "expires_at", issuance.ExpiresAt.UTC().Format(time.RFC3339), "ip", ip)
+		} else {
+			deliverPasswordResetLink(s.DevLogPasswordResetLink, email, issuance, ip)
+		}
 	}
-	respondWithJSON(w, http.StatusOK, openapi.PasswordResetRequestResponse{Status: "accepted"})
+	respondWithJSON(w, http.StatusOK, openapi.PasswordResetRequestResponse{Status: "accepted", EmailDelivery: s.emailDeliveryState()})
 }
 
 // deliverPasswordResetLink is the delivery adapter slot (#1178): until an
