@@ -5,7 +5,7 @@ require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/library/layout_contract'
 require_relative '../../src/granete_for_sketchup/model/furniture_builder'
 
-# #1691 — the width reflection (#1575) must FOLD a derived box's local X
+# #1693 — the width reflection (#1575) must FOLD a derived box's local X
 # extent, exactly like a board: a derived gola run spans [0,dims] on local X
 # (#1689 corner convention), and mirroring it as a POINT (extent 0) anchored
 # the box at the mirrored point and spanned x∈[600,1200] of a 600-wide
@@ -60,6 +60,26 @@ class GolaDerivedMirrorExtentTest < Minitest::Test
 
     assert_in_delta 560.0, mirrored.local_translation[0], 1.0e-6,
                     'a mount POINT mirrors as a point (600 − 40), extent stays 0'
+  end
+
+  # Review r1 P1: kit parts are 'derived' with dimensions TOO, but their
+  # local frame is a FACE MOUNT POINT (localTransform ≠ the AABB transform).
+  # Folding their extent would displace every kit piece of every mirrored
+  # furniture — they mirror as points.
+  def test_kit_part_derived_face_point_mirrors_as_a_point
+    face_point = [300.0, 560.0, 400.0]
+    box_min = [280.0, 555.0, 385.0] # the AABB rides separately
+    kit_part = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+      placement_id: 'kit-hw-part', placement_kind: 'derived',
+      dimensions: [40.0, 10.0, 30.0],
+      translation: box_min,
+      local_transform: { 'translation' => face_point,
+                         'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] } }
+    )
+    mirrored = kit_part.with_mirrored_frame(MIRROR, 600.0)
+
+    assert_in_delta 300.0, mirrored.local_translation[0], 1.0e-6,
+                    'the face mount point mirrors as a point (600 − 300), never folded'
   end
 
   def test_derived_without_dimensions_keeps_the_point_mirror

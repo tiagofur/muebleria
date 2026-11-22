@@ -283,18 +283,36 @@ module Granete
           { 'translation' => t, 'basis' => b }
         end
 
-        # #1691: a DERIVED box (the gola runs/supports/caps the engine
+        # #1693: a DERIVED CORNER box (the gola runs/supports/caps the engine
         # materializes from the resolved grip) spans [0,dims] on local X like
         # a board (#1689 corner convention) — the width reflection must FOLD
         # that extent or the box lands outside the cabinet (a 600 run anchored
-        # at the mirrored point spans x∈[600,1200]). Mounted hardware keeps
-        # extent 0: its frame is a mount POINT, the asset/proxy grows around
-        # it.
+        # at the mirrored point spans x∈[600,1200]).
+        # Kit parts are 'derived' TOO but their local frame anchors a FACE
+        # MOUNT POINT (localTransform ≠ the published AABB transform): those
+        # mirror as points, extent 0 — folding them would displace every kit
+        # piece of every mirrored furniture (review r1 P1). The corner
+        # convention's signature: the published AABB translation EQUALS the
+        # localTransform translation (true in the opening pass, false for kit
+        # parts). Mounted hardware is a point by the same rule.
         def mirrored_x_extent_mm
           return 0.0 unless placement_kind == 'derived'
           return 0.0 unless dimensions.is_a?(Array) && dimensions[0].to_f.positive?
+          return 0.0 unless corner_convention_box?
 
           dimensions[0].to_f
+        end
+
+        # The anchor-convention discriminator: a corner box publishes its
+        # local frame AT the AABB translation; a face-point placement
+        # publishes the mount point as its local frame (the AABB rides
+        # separately in transform).
+        def corner_convention_box?
+          return false unless translation.is_a?(Array) && local_translation.is_a?(Array)
+
+          translation.each_index.all? do |axis|
+            (translation[axis].to_f - local_translation[axis].to_f).abs < 1.0e-6
+          end
         end
 
         # Legacy AABB-only placement (#414 compat): the point mirrors as-is.
