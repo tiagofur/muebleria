@@ -214,11 +214,21 @@ module Granete
           return { 'status' => 'skipped', 'reason' => 'diseño sin muebles' } if items.empty?
           return { 'status' => 'skipped' } unless active_model.respond_to?(:entities)
 
-          targets, = collect_placed_design_targets(active_model, items)
+          targets, _matched, skipped_definition = collect_placed_design_targets(active_model, items)
           commands = targets.filter_map do |target|
             design_opening_rebuild_command(target[:root], target[:definition], stored.design_id)
           end
-          return { 'status' => 'unchanged', 'reason' => 'muebles no colocados' } if commands.empty?
+          if commands.empty?
+            # The #1264 distinction, not a collapsed reason: a unit whose
+            # definition left the local catalog is a different honest absence
+            # than a unit that is simply not placed.
+            reason = if skipped_definition.positive?
+                       "la definición del mueble no está en el catálogo local (#{skipped_definition})"
+                     else
+                       'muebles no colocados'
+                     end
+            return { 'status' => 'unchanged', 'reason' => reason }
+          end
 
           outcome = mutation_coordinator.execute_batch(commands)
           if outcome.outcome == 'committed'
