@@ -66,7 +66,12 @@ func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeni
 				hangFromZ = append(hangFromZ, rows[r].bottomMm)
 			}
 			if len(hangFromZ) == 0 {
-				return fmt.Errorf("la muesca entre frentes del perfil %s no tiene frentes apilados", modifier.ProfileID)
+				// #1685: a furniture without stacked fronts has no between
+				// edges — the boundary this modifier addresses does not
+				// exist here. Truthful absence, exactly like the between
+				// runs/strips/BOM treat zero edges: nothing to cut, the
+				// resolve keeps the boundaries that do exist.
+				continue
 			}
 		}
 		placed := false

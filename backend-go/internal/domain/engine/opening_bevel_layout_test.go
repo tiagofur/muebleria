@@ -189,10 +189,19 @@ func TestOpeningBevelFailsClosed(t *testing.T) {
 		Effect: OpeningModifierEffectBevel, Role: "door", ProfileID: "p", Boundary: "between:z1:z2",
 		BevelAngleDeg: 45, BevelSizeMm: 10,
 	}}
-	if _, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
+	// #1685: a single-front furniture has no between edges — the boundary
+	// does not exist here, so the bevel is truthful absence (the resolve
+	// keeps going, nothing is bevelled), never a failed resolve.
+	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
 		fronts: openingPassFront("top", 40), openingBodyModifiers: betweenBoundary,
-	}); err == nil || !strings.Contains(err.Error(), "no encontró frentes") {
-		t.Fatalf("a between-boundary bevel on a single front has no edge to cut and must fail closed, got %v", err)
+	})
+	if err != nil {
+		t.Fatalf("a between-boundary bevel on a single front is truthful absence, got %v", err)
+	}
+	for _, component := range layout.Components {
+		if len(component.Bevels) > 0 {
+			t.Fatalf("a between bevel with no between edges must cut nothing, got %+v", component.Bevels)
+		}
 	}
 }
 

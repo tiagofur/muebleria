@@ -46,6 +46,12 @@ func applyOpeningBevelsToBoards(boards []layoutBoard, modifiers []ResolvedOpenin
 		if err != nil {
 			return err
 		}
+		if kind == "between" && len(targets) == 0 {
+			// #1685: no stacked fronts → no between edges; the boundary does
+			// not exist in this furniture. Truthful absence (nothing to
+			// bevel), mirroring the notch pass and the between runs/BOM.
+			continue
+		}
 		edgeKind := kind
 		if kind == "between" {
 			edgeKind = "top"
