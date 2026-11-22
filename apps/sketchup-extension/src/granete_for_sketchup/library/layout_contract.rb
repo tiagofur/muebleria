@@ -288,13 +288,13 @@ module Granete
         # a board (#1689 corner convention) — the width reflection must FOLD
         # that extent or the box lands outside the cabinet (a 600 run anchored
         # at the mirrored point spans x∈[600,1200]).
-        # Kit parts are 'derived' TOO but their local frame anchors a FACE
-        # MOUNT POINT (localTransform ≠ the published AABB transform): those
-        # mirror as points, extent 0 — folding them would displace every kit
-        # piece of every mirrored furniture (review r1 P1). The corner
-        # convention's signature: the published AABB translation EQUALS the
-        # localTransform translation (true in the opening pass, false for kit
-        # parts). Mounted hardware is a point by the same rule.
+        # Las piezas de kit viajan como 'derived' con dimensiones TOO, pero su
+        # frame local ancla un PUNTO DE CARA (localTransform ≠ el AABB
+        # publicado): esas espejan como punto, extensión 0 — plegarlas
+        # desplazaría cada pieza de kit de cada mueble espejado (review r1
+        # P1). La firma de la convención esquina: el AABB publicado IGUALA al
+        # localTransform (cierto en el pass de apertura, falso en piezas de
+        # kit). El herraje montado es punto por la misma regla.
         def mirrored_x_extent_mm
           return 0.0 unless placement_kind == 'derived'
           return 0.0 unless dimensions.is_a?(Array) && dimensions[0].to_f.positive?
