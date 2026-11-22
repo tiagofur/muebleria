@@ -400,6 +400,9 @@ func (s *stubStore) GetProjectCustomerContact(context.Context, string) (*storage
 }
 
 func (s *stubStore) CreateQuoteDelivery(_ context.Context, cmd storage.CreateQuoteDeliveryCommand) (*storage.QuoteDelivery, error) {
+	if s.quoteDeliveryCreateErr != nil {
+		return nil, s.quoteDeliveryCreateErr
+	}
 	s.createdQuoteDeliveries = append(s.createdQuoteDeliveries, cmd)
 	d := cmd.Delivery
 	d.ID = "11111111-2222-4333-8444-555555555555"

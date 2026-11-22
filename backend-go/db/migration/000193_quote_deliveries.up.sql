@@ -56,7 +56,7 @@ REVOKE UPDATE, DELETE ON quote_deliveries FROM granete_app;
 
 -- The only state transitions: queued → sent|failed (email, worker) and
 -- prepared → confirmed (WhatsApp, the user). Both go through here.
-CREATE FUNCTION record_quote_delivery_outcome(p_delivery_id UUID, p_outcome TEXT, p_reason TEXT)
+CREATE FUNCTION record_quote_delivery_outcome(p_delivery_id UUID, p_outcome TEXT, p_reason TEXT, p_actor_user_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 VOLATILE
@@ -68,6 +68,8 @@ DECLARE
     d quote_deliveries%ROWTYPE;
     v_event_id TEXT;
     v_status TEXT;
+    v_legacy_status TEXT;
+    v_actor UUID;
 BEGIN
     IF p_outcome NOT IN ('sent', 'failed', 'confirmed') THEN
         RAISE EXCEPTION 'unknown quote delivery outcome %', p_outcome;
@@ -80,6 +82,9 @@ BEGIN
             OR (d.status = 'prepared' AND p_outcome = 'confirmed')) THEN
         RETURN FALSE;
     END IF;
+    -- The actor of the fact: whoever confirmed (WhatsApp), else the user who
+    -- requested the email.
+    v_actor := COALESCE(p_actor_user_id, d.requested_by);
 
     IF p_outcome = 'failed' THEN
         UPDATE quote_deliveries SET status = 'failed', failure_reason = left(p_reason, 500) WHERE id = d.id;
@@ -91,8 +96,12 @@ BEGIN
         RETURN TRUE;
     END IF;
 
-    SELECT commercial_status INTO v_status FROM projects WHERE id = d.project_id FOR UPDATE;
-    IF (v_status IS NULL OR v_status IN ('draft', 'sent'))
+    SELECT commercial_status, status INTO v_status, v_legacy_status FROM projects WHERE id = d.project_id FOR UPDATE;
+    -- A NULL commercial_status (never backfilled) derives from the legacy
+    -- projects.status (mapLegacyStatusToCommercial): accepted/produced read
+    -- as won, so only a legacy draft/quoted project may move to "sent".
+    IF ((v_status IS NULL AND COALESCE(v_legacy_status, 'draft') IN ('draft', 'quoted'))
+        OR v_status IN ('draft', 'sent'))
        AND NOT EXISTS (
            SELECT 1 FROM project_events
             WHERE project_id = d.project_id
@@ -100,7 +109,7 @@ BEGIN
        ) THEN
         v_event_id := gen_random_uuid()::text;
         INSERT INTO project_events (id, project_id, type, at, by_user_id, source, note, payload, organization_id)
-        VALUES (v_event_id, d.project_id, 'quote_sent', NOW(), d.requested_by, 'api', NULL,
+        VALUES (v_event_id, d.project_id, 'quote_sent', NOW(), v_actor, 'api', NULL,
                 jsonb_build_object('quoteRevisionId', d.quote_revision_id, 'revisionNumber', d.revision_number,
                                    'channel', d.channel, 'deliveryId', d.id, 'pdfSha256', d.pdf_sha256),
                 d.organization_id);
@@ -111,7 +120,7 @@ BEGIN
        SET status = p_outcome, sent_at = NOW(), project_event_id = v_event_id
      WHERE id = d.id;
     INSERT INTO security_audit_events (event_type, schema_version, actor_user_id, organization_id, details)
-    VALUES ('quote_delivery_sent', 1, d.requested_by, d.organization_id,
+    VALUES ('quote_delivery_sent', 1, v_actor, d.organization_id,
             jsonb_build_object('delivery_id', d.id, 'project_id', d.project_id,
                                'quote_revision_id', d.quote_revision_id, 'revision_number', d.revision_number,
                                'channel', d.channel, 'pdf_sha256', d.pdf_sha256,
@@ -119,12 +128,12 @@ BEGIN
     RETURN TRUE;
 END
 $$;
-REVOKE ALL ON FUNCTION record_quote_delivery_outcome(UUID, TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION record_quote_delivery_outcome(UUID, TEXT, TEXT, UUID) FROM PUBLIC;
 
 -- The WhatsApp confirmation is a user command: the runtime role may only
 -- confirm a delivery of its own organization (tenant check here, since the
 -- definer bypasses RLS).
-CREATE FUNCTION confirm_quote_delivery(p_delivery_id UUID)
+CREATE FUNCTION confirm_quote_delivery(p_project_id UUID, p_delivery_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 VOLATILE
@@ -151,15 +160,16 @@ BEGIN
     END IF;
     IF NOT EXISTS (
         SELECT 1 FROM quote_deliveries
-         WHERE id = p_delivery_id AND organization_id = actor_organization AND channel = 'whatsapp'
+         WHERE id = p_delivery_id AND project_id = p_project_id
+           AND organization_id = actor_organization AND channel = 'whatsapp'
     ) THEN
         RETURN FALSE;
     END IF;
-    RETURN record_quote_delivery_outcome(p_delivery_id, 'confirmed', NULL);
+    RETURN record_quote_delivery_outcome(p_delivery_id, 'confirmed', NULL, public.app_current_user_id());
 END
 $$;
-REVOKE ALL ON FUNCTION confirm_quote_delivery(UUID) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION confirm_quote_delivery(UUID) TO granete_app;
+REVOKE ALL ON FUNCTION confirm_quote_delivery(UUID, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION confirm_quote_delivery(UUID, UUID) TO granete_app;
 
 -- Email outbox: a third kind whose ref is the quote delivery id; the mark
 -- functions report the outcome to the delivery in the same transaction.
@@ -189,7 +199,7 @@ BEGIN
         -- delivery bookkeeping fails (otherwise the row stays leased and the
         -- customer gets the email again every lease period).
         BEGIN
-            PERFORM record_quote_delivery_outcome(v_ref::uuid, 'sent', NULL);
+            PERFORM record_quote_delivery_outcome(v_ref::uuid, 'sent', NULL, NULL);
         EXCEPTION WHEN OTHERS THEN
             UPDATE email_outbox SET last_error = left('quote delivery bookkeeping failed: ' || SQLSTATE, 500) WHERE id = p_id;
             RAISE WARNING 'quote delivery bookkeeping failed for outbox %: %', p_id, SQLSTATE;
@@ -223,7 +233,7 @@ BEGIN
     END IF;
     IF p_final AND v_kind = 'quote' THEN
         BEGIN
-            PERFORM record_quote_delivery_outcome(v_ref::uuid, 'failed', p_error);
+            PERFORM record_quote_delivery_outcome(v_ref::uuid, 'failed', p_error, NULL);
         EXCEPTION WHEN OTHERS THEN
             RAISE WARNING 'quote delivery bookkeeping failed for outbox %: %', p_id, SQLSTATE;
         END;
@@ -257,7 +267,7 @@ BEGIN
     LOOP
         IF expired.kind = 'quote' THEN
             BEGIN
-                PERFORM record_quote_delivery_outcome(expired.ref::uuid, 'failed', 'el email venció sin poder enviarse');
+                PERFORM record_quote_delivery_outcome(expired.ref::uuid, 'failed', 'el email venció sin poder enviarse', NULL);
             EXCEPTION WHEN OTHERS THEN
                 RAISE WARNING 'quote delivery bookkeeping failed for expired %: %', expired.ref, SQLSTATE;
             END;
@@ -305,6 +315,6 @@ CREATE TRIGGER trg_quote_delivery_cancel_email
     FOR EACH ROW EXECUTE FUNCTION cancel_quote_delivery_email();
 
 INSERT INTO rls_policy_inventory (table_name, classification, read_scope, write_scope, rationale)
-VALUES ('quote_deliveries', 'append-only', 'organization', 'insert-only-organization',
-        'Quote sends (#1650): tenant-private commercial record of the sending organization; status transitions only through record_quote_delivery_outcome (worker) and confirm_quote_delivery (tenant-checked)')
+VALUES ('quote_deliveries', 'tenant-owned', 'organization', 'insert-only-organization',
+        'Quote sends (#1650): tenant-private commercial record of the sending organization; the runtime role only inserts; status transitions only through record_quote_delivery_outcome (worker, SECURITY DEFINER) and confirm_quote_delivery (tenant + active membership checked)')
 ON CONFLICT (table_name) DO NOTHING;

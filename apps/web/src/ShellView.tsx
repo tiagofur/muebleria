@@ -1007,6 +1007,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     baseUrl: DEFAULT_API_BASE,
     revisions: filterProjectsToPlant || quoteAuthority.kind === 'idle' ? undefined : quoteRevisions,
     buildPdf: buildCommercialQuotePdfForRevision,
+    onDeliverySent: () => {
+      void refreshWorkspace?.();
+    },
   });
   // #642 / 2A: ONE batch summaries request per session/organization scope
   // feeds every Cotizaciones list card (no per-card revision fetches).

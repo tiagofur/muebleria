@@ -60,6 +60,8 @@ func respondWithQuoteDeliveryError(w http.ResponseWriter, err error, op string) 
 		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "cotización no encontrada", nil)
 	case errors.Is(err, storage.ErrQuoteDeliveryAmountsWithheld):
 		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, "sólo la organización que vende el proyecto puede enviar la cotización", nil)
+	case errors.Is(err, storage.ErrQuoteDeliveryRateLimited):
+		respondWithAPIError(w, http.StatusTooManyRequests, openapi.ApiErrorCodeQuoteDeliveryRateLimited, "ya se enviaron muchas cotizaciones por email en poco tiempo, o esta misma recién se envió. Esperá unos minutos e intentá de nuevo.", map[string]interface{}{"reason": "rate_limited"})
 	case errors.Is(err, storage.ErrQuoteDeliveryNotConfirmable):
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeQuoteDeliveryNotConfirmable, "este envío ya no se puede confirmar", map[string]interface{}{"reason": "not_confirmable"})
 	default:
@@ -118,6 +120,11 @@ func (s *Server) sendableContext(w http.ResponseWriter, r *http.Request) (*stora
 }
 
 // HandleSendQuoteEmail serves POST …/quote-revisions/{id}:send-email.
+//
+// Trust boundary: the PDF is rendered by the web client from the frozen
+// revision (deterministic: same bytes as the download). The server checks it
+// is a PDF within limits and records its SHA-256/size as evidence of exactly
+// what was sent; it does not re-render or verify the content.
 func (s *Server) HandleSendQuoteEmail(w http.ResponseWriter, r *http.Request) {
 	actorID, ok := s.requireQuoteSender(w, r)
 	if !ok {
@@ -281,8 +288,9 @@ func (s *Server) HandlePrepareQuoteWhatsApp(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	respondWithJSON(w, http.StatusCreated, openapi.PreparedQuoteWhatsApp{
-		Delivery:    toQuoteDeliveryDTO(*d),
-		WhatsappUrl: "https://wa.me/" + digits + "?text=" + url.QueryEscape(message),
+		Delivery: toQuoteDeliveryDTO(*d),
+		// %20, not "+": wa.me shows a literal "+" for query-escaped spaces.
+		WhatsappUrl: "https://wa.me/" + digits + "?text=" + strings.ReplaceAll(url.QueryEscape(message), "+", "%20"),
 		Message:     message,
 	})
 }
@@ -307,8 +315,9 @@ func (s *Server) HandleConfirmQuoteDelivery(w http.ResponseWriter, r *http.Reque
 
 // HandleListQuoteDeliveries serves GET /api/projects/{projectId}/quote-deliveries.
 func (s *Server) HandleListQuoteDeliveries(w http.ResponseWriter, r *http.Request) {
-	if claimsFromRequest(r) == nil {
-		respondWithError(w, http.StatusUnauthorized, "invalid token")
+	// The list exposes the customer's email and phone: same authority as
+	// sending.
+	if _, ok := s.requireQuoteSender(w, r); !ok {
 		return
 	}
 	projectID := r.PathValue("projectId")

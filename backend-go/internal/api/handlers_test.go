@@ -31,6 +31,7 @@ type stubStore struct {
 	// #1650 quote deliveries.
 	quoteDeliveryCtx       *storage.QuoteDeliveryContext
 	quoteDeliveryErr       error
+	quoteDeliveryCreateErr error
 	createdQuoteDeliveries []storage.CreateQuoteDeliveryCommand
 	// #1646: messages the handlers enqueued in the email outbox.
 	enqueuedEmails    []storage.OutboundEmail

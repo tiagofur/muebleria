@@ -319,6 +319,7 @@ const (
 	ApiErrorCodeQuoteDeliveryEmailUnavailable    ApiErrorCode = "QUOTE_DELIVERY_EMAIL_UNAVAILABLE"
 	ApiErrorCodeQuoteDeliveryNotConfirmable      ApiErrorCode = "QUOTE_DELIVERY_NOT_CONFIRMABLE"
 	ApiErrorCodeQuoteDeliveryInvalidPdf          ApiErrorCode = "QUOTE_DELIVERY_INVALID_PDF"
+	ApiErrorCodeQuoteDeliveryRateLimited         ApiErrorCode = "QUOTE_DELIVERY_RATE_LIMITED"
 	ApiErrorCodeRefreshInvalid                   ApiErrorCode = "REFRESH_INVALID"
 	ApiErrorCodeRefreshExpired                   ApiErrorCode = "REFRESH_EXPIRED"
 	ApiErrorCodeRefreshRevoked                   ApiErrorCode = "REFRESH_REVOKED"

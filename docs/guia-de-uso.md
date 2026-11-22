@@ -255,15 +255,20 @@ se mantiene abierto para corregirlo sin perder tus cambios.
      cambia qué día es «hoy»).
 11. **Enviar la cotización al cliente** (Herramientas → Enviar cotización;
    ventas y administración): elegí la revisión **publicada o aceptada** y:
-   - **Enviar por email:** sale al email guardado del cliente con el **PDF
-     exacto** de esa revisión adjunto (el mismo archivo que «Más → PDF listado/
-     resumen»; el historial muestra su huella SHA-256). Podés sumar un mensaje.
+   - **Enviar por email:** sale al email guardado del cliente con el PDF de esa
+     revisión adjunto. Granete lo genera en tu navegador desde la revisión
+     congelada: es **el mismo archivo** que «Más → PDF listado/resumen», y el
+     historial guarda su huella SHA-256 como constancia de lo que se envió.
+     Podés sumar un mensaje. Para que el correo del taller no se use como envío
+     masivo hay un tope de 30 emails de cotización por hora por taller, y la
+     misma revisión al mismo email no se reenvía antes de 2 minutos.
      Figura «En cola» hasta que el servidor de correo lo acepta; recién ahí
      queda **«Enviada»** con fecha y hora reales y la obra pasa a «enviada» si
      todavía estaba en borrador (nunca vuelve atrás una obra ganada).
    - **Preparar WhatsApp:** abre WhatsApp con un mensaje listo (revisión y
      total) para el teléfono del cliente; adjuntá el PDF y envialo vos. Hasta
-     que tocás **«Ya lo envié»** no cuenta como enviada.
+     que tocás **«Ya lo envié»** no cuenta como enviada (queda registrado quién
+     lo confirmó).
    - Si el cliente no tiene email o teléfono (con código de país, por ejemplo
      +52…), o el servidor no envía correos, el botón queda deshabilitado con el
      motivo: completalo en **Clientes**.

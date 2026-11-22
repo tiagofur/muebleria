@@ -115,6 +115,13 @@ func TestSendQuoteEmailRefusals(t *testing.T) {
 			}
 		})
 	}
+	// Throttled by the store: typed 429.
+	throttled := &Server{Store: &stubStore{quoteDeliveryCtx: qdContext(), quoteDeliveryCreateErr: storage.ErrQuoteDeliveryRateLimited}, EmailDelivery: configured}
+	tw := httptest.NewRecorder()
+	throttled.HandleSendQuoteEmail(tw, qdRequest(http.MethodPost, ":send-email", qdEmailBody(pdf, "")))
+	if tw.Code != http.StatusTooManyRequests || !strings.Contains(tw.Body.String(), "QUOTE_DELIVERY_RATE_LIMITED") {
+		t.Fatalf("rate limited: %d %s", tw.Code, tw.Body.String())
+	}
 	// Manufacturing-only organization: the store refuses with amounts withheld.
 	server := &Server{Store: &stubStore{quoteDeliveryErr: storage.ErrQuoteDeliveryAmountsWithheld}, EmailDelivery: configured}
 	w := httptest.NewRecorder()
@@ -140,7 +147,7 @@ func TestPrepareQuoteWhatsAppBuildsPrefilledLinkWithoutMarkingSent(t *testing.T)
 		t.Fatalf("a prepared WhatsApp delivery is not sent: %+v", out.Delivery)
 	}
 	u, err := url.Parse(out.WhatsappUrl)
-	if err != nil || u.Host != "wa.me" || u.Path != "/525512345678" || u.Query().Get("text") != out.Message {
+	if err != nil || u.Host != "wa.me" || u.Path != "/525512345678" || u.Query().Get("text") != out.Message || strings.Contains(u.RawQuery, "+") {
 		t.Fatalf("whatsapp url %q", out.WhatsappUrl)
 	}
 	if !strings.Contains(out.Message, "Q2") || !strings.Contains(out.Message, "$125,430.50 MXN") || !strings.Contains(out.Message, "Cocina Norte") {
@@ -161,6 +168,12 @@ func TestConfirmQuoteDelivery(t *testing.T) {
 	server := &Server{Store: &stubStore{}}
 	w := httptest.NewRecorder()
 	server.HandleConfirmQuoteDelivery(w, qdRequest(http.MethodPost, "", ""))
+	// A production role can neither confirm nor read the customer contact.
+	pw := httptest.NewRecorder()
+	(&Server{Store: &stubStore{quoteDeliveryCtx: qdContext()}}).HandleListQuoteDeliveries(pw, qdRequest(http.MethodGet, "", "", domain.RoleProduccion))
+	if pw.Code != http.StatusForbidden {
+		t.Fatalf("list without send authority: %d", pw.Code)
+	}
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"status":"confirmed"`) || !strings.Contains(w.Body.String(), `"sentAt"`) {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}

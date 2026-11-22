@@ -22,6 +22,14 @@ import (
 // EmailKindQuote is the outbox kind for quote emails; ref = delivery id.
 const EmailKindQuote = "quote"
 
+// QuoteEmailsPerHour caps quote emails per organization (abuse throttle);
+// QuoteEmailRepeatCooldown refuses the same revision to the same address
+// again within the window (double click, impatient retry).
+const (
+	QuoteEmailsPerHour       = 30
+	QuoteEmailRepeatCooldown = 2 * time.Minute
+)
+
 // QuoteEmailTTL bounds how long a quote email may wait in the outbox before
 // the delivery is closed as failed.
 const QuoteEmailTTL = 72 * time.Hour
@@ -35,6 +43,9 @@ var (
 	// ErrQuoteDeliveryAmountsWithheld means the caller's organization does not
 	// own the retail price (manufacturing-only): it cannot send the quote.
 	ErrQuoteDeliveryAmountsWithheld = errors.New("quote amounts withheld for this organization")
+	// ErrQuoteDeliveryRateLimited means the organization exceeded the quote
+	// email budget or repeated the same send within the cooldown.
+	ErrQuoteDeliveryRateLimited = errors.New("quote delivery rate limited")
 	// ErrQuoteDeliveryNotConfirmable means the delivery is not a pending
 	// WhatsApp delivery of the caller's organization.
 	ErrQuoteDeliveryNotConfirmable = errors.New("quote delivery not confirmable")
@@ -157,6 +168,26 @@ func (s *PostgresStore) CreateQuoteDelivery(ctx context.Context, cmd CreateQuote
 		d.ID = uuid.NewString()
 	}
 	org := OrgFromCtx(ctx)
+	if d.Channel == "email" {
+		// Abuse throttle: the platform's sender must not become a bulk mailer.
+		// Serialized per organization so concurrent requests cannot both pass.
+		if _, err := s.db(ctx).Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('granete:quote-email:' || $1))`, org); err != nil {
+			return nil, fmt.Errorf("quote email throttle lock: %w", err)
+		}
+		var lastHour, sameRecent int
+		if err := s.db(ctx).QueryRow(ctx, `
+			SELECT count(*) FILTER (WHERE requested_at > NOW() - interval '1 hour'),
+			       count(*) FILTER (WHERE requested_at > NOW() - make_interval(secs => $4)
+			                          AND quote_revision_id = $2 AND recipient = $3)
+			  FROM quote_deliveries
+			 WHERE organization_id = $1 AND channel = 'email' AND status <> 'failed'`,
+			org, d.QuoteRevisionID, d.Recipient, int(QuoteEmailRepeatCooldown.Seconds())).Scan(&lastHour, &sameRecent); err != nil {
+			return nil, fmt.Errorf("quote email throttle: %w", err)
+		}
+		if lastHour >= QuoteEmailsPerHour || sameRecent > 0 {
+			return nil, ErrQuoteDeliveryRateLimited
+		}
+	}
 	switch d.Channel {
 	case "email":
 		if cmd.Email == nil {
@@ -212,7 +243,7 @@ func (s *PostgresStore) CreateQuoteDelivery(ctx context.Context, cmd CreateQuote
 // WhatsApp message was actually sent. Must run in the tenant transaction.
 func (s *PostgresStore) ConfirmQuoteDelivery(ctx context.Context, projectID, deliveryID string) (*QuoteDelivery, error) {
 	var ok bool
-	if err := s.db(ctx).QueryRow(ctx, `SELECT confirm_quote_delivery($1)`, deliveryID).Scan(&ok); err != nil {
+	if err := s.db(ctx).QueryRow(ctx, `SELECT confirm_quote_delivery($1, $2)`, projectID, deliveryID).Scan(&ok); err != nil {
 		return nil, fmt.Errorf("confirm quote delivery: %w", err)
 	}
 	if !ok {

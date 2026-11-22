@@ -7,7 +7,7 @@
  * lo envía desde su WhatsApp; queda «sin confirmar» hasta que el usuario
  * confirma que lo envió. Destinatarios: siempre los del cliente guardado.
  */
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import {
   GraneteApiClient,
@@ -37,6 +37,18 @@ export interface QuoteSendPanelProps {
   readonly revisions: readonly QuoteSendRevision[];
   /** Builds the exact client PDF (same builder as the download). */
   readonly buildPdf: (quoteRevisionId: string, variant: 'detailed' | 'summary') => Promise<QuoteSendPdfResult>;
+  /**
+   * Called when a delivery became sent/confirmed (the server may have moved
+   * the project to «enviada»): lets the shell refresh project and summaries.
+   */
+  readonly onDeliverySent?: () => void;
+}
+
+/** A queued email older than this is shown as stuck and no longer polled. */
+export const QUOTE_EMAIL_STALE_MS = 15 * 60 * 1000;
+
+function isStaleQueued(d: QuoteDelivery, now: number): boolean {
+  return d.status === 'queued' && now - new Date(d.requestedAt).getTime() > QUOTE_EMAIL_STALE_MS;
 }
 
 const STATUS_LABELS: Readonly<Record<string, string>> = {
@@ -87,22 +99,44 @@ function errorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
-function deliveryLine(d: QuoteDelivery): string {
+function deliveryLine(d: QuoteDelivery, now: number): string {
   const channel = d.channel === 'email' ? `Email a ${d.recipient}` : `WhatsApp a ${d.recipient}`;
   const when = d.sentAt ? ` · ${formatWhen(d.sentAt)}` : ` · pedido ${formatWhen(d.requestedAt)}`;
-  return `Q${d.revisionNumber} · ${channel} · ${STATUS_LABELS[d.status] ?? d.status}${when}`;
+  const label = isStaleQueued(d, now)
+    ? 'Sigue en cola hace más de 15 minutos: el servidor de correo no lo aceptó todavía'
+    : STATUS_LABELS[d.status] ?? d.status;
+  return `Q${d.revisionNumber} · ${channel} · ${label}${when}`;
 }
 
-export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions, buildPdf }: QuoteSendPanelProps): ReactNode {
+export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions, buildPdf, onDeliverySent }: QuoteSendPanelProps): ReactNode {
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => api.listProjectQuoteDeliveries(token, projectId, signal),
     retry: false,
-    // Queued emails become "sent" when the worker delivers them.
-    refetchInterval: (q) => (q.state.data?.items.some((d) => d.status === 'queued') ? 4000 : false),
+    // Queued emails become "sent" when the worker delivers them; a stale
+    // queued email (worker problem) stops the polling and is shown as stuck.
+    refetchInterval: (q) => {
+      const now = Date.now();
+      return q.state.data?.items.some((d) => d.status === 'queued' && !isStaleQueued(d, now)) ? 4000 : false;
+    },
   });
+
+  // Notify the shell once per delivery that reaches sent/confirmed.
+  const seenSent = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const items = query.data?.items;
+    if (!items) return;
+    const sentIds = items.filter((d) => d.status === 'sent' || d.status === 'confirmed').map((d) => d.id);
+    if (seenSent.current === null) {
+      seenSent.current = new Set(sentIds);
+      return;
+    }
+    const fresh = sentIds.filter((id) => !seenSent.current!.has(id));
+    sentIds.forEach((id) => seenSent.current!.add(id));
+    if (fresh.length > 0) onDeliverySent?.();
+  }, [query.data, onDeliverySent]);
 
   const sendable = useMemo(
     () => [...revisions].filter(isQuoteRevisionSendable).sort((a, b) => b.revisionNumber - a.revisionNumber),
@@ -117,6 +151,7 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
   const [prepared, setPrepared] = useState<PreparedQuoteWhatsApp | null>(null);
   const emailKey = useRef<string | null>(null);
   const whatsappKey = useRef<string | null>(null);
+  const confirmKeys = useRef(new Map<string, string>());
 
   const refresh = () => queryClient.invalidateQueries({ queryKey });
   // An Idempotency-Key belongs to ONE exact request: a changed input or a
@@ -175,8 +210,16 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
   });
 
   const confirm = useMutation({
-    mutationFn: async (deliveryId: string) =>
-      api.confirmProjectQuoteDelivery(token, projectId, deliveryId, newIntentKey('quote-confirm')),
+    mutationFn: async (deliveryId: string) => {
+      // One intent per delivery: a lost response retried replays the same
+      // confirmation instead of answering «ya no se puede confirmar».
+      let key = confirmKeys.current.get(deliveryId);
+      if (!key) {
+        key = newIntentKey('quote-confirm');
+        confirmKeys.current.set(deliveryId, key);
+      }
+      return api.confirmProjectQuoteDelivery(token, projectId, deliveryId, key);
+    },
     onSuccess: async () => {
       setPrepared(null);
       setError(null);
@@ -379,7 +422,7 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
           <ul className="quote-send__history" data-testid="quote-send-history">
             {list.items.map((d) => (
               <li key={d.id} className={`quote-send__item quote-send__item--${d.status}`} data-testid={`quote-delivery-${d.status}`}>
-                <span>{deliveryLine(d)}</span>
+                <span>{deliveryLine(d, Date.now())}</span>
                 {d.pdfSha256 ? (
                   <span className="quote-send__hash" title={`SHA-256 del PDF enviado: ${d.pdfSha256}`}>
                     PDF {d.pdfSha256.slice(0, 12)}

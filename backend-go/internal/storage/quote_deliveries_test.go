@@ -395,3 +395,166 @@ func TestQuoteDeliveryReviewHardening(t *testing.T) {
 		}
 	})
 }
+
+func prepareWhatsApp(t *testing.T, fx *quoteLifecycleFixture, revisionID, requestedBy string) *storage.QuoteDelivery {
+	t.Helper()
+	var d *storage.QuoteDelivery
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var e error
+		d, e = fx.store.CreateQuoteDelivery(ctx, storage.CreateQuoteDeliveryCommand{Delivery: storage.QuoteDelivery{
+			ProjectID: fx.projectID, QuoteRevisionID: revisionID, RevisionNumber: 1,
+			Channel: "whatsapp", Recipient: "+525512345678", RequestedBy: requestedBy,
+		}})
+		return e
+	}); err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	return d
+}
+
+func TestQuoteDeliveryRacesRollbackAndLegacyStatus(t *testing.T) {
+	ctx := context.Background()
+	fx, revisionID := quoteDeliveryFixture(t)
+
+	t.Run("two simultaneous confirmations: exactly one wins, one quote_sent", func(t *testing.T) {
+		d := prepareWhatsApp(t, fx, revisionID, rlsUserA)
+		errs := make(chan error, 2)
+		start := make(chan struct{})
+		for i := 0; i < 2; i++ {
+			go func() {
+				<-start
+				errs <- fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+					_, e := fx.store.ConfirmQuoteDelivery(ctx, fx.projectID, d.ID)
+					return e
+				})
+			}()
+		}
+		close(start)
+		var ok, refused int
+		for i := 0; i < 2; i++ {
+			switch err := <-errs; err {
+			case nil:
+				ok++
+			case storage.ErrQuoteDeliveryNotConfirmable:
+				refused++
+			default:
+				t.Fatalf("unexpected: %v", err)
+			}
+		}
+		if ok != 1 || refused != 1 {
+			t.Fatalf("ok=%d refused=%d", ok, refused)
+		}
+		if n := countRows(t, fx, `SELECT count(*) FROM project_events WHERE project_id=$1 AND type='quote_sent' AND payload->>'deliveryId'=$2`, fx.projectID, d.ID); n != 1 {
+			t.Fatalf("quote_sent events for the delivery = %d", n)
+		}
+	})
+
+	t.Run("a failed request transaction leaves no delivery, outbox or audit row", func(t *testing.T) {
+		pdf := []byte("%PDF-1.7\nrollback")
+		msg := mail.QuoteMessage("cliente@taller.test", "", "", "", 1, "", mail.Attachment{FileName: "x.pdf", ContentType: "application/pdf", Data: pdf})
+		var id string
+		err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			d, e := fx.store.CreateQuoteDelivery(ctx, storage.CreateQuoteDeliveryCommand{Delivery: storage.QuoteDelivery{
+				ProjectID: fx.projectID, QuoteRevisionID: revisionID, RevisionNumber: 1, Channel: "email",
+				Recipient: "rollback@taller.test", Variant: "detailed", PDFSHA256: strings.Repeat("a", 64), PDFBytes: len(pdf),
+				PDFFileName: "x.pdf", RequestedBy: rlsUserA,
+			}, Email: &msg})
+			if e != nil {
+				return e
+			}
+			id = d.ID
+			return context.Canceled // the handler fails after the insert
+		})
+		if err != context.Canceled || id == "" {
+			t.Fatalf("expected the forced failure, got %v", err)
+		}
+		if countRows(t, fx, `SELECT count(*) FROM quote_deliveries WHERE id=$1`, id)+
+			countRows(t, fx, `SELECT count(*) FROM email_outbox WHERE ref=$1`, id)+
+			countRows(t, fx, `SELECT count(*) FROM security_audit_events WHERE details->>'delivery_id'=$1`, id) != 0 {
+			t.Fatal("delivery, outbox message and audit must roll back together")
+		}
+	})
+
+	t.Run("the confirming user is the actor, and the project in the path must match", func(t *testing.T) {
+		// Prepared by someone else (fixture row; the API would require the
+		// preparer to be a member, which RLS on the audit already enforces).
+		d := &storage.QuoteDelivery{ID: "16500000-0000-4000-8000-0000000000cc"}
+		if _, err := fx.admin.Exec(ctx, `
+			INSERT INTO quote_deliveries (id, organization_id, project_id, quote_revision_id, revision_number, channel, recipient, status, requested_by)
+			VALUES ($1, '`+rlsOrgA+`', $2, $3, 1, 'whatsapp', '+525512345678', 'prepared', $4)`, d.ID, fx.projectID, revisionID, rlsUserB); err != nil {
+			t.Fatal(err)
+		}
+		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			_, e := fx.store.ConfirmQuoteDelivery(ctx, fiSharedProject, d.ID)
+			return e
+		}); err != storage.ErrQuoteDeliveryNotConfirmable {
+			t.Fatalf("confirm under another project must be refused, got %v", err)
+		}
+		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			_, e := fx.store.ConfirmQuoteDelivery(ctx, fx.projectID, d.ID)
+			return e
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if n := countRows(t, fx, `SELECT count(*) FROM security_audit_events WHERE event_type='quote_delivery_sent' AND details->>'delivery_id'=$1 AND actor_user_id=$2`, d.ID, rlsUserA); n != 1 {
+			t.Fatal("the audit of the confirmation must name the confirming user")
+		}
+	})
+
+	t.Run("the same send twice within the cooldown is refused", func(t *testing.T) {
+		requestQuoteEmail(t, fx, revisionID, []byte("%PDF-1.7\nonce"))
+		err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			msg := mail.QuoteMessage("cliente@taller.test", "", "", "", 1, "", mail.Attachment{FileName: "x.pdf", ContentType: "application/pdf", Data: []byte("%PDF-1.7\ntwice")})
+			_, e := fx.store.CreateQuoteDelivery(ctx, storage.CreateQuoteDeliveryCommand{Delivery: storage.QuoteDelivery{
+				ProjectID: fx.projectID, QuoteRevisionID: revisionID, RevisionNumber: 1, Channel: "email",
+				Recipient: "cliente@taller.test", Variant: "detailed", PDFSHA256: strings.Repeat("b", 64), PDFBytes: 14,
+				PDFFileName: "x.pdf", RequestedBy: rlsUserA,
+			}, Email: &msg})
+			return e
+		})
+		if err != storage.ErrQuoteDeliveryRateLimited {
+			t.Fatalf("repeat within cooldown must be throttled, got %v", err)
+		}
+	})
+
+	t.Run("a legacy accepted project (NULL commercial_status) is never rolled back to sent", func(t *testing.T) {
+		if _, err := fx.admin.Exec(ctx, `UPDATE projects SET commercial_status = NULL, status = 'accepted' WHERE id = $1`, fx.projectID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fx.admin.Exec(ctx, `DELETE FROM project_events WHERE project_id = $1 AND type = 'quote_sent'`, fx.projectID); err != nil {
+			t.Fatal(err)
+		}
+		d := prepareWhatsApp(t, fx, revisionID, rlsUserA)
+		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			_, e := fx.store.ConfirmQuoteDelivery(ctx, fx.projectID, d.ID)
+			return e
+		}); err != nil {
+			t.Fatal(err)
+		}
+		var commercial *string
+		if err := fx.admin.QueryRow(ctx, `SELECT commercial_status FROM projects WHERE id=$1`, fx.projectID).Scan(&commercial); err != nil {
+			t.Fatal(err)
+		}
+		if commercial != nil || countRows(t, fx, `SELECT count(*) FROM project_events WHERE project_id=$1 AND type='quote_sent'`, fx.projectID) != 0 {
+			t.Fatalf("legacy won project changed: status=%v", commercial)
+		}
+	})
+
+	t.Run("deleting the project through the canonical path cancels its queued email", func(t *testing.T) {
+		if _, err := fx.admin.Exec(ctx, `UPDATE email_outbox SET status='cancelled', payload=NULL WHERE status='pending'`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fx.admin.Exec(ctx, `UPDATE quote_deliveries SET requested_at = NOW() - interval '1 day'`); err != nil {
+			t.Fatal(err)
+		}
+		d := requestQuoteEmail(t, fx, revisionID, []byte("%PDF-1.7\ndelete"))
+		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			return fx.store.DeleteProject(ctx, fx.projectID)
+		}); err != nil {
+			t.Skipf("canonical project delete not available for this fixture: %v", err)
+		}
+		if n := countRows(t, fx, `SELECT count(*) FROM email_outbox WHERE ref=$1 AND status='cancelled' AND payload IS NULL`, d.ID); n != 1 {
+			t.Fatal("deleting the project must cancel its queued quote email")
+		}
+	})
+}

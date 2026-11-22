@@ -6,6 +6,7 @@
  * byte-identical to the downloaded file.
  */
 import { useMemo, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { roleCanAppendProjectEvent } from '@granete/domain';
 import type { QuoteRevisionDetail } from '@granete/storage';
 import { QuoteSendPanel, type QuoteSendPdfResult } from '@granete/ui';
@@ -23,6 +24,8 @@ export interface QuoteSendRendererInput {
   readonly baseUrl: string;
   /** Exact revisions of the selected project (authoritative server read). */
   readonly revisions: ReadonlyArray<QuoteRevisionDetail> | undefined;
+  /** Refreshes the project aggregate after a send moved its commercial status. */
+  readonly onDeliverySent?: () => void;
   readonly buildPdf: (
     revisions: ReadonlyArray<QuoteRevisionDetail>,
     quoteRevisionId: string,
@@ -35,7 +38,8 @@ export function canSendQuotes(roles: readonly string[]): boolean {
 }
 
 export function useQuoteSendRenderer(input: QuoteSendRendererInput): ((projectId: string) => ReactNode) | undefined {
-  const { session, authToken, sessionScope, actorRoles, baseUrl, revisions, buildPdf } = input;
+  const { session, authToken, sessionScope, actorRoles, baseUrl, revisions, buildPdf, onDeliverySent } = input;
+  const queryClient = useQueryClient();
   const enabled = session === 'auth' && Boolean(authToken) && sessionScope !== null && canSendQuotes(actorRoles);
   return useMemo(() => {
     if (!enabled || !authToken || !sessionScope) return undefined;
@@ -64,8 +68,13 @@ export function useQuoteSendRenderer(input: QuoteSendRendererInput): ((projectId
               revision.commercialAmountsWithheld !== true,
           }))}
           buildPdf={toPanelPdf}
+          onDeliverySent={() => {
+            // The project may now be «enviada»: cards and the project header.
+            void queryClient.invalidateQueries({ queryKey: ['project-commercial-summaries', ...root] });
+            onDeliverySent?.();
+          }}
         />
       );
     };
-  }, [enabled, authToken, sessionScope, baseUrl, revisions, buildPdf]);
+  }, [enabled, authToken, sessionScope, baseUrl, revisions, buildPdf, onDeliverySent, queryClient]);
 }

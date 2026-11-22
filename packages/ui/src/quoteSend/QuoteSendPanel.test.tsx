@@ -26,7 +26,7 @@ function list(overrides: Record<string, unknown> = {}) {
 
 const delivery = (overrides: Record<string, unknown> = {}) => ({
   id: DELIVERY, projectId: PROJECT, quoteRevisionId: REV, revisionNumber: 2, channel: 'email',
-  recipient: 'ana@cliente.test', status: 'queued', requestedAt: '2026-11-22T10:00:00Z', ...overrides,
+  recipient: 'ana@cliente.test', status: 'queued', requestedAt: new Date().toISOString(), ...overrides,
 });
 
 const published: QuoteSendRevision = { id: REV, revisionNumber: 2, status: 'published', exportable: true };
@@ -170,5 +170,25 @@ describe('QuoteSendPanel idempotency intents (#1650)', () => {
     await screen.findByTestId('quote-send-notice');
     expect(keys).toHaveLength(2);
     expect(keys[0]).not.toBe(keys[1]);
+  });
+});
+
+describe('QuoteSendPanel stale queue and shell refresh (#1650)', () => {
+  it('shows a stale queued email as stuck and notifies the shell when one is sent', async () => {
+    const old = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+    let listed = list({ items: [delivery({ requestedAt: old })] });
+    vi.stubGlobal('fetch', vi.fn(async () => json(200, listed)));
+    const onDeliverySent = vi.fn();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <QuoteSendPanel baseUrl="http://api.test/api" token="tok" projectId={PROJECT} queryKey={['qd-stale', PROJECT]} revisions={[published]} buildPdf={vi.fn()} onDeliverySent={onDeliverySent} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText(/Sigue en cola hace más de 15 minutos/)).toBeTruthy();
+    expect(onDeliverySent).not.toHaveBeenCalled();
+    listed = list({ items: [delivery({ requestedAt: old, status: 'sent', sentAt: new Date().toISOString() })] });
+    await queryClient.invalidateQueries({ queryKey: ['qd-stale', PROJECT] });
+    await waitFor(() => expect(onDeliverySent).toHaveBeenCalledTimes(1));
   });
 });
