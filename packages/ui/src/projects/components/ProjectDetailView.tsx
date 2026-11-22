@@ -48,12 +48,6 @@ import {
 import { ProjectFloorProgressStrip } from '../../production/ProjectFloorProgressStrip';
 import { formatIsoDate } from '../helpers/projectFilterHelpers';
 
-/** #1599: «Creado en modo desarrollador … · desde 3 nov 2026» (date omitted, never invented, when unreadable). */
-function devModeNote(markedAt: string): string {
-  const day = formatIsoDate(markedAt);
-  const base = 'Creado en modo desarrollador: se recomienda sólo para pruebas';
-  return day && day !== '—' && day !== markedAt ? `${base} · desde ${day}` : base;
-}
 import { ProjectStalenessBanner } from './ProjectStalenessBanner';
 import { CostingPanel } from './CostingPanel';
 import type { CostingPanelView } from '../costingView';
@@ -87,6 +81,13 @@ import {
   type ProjectDetailContextValue,
   projectAllowsContentEdit,
 } from './projectDetailContext';
+
+/** #1599: «Creado en modo desarrollador … · desde 3 nov 2026» (date omitted, never invented, when unreadable). */
+function devModeNote(markedAt: string): string {
+  const day = formatIsoDate(markedAt);
+  const base = 'Creado en modo desarrollador: se recomienda sólo para pruebas';
+  return day && day !== '—' && day !== markedAt ? `${base} · desde ${day}` : base;
+}
 
 // ─── Re-export context types for external consumers ──────────────────
 export type { ProjectDetailCatalogs, ProjectDetailItemHandlers, ProjectDetailRemoveConfirm, ProjectDetail3DHandlers };

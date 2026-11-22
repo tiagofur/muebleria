@@ -52,7 +52,6 @@ function quoteNoun(count: number): string {
 /** #1118: paginación incremental — 500 tab stops no son triage. */
 const LIST_PAGE_SIZE = 24;
 
-
 /** #1599: full sentence for the dev-mode badge (title + aria-label). */
 function devModeCardLabel(markedAt: string): string {
   const day = formatIsoDate(markedAt);
@@ -483,6 +482,7 @@ export function ProjectsListView({
                     <div className="project-card__legacy" data-testid="project-card-dev-mode">
                       <span
                         className="status-badge status-badge--warning"
+                        role="img"
                         title={devModeCardLabel(project.devModeMarkedAt)}
                         aria-label={devModeCardLabel(project.devModeMarkedAt)}
                       >
