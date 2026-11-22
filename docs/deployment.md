@@ -415,7 +415,7 @@ umount /mnt/usb
 | `SMTP_TLS` | No | `starttls` | `starttls` (exige STARTTLS) o `tls` (TLS implícito). `none` sólo para buzones de prueba locales; en producción el backend se niega a arrancar |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | Según proveedor | — | Credenciales SMTP (van juntas). Secreto: nunca en el repositorio |
 | `SMTP_FROM` | Con `SMTP_HOST` | — | Remitente, p. ej. `Granete <no-reply@tu-dominio.com>` (el dominio debe estar verificado en el proveedor: SPF/DKIM) |
-| `APP_PUBLIC_URL` | Con `SMTP_HOST` | `https://$DOMAIN` | Origen https de la web usado en los enlaces de los emails; nunca se deriva del Host de la request |
+| `APP_PUBLIC_URL` | Con `SMTP_HOST` | — | Origen https de la web usado en los enlaces de los emails; nunca se deriva del Host de la request |
 | `GRANETE_EMAIL_TIMEZONE` | No | `UTC` | Zona IANA para las fechas de vencimiento impresas en los emails |
 | `MEDIA_DIR` | No | `/data/media` | Ruta del directorio de media dentro del contenedor |
 | `PORT` | No | `8080` | Puerto del backend |
@@ -423,11 +423,18 @@ umount /mnt/usb
 **Email (#1646):** los mensajes se escriben en la tabla `email_outbox` en la misma
 transacción que el token que llevan y un worker del backend los envía con reintentos
 (30 s, 2 min, 10 min, 30 min y luego cada hora, hasta 10 intentos o hasta que vence el
-enlace). Un rechazo 5xx del destinatario es definitivo. Los logs sólo muestran el
-destinatario enmascarado (`a***@dominio`), nunca el enlace ni el token, y el cuerpo se
-borra de la tabla en cuanto el mensaje se envía, falla o vence. Para revisar entregas:
-`SELECT kind, status, attempts, last_error, created_at, sent_at FROM email_outbox ORDER BY created_at DESC LIMIT 20;`
-(con el rol de migración; el rol de runtime no lee la tabla).
+enlace). Un rechazo 5xx del destinatario es definitivo. El mensaje (destinatario, asunto
+y cuerpo) se guarda **sellado con AES-GCM** con una clave derivada de `JWT_SECRET`: ni la
+base, ni un backup ni una réplica tienen un enlace utilizable ni la dirección; rotar
+`JWT_SECRET` hace que los mensajes pendientes fallen (se vuelven a pedir). El sellado se
+borra en cuanto el mensaje se envía, falla, se reemplaza (un enlace nuevo invalida el
+anterior; revocar una invitación cancela su email) o vence. El reset propio tiene un
+enfriamiento de 2 minutos por cuenta (la respuesta es idéntica). Los logs sólo muestran el
+destinatario enmascarado (`a***@dominio`), nunca el enlace ni el token. Para revisar
+entregas: `SELECT kind, status, attempts, last_error, created_at, sent_at FROM email_outbox ORDER BY created_at DESC LIMIT 20;`
+(con el rol de migración; el rol de runtime no lee la tabla). En desarrollo,
+`GRANETE_DEV_EMAIL_TRANSPORT=log` imprime los mensajes en el log en vez de enviarlos
+(rechazado en producción).
 
 **Generar secretos seguros:**
 ```bash

@@ -27,13 +27,23 @@ func (m Message) Validate() error {
 	if strings.ContainsAny(m.To, "\r\n") || strings.ContainsAny(m.Subject, "\r\n") {
 		return errors.New("mail: header injection")
 	}
-	if _, err := mail.ParseAddress(m.To); err != nil {
+	if !ValidAddress(m.To) {
 		return fmt.Errorf("mail: invalid recipient")
 	}
 	if strings.TrimSpace(m.Subject) == "" || strings.TrimSpace(m.Text) == "" {
 		return errors.New("mail: subject and text body are required")
 	}
 	return nil
+}
+
+// ValidAddress reports whether addr is a single bare RFC 5322 address (no
+// display name, no list) that SMTP can deliver to.
+func ValidAddress(addr string) bool {
+	if addr == "" || strings.ContainsAny(addr, "\r\n") {
+		return false
+	}
+	parsed, err := mail.ParseAddress(addr)
+	return err == nil && parsed.Address == addr
 }
 
 // Sender delivers one message. Implementations must never log the body or

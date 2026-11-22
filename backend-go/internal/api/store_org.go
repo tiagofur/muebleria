@@ -52,6 +52,7 @@ type OrgStore interface {
 	RequestPasswordReset(ctx context.Context, email, ip, requestID string, compose storage.PasswordResetEmailComposer) (*storage.PasswordResetIssuance, error)
 	// Email outbox (#1646): joins the ambient transaction.
 	EnqueueEmail(ctx context.Context, email storage.OutboundEmail) (string, error)
+	CancelEmails(ctx context.Context, kind, ref string) (int, error)
 	IssuePasswordResetToken(ctx context.Context, userID, issuedVia string, issuedBy *string, ttl time.Duration, ip, requestID string) (*storage.PasswordResetIssuance, error)
 	ConfirmPasswordReset(ctx context.Context, cmd storage.ConfirmPasswordResetCommand) (int, error)
 	ListSecurityAuditEvents(ctx context.Context, organizationID string, limit int) ([]openapi.SecurityAuditEvent, error)

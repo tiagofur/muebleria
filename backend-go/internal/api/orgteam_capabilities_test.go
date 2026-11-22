@@ -537,6 +537,14 @@ func TestInvitationEmailQueuedOnlyWhenDeliveryConfigured(t *testing.T) {
 	// #1646: with SMTP configured the invitation email is enqueued (same
 	// request transaction) with an absolute accept link built from
 	// APP_PUBLIC_URL; without it nothing is queued and the response says so.
+	t.Run("rejects an address SMTP cannot deliver", func(t *testing.T) {
+		srv, store := teamCapabilityServer(domain.OrganizationTypeFactory, nil)
+		rr := httptest.NewRecorder()
+		srv.HandleOrgCreateInvitation(rr, teamCapabilityRequest(http.MethodPost, "/api/org/invitations", "actor", []string{string(domain.RoleGerenteVentas)}, `{"email":"a@b@c","roles":["vendedor"]}`))
+		if rr.Code != http.StatusBadRequest || store.invitationCreated {
+			t.Fatalf("status=%d created=%t", rr.Code, store.invitationCreated)
+		}
+	})
 	for _, configured := range []bool{false, true} {
 		srv, store := teamCapabilityServer(domain.OrganizationTypeFactory, nil)
 		store.getOrgByID.Name = "Taller <Norte>"
@@ -562,6 +570,9 @@ func TestInvitationEmailQueuedOnlyWhenDeliveryConfigured(t *testing.T) {
 			t.Fatalf("configured: delivery=%q queued=%d", payload.EmailDelivery, len(store.enqueuedEmails))
 		}
 		queued := store.enqueuedEmails[0]
+		if queued.Ref != "inv-1" {
+			t.Fatalf("invitation email must reference the invitation id, got %q", queued.Ref)
+		}
 		wantLink := "https://app.granete.test/accept-invitation?token=" + payload.InvitationToken
 		if queued.Kind != storage.EmailKindInvitation || queued.OrganizationID != "org-1" || queued.Message.To != "seller@example.com" ||
 			!strings.Contains(queued.Message.Text, wantLink) || !strings.Contains(queued.Message.HTML, "Taller &lt;Norte&gt;") {

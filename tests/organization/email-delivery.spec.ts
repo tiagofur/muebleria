@@ -117,4 +117,41 @@ test.describe.serial('Email delivery (#1646) through the outbox', () => {
     const resets = (await mailboxFor(MEMBER_EMAIL)).filter((m) => /^Restablecer/.test(m.Subject));
     expect(resets).toHaveLength(1);
   });
+
+  test('a repeat inside the cooldown sends nothing; an expired emailed link is refused clearly', async ({ page }) => {
+    const requestReset = async () => {
+      await page.goto('/');
+      await page.getByRole('button', { name: '¿Olvidaste tu contraseña?' }).click();
+      await page.getByLabel('Email *').fill(MEMBER_EMAIL);
+      await page.getByRole('button', { name: 'Pedir enlace' }).click();
+      await expect(page.getByText(/en unos minutos te llega un correo/)).toBeVisible();
+    };
+    // Inside the 2-minute per-account cooldown: same screen, no new email.
+    await requestReset();
+    await page.waitForTimeout(4_000);
+    expect((await mailboxFor(MEMBER_EMAIL)).filter((m) => /^Restablecer/.test(m.Subject))).toHaveLength(1);
+
+    // Fixture time travel (admin DSN, never through the app): end the
+    // cooldown, request again, then age the fresh token past its expiry.
+    const pool = new Pool({ connectionString: required('ORGANIZATION_TEST_DATABASE_URL') });
+    try {
+      await pool.query(`UPDATE email_outbox SET created_at = NOW() - interval '10 minutes' WHERE kind = 'password_reset'`);
+      await requestReset();
+      const message = await waitForMessage(MEMBER_EMAIL, /^Restablecer tu contraseña de Granete$/, 2);
+      const expiredLink = linkTo(message.Text, '/reset-password');
+      expect(expiredLink).not.toBe(resetLink);
+      await pool.query(
+        `UPDATE password_reset_tokens SET expires_at = NOW() - interval '1 second'
+          WHERE user_id = (SELECT id FROM users WHERE normalized_email = $1) AND used_at IS NULL AND revoked_at IS NULL`,
+        [MEMBER_EMAIL],
+      );
+      await page.goto(expiredLink);
+      await page.getByRole('textbox', { name: 'Nueva contraseña *' }).fill(NEW_PASSWORD);
+      await page.getByRole('textbox', { name: 'Confirmar contraseña *' }).fill(NEW_PASSWORD);
+      await page.getByRole('button', { name: 'Actualizar contraseña' }).click();
+      await expect(page.getByText('El enlace de restablecimiento no es válido o ya fue utilizado')).toBeVisible();
+    } finally {
+      await pool.end();
+    }
+  });
 });

@@ -17,8 +17,8 @@ import (
 // Queue is the storage side of the outbox.
 type Queue interface {
 	ClaimEmailBatch(ctx context.Context, limit int, lease time.Duration) ([]storage.ClaimedEmail, error)
-	MarkEmailSent(ctx context.Context, id string) error
-	MarkEmailFailed(ctx context.Context, id, sanitizedError string, retryAt time.Time, final bool) error
+	MarkEmailSent(ctx context.Context, id, leaseToken string) (bool, error)
+	MarkEmailFailed(ctx context.Context, id, leaseToken, sanitizedError string, retryAt time.Time, final bool) (bool, error)
 }
 
 // DefaultBackoff spaces retries; the last step repeats. A reset link lives
@@ -31,8 +31,8 @@ type Worker struct {
 	Queue       Queue
 	Sender      mail.Sender
 	Interval    time.Duration // poll period (default 10s)
-	Lease       time.Duration // per-claim lease (default 2m)
-	BatchSize   int           // default 20
+	Lease       time.Duration // per-claim lease (default 5m; must outlast a whole batch)
+	BatchSize   int           // default 5 (5 × 20s SMTP timeout ≪ 5m lease)
 	MaxAttempts int           // default 10
 	Backoff     []time.Duration
 	Logger      *slog.Logger
@@ -44,10 +44,10 @@ func (w *Worker) defaults() {
 		w.Interval = 10 * time.Second
 	}
 	if w.Lease <= 0 {
-		w.Lease = 2 * time.Minute
+		w.Lease = 5 * time.Minute
 	}
 	if w.BatchSize <= 0 {
-		w.BatchSize = 20
+		w.BatchSize = 5
 	}
 	if w.MaxAttempts <= 0 {
 		w.MaxAttempts = 10
@@ -99,23 +99,43 @@ func (w *Worker) RunOnce(ctx context.Context) (Result, error) {
 			// The lease returns the rest to the queue.
 			return res, ctx.Err()
 		}
-		sendErr := w.Sender.Send(ctx, msg.Message)
+		// Outcomes are recorded even if shutdown cancels ctx mid-batch: an
+		// accepted message must not be re-sent after restart.
+		markCtx := context.WithoutCancel(ctx)
+		var sendErr error
+		if msg.OpenErr != nil {
+			sendErr = &mail.InvalidMessageError{Err: msg.OpenErr}
+		} else {
+			sendErr = w.Sender.Send(ctx, msg.Message)
+		}
 		if sendErr == nil {
-			if err := w.Queue.MarkEmailSent(ctx, msg.ID); err != nil {
+			held, err := w.Queue.MarkEmailSent(markCtx, msg.ID, msg.LeaseToken)
+			if err != nil {
 				// Sent but not recorded: the lease will retry it. Logged so an
 				// operator can explain a possible duplicate.
 				w.Logger.Error("email sent but outbox not updated", "outbox_id", msg.ID, "kind", msg.Kind, "error", err)
 				continue
+			}
+			if !held {
+				w.Logger.Warn("email sent after its lease lapsed; another worker owns the row", "outbox_id", msg.ID, "kind", msg.Kind)
 			}
 			res.Sent++
 			w.Logger.Info("email sent", "outbox_id", msg.ID, "kind", msg.Kind, "to", mail.MaskAddress(msg.Message.To), "attempt", msg.Attempts)
 			continue
 		}
 		summary, permanent := mail.Classify(sendErr)
+		if msg.OpenErr != nil {
+			summary = "payload ilegible (¿cambió la clave?)"
+		}
 		final := permanent || msg.Attempts >= w.MaxAttempts
 		retryAt := w.Now().Add(w.backoff(msg.Attempts))
-		if err := w.Queue.MarkEmailFailed(ctx, msg.ID, summary, retryAt, final); err != nil {
+		held, err := w.Queue.MarkEmailFailed(markCtx, msg.ID, msg.LeaseToken, summary, retryAt, final)
+		if err != nil {
 			w.Logger.Error("email outbox failure not recorded", "outbox_id", msg.ID, "kind", msg.Kind, "error", err)
+			continue
+		}
+		if !held {
+			w.Logger.Warn("email failure not recorded: lease lapsed; another worker owns the row", "outbox_id", msg.ID, "kind", msg.Kind)
 			continue
 		}
 		if final {

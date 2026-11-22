@@ -174,3 +174,47 @@ func TestMessageValidationAndMasking(t *testing.T) {
 	}
 	_ = strconv.Itoa
 }
+
+func TestCipherSealsAndRejectsOtherKeys(t *testing.T) {
+	c, err := NewCipher("secret-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := Message{To: "ana@taller.test", Subject: "Hola", Text: "https://x.test/reset-password?token=abc123", HTML: "<p>x</p>"}
+	sealed, err := c.Seal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(sealed, "gcm1:") || strings.Contains(sealed, "abc123") || strings.Contains(sealed, "ana@") {
+		t.Fatalf("sealed payload leaks plaintext: %s", sealed)
+	}
+	opened, err := c.Open(sealed)
+	if err != nil || opened != msg {
+		t.Fatalf("round trip failed: %+v err=%v", opened, err)
+	}
+	other, _ := NewCipher("secret-b")
+	if _, err := other.Open(sealed); err == nil {
+		t.Fatal("a payload sealed under another key must not open")
+	}
+	if _, err := NewCipher("  "); err == nil {
+		t.Fatal("empty secret must be refused")
+	}
+}
+
+func TestValidAddressAndOrgNameFolding(t *testing.T) {
+	for addr, want := range map[string]bool{"ana@taller.test": true, "a@b@c": false, "Ana <ana@taller.test>": false, "a@b.test, c@d.test": false, "": false} {
+		if got := ValidAddress(addr); got != want {
+			t.Fatalf("ValidAddress(%q)=%t want %t", addr, got, want)
+		}
+	}
+	msg := InvitationMessage("ana@taller.test", "Taller\r\nBcc: x@y.test", "https://x.test/accept-invitation?token=t", time.Now().Add(time.Hour), nil)
+	if err := msg.Validate(); err != nil || strings.ContainsAny(msg.Subject, "\r\n") {
+		t.Fatalf("org name with line breaks must fold into one header line: %q err=%v", msg.Subject, err)
+	}
+}
+
+func TestLogSenderRefusesInvalidMessages(t *testing.T) {
+	if err := (LogSender{}).Send(context.Background(), Message{To: "bad", Subject: "s", Text: "t"}); err == nil {
+		t.Fatal("log sender must validate like the real transport")
+	}
+}

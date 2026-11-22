@@ -71,7 +71,7 @@ owned_process() {
 }
 
 recover_orphan() {
-  local kind pid result=COMPLETE container tmp_root remaining
+  local kind pid result=COMPLETE container mail_container tmp_root remaining
   AUTOMATED_RESULT="$(session_field "${RUN_DIR}" automated_result)"
   HOST_RESULT="$(session_field "${RUN_DIR}" host_result)"
   EXPIRES_AT="$(session_field "${RUN_DIR}" expires_at_epoch)"
@@ -105,6 +105,21 @@ recover_orphan() {
   else
     result=INCOMPLETE
   fi
+  # #1646 SMTP sink: recorded only once the run reached it; when present it
+  # must match the owned name and be gone before cleanup reads COMPLETE.
+  if [ -f "${RUN_DIR}/mail-container" ]; then
+    mail_container="$(cat "${RUN_DIR}/mail-container" 2>/dev/null || true)"
+    if [[ "${mail_container}" =~ ^granete-org-gate-[0-9]+-[a-f0-9]{8}-mail$ ]]; then
+      docker rm -f "${mail_container}" >/dev/null 2>&1 || true
+      if remaining="$(docker ps -aq --filter "name=^/${mail_container}$" 2>/dev/null)"; then
+        [ -z "${remaining}" ] || result=INCOMPLETE
+      else
+        result=INCOMPLETE
+      fi
+    else
+      result=INCOMPLETE
+    fi
+  fi
   tmp_root="$(cat "${RUN_DIR}/tmp-root" 2>/dev/null || true)"
   if [[ "${tmp_root}" == "${TMPDIR:-/tmp}"/granete-organization-gate.* ]]; then
     rm -rf -- "${tmp_root}"
@@ -127,6 +142,12 @@ completed_cleanup_readback() {
   done
   container="$(cat "${RUN_DIR}/container" 2>/dev/null || true)"
   if [ -n "${container}" ]; then
+    remaining="$(docker ps -aq --filter "name=^/${container}$" 2>/dev/null)" || return 1
+    [ -z "${remaining}" ] || return 1
+  fi
+  if [ -f "${RUN_DIR}/mail-container" ]; then
+    container="$(cat "${RUN_DIR}/mail-container" 2>/dev/null || true)"
+    [ -n "${container}" ] || return 1
     remaining="$(docker ps -aq --filter "name=^/${container}$" 2>/dev/null)" || return 1
     [ -z "${remaining}" ] || return 1
   fi
@@ -469,6 +490,7 @@ POSTGRES_PORT="${POSTGRES_BIND##*:}"
 # real SMTP and specs read the mailbox over its loopback HTTP API. Plain SMTP
 # (SMTP_TLS=none) is accepted by config only outside production.
 MAIL_CONTAINER="${CONTAINER}-mail"
+if [ -n "${INTERACTIVE}" ]; then printf '%s\n' "${MAIL_CONTAINER}" >"${RUN_DIR}/mail-container"; fi
 docker run -d --rm --name "${MAIL_CONTAINER}" \
   -p 127.0.0.1::1025 -p 127.0.0.1::8025 axllent/mailpit:v1.20.4 >/dev/null \
   || fail "mailpit container did not start"

@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/tiagofur/muebles-backend/internal/mail"
 )
 
 type dbtx interface {
@@ -49,6 +51,9 @@ func (s *PostgresStore) beginTx(ctx context.Context) (pgx.Tx, error) {
 
 type PostgresStore struct {
 	Pool *pgxpool.Pool
+	// EmailCipher seals email outbox payloads (#1646). Nil: the outbox
+	// refuses to store or claim messages (fail closed).
+	EmailCipher *mail.Cipher
 }
 
 func NewPostgresStore(databaseURL string) (*PostgresStore, error) {

@@ -42,7 +42,9 @@ func InvitationMessage(to, organizationName, link string, expiresAt time.Time, l
 		loc = time.UTC
 	}
 	when := expiresAt.In(loc).Format("02/01/2006 15:04 MST")
-	org := strings.TrimSpace(organizationName)
+	// Names are user data: fold any line break so the subject stays one
+	// header line (Validate would otherwise refuse the whole message).
+	org := strings.Join(strings.Fields(organizationName), " ")
 	if org == "" {
 		org = "tu taller"
 	}

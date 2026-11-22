@@ -31,16 +31,25 @@ func (q *fakeQueue) ClaimEmailBatch(context.Context, int, time.Duration) ([]stor
 	q.batch = nil
 	return out, nil
 }
-func (q *fakeQueue) MarkEmailSent(_ context.Context, id string) error {
+func (q *fakeQueue) MarkEmailSent(ctx context.Context, id, lease string) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if lease != "lease-"+id {
+		return false, nil
+	}
 	q.sent = append(q.sent, id)
-	return nil
+	return true, nil
 }
-func (q *fakeQueue) MarkEmailFailed(_ context.Context, id, summary string, retryAt time.Time, final bool) error {
+func (q *fakeQueue) MarkEmailFailed(ctx context.Context, id, lease, summary string, retryAt time.Time, final bool) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
 	if q.failed == nil {
 		q.failed = map[string]failure{}
 	}
 	q.failed[id] = failure{summary, retryAt, final}
-	return nil
+	return true, nil
 }
 
 type scriptedSender struct{ errs map[string]error }
@@ -53,7 +62,7 @@ func (s scriptedSender) Send(_ context.Context, m mail.Message) error {
 const secretLink = "https://app.granete.test/reset-password?token=deadbeefcafe"
 
 func claimed(id, to string, attempts int) storage.ClaimedEmail {
-	return storage.ClaimedEmail{ID: id, Kind: storage.EmailKindPasswordReset, Attempts: attempts,
+	return storage.ClaimedEmail{ID: id, Kind: storage.EmailKindPasswordReset, Attempts: attempts, LeaseToken: "lease-" + id,
 		Message: mail.Message{To: to, Subject: "Restablecer", Text: "Abrí " + secretLink}}
 }
 
@@ -115,5 +124,36 @@ func TestWorkerBackoffRepeatsLastStep(t *testing.T) {
 	w := &Worker{Backoff: []time.Duration{time.Second, time.Minute}}
 	if w.backoff(1) != time.Second || w.backoff(2) != time.Minute || w.backoff(9) != time.Minute {
 		t.Fatal("backoff must step through and then repeat the last value")
+	}
+}
+
+type cancellingSender struct{ cancel context.CancelFunc }
+
+func (cancellingSender) Name() string { return "fake" }
+func (s cancellingSender) Send(context.Context, mail.Message) error {
+	s.cancel() // shutdown arrives while the provider is accepting the message
+	return nil
+}
+
+func TestWorkerRecordsAcceptedSendEvenWhenShutdownCancelsMidSend(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	q := &fakeQueue{batch: []storage.ClaimedEmail{claimed("ok", "ana@taller.test", 1)}}
+	w := &Worker{Queue: q, Sender: cancellingSender{cancel: cancel}, Logger: slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))}
+	_, _ = w.RunOnce(ctx)
+	if len(q.sent) != 1 {
+		t.Fatalf("an accepted message must be marked sent despite cancellation, sent=%v", q.sent)
+	}
+}
+
+func TestWorkerUnreadablePayloadFailsFinal(t *testing.T) {
+	c := claimed("bad", "ana@taller.test", 1)
+	c.OpenErr = errors.New("does not open")
+	q := &fakeQueue{batch: []storage.ClaimedEmail{c}}
+	w := &Worker{Queue: q, Sender: scriptedSender{}, Logger: slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))}
+	if _, err := w.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if f := q.failed["bad"]; !f.final {
+		t.Fatalf("unreadable payload must fail for good, got %+v", f)
 	}
 }

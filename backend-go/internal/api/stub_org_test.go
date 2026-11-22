@@ -151,6 +151,9 @@ func (s *stubStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgT
 }
 
 func (s *stubStore) RequestPasswordReset(_ context.Context, _ string, _ string, _ string, compose storage.PasswordResetEmailComposer) (*storage.PasswordResetIssuance, error) {
+	if s.passwordResetErr != nil {
+		return nil, s.passwordResetErr
+	}
 	if s.passwordResetIssuance != nil && compose != nil {
 		// Mirrors the real store: the composed message joins the issuance.
 		s.enqueuedEmails = append(s.enqueuedEmails, storage.OutboundEmail{
@@ -160,6 +163,11 @@ func (s *stubStore) RequestPasswordReset(_ context.Context, _ string, _ string, 
 		})
 	}
 	return s.passwordResetIssuance, nil
+}
+
+func (s *stubStore) CancelEmails(_ context.Context, kind, ref string) (int, error) {
+	s.cancelledEmails = append(s.cancelledEmails, kind+":"+ref)
+	return 0, nil
 }
 
 func (s *stubStore) EnqueueEmail(_ context.Context, email storage.OutboundEmail) (string, error) {

@@ -11,6 +11,7 @@ import (
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/mail"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
@@ -770,7 +771,7 @@ func (s *Server) HandleOrgCreateInvitation(w http.ResponseWriter, r *http.Reques
 	for i, v := range body.Roles {
 		roles[i] = domain.UserRole(v)
 	}
-	if email == "" || !strings.Contains(email, "@") || !domain.RolesAllowedInOrg(roles, org.Type) {
+	if email == "" || !mail.ValidAddress(email) || !domain.RolesAllowedInOrg(roles, org.Type) {
 		respondWithError(w, http.StatusBadRequest, "email válido y roles permitidos son obligatorios")
 		return
 	}
@@ -890,6 +891,12 @@ func (s *Server) HandleOrgRevokeInvitation(w http.ResponseWriter, r *http.Reques
 	}
 	if err = s.auditRequired(r.Context(), "invitation_revoked", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{"invitation_id": inv.ID, "reason": reason}); err != nil {
 		respondWithInternalError(w, err, "audit invitation revoke")
+		return
+	}
+	// #1646: a revoked invitation's pending email would carry a dead link.
+	// Same transaction as the revoke; a no-op when nothing is queued.
+	if _, err = s.Store.CancelEmails(r.Context(), storage.EmailKindInvitation, inv.ID); err != nil {
+		respondWithInternalError(w, err, "cancel invitation email")
 		return
 	}
 	w.Header().Set("ETag", FormatVersionETag(inv.Version))

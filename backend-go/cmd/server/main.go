@@ -121,20 +121,43 @@ func main() {
 	// their credential) and this worker delivers them with retries. Without
 	// it nothing is emailed, and production says so loudly at boot.
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
+	workerDone := make(chan struct{})
 	defer stopWorkers()
-	if cfg.SMTP != nil {
-		sender, senderErr := mail.NewSMTPSender(*cfg.SMTP)
+	var sender mail.Sender
+	switch {
+	case cfg.SMTP != nil:
+		smtpSender, senderErr := mail.NewSMTPSender(*cfg.SMTP)
 		if senderErr != nil {
 			slog.Error("Invalid SMTP configuration, refusing to start", "error", senderErr)
 			os.Exit(1)
 		}
-		serverAPI.EmailDelivery = &api.EmailDeliveryConfig{PublicAppURL: cfg.PublicAppURL, Location: cfg.EmailLocation}
+		sender = smtpSender
 		slog.Info("Email delivery configured", "transport", "smtp", "host", cfg.SMTP.Host, "port", cfg.SMTP.Port, "tls", string(cfg.SMTP.TLS), "public_app_url", cfg.PublicAppURL)
-		go (&emailoutbox.Worker{Queue: store, Sender: sender, Interval: cfg.EmailOutboxPollInterval}).Run(workerCtx)
-	} else if cfg.Production {
+	case cfg.DevEmailLog:
+		sender = mail.LogSender{}
+		slog.Warn("Email delivery uses the DEVELOPMENT log transport: messages and their one-time links are printed here, nothing is sent", "public_app_url", cfg.PublicAppURL)
+	case cfg.Production:
 		slog.Warn("EMAIL DELIVERY NOT CONFIGURED: password-reset links and invitation emails will NOT be sent. Set SMTP_HOST, SMTP_FROM, APP_PUBLIC_URL (and SMTP_USERNAME/SMTP_PASSWORD) to enable it; until then admins share links by hand.")
-	} else {
+	default:
 		slog.Info("Email delivery not configured (SMTP_HOST unset): reset links are withheld and invitations are shared by link")
+	}
+	if sender != nil {
+		// Outbox payloads are sealed with a key derived from the server
+		// secret (dedicated label): the database never holds a usable link.
+		emailCipher, cipherErr := mail.NewCipher(cfg.JWTSecret)
+		if cipherErr != nil {
+			slog.Error("Email outbox cipher unavailable, refusing to start", "error", cipherErr)
+			os.Exit(1)
+		}
+		store.EmailCipher = emailCipher
+		serverAPI.EmailDelivery = &api.EmailDeliveryConfig{PublicAppURL: cfg.PublicAppURL, Location: cfg.EmailLocation}
+		worker := &emailoutbox.Worker{Queue: store, Sender: sender, Interval: cfg.EmailOutboxPollInterval}
+		go func() {
+			defer close(workerDone)
+			worker.Run(workerCtx)
+		}()
+	} else {
+		close(workerDone)
 	}
 	handler := api.RegisterRoutes(serverAPI)
 	if os.Getenv("ORGANIZATION_TEST_ISOLATED") == "1" {
@@ -183,6 +206,11 @@ func main() {
 	<-quit
 	slog.Info("Shutting down HTTP server gracefully...")
 	stopWorkers()
+	select {
+	case <-workerDone:
+	case <-time.After(30 * time.Second):
+		slog.Warn("email outbox worker did not stop in time; leased messages retry after their lease")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

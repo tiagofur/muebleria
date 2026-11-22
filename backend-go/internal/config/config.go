@@ -88,6 +88,11 @@ type Config struct {
 	// messages (GRANETE_EMAIL_OUTBOX_POLL_INTERVAL, Go duration, 1s–5m,
 	// default 10s).
 	EmailOutboxPollInterval time.Duration
+	// DevEmailLog routes the outbox to the development log transport
+	// (GRANETE_DEV_EMAIL_TRANSPORT=log): full messages, links included, go to
+	// the server log instead of a mailbox. Refused in production and together
+	// with SMTP_HOST.
+	DevEmailLog bool
 	// Production mirrors GRANETE_ENV=production.
 	Production bool
 }
@@ -201,6 +206,10 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	devEmailLog, publicAppURL, err := parseDevEmailTransport(smtpConfig != nil, publicAppURL)
+	if err != nil {
+		return Config{}, err
+	}
 	graneteEnv, err := normalizeGraneteEnv()
 	if err != nil {
 		return Config{}, err
@@ -240,6 +249,7 @@ func LoadConfig() (Config, error) {
 		SMTP:                             smtpConfig,
 		PublicAppURL:                     publicAppURL,
 		EmailLocation:                    emailLocation,
+		DevEmailLog:                      devEmailLog,
 		EmailOutboxPollInterval:          outboxPoll,
 		Production:                       graneteEnv == "production",
 	}, nil
@@ -363,9 +373,38 @@ func parseEmailDelivery() (*mail.SMTPConfig, string, error) {
 	return &cfg, publicURL, nil
 }
 
-// parsePublicAppURL validates APP_PUBLIC_URL: an absolute http(s) origin
-// (optionally with a base path), https in production, normalized without a
-// trailing slash. Empty is allowed here; parseEmailDelivery requires it when
+// parseDevEmailTransport resolves GRANETE_DEV_EMAIL_TRANSPORT (#1646). Only
+// "log" (or empty) is accepted; "log" is refused in production and together
+// with SMTP, and defaults the link base to the Vite dev origin.
+func parseDevEmailTransport(smtpConfigured bool, publicURL string) (bool, string, error) {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("GRANETE_DEV_EMAIL_TRANSPORT")))
+	switch raw {
+	case "":
+		return false, publicURL, nil
+	case "log":
+	default:
+		return false, "", fmt.Errorf("GRANETE_DEV_EMAIL_TRANSPORT must be \"log\" or empty, got %q", raw)
+	}
+	env, err := normalizeGraneteEnv()
+	if err != nil {
+		return false, "", err
+	}
+	if env == "production" {
+		return false, "", errors.New("production (GRANETE_ENV=production) must never log email bodies: GRANETE_DEV_EMAIL_TRANSPORT=log cannot be enabled")
+	}
+	if smtpConfigured {
+		return false, "", errors.New("GRANETE_DEV_EMAIL_TRANSPORT=log and SMTP_HOST are mutually exclusive")
+	}
+	if publicURL == "" {
+		publicURL = "http://localhost:5173"
+	}
+	return true, publicURL, nil
+}
+
+// parsePublicAppURL validates APP_PUBLIC_URL: the absolute http(s) Web origin
+// only (the SPA routes /reset-password and /accept-invitation live at the
+// root, so no path), https in production, normalized without a trailing
+// slash. Empty is allowed here; parseEmailDelivery requires it when
 // SMTP is configured.
 func parsePublicAppURL(raw string, production bool) (string, error) {
 	raw = strings.TrimSpace(raw)

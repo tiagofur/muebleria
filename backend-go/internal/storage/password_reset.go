@@ -139,6 +139,17 @@ func (s *PostgresStore) RequestPasswordReset(ctx context.Context, email, ip, req
 			return nil, err
 		}
 	}
+	if compose != nil {
+		// Per-account cooldown: a repeat inside the window answers the same
+		// to the requester but mints nothing and sends nothing.
+		recent, recentErr := s.recentEmailExists(txCtx, EmailKindPasswordReset, u.ID, PasswordResetEmailCooldown)
+		if recentErr != nil {
+			return nil, fmt.Errorf("password reset cooldown: %w", recentErr)
+		}
+		if recent {
+			return nil, nil
+		}
+	}
 	issuance, err := s.IssuePasswordResetToken(txCtx, u.ID, "self", nil, PasswordResetTokenTTL, ip, requestID)
 	if err != nil {
 		return nil, err
@@ -146,6 +157,7 @@ func (s *PostgresStore) RequestPasswordReset(ctx context.Context, email, ip, req
 	if compose != nil {
 		if _, err = s.EnqueueEmail(txCtx, OutboundEmail{
 			Kind:      EmailKindPasswordReset,
+			Ref:       u.ID,
 			Message:   compose(u.Email, *issuance),
 			ExpiresAt: issuance.ExpiresAt,
 		}); err != nil {

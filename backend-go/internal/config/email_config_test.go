@@ -9,7 +9,7 @@ import (
 
 func clearEmailEnv(t *testing.T) {
 	t.Helper()
-	for _, key := range []string{"GRANETE_ENV", "APP_PUBLIC_URL", "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_TLS"} {
+	for _, key := range []string{"GRANETE_DEV_EMAIL_TRANSPORT", "GRANETE_ENV", "APP_PUBLIC_URL", "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_TLS"} {
 		t.Setenv(key, "")
 	}
 }
@@ -93,5 +93,26 @@ func TestParseEmailDelivery_PlainTLSAllowedForLocalSink(t *testing.T) {
 	cfg, _, err := parseEmailDelivery()
 	if err != nil || cfg.Port != 1025 || cfg.TLS != mail.TLSNone {
 		t.Fatalf("local sink config: %+v err=%v", cfg, err)
+	}
+}
+
+func TestParseDevEmailTransport(t *testing.T) {
+	clearEmailEnv(t)
+	t.Setenv("GRANETE_DEV_EMAIL_TRANSPORT", "log")
+	enabled, url, err := parseDevEmailTransport(false, "")
+	if err != nil || !enabled || url != "http://localhost:5173" {
+		t.Fatalf("dev log transport: enabled=%t url=%q err=%v", enabled, url, err)
+	}
+	if _, _, err := parseDevEmailTransport(true, "http://localhost:5173"); err == nil {
+		t.Fatal("log transport together with SMTP must be refused")
+	}
+	t.Setenv("GRANETE_ENV", "production")
+	if _, _, err := parseDevEmailTransport(false, ""); err == nil {
+		t.Fatal("log transport must be refused in production")
+	}
+	t.Setenv("GRANETE_ENV", "")
+	t.Setenv("GRANETE_DEV_EMAIL_TRANSPORT", "stdout")
+	if _, _, err := parseDevEmailTransport(false, ""); err == nil {
+		t.Fatal("unknown transport must be refused")
 	}
 }

@@ -52,6 +52,7 @@ func (s *Server) enqueueInvitationEmail(ctx context.Context, organizationID, org
 	_, err := s.Store.EnqueueEmail(ctx, storage.OutboundEmail{
 		Kind:           storage.EmailKindInvitation,
 		OrganizationID: organizationID,
+		Ref:            inv.ID,
 		Message:        mail.InvitationMessage(inv.Email, organizationName, s.EmailDelivery.link("/accept-invitation", token), inv.ExpiresAt, s.EmailDelivery.Location),
 		ExpiresAt:      inv.ExpiresAt,
 	})

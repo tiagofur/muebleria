@@ -7,6 +7,7 @@ package api
 
 import (
 	"bytes"
+	"errors"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -83,6 +84,26 @@ func TestRequestPasswordResetWithEmailDeliveryQueuesOnlyForKnownAccounts(t *test
 	}
 	if !bytes.Equal(bodies[0], bodies[1]) {
 		t.Fatalf("responses diverge: %s vs %s", bodies[0], bodies[1])
+	}
+}
+
+func TestRequestPasswordResetStoreFailureStaysUniform(t *testing.T) {
+	// A failure can only happen on the known-account path (token, audit,
+	// outbox writes): answering 500 would reveal the account exists.
+	ok := NewServer(&stubStore{}, "secret", nil, 1, 1)
+	broken := NewServer(&stubStore{passwordResetErr: errors.New("enqueue failed")}, "secret", nil, 1, 1)
+	var bodies [][]byte
+	for _, server := range []*Server{ok, broken} {
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/password-resets", bytes.NewBufferString(`{"email":"alguien@example.com"}`))
+		rec := httptest.NewRecorder()
+		server.HandleRequestPasswordReset(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		bodies = append(bodies, rec.Body.Bytes())
+	}
+	if !bytes.Equal(bodies[0], bodies[1]) {
+		t.Fatalf("failure response diverges: %s vs %s", bodies[0], bodies[1])
 	}
 }
 
