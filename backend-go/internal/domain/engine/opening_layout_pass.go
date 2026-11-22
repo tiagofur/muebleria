@@ -144,7 +144,9 @@ func appendOpeningBetweenProfileHardware(layout *FurnitureLayout, catalog domain
 		layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 			hw,
 			fmt.Sprintf("opening-profile-between-%s-%d", hw.ID, k),
-			[3]float64{0, float64(dims.DepthMm), z},
+			// #1689: min corner — the run's depth reaches BACK from the
+			// front plane (dims[1] inside), never floating ahead of it.
+			[3]float64{0, float64(dims.DepthMm) - members.BetweenProfileDepthMm, z},
 			LayoutBasis{
 				X: [3]float64{1, 0, 0},
 				Y: [3]float64{0, 1, 0},
@@ -464,11 +466,17 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 	// 1. Profile: spanning the entire furniture width from X = 0 to X = totalW,
 	// front face flush with the carcass front plane, vertical envelope from
 	// the declared datasheet (8006: 56.5 tall × 27.2 deep).
+	// #1689: the box publishes its MIN CORNER — the same convention the
+	// supports/caps below and every board use. The anchor (front-top plane)
+	// stays the geometry's derivation reference; the published translation is
+	// the corner of [0,dims] in the published basis, so every consumer that
+	// draws the box lands it inside the band instead of floating off the
+	// front plane.
 	if hw, ok := findHardware(catalog, members.ProfileHardwareID); ok && hw.Active {
 		layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 			hw,
 			fmt.Sprintf("opening-profile-%s", hw.ID),
-			[3]float64{0, yPos, zPos},
+			[3]float64{0, yPos - members.ProfileDepthMm, zPos - members.ProfileHeightMm},
 			LayoutBasis{
 				X: [3]float64{1, 0, 0},
 				Y: [3]float64{0, 1, 0},

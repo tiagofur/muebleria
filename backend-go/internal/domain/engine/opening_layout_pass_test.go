@@ -209,8 +209,12 @@ func TestOpeningMembersPlaceFromDeclaredDatasheet(t *testing.T) {
 	if profile.DimensionsMm != [3]float64{400, 27.2, 56.5} {
 		t.Fatalf("profile envelope = %v, want [400 27.2 56.5] (datasheet, front flush)", profile.DimensionsMm)
 	}
-	if profile.Transform.TranslationMm != [3]float64{0, 560, 720} {
-		t.Fatalf("profile translation = %v, want [0 560 720]", profile.Transform.TranslationMm)
+	// #1689: min corner of the run band — front face flush at Y=560 means the
+	// box spans Y [532.8, 560] and hangs from the top Z [663.5, 720], the same
+	// convention the caps below pin (the host extends +axes from the
+	// translation). The pre-#1689 anchor [0 560 720] floated the run outside.
+	if profile.Transform.TranslationMm != [3]float64{0, 532.8, 663.5} {
+		t.Fatalf("profile translation = %v, want [0 532.8 663.5] (min corner of the band)", profile.Transform.TranslationMm)
 	}
 
 	// #1296: the support's origin (the L's corner: plate face, arm rear,

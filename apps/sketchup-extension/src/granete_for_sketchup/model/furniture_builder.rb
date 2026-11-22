@@ -1101,12 +1101,23 @@ module Granete
           hardware_definition = model.definitions.add(
             "#{FurnitureBuilder::HARDWARE_DEFINITION_PREFIX}#{name} · #{placement.placement_id}"
           )
-          # #1453 F2: the proxy renders centered IN-PLANE on the definition
-          # origin (the mount point) and growing outward on Z — the same
-          # convention web/Go AABB draw with. The instance origin stays at
-          # the face point (the #405 contract pins it), so centering lives
-          # in the geometry, never in the instance transform.
-          LocalGeometry.build_hardware_proxy_box(hardware_definition, dims)
+          # #1689: a DERIVED placement (the gola runs/supports/caps the engine
+          # materializes from the resolved grip) is a BOX in the engine's
+          # published frame — translation is its min corner and the geometry
+          # spans [0,dims] on the basis, exactly like a board. The centered
+          # mount proxy below stays for MOUNTED hardware (a handle on its
+          # face point, #1453 F2) — rendering a run with it floated the gola
+          # outside the cabinet.
+          if placement.respond_to?(:placement_kind) && placement.placement_kind == 'derived'
+            LocalGeometry.build_local_box(hardware_definition, dims[0], dims[1], dims[2])
+          else
+            # #1453 F2: the proxy renders centered IN-PLANE on the definition
+            # origin (the mount point) and growing outward on Z — the same
+            # convention web/Go AABB draw with. The instance origin stays at
+            # the face point (the #405 contract pins it), so centering lives
+            # in the geometry, never in the instance transform.
+            LocalGeometry.build_hardware_proxy_box(hardware_definition, dims)
+          end
           transform = if defined?(::Geom::Transformation) && pos.is_a?(::Geom::Transformation)
                         pos
                       elsif placement.basis
@@ -1298,6 +1309,41 @@ module Granete
           LocalGeometry.mirror_placement(board.translation, placement_basis, board.width_mm, mirror_width_mm)
         end
 
+        # #1689: the width reflection flips the local X DIRECTION of boards
+        # whose local X runs along the furniture depth/height (the laterals:
+        # basis.x has no width component). The box itself is symmetric, but
+        # the X-addressed decorations (notch/bevel bands) would land on the
+        # mirrored-away edge — the gola side notches cut the BACK instead of
+        # the front. Flip their X band inside [0, extent] so the cut keeps
+        # addressing the same physical edge after the reflection. Boards
+        # whose local X runs along the width (doors) need no flip: the
+        # reflection moving them to the other width edge is the truthful
+        # mirror of the cut.
+        # #1689: on mirrored boards whose local X leaves the width plane the
+        # reflection flips the X-addressed bands — re-anchor them; every
+        # other board renders the engine bands untouched.
+        def bands_for_build(board, notches, bevels, mirror_width_mm)
+          return [notches, bevels] unless mirror_width_mm
+
+          mirrored_local_bands(notches, bevels, board.width_mm,
+                               board.respond_to?(:basis) ? board.basis : nil)
+        end
+
+        def mirrored_local_bands(notches, bevels, extent_mm, original_basis)
+          bx = original_basis.is_a?(Hash) ? original_basis['x'] : nil
+          return [notches, bevels] if bx.nil? || bx[0].abs >= 1.0e-6
+
+          [notches.map { |n| flip_band_x(n, extent_mm) },
+           bevels.map { |b| flip_band_x(b, extent_mm) }]
+        end
+
+        def flip_band_x(band, extent_mm)
+          start = band['startMm'].dup
+          size = band['sizeMm']
+          start[0] = extent_mm - start[0] - size[0]
+          band.merge('startMm' => start)
+        end
+
         # rubocop:disable-next Metrics/ParameterLists
         def render_native_board(model, parent_definition, furniture_instance_id, board,
                                 placement_transform: nil, assembly_instance_id: nil,
@@ -1320,6 +1366,7 @@ module Granete
           # cuts land on the mirrored corner — the local geometry itself
           # (dims, notches, bevels) stays the engine's untouched truth.
           build_translation, build_basis = board_placement_pair(board, mirror_width_mm)
+          notches, bevels = bands_for_build(board, notches, bevels, mirror_width_mm)
           LocalGeometry.build_local_box(board_definition, board.width_mm, board.thickness_mm,
                                         board.length_mm, notches: notches, bevels: bevels,
                                                          basis: build_basis)
