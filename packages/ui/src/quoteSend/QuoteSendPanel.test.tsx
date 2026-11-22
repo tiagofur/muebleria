@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { QuoteSendPanel, bytesToBase64, isQuoteRevisionSendable, type QuoteSendRevision } from './QuoteSendPanel';
+import { QuoteSendPanel, bytesToBase64, isQuoteRevisionSendable, type QuoteSendPdfResult, type QuoteSendRevision } from './QuoteSendPanel';
 
 const PROJECT = '16500000-0000-4000-8000-000000000001';
 const REV = '16500000-0000-4000-8000-000000000003';
@@ -32,7 +32,13 @@ const delivery = (overrides: Record<string, unknown> = {}) => ({
 const published: QuoteSendRevision = { id: REV, revisionNumber: 2, status: 'published', exportable: true };
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
 
-function renderPanel(fetchMock: ReturnType<typeof vi.fn>, revisions: readonly QuoteSendRevision[] = [published], buildPdf = vi.fn(async () => ({ ok: true as const, bytes: PDF, fileName: 'Cotizacion-Q2-listado.pdf' }))) {
+type BuildPdf = (quoteRevisionId: string, variant: 'detailed' | 'summary') => Promise<QuoteSendPdfResult>;
+
+function renderPanel(
+  fetchMock: ReturnType<typeof vi.fn>,
+  revisions: readonly QuoteSendRevision[] = [published],
+  buildPdf = vi.fn<BuildPdf>(async () => ({ ok: true, bytes: PDF, fileName: 'Cotizacion-Q2-listado.pdf' })),
+) {
   vi.stubGlobal('fetch', fetchMock);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -128,10 +134,10 @@ describe('QuoteSendPanel (#1650)', () => {
   });
 
   it('shows a PDF build failure without calling the server', async () => {
-    const fetchMock = vi.fn(async () => json(200, list()));
-    renderPanel(fetchMock, [published], vi.fn(async () => ({ ok: false as const, message: 'La revisión congelada no tiene líneas' })));
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => json(200, list()));
+    renderPanel(fetchMock, [published], vi.fn<BuildPdf>(async () => ({ ok: false, message: 'La revisión congelada no tiene líneas' })));
     fireEvent.click(await screen.findByRole('button', { name: 'Enviar por email' }));
     expect((await screen.findByTestId('quote-send-error')).textContent).toContain('no tiene líneas');
-    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith(':send-email'))).toBe(false);
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).endsWith(':send-email'))).toBe(false);
   });
 });
