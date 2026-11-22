@@ -108,7 +108,7 @@ func (s *PostgresStore) ClaimEmailBatch(ctx context.Context, limit int, lease ti
 	if s.EmailCipher == nil {
 		return nil, ErrEmailCipherMissing
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT id, kind, payload, attempts, lease_token FROM claim_email_outbox_batch($1, $2)`,
+	rows, err := s.db(ctx).Query(ctx, `SELECT id, kind, payload, attempts, lease_token FROM claim_email_outbox_batch($1, $2)`,
 		limit, int(lease.Seconds()))
 	if err != nil {
 		return nil, fmt.Errorf("claim email batch: %w", err)
@@ -131,7 +131,7 @@ func (s *PostgresStore) ClaimEmailBatch(ctx context.Context, limit int, lease ti
 // when the lease was lost (another worker re-claimed the row).
 func (s *PostgresStore) MarkEmailSent(ctx context.Context, id, leaseToken string) (bool, error) {
 	var ok bool
-	err := s.Pool.QueryRow(ctx, `SELECT mark_email_outbox_sent($1, $2)`, id, leaseToken).Scan(&ok)
+	err := s.db(ctx).QueryRow(ctx, `SELECT mark_email_outbox_sent($1, $2)`, id, leaseToken).Scan(&ok)
 	return ok, err
 }
 
@@ -140,6 +140,6 @@ func (s *PostgresStore) MarkEmailSent(ctx context.Context, id, leaseToken string
 // token or body. It reports false when the lease was lost.
 func (s *PostgresStore) MarkEmailFailed(ctx context.Context, id, leaseToken, sanitizedError string, retryAt time.Time, final bool) (bool, error) {
 	var ok bool
-	err := s.Pool.QueryRow(ctx, `SELECT mark_email_outbox_failed($1, $2, $3, $4, $5)`, id, leaseToken, sanitizedError, retryAt, final).Scan(&ok)
+	err := s.db(ctx).QueryRow(ctx, `SELECT mark_email_outbox_failed($1, $2, $3, $4, $5)`, id, leaseToken, sanitizedError, retryAt, final).Scan(&ok)
 	return ok, err
 }

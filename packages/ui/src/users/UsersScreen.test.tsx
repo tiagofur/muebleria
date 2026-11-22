@@ -593,7 +593,7 @@ describe('UsersScreen (#458 tenant-safe query integrity)', () => {
     await actor.click(await screen.findByRole('button', { name: 'Invitar miembro' }));
     await actor.type(screen.getByLabelText('Email del colaborador *'), 'new@test.com');
     await actor.click(screen.getByRole('button', { name: 'Generar Invitación' }));
-    expect((await screen.findByText(/Le enviamos un email a new@test.com/)).textContent).toContain('con el enlace');
+    expect((await screen.findByText(/Le estamos enviando un email a new@test.com/)).textContent).toContain('con el enlace');
     expect(screen.getByText(/Si no le llega en unos minutos/)).toBeTruthy();
     expect(screen.getByText(/token=secret/)).toBeTruthy();
   });

@@ -964,7 +964,7 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
           <div className="users-modal-stack">
             <div className="users-invitation-success" role="status">
               {inviteEmailedTo
-                ? `✓ Invitación generada. Le enviamos un email a ${inviteEmailedTo} con el enlace.`
+                ? `✓ Invitación generada. Le estamos enviando un email a ${inviteEmailedTo} con el enlace.`
                 : '✓ Invitación generada exitosamente.'}
             </div>
 

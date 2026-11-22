@@ -154,6 +154,12 @@ func (s *Server) HandleIssueMembershipPasswordReset(w http.ResponseWriter, r *ht
 		respondWithInternalError(w, err, "issue password reset")
 		return
 	}
+	// #1646: the admin link rotated the member's token; a still-pending
+	// self-service email would only carry a dead link.
+	if _, err = s.Store.CancelEmails(r.Context(), storage.EmailKindPasswordReset, member.UserID); err != nil {
+		respondWithInternalError(w, err, "cancel pending reset email")
+		return
+	}
 	respondWithJSON(w, http.StatusCreated, openapi.PasswordResetIssuanceResponse{
 		Token:       issuance.Token,
 		ResetURL:    "/reset-password?token=" + issuance.Token,

@@ -179,6 +179,9 @@ func TestIssuePasswordResetAuthorityAndTarget(t *testing.T) {
 		if store.issuedResetUserID != "user-9" || store.issuedResetVia != "admin" {
 			t.Fatalf("issued target=%q via=%q", store.issuedResetUserID, store.issuedResetVia)
 		}
+		if len(store.cancelledEmails) != 1 || store.cancelledEmails[0] != "password_reset:user-9" {
+			t.Fatalf("admin issuance must cancel the pending self-service email, got %v", store.cancelledEmails)
+		}
 	})
 
 	t.Run("unknown member", func(t *testing.T) {

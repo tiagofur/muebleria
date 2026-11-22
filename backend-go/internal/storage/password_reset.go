@@ -142,6 +142,11 @@ func (s *PostgresStore) RequestPasswordReset(ctx context.Context, email, ip, req
 	if compose != nil {
 		// Per-account cooldown: a repeat inside the window answers the same
 		// to the requester but mints nothing and sends nothing.
+		// Serialize concurrent requests for the same account so two cannot
+		// both pass the check (transaction-scoped advisory lock).
+		if _, lockErr := tx.Exec(txCtx, `SELECT pg_advisory_xact_lock(hashtext('granete:pwreset:' || $1))`, u.ID); lockErr != nil {
+			return nil, fmt.Errorf("password reset cooldown lock: %w", lockErr)
+		}
 		recent, recentErr := s.recentEmailExists(txCtx, EmailKindPasswordReset, u.ID, PasswordResetEmailCooldown)
 		if recentErr != nil {
 			return nil, fmt.Errorf("password reset cooldown: %w", recentErr)
