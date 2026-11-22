@@ -13,12 +13,23 @@ import (
 	"strings"
 )
 
+// MaxAttachmentBytes bounds the total attachment size of one message.
+const MaxAttachmentBytes = 5 << 20
+
+// Attachment is one file attached to a message (#1650: the exact quote PDF).
+type Attachment struct {
+	FileName    string
+	ContentType string
+	Data        []byte
+}
+
 // Message is one rendered email.
 type Message struct {
-	To      string
-	Subject string
-	Text    string
-	HTML    string
+	To          string
+	Subject     string
+	Text        string
+	HTML        string
+	Attachments []Attachment `json:",omitempty"`
 }
 
 // Validate rejects header injection and empty parts before anything is
@@ -32,6 +43,22 @@ func (m Message) Validate() error {
 	}
 	if strings.TrimSpace(m.Subject) == "" || strings.TrimSpace(m.Text) == "" {
 		return errors.New("mail: subject and text body are required")
+	}
+	total := 0
+	for _, a := range m.Attachments {
+		if a.FileName == "" || len(a.FileName) > 200 || strings.ContainsAny(a.FileName, "\r\n\"/\\") {
+			return errors.New("mail: invalid attachment file name")
+		}
+		if a.ContentType != "application/pdf" {
+			return errors.New("mail: unsupported attachment type")
+		}
+		if len(a.Data) == 0 {
+			return errors.New("mail: empty attachment")
+		}
+		total += len(a.Data)
+	}
+	if total > MaxAttachmentBytes {
+		return errors.New("mail: attachments too large")
 	}
 	return nil
 }

@@ -2,11 +2,16 @@ package mail
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"io"
 	"mime"
+	"mime/multipart"
 	"mime/quotedprintable"
 	"net"
+	netmail "net/mail"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -189,7 +194,7 @@ func TestCipherSealsAndRejectsOtherKeys(t *testing.T) {
 		t.Fatalf("sealed payload leaks plaintext: %s", sealed)
 	}
 	opened, err := c.Open(sealed)
-	if err != nil || opened != msg {
+	if err != nil || !reflect.DeepEqual(opened, msg) {
 		t.Fatalf("round trip failed: %+v err=%v", opened, err)
 	}
 	other, _ := NewCipher("secret-b")
@@ -216,5 +221,79 @@ func TestValidAddressAndOrgNameFolding(t *testing.T) {
 func TestLogSenderRefusesInvalidMessages(t *testing.T) {
 	if err := (LogSender{}).Send(context.Background(), Message{To: "bad", Subject: "s", Text: "t"}); err == nil {
 		t.Fatal("log sender must validate like the real transport")
+	}
+}
+
+func TestSMTPSenderDeliversExactPDFAttachment(t *testing.T) {
+	srv := startFakeSMTP(t)
+	sender, err := NewSMTPSender(SMTPConfig{Host: "127.0.0.1", Port: srv.port(), From: "Granete <no-reply@granete.test>", TLS: TLSNone, Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pdf := []byte("%PDF-1.7\n" + strings.Repeat("contenido binario \x00\xff ", 400))
+	msg := QuoteMessage("cliente@taller.test", "Ana López", "Taller Norte", "Cocina\r\nBcc: x@y.test", 2, "Cualquier duda, avisame.\n<b>gracias</b>",
+		Attachment{FileName: "Cotizacion-Cocina-Q2-listado.pdf", ContentType: "application/pdf", Data: pdf})
+	if err := msg.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if err := sender.Send(context.Background(), msg); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	srv.mu.Lock()
+	data := srv.data
+	srv.mu.Unlock()
+	parsed, err := netmail.ReadMessage(strings.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mediaType, params, err := mime.ParseMediaType(parsed.Header.Get("Content-Type"))
+	if err != nil || mediaType != "multipart/mixed" {
+		t.Fatalf("top-level type %q err=%v", mediaType, err)
+	}
+	reader := multipart.NewReader(parsed.Body, params["boundary"])
+	var gotPDF []byte
+	var sawAlternative bool
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		ct := part.Header.Get("Content-Type")
+		if strings.HasPrefix(ct, "multipart/alternative") {
+			sawAlternative = true
+			continue
+		}
+		if strings.HasPrefix(ct, "application/pdf") {
+			raw, _ := io.ReadAll(part)
+			gotPDF, err = base64.StdEncoding.DecodeString(strings.ReplaceAll(string(raw), "\r\n", ""))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if !sawAlternative || !bytes.Equal(gotPDF, pdf) {
+		t.Fatalf("attachment must arrive byte-identical (alt=%t, len=%d want %d)", sawAlternative, len(gotPDF), len(pdf))
+	}
+	if strings.Contains(msg.Subject, "\n") || !strings.Contains(msg.HTML, "&lt;b&gt;gracias&lt;/b&gt;") {
+		t.Fatalf("subject must be one line and the note escaped: %q", msg.Subject)
+	}
+}
+
+func TestValidateRejectsBadAttachments(t *testing.T) {
+	base := Message{To: "a@b.test", Subject: "s", Text: "t"}
+	for name, a := range map[string]Attachment{
+		"type":  {FileName: "x.exe", ContentType: "application/x-msdownload", Data: []byte("x")},
+		"name":  {FileName: "../x.pdf", ContentType: "application/pdf", Data: []byte("x")},
+		"empty": {FileName: "x.pdf", ContentType: "application/pdf"},
+		"big":   {FileName: "x.pdf", ContentType: "application/pdf", Data: make([]byte, MaxAttachmentBytes+1)},
+	} {
+		m := base
+		m.Attachments = []Attachment{a}
+		if m.Validate() == nil {
+			t.Fatalf("%s attachment must be refused", name)
+		}
 	}
 }

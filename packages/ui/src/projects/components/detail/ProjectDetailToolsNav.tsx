@@ -1,5 +1,5 @@
 import { useRef, type KeyboardEvent, type ReactNode } from 'react';
-import { Activity, Camera, ClipboardList, MessageSquare, Ruler, Wallet, Wrench } from 'lucide-react';
+import { Activity, Camera, ClipboardList, MessageSquare, Ruler, Send, Wallet, Wrench } from 'lucide-react';
 import { surveyFabricationBlockers } from '@granete/domain';
 import { useProjectDetail } from '../projectDetailContext';
 
@@ -7,6 +7,7 @@ export type QuoteToolsPanel =
   | 'overview'
   | 'lifecycle'
   | 'payments'
+  | 'send'
   | 'survey'
   | 'kitchen'
   | 'scenarios'
@@ -21,6 +22,7 @@ export const QUOTE_TOOLS_PANEL_IDS: readonly Exclude<QuoteToolsPanel, null>[] = 
   'overview',
   'lifecycle',
   'payments',
+  'send',
   'survey',
   'kitchen',
   'scenarios',
@@ -129,6 +131,16 @@ export function ProjectDetailToolsNav({
           >
             <Wallet size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
             Cobros
+          </button>
+        ) : null}
+        {ctx.renderQuoteSendPanel ? (
+          <button
+            type="button"
+            {...tabProps('send')}
+            data-testid="project-tools-send"
+          >
+            <Send size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
+            Enviar cotización
           </button>
         ) : null}
         <button

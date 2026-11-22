@@ -69,3 +69,41 @@ func InvitationMessage(to, organizationName, link string, expiresAt time.Time, l
 <p>— Granete</p>`, html.EscapeString(org), html.EscapeString(link), html.EscapeString(when))
 	return Message{To: to, Subject: fmt.Sprintf("Invitación a %s en Granete", org), Text: text, HTML: htmlBody}
 }
+
+// QuoteMessage renders the Spanish email that carries the exact quote PDF
+// (#1650). note is the seller's optional free text (plain; escaped in HTML).
+func QuoteMessage(to, customerName, organizationName, projectName string, revisionNumber int, note string, pdf Attachment) Message {
+	fold := func(s string) string { return strings.Join(strings.Fields(s), " ") }
+	org := fold(organizationName)
+	if org == "" {
+		org = "tu taller"
+	}
+	customer := fold(customerName)
+	greeting := "Hola,"
+	if customer != "" {
+		greeting = fmt.Sprintf("Hola %s,", customer)
+	}
+	project := fold(projectName)
+	what := fmt.Sprintf("la cotización Q%d", revisionNumber)
+	if project != "" {
+		what = fmt.Sprintf("la cotización Q%d de «%s»", revisionNumber, project)
+	}
+	note = strings.TrimSpace(note)
+	lines := []string{greeting, "", fmt.Sprintf("Te enviamos %s. Encontrás el PDF adjunto.", what)}
+	htmlNote := ""
+	if note != "" {
+		lines = append(lines, "", note)
+		htmlNote = "<p>" + strings.ReplaceAll(html.EscapeString(note), "\n", "<br>") + "</p>\n"
+	}
+	lines = append(lines, "", "— "+org)
+	htmlBody := fmt.Sprintf(`<p>%s</p>
+<p>Te enviamos %s. Encontrás el PDF adjunto.</p>
+%s<p>— %s</p>`, html.EscapeString(greeting), html.EscapeString(what), htmlNote, html.EscapeString(org))
+	return Message{
+		To:          to,
+		Subject:     fmt.Sprintf("Cotización Q%d — %s", revisionNumber, org),
+		Text:        strings.Join(lines, "\n"),
+		HTML:        htmlBody,
+		Attachments: []Attachment{pdf},
+	}
+}

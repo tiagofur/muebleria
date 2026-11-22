@@ -65,6 +65,8 @@ export function ProjectDetailToolsContent({
 
       {toolsPanel === 'payments' && ctx.renderPaymentsPanel ? ctx.renderPaymentsPanel() : null}
 
+      {toolsPanel === 'send' && ctx.renderQuoteSendPanel ? ctx.renderQuoteSendPanel() : null}
+
       {toolsPanel === 'survey' ? (
         <SiteSurveyPanel
           projectId={project.id}

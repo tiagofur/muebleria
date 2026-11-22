@@ -1667,6 +1667,7 @@ export function AppContent({
     handleExportProductionPack,
     handleExportCommercialQuote,
     handleExportCommercialQuotePdf,
+    buildCommercialQuotePdfForRevision,
   } = useExportHandlers({
     projects,
     selectedProject,
@@ -1971,6 +1972,7 @@ export function AppContent({
     handleExportCncPilot,
     handleExportCommercialQuote,
     handleExportCommercialQuotePdf,
+    buildCommercialQuotePdfForRevision,
     handleExportCutListCsv,
     handleExportCutPlanPdf,
     handleExportCutPlanDxf,

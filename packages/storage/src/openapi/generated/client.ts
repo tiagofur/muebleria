@@ -140,6 +140,7 @@ import type {
   PlatformOrganization,
   PlatformUser,
   PrepareDesignPublishRequest,
+  PreparedQuoteWhatsApp,
   PriceHistoryResponse,
   PriceUpdatePreview,
   PriceUpdatePreviewRequest,
@@ -162,6 +163,8 @@ import type {
   ProjectWorkshopOccurrences,
   ProvisionOrganizationRequest,
   PublishDesignRevisionRequest,
+  QuoteDelivery,
+  QuoteDeliveryList,
   QuoteLineFurnitureInstance,
   QuotePriceRefreshPreview,
   QuotePriceRefreshResult,
@@ -186,6 +189,7 @@ import type {
   SavePolicyDraftRequest,
   SecurityAuditEvent,
   SelectOrganizationRequest,
+  SendQuoteEmailRequest,
   SessionDirectory,
   SessionRevokeResponse,
   SetProjectCommercialStatusRequest,
@@ -335,6 +339,10 @@ export abstract class GeneratedGraneteApiClient {
   previewProjectQuotePriceRefresh(token: string, projectId: string, quoteRevisionId: string, signal?: AbortSignal): Promise<QuotePriceRefreshPreview> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-revisions/${encodeURIComponent(quoteRevisionId)}:price-refresh-preview`, { schema: "QuotePriceRefreshPreview", token, signal }); }
   priceRefreshProjectQuote(token: string, projectId: string, quoteRevisionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<QuotePriceRefreshResult> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-revisions/${encodeURIComponent(quoteRevisionId)}:price-refresh`, { schema: "QuotePriceRefreshResult", token, idempotencyKey: key, signal }); }
   acceptProjectQuoteRevision(token: string, projectId: string, quoteRevisionId: string, body: AcceptQuoteRevisionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<QuoteRevision> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-revisions/${encodeURIComponent(quoteRevisionId)}:accept`, { schema: "QuoteRevision", token, bodySchema: "AcceptQuoteRevisionRequest", body, idempotencyKey: key, signal }); }
+  sendProjectQuoteRevisionEmail(token: string, projectId: string, quoteRevisionId: string, body: SendQuoteEmailRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<QuoteDelivery> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-revisions/${encodeURIComponent(quoteRevisionId)}:send-email`, { schema: "QuoteDelivery", token, bodySchema: "SendQuoteEmailRequest", body, idempotencyKey: key, signal }); }
+  prepareProjectQuoteRevisionWhatsApp(token: string, projectId: string, quoteRevisionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<PreparedQuoteWhatsApp> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-revisions/${encodeURIComponent(quoteRevisionId)}:prepare-whatsapp`, { schema: "PreparedQuoteWhatsApp", token, idempotencyKey: key, signal }); }
+  listProjectQuoteDeliveries(token: string, projectId: string, signal?: AbortSignal): Promise<QuoteDeliveryList> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/quote-deliveries`, { schema: "QuoteDeliveryList", token, signal }); }
+  confirmProjectQuoteDelivery(token: string, projectId: string, quoteDeliveryId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<QuoteDelivery> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-deliveries/${encodeURIComponent(quoteDeliveryId)}:confirm`, { schema: "QuoteDelivery", token, idempotencyKey: key, signal }); }
   approveDesignRevision(token: string, designId: string, revisionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}:approve`, { schema: "DesignRevision", token, idempotencyKey: key, signal }); }
   evaluateDesignRevisionPreflight(token: string, designId: string, revisionId: string, body: EvaluateDesignRevisionPreflightRequest, signal?: AbortSignal): Promise<ManufacturingPreflightResult> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}/preflight`, { schema: "ManufacturingPreflightResult", token, bodySchema: "EvaluateDesignRevisionPreflightRequest", body, signal }); }
   approveProjectDesignRevisionForProduction(token: string, projectId: string, designId: string, revisionId: string, body: ApproveDesignRevisionForProductionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}:approve-for-production`, { schema: "DesignRevision", token, bodySchema: "ApproveDesignRevisionForProductionRequest", body, idempotencyKey: key, signal }); }

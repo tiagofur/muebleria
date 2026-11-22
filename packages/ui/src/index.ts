@@ -403,6 +403,16 @@ export {
 } from './payments';
 
 export {
+  QuoteSendPanel,
+  bytesToBase64,
+  isQuoteRevisionSendable,
+  sha256Hex,
+  type QuoteSendPanelProps,
+  type QuoteSendPdfResult,
+  type QuoteSendRevision,
+} from './quoteSend';
+
+export {
   LoginScreen,
   AcceptInvitationScreen,
   ResetPasswordScreen,

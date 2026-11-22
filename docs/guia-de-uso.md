@@ -253,6 +253,20 @@ se mantiene abierto para corregirlo sin perder tus cambios.
    - Si cambiás la zona horaria del taller, las cotizaciones ya publicadas
      pueden vencer un día antes o después (la fecha «válida hasta» no cambia;
      cambia qué día es «hoy»).
+11. **Enviar la cotización al cliente** (Herramientas → Enviar cotización;
+   ventas y administración): elegí la revisión **publicada o aceptada** y:
+   - **Enviar por email:** sale al email guardado del cliente con el **PDF
+     exacto** de esa revisión adjunto (el mismo archivo que «Más → PDF listado/
+     resumen»; el historial muestra su huella SHA-256). Podés sumar un mensaje.
+     Figura «En cola» hasta que el servidor de correo lo acepta; recién ahí
+     queda **«Enviada»** con fecha y hora reales y la obra pasa a «enviada» si
+     todavía estaba en borrador (nunca vuelve atrás una obra ganada).
+   - **Preparar WhatsApp:** abre WhatsApp con un mensaje listo (revisión y
+     total) para el teléfono del cliente; adjuntá el PDF y envialo vos. Hasta
+     que tocás **«Ya lo envié»** no cuenta como enviada.
+   - Si el cliente no tiene email o teléfono (con código de país, por ejemplo
+     +52…), o el servidor no envía correos, el botón queda deshabilitado con el
+     motivo: completalo en **Clientes**.
 
 ## 7. Proyectar — el ambiente en 3D
 

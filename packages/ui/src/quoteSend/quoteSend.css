@@ -1,0 +1,112 @@
+/* #1650 — Enviar cotización. Tokens del sistema de diseño únicamente. */
+
+.quote-send {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.quote-send__form,
+.quote-send__whatsapp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.quote-send__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.quote-send__variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.quote-send__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.quote-send__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.quote-send__history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quote-send__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.quote-send__item--failed {
+  border-color: var(--danger-500);
+}
+
+.quote-send__hash {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.quote-send__message {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--border-subtle);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.quote-send__recipient,
+.quote-send__muted {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.quote-send__notice {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--success-700);
+}
+
+.quote-send__warning {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--warning-700);
+}
+
+.quote-send__error {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--danger-700);
+}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -154,13 +155,20 @@ func parseAddress(from string) (string, error) {
 
 // buildMIME renders a multipart/alternative message (text + optional HTML),
 // quoted-printable UTF-8, with RFC 2047 encoded subject.
+func newBoundary() (string, error) {
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "granete-" + hex.EncodeToString(b), nil
+}
+
 func buildMIME(from string, msg Message) ([]byte, error) {
 	var buf bytes.Buffer
-	boundaryBytes := make([]byte, 12)
-	if _, err := rand.Read(boundaryBytes); err != nil {
+	alt, err := newBoundary()
+	if err != nil {
 		return nil, err
 	}
-	boundary := "granete-" + hex.EncodeToString(boundaryBytes)
 	header := func(k, v string) { fmt.Fprintf(&buf, "%s: %s\r\n", k, v) }
 	header("From", from)
 	header("To", msg.To)
@@ -168,8 +176,8 @@ func buildMIME(from string, msg Message) ([]byte, error) {
 	header("Date", time.Now().UTC().Format(time.RFC1123Z))
 	header("MIME-Version", "1.0")
 	header("Auto-Submitted", "auto-generated")
-	part := func(contentType, content string) error {
-		fmt.Fprintf(&buf, "--%s\r\n", boundary)
+	textPart := func(contentType, content string) error {
+		fmt.Fprintf(&buf, "--%s\r\n", alt)
 		fmt.Fprintf(&buf, "Content-Type: %s; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n", contentType)
 		qp := quotedprintable.NewWriter(&buf)
 		if _, err := qp.Write([]byte(content)); err != nil {
@@ -181,16 +189,39 @@ func buildMIME(from string, msg Message) ([]byte, error) {
 		buf.WriteString("\r\n")
 		return nil
 	}
-	header("Content-Type", fmt.Sprintf("multipart/alternative; boundary=%q", boundary))
+	mixed := ""
+	if len(msg.Attachments) > 0 {
+		if mixed, err = newBoundary(); err != nil {
+			return nil, err
+		}
+		header("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%q", mixed))
+		buf.WriteString("\r\n")
+		fmt.Fprintf(&buf, "--%s\r\n", mixed)
+	}
+	header("Content-Type", fmt.Sprintf("multipart/alternative; boundary=%q", alt))
 	buf.WriteString("\r\n")
-	if err := part("text/plain", msg.Text); err != nil {
+	if err := textPart("text/plain", msg.Text); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(msg.HTML) != "" {
-		if err := part("text/html", msg.HTML); err != nil {
+		if err := textPart("text/html", msg.HTML); err != nil {
 			return nil, err
 		}
 	}
-	fmt.Fprintf(&buf, "--%s--\r\n", boundary)
+	fmt.Fprintf(&buf, "--%s--\r\n", alt)
+	for _, a := range msg.Attachments {
+		fmt.Fprintf(&buf, "--%s\r\n", mixed)
+		name := mime.QEncoding.Encode("utf-8", a.FileName)
+		fmt.Fprintf(&buf, "Content-Type: %s; name=%q\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=%q\r\n\r\n", a.ContentType, name, name)
+		encoded := base64.StdEncoding.EncodeToString(a.Data)
+		for len(encoded) > 76 {
+			buf.WriteString(encoded[:76] + "\r\n")
+			encoded = encoded[76:]
+		}
+		buf.WriteString(encoded + "\r\n")
+	}
+	if mixed != "" {
+		fmt.Fprintf(&buf, "--%s--\r\n", mixed)
+	}
 	return buf.Bytes(), nil
 }

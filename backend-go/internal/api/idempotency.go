@@ -95,6 +95,13 @@ func copyIdempotentResponse(w http.ResponseWriter, response storage.IdempotencyR
 	_, _ = w.Write(response.Body)
 }
 
+// idempotencyBodyLimits raises the request-body cap for commands whose body
+// legitimately carries a file (#1650: the exact quote PDF, base64, ≤ 5 MiB
+// decoded). Every other command keeps maxJSONBodyBytes.
+var idempotencyBodyLimits = map[string]int64{
+	"quote.send-email": 8 << 20,
+}
+
 func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("Idempotency-Key")
@@ -107,7 +114,11 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 			respondWithAPIError(w, http.StatusServiceUnavailable, openapi.ApiErrorCodeInternalError, "El almacenamiento durable de idempotencia no está disponible", nil)
 			return
 		}
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
+		limit := int64(maxJSONBodyBytes)
+		if custom, ok := idempotencyBodyLimits[operation]; ok {
+			limit = custom
+		}
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 		if err != nil {
 			respondWithAPIError(w, http.StatusRequestEntityTooLarge, openapi.ApiErrorCodeBadRequest, "request body too large", nil)
 			return

@@ -466,6 +466,8 @@ export interface ProjectsScreenProps {
   ) => boolean | void | Promise<boolean | void>;
   /** #1649: server-backed «Cobros» panel of the project (auth sessions only). */
   readonly renderPaymentsPanel?: (projectId: string) => import('react').ReactNode;
+  /** #1650: «Enviar cotización» panel of the selected project. */
+  readonly renderQuoteSendPanel?: (projectId: string) => import('react').ReactNode;
   /** #1648: server-authored committed delivery date (absent → read-only). */
   readonly onCommitDelivery?: (projectId: string, input: import('@granete/domain').DeliveryCommitmentInput) => Promise<import('./delivery').DeliveryCommitResult>;
 }
@@ -592,6 +594,7 @@ export function ProjectsScreen({
   onChangeCommercialStatus,
   onRecordDeposit,
   renderPaymentsPanel,
+  renderQuoteSendPanel,
   onCommitDelivery,
 }: ProjectsScreenProps): ReactNode {
   // #1142 P2: referencia desde la Vitrina — persiste hasta que el usuario la resuelve.
@@ -942,6 +945,7 @@ export function ProjectsScreen({
           onChangeCommercialStatus={onChangeCommercialStatus}
           onRecordDeposit={onRecordDeposit}
           renderPaymentsPanel={renderPaymentsPanel}
+          renderQuoteSendPanel={renderQuoteSendPanel}
           onCommitDelivery={onCommitDelivery}
         />
       ) : (

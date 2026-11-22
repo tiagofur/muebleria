@@ -192,6 +192,7 @@ import {
 } from './routes';
 import { organizationKeys } from './shared/query/queryKeys';
 import { sessionScopeKey } from './shared/query/sessionScope';
+import { useQuoteSendRenderer } from './quoteSend/useQuoteSendRenderer';
 import { usePaymentRenderers } from './payments/usePaymentRenderers';
 import { usePriceUpdateActions } from './catalog/usePriceUpdateActions';
 import { getUiStoreState } from './stores/uiStore';
@@ -368,6 +369,10 @@ export interface ShellViewCtx {
   readonly handleExportCncPilot: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportCommercialQuote: (revisions: QuoteRevisionsQuery["revisions"], quoteRevisionId: string) => Promise<void>;
   readonly handleExportCommercialQuotePdf: (revisions: QuoteRevisionsQuery["revisions"], quoteRevisionId: string, variant: "detailed" | "summary") => Promise<void>;
+  readonly buildCommercialQuotePdfForRevision: (revisions: QuoteRevisionsQuery["revisions"], quoteRevisionId: string, variant: "detailed" | "summary") => Promise<
+    | { readonly ok: true; readonly bytes: Uint8Array; readonly fileName: string }
+    | { readonly ok: false; readonly issues: ReadonlyArray<{ readonly message: string }> }
+  >;
   readonly handleExportCutListCsv: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportCutPlanPdf: (cutPlan: CutPlan) => Promise<void>;
   readonly handleExportCutPlanDxf: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => Promise<void>;
@@ -709,6 +714,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     handleExportCncPilot,
     handleExportCommercialQuote,
     handleExportCommercialQuotePdf,
+    buildCommercialQuotePdfForRevision,
     handleExportCutListCsv,
     handleExportCutPlanPdf,
     handleExportCutPlanDxf,
@@ -992,6 +998,15 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     routeProductionOrderId,
     selectedProjectId,
     refreshWorkspace,
+  });
+  const renderQuoteSendPanel = useQuoteSendRenderer({
+    session,
+    authToken,
+    sessionScope,
+    actorRoles,
+    baseUrl: DEFAULT_API_BASE,
+    revisions: filterProjectsToPlant || quoteAuthority.kind === 'idle' ? undefined : quoteRevisions,
+    buildPdf: buildCommercialQuotePdfForRevision,
   });
   // #642 / 2A: ONE batch summaries request per session/organization scope
   // feeds every Cotizaciones list card (no per-card revision fetches).
@@ -2955,6 +2970,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             projectActions.changeCommercialStatus(projectId, status, authUser ? { id: authUser.id, role: authUser.role } : undefined)
           }
           renderPaymentsPanel={paymentRenderers.renderPaymentsPanel}
+          renderQuoteSendPanel={renderQuoteSendPanel}
           onRecordDeposit={(projectId, params) =>
             projectActions.recordDeposit(projectId, params, authUser ? { id: authUser.id, role: authUser.role } : undefined)
           }

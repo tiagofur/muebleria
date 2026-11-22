@@ -44,6 +44,14 @@ func registerCommercialRoutes(server *Server, mux *http.ServeMux, authMW func(ht
 		// revision).
 		"price-refresh-preview": http.HandlerFunc(server.HandleQuotePriceRefreshPreview),
 		"price-refresh":         server.RequireIdempotency("quote.price-refresh", http.HandlerFunc(server.HandleQuotePriceRefresh)),
+		// #1650: send the exact revision to the customer (recipient from the
+		// stored customer contact, never from the request).
+		"send-email":       server.RequireIdempotency("quote.send-email", http.HandlerFunc(server.HandleSendQuoteEmail)),
+		"prepare-whatsapp": server.RequireIdempotency("quote.prepare-whatsapp", http.HandlerFunc(server.HandlePrepareQuoteWhatsApp)),
+	}))))
+	mux.Handle("GET /api/projects/{projectId}/quote-deliveries", authMW(http.HandlerFunc(server.HandleListQuoteDeliveries)))
+	mux.Handle("POST /api/projects/{projectId}/quote-deliveries/{quoteDeliveryCommand...}", noStoreMiddleware(authMW(colonCommandRouter("quoteDeliveryCommand", "quoteDeliveryId", map[string]http.Handler{
+		"confirm": server.RequireIdempotency("quote.confirm-delivery", http.HandlerFunc(server.HandleConfirmQuoteDelivery)),
 	}))))
 	// #500 / WEB-DT-1: authoritative contextual projection of the Project
 	// Furniture matrix (placed/pending, commercial grouping provenance,
