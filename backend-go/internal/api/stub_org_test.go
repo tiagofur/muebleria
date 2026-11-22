@@ -150,8 +150,29 @@ func (s *stubStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgT
 	return s.orgTeam, nil
 }
 
-func (s *stubStore) RequestPasswordReset(context.Context, string, string, string) (*storage.PasswordResetIssuance, error) {
+func (s *stubStore) RequestPasswordReset(_ context.Context, _ string, _ string, _ string, compose storage.PasswordResetEmailComposer) (*storage.PasswordResetIssuance, error) {
+	if s.passwordResetErr != nil {
+		return nil, s.passwordResetErr
+	}
+	if s.passwordResetIssuance != nil && compose != nil {
+		// Mirrors the real store: the composed message joins the issuance.
+		s.enqueuedEmails = append(s.enqueuedEmails, storage.OutboundEmail{
+			Kind:      storage.EmailKindPasswordReset,
+			Message:   compose("stored@example.com", *s.passwordResetIssuance),
+			ExpiresAt: s.passwordResetIssuance.ExpiresAt,
+		})
+	}
 	return s.passwordResetIssuance, nil
+}
+
+func (s *stubStore) CancelEmails(_ context.Context, kind, ref string) (int, error) {
+	s.cancelledEmails = append(s.cancelledEmails, kind+":"+ref)
+	return 0, nil
+}
+
+func (s *stubStore) EnqueueEmail(_ context.Context, email storage.OutboundEmail) (string, error) {
+	s.enqueuedEmails = append(s.enqueuedEmails, email)
+	return "outbox-1", nil
 }
 
 func (s *stubStore) IssuePasswordResetToken(_ context.Context, userID, issuedVia string, _ *string, _ time.Duration, _, _ string) (*storage.PasswordResetIssuance, error) {

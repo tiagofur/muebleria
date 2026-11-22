@@ -28,9 +28,13 @@ type stubStore struct {
 	// #1178 password reset: configurable issuance outcome, org team fixture
 	// and capture of the issued reset target.
 	passwordResetIssuance *storage.PasswordResetIssuance
-	orgTeam               []storage.OrgTeamMember
-	issuedResetUserID     string
-	issuedResetVia        string
+	// #1646: messages the handlers enqueued in the email outbox.
+	enqueuedEmails    []storage.OutboundEmail
+	cancelledEmails   []string
+	passwordResetErr  error
+	orgTeam           []storage.OrgTeamMember
+	issuedResetUserID string
+	issuedResetVia    string
 	// Hardware 3D assets (#667 M1)
 	assetSessionResult           *storage.HardwareAssetUploadSessionResult
 	assetSession                 *domain.HardwareAssetUploadSession
@@ -549,10 +553,10 @@ type stubStore struct {
 
 	// #1680 — project grip report stubs: the stored grip the GET serves and
 	// the design-lineage choices the report composes from.
-	projectGrip          *storage.ProjectGrip
-	gripLineage          map[string]storage.GripLineageChoices
-	gripLevelChoices     map[string]string
-	gripLineageFn        func(context.Context, string) (map[string]storage.GripLineageChoices, map[string]string, error)
+	projectGrip      *storage.ProjectGrip
+	gripLineage      map[string]storage.GripLineageChoices
+	gripLevelChoices map[string]string
+	gripLineageFn    func(context.Context, string) (map[string]storage.GripLineageChoices, map[string]string, error)
 }
 
 // designGripFacadeApplyCapture records one facade write (#1532).

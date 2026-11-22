@@ -9488,12 +9488,21 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "status"
+          "status",
+          "email_delivery"
         ],
         "properties": {
           "status": {
             "type": "string",
             "const": "accepted"
+          },
+          "email_delivery": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "not_configured"
+            ],
+            "description": "Whether Granete queued an email (#1646). The same for every request (it reflects server configuration, never whether the account exists)."
           }
         }
       },
@@ -10089,7 +10098,8 @@
         "required": [
           "invitation",
           "invitation_token",
-          "accept_url"
+          "accept_url",
+          "email_delivery"
         ],
         "properties": {
           "invitation": {
@@ -10100,6 +10110,14 @@
           },
           "accept_url": {
             "type": "string"
+          },
+          "email_delivery": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "not_configured"
+            ],
+            "description": "Whether Granete queued the invitation email to the invitee (#1646). The copy-link path stays available either way."
           }
         }
       },
@@ -11095,7 +11113,8 @@
         "required": [
           "invitation",
           "invitation_token",
-          "accept_url"
+          "accept_url",
+          "email_delivery"
         ],
         "properties": {
           "invitation": {
@@ -11106,6 +11125,14 @@
           },
           "accept_url": {
             "type": "string"
+          },
+          "email_delivery": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "not_configured"
+            ],
+            "description": "Whether Granete queued the invitation email to the invitee (#1646). The copy-link path stays available either way."
           }
         }
       },

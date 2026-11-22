@@ -408,6 +408,26 @@ func (s *staleInvitationStore) RevokeInvitation(_ context.Context, _, id, _, _ s
 	return &storage.Invitation{ID: id, Email: "invite@example.test", Version: s.version, RevokedAt: &now, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}, nil
 }
 
+func TestInvitationRevokeCancelsItsQueuedEmail(t *testing.T) {
+	// #1646: a revoked invitation's pending email would carry a dead link.
+	store := &staleInvitationStore{
+		stubStore: stubStore{getOrgByID: &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusActive, CredentialVersion: 1}},
+		version:   2,
+	}
+	server := NewServer(store, "secret", nil, 1, 1)
+	req := withOrgClaims(httptest.NewRequest(http.MethodPost, "/api/org/invitations/inv-1:revoke", bytes.NewBufferString(`{"reason":"security"}`)), "actor", "org-1", string(domain.RoleAdmin))
+	req.SetPathValue("invitationId", "inv-1")
+	req.Header.Set("If-Match", `"v2"`)
+	rec := httptest.NewRecorder()
+	server.HandleOrgRevokeInvitation(rec, req)
+	if rec.Code != http.StatusOK || !store.revoked {
+		t.Fatalf("status=%d revoked=%v body=%s", rec.Code, store.revoked, rec.Body.String())
+	}
+	if len(store.cancelledEmails) != 1 || store.cancelledEmails[0] != "invitation:inv-1" {
+		t.Fatalf("revoke must cancel the invitation email, got %v", store.cancelledEmails)
+	}
+}
+
 func TestStaleInvitationRevokeReturnsTyped412WithoutOverwrite(t *testing.T) {
 	store := &staleInvitationStore{
 		stubStore: stubStore{getOrgByID: &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusActive, CredentialVersion: 1}},

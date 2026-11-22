@@ -340,6 +340,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
         invitation: { ...invitation, status: 'pending', version: 5, expires_at: '2026-09-12T00:00:00Z' },
         invitation_token: 'rotated-secret',
         accept_url: '/accept-invitation?token=rotated-secret',
+        email_delivery: 'not_configured',
       });
       return jsonOk([]);
     }));
@@ -565,7 +566,7 @@ describe('UsersScreen (#458 tenant-safe query integrity)', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/org/memberships')) return response(directory('Ana', ['team:view', 'team:invite:sales', 'team:manage:sales']));
-      if (url.endsWith('/org/invitations') && init?.method === 'POST') return response({ invitation: { ...invitation, status: 'pending' }, invitation_token: 'secret', accept_url: '/accept-invitation?token=secret' });
+      if (url.endsWith('/org/invitations') && init?.method === 'POST') return response({ invitation: { ...invitation, status: 'pending' }, invitation_token: 'secret', accept_url: '/accept-invitation?token=secret', email_delivery: 'not_configured' });
       return response([]);
     }));
     const actor = userEvent.setup();
@@ -578,6 +579,23 @@ describe('UsersScreen (#458 tenant-safe query integrity)', () => {
     await actor.click(screen.getByRole('button', { name: 'Copiar enlace para WhatsApp' }));
     expect((await screen.findByRole('alert')).textContent).toContain('copialo manualmente');
     expect(screen.queryByText('✓ Enlace copiado al portapapeles')).toBeNull();
+  });
+
+  it('tells the admin the invitation was emailed and keeps the link as fallback (#1646)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/org/memberships')) return response(directory('Ana', ['team:view', 'team:invite:sales', 'team:manage:sales']));
+      if (url.endsWith('/org/invitations') && init?.method === 'POST') return response({ invitation: { ...invitation, status: 'pending' }, invitation_token: 'secret', accept_url: '/accept-invitation?token=secret', email_delivery: 'queued' });
+      return response([]);
+    }));
+    const actor = userEvent.setup();
+    renderUsers();
+    await actor.click(await screen.findByRole('button', { name: 'Invitar miembro' }));
+    await actor.type(screen.getByLabelText('Email del colaborador *'), 'new@test.com');
+    await actor.click(screen.getByRole('button', { name: 'Generar Invitación' }));
+    expect((await screen.findByText(/Le estamos enviando un email a new@test.com/)).textContent).toContain('con el enlace');
+    expect(screen.getByText(/Si no le llega en unos minutos/)).toBeTruthy();
+    expect(screen.getByText(/token=secret/)).toBeTruthy();
   });
 
   it('shows an actionable stale-invitation conflict without false success', async () => {
@@ -632,7 +650,7 @@ describe('UsersScreen (#458 tenant-safe query integrity)', () => {
       const url = String(input);
       const tenantA = new Headers(init?.headers).get('Authorization') === 'Bearer token-a';
       if (url.endsWith('/org/memberships')) return response(directory(tenantA ? 'Ana' : 'Bruno', tenantA ? ['team:view', 'team:invite:sales', 'team:manage:sales'] : ['team:view']));
-      if (url.endsWith(`/${invitation.id}:resend`)) return response({ invitation: { ...invitation, status: 'pending', version: 5 }, invitation_token: 'secret-a', accept_url: '/accept-invitation?token=secret-a' });
+      if (url.endsWith(`/${invitation.id}:resend`)) return response({ invitation: { ...invitation, status: 'pending', version: 5 }, invitation_token: 'secret-a', accept_url: '/accept-invitation?token=secret-a', email_delivery: 'queued' });
       if (url.endsWith('/org/invitations')) return response(tenantA ? [invitation] : []);
       return response([]);
     }));

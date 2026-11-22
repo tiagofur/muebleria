@@ -71,7 +71,7 @@ owned_process() {
 }
 
 recover_orphan() {
-  local kind pid result=COMPLETE container tmp_root remaining
+  local kind pid result=COMPLETE container mail_container tmp_root remaining
   AUTOMATED_RESULT="$(session_field "${RUN_DIR}" automated_result)"
   HOST_RESULT="$(session_field "${RUN_DIR}" host_result)"
   EXPIRES_AT="$(session_field "${RUN_DIR}" expires_at_epoch)"
@@ -105,6 +105,21 @@ recover_orphan() {
   else
     result=INCOMPLETE
   fi
+  # #1646 SMTP sink: recorded only once the run reached it; when present it
+  # must match the owned name and be gone before cleanup reads COMPLETE.
+  if [ -f "${RUN_DIR}/mail-container" ]; then
+    mail_container="$(cat "${RUN_DIR}/mail-container" 2>/dev/null || true)"
+    if [[ "${mail_container}" =~ ^granete-org-gate-[0-9]+-[a-f0-9]{8}-mail$ ]]; then
+      docker rm -f "${mail_container}" >/dev/null 2>&1 || true
+      if remaining="$(docker ps -aq --filter "name=^/${mail_container}$" 2>/dev/null)"; then
+        [ -z "${remaining}" ] || result=INCOMPLETE
+      else
+        result=INCOMPLETE
+      fi
+    else
+      result=INCOMPLETE
+    fi
+  fi
   tmp_root="$(cat "${RUN_DIR}/tmp-root" 2>/dev/null || true)"
   if [[ "${tmp_root}" == "${TMPDIR:-/tmp}"/granete-organization-gate.* ]]; then
     rm -rf -- "${tmp_root}"
@@ -127,6 +142,12 @@ completed_cleanup_readback() {
   done
   container="$(cat "${RUN_DIR}/container" 2>/dev/null || true)"
   if [ -n "${container}" ]; then
+    remaining="$(docker ps -aq --filter "name=^/${container}$" 2>/dev/null)" || return 1
+    [ -z "${remaining}" ] || return 1
+  fi
+  if [ -f "${RUN_DIR}/mail-container" ]; then
+    container="$(cat "${RUN_DIR}/mail-container" 2>/dev/null || true)"
+    [ -n "${container}" ] || return 1
     remaining="$(docker ps -aq --filter "name=^/${container}$" 2>/dev/null)" || return 1
     [ -z "${remaining}" ] || return 1
   fi
@@ -269,6 +290,7 @@ esac
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/granete-organization-gate.XXXXXX")"
 if [ -n "${INTERACTIVE}" ]; then printf '%s\n' "${TMP_ROOT}" >"${RUN_DIR}/tmp-root"; fi
 CONTAINER=""
+MAIL_CONTAINER=""
 BACKEND_PID=""
 
 cleanup() {
@@ -300,6 +322,15 @@ cleanup() {
   if [ -n "${INTERACTIVE}" ] && ! ownership_evidence_complete; then
     cleanup_result=INCOMPLETE
     FAILURE_REASON=ownership_evidence_incomplete
+  fi
+  if [ "${cleanup_result}" = COMPLETE ] && [ -n "${MAIL_CONTAINER}" ]; then
+    # #1646 disposable SMTP sink: it holds only gate-generated mail.
+    docker rm -f "${MAIL_CONTAINER}" >/dev/null 2>&1 || true
+    if remaining="$(docker ps -aq --filter "name=^/${MAIL_CONTAINER}$" 2>/dev/null)"; then
+      [ -z "${remaining}" ] || cleanup_result=INCOMPLETE
+    else
+      cleanup_result=INCOMPLETE
+    fi
   fi
   if [ "${cleanup_result}" = COMPLETE ]; then
     docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
@@ -454,6 +485,26 @@ POSTGRES_BIND="$(docker inspect -f '{{(index (index .NetworkSettings.Ports "5432
 POSTGRES_HOST="${POSTGRES_BIND%:*}"
 POSTGRES_PORT="${POSTGRES_BIND##*:}"
 [ "${POSTGRES_HOST}" = '127.0.0.1' ] || fail "PostgreSQL must bind only to loopback"
+
+# #1646: disposable SMTP sink (mailpit, pinned) so the outbox worker delivers
+# real SMTP and specs read the mailbox over its loopback HTTP API. Plain SMTP
+# (SMTP_TLS=none) is accepted by config only outside production.
+MAIL_CONTAINER="${CONTAINER}-mail"
+if [ -n "${INTERACTIVE}" ]; then printf '%s\n' "${MAIL_CONTAINER}" >"${RUN_DIR}/mail-container"; fi
+docker run -d --rm --name "${MAIL_CONTAINER}" \
+  -p 127.0.0.1::1025 -p 127.0.0.1::8025 axllent/mailpit:v1.20.4 >/dev/null \
+  || fail "mailpit container did not start"
+MAIL_SMTP_PORT="$(docker inspect -f '{{(index (index .NetworkSettings.Ports "1025/tcp") 0).HostPort}}' "${MAIL_CONTAINER}")"
+MAIL_HTTP_PORT="$(docker inspect -f '{{(index (index .NetworkSettings.Ports "8025/tcp") 0).HostPort}}' "${MAIL_CONTAINER}")"
+MAIL_READY=""
+for _ in $(seq 1 60); do
+  if curl -fsS "http://127.0.0.1:${MAIL_HTTP_PORT}/api/v1/info" >/dev/null 2>&1; then
+    MAIL_READY=yes
+    break
+  fi
+  sleep 1
+done
+[ -n "${MAIL_READY}" ] || fail "mailpit did not become ready"
 MIGRATION_DATABASE_URL="postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/granete_gate?sslmode=disable"
 DATABASE_URL="postgres://granete_app:${APP_DATABASE_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/granete_gate?sslmode=disable"
 ORGANIZATION_TEST_DATABASE_URL="${MIGRATION_DATABASE_URL}"
@@ -498,6 +549,10 @@ GATE_SERVER_ENV=("${GATE_BASE_ENV[@]}"
   MEDIA_SIGNING_KEY="${MEDIA_SIGNING_KEY}" MFA_ENCRYPTION_KEY="${MFA_ENCRYPTION_KEY}"
   MEDIA_DIR="${MEDIA_DIR}" PORT="${BACKEND_PORT}" ORGANIZATION_GATE_BIND_HOST=127.0.0.1
   CORS_ALLOWED_ORIGINS="http://127.0.0.1:${ORGANIZATION_WEB_PORT}"
+  SMTP_HOST=127.0.0.1 SMTP_PORT="${MAIL_SMTP_PORT}" SMTP_TLS=none
+  SMTP_FROM="Granete Gate <no-reply@granete.test>"
+  APP_PUBLIC_URL="http://127.0.0.1:${ORGANIZATION_WEB_PORT}"
+  GRANETE_EMAIL_OUTBOX_POLL_INTERVAL=1s
   RATE_LIMIT_RPS=100 RATE_LIMIT_BURST=100)
 GATE_ADMIN_ENV=("${GATE_BASE_ENV[@]}" ADMIN_PASSWORD="${ADMIN_PASSWORD}")
 
@@ -581,6 +636,7 @@ GATE_BROWSER_ENV=("${GATE_BASE_ENV[@]}"
   ORGANIZATION_GATE_PASSWORD="${ADMIN_PASSWORD}"
   ORGANIZATION_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api"
   VITE_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api"
+  ORGANIZATION_MAILPIT_API="http://127.0.0.1:${MAIL_HTTP_PORT}"
   ORGANIZATION_TEST_OUTPUT="${TMP_ROOT}/playwright-output")
 
 run_prepared_automatic_gate() {

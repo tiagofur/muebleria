@@ -45,6 +45,16 @@ services:
       # refuse to boot instead of shipping an insecure credential.
       GRANETE_ENV: production
       MEDIA_DIR: /data/media
+      # #1646 outbound email (reset links, invitations). Empty SMTP_HOST =
+      # not configured: the backend warns at boot and the screens say so.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_TLS: ${SMTP_TLS:-}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
+      GRANETE_EMAIL_TIMEZONE: ${GRANETE_EMAIL_TIMEZONE:-}
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-0.5}
       RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-10}
       # SEC-8 (#1191, review #1195): Caddy fronts the backend on the internal

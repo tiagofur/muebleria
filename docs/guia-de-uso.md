@@ -24,6 +24,12 @@ completa) para explorar todo antes de cargar tus propios datos.
   nuevas quedan **pendientes de aprobación** — un admin las aprueba en
   Usuarios.
 - **Salir:** botón "Salir" arriba a la derecha.
+- **¿Olvidaste tu contraseña?** En la pantalla de inicio, tocá el enlace,
+  poné tu email y "Pedir enlace". Si el servidor tiene email configurado te
+  llega un correo con un enlace que **vence en una hora y sirve una sola
+  vez** (revisá spam). Si la pantalla dice que el servidor todavía no envía
+  correos, pedile el enlace a tu admin del taller (Usuarios → Restablecer
+  contraseña).
 
 Roles y qué ven (los 8 roles canónicos de `contracts/roles.json`):
 
@@ -719,6 +725,13 @@ Con la cotización **aceptada**:
 ## 11. Administración
 
 - **Usuarios** (solo admin): aprobar registros, asignar roles, desactivar.
+- **Invitar miembro:** con email configurado en el servidor, Granete le manda
+  la invitación por correo al colaborador y te lo confirma en pantalla; el
+  enlace para copiar por WhatsApp queda igual como respaldo. Sin email
+  configurado, copiás y mandás el enlace vos.
+- **Email del servidor (quien instala):** variables `SMTP_*` y
+  `APP_PUBLIC_URL`, ver `docs/deployment.md`. Sin ellas el backend avisa al
+  arrancar que no envía correos.
 - **Ajustes:** margen/MO/moneda defaults, y si el vendedor ve costos.
 
 ## 11b. Modo dev de biblioteca en SketchUp (sólo ingeniería)

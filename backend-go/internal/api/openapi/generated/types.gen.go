@@ -374,7 +374,8 @@ type PasswordResetRequest struct {
 }
 
 type PasswordResetRequestResponse struct {
-	Status string `json:"status"`
+	Status        string `json:"status"`
+	EmailDelivery string `json:"email_delivery"`
 }
 
 type PasswordResetConfirmRequest struct {
@@ -519,6 +520,7 @@ type CreateInvitationResponse struct {
 	Invitation      Invitation `json:"invitation"`
 	InvitationToken string     `json:"invitation_token"`
 	AcceptURL       string     `json:"accept_url"`
+	EmailDelivery   string     `json:"email_delivery"`
 }
 
 type UpdateMemberRolesRequest struct {
@@ -812,6 +814,7 @@ type ResendInvitationResponse struct {
 	Invitation      Invitation `json:"invitation"`
 	InvitationToken string     `json:"invitation_token"`
 	AcceptURL       string     `json:"accept_url"`
+	EmailDelivery   string     `json:"email_delivery"`
 }
 
 type RevokeInvitationRequest struct {

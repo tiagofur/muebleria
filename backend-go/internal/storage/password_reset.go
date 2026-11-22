@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/mail"
 )
 
 // PasswordResetTokenTTL bounds every reset link: short by design — a reset
@@ -96,12 +97,21 @@ func (s *PostgresStore) IssuePasswordResetToken(ctx context.Context, userID, iss
 	return &PasswordResetIssuance{Token: raw, ExpiresAt: expiresAt}, nil
 }
 
+// PasswordResetEmailComposer renders the reset email for the stored address
+// of the account and the freshly minted credential. Rendering stays in the
+// API layer (link base, templates); storage only persists the result.
+type PasswordResetEmailComposer func(recipient string, issuance PasswordResetIssuance) mail.Message
+
 // RequestPasswordReset is the pre-auth self-service path: the outcome is
-// uniform for the requester (the handler answers 204 regardless), and the
-// raw token is returned only for server-side delivery (currently the server
-// log outside production until an email adapter lands). Disabled accounts
-// are treated as unknown: no token, no oracle.
-func (s *PostgresStore) RequestPasswordReset(ctx context.Context, email, ip, requestID string) (*PasswordResetIssuance, error) {
+// uniform for the requester (the handler answers the same regardless), and
+// the raw token is returned only for server-side delivery. Disabled accounts
+// are treated as unknown: no token, no email, no oracle.
+//
+// With a composer (#1646, email delivery configured) the token issuance, its
+// audit event and the outbox message commit in ONE transaction: a message
+// exists if and only if its credential does. It is addressed to the email
+// stored on the account, never to the raw request input.
+func (s *PostgresStore) RequestPasswordReset(ctx context.Context, email, ip, requestID string, compose PasswordResetEmailComposer) (*PasswordResetIssuance, error) {
 	u, err := s.GetUserByEmail(ctx, email)
 	if errors.Is(err, ErrUserNotFound) {
 		return nil, nil
@@ -112,7 +122,59 @@ func (s *PostgresStore) RequestPasswordReset(ctx context.Context, email, ip, req
 	if u.AccountStatus != domain.AccountStatusActive {
 		return nil, nil
 	}
-	return s.IssuePasswordResetToken(ctx, u.ID, "self", nil, PasswordResetTokenTTL, ip, requestID)
+	tx, owned, err := s.beginOrUseTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if owned {
+		defer tx.Rollback(ctx)
+	}
+	txCtx := context.WithValue(ctx, transactionContextKey{}, tx)
+	if owned {
+		// The request is anonymous: under the runtime role the audit row is
+		// only insertable inside a user-scoped tenant context (same structure
+		// as ConfirmPasswordReset). Without it a known email failed with an
+		// RLS violation (#1646).
+		if err = setTenantContext(txCtx, tx, TenantActor{UserID: u.ID}); err != nil {
+			return nil, err
+		}
+	}
+	if compose != nil {
+		// Per-account cooldown: a repeat inside the window answers the same
+		// to the requester but mints nothing and sends nothing.
+		// Serialize concurrent requests for the same account so two cannot
+		// both pass the check (transaction-scoped advisory lock).
+		if _, lockErr := tx.Exec(txCtx, `SELECT pg_advisory_xact_lock(hashtext('granete:pwreset:' || $1))`, u.ID); lockErr != nil {
+			return nil, fmt.Errorf("password reset cooldown lock: %w", lockErr)
+		}
+		recent, recentErr := s.recentEmailExists(txCtx, EmailKindPasswordReset, u.ID, PasswordResetEmailCooldown)
+		if recentErr != nil {
+			return nil, fmt.Errorf("password reset cooldown: %w", recentErr)
+		}
+		if recent {
+			return nil, nil
+		}
+	}
+	issuance, err := s.IssuePasswordResetToken(txCtx, u.ID, "self", nil, PasswordResetTokenTTL, ip, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if compose != nil {
+		if _, err = s.EnqueueEmail(txCtx, OutboundEmail{
+			Kind:      EmailKindPasswordReset,
+			Ref:       u.ID,
+			Message:   compose(u.Email, *issuance),
+			ExpiresAt: issuance.ExpiresAt,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if owned {
+		if err = tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+	}
+	return issuance, nil
 }
 
 // ConfirmPasswordResetCommand carries the raw token and the ALREADY validated
