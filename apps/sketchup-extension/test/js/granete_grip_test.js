@@ -320,6 +320,26 @@ test('oración: sin dimensiones conocidas y sin filas son estados honestos', () 
   assert.ok(grip.sentenceFor({ recipeMode: 'handle', layout: { state: 'resolved', rows: [] } }).length > 0, 'handle with no rows still names the mode');
 });
 
+test('#1683 convergencia: el write ok con modelo fallido avisa la divergencia, nunca la calla', () => {
+  const { grip, bridgeCalls, toastCalls } = buildSandbox();
+  grip.onBindingStatus({ state: 'connected', binding: { projectId: PROJECT, designId: 'd-1' } });
+  answerGet(grip, bridgeCalls, { status: 'ok', grip: okGrip(STYLE_ID), styles: stylesList() });
+  answer(grip, 'onProjectGripApplied', {
+    requestId: null, status: 'ok', projectId: PROJECT, grip: okGrip(STYLE_OTHER),
+    model: { status: 'failed', reason: 'el canal de resolución de autoría no está disponible' }
+  });
+  const divergence = toastCalls.filter(function (t) { return t.kind === 'error' && t.text.indexOf('modelo no se actualizó') !== -1; });
+  assert.strictEqual(divergence.length, 1, 'one honest divergence toast');
+  assert.ok(divergence[0].text.indexOf('Aplicado en el servidor') !== -1, 'the toast says the server write stands');
+  // A converged answer keeps the single success toast — no noise.
+  answer(grip, 'onProjectGripApplied', {
+    requestId: null, status: 'ok', projectId: PROJECT, grip: okGrip(STYLE_ID),
+    model: { status: 'converged', units: 1 }
+  });
+  const again = toastCalls.filter(function (t) { return t.kind === 'error' && t.text.indexOf('modelo no se actualizó') !== -1; });
+  assert.strictEqual(again.length, 1, 'converged adds no divergence toast');
+});
+
 test('razones: el mapa del taller nombra la acción y el lugar (sin códigos crudos)', () => {
   const { grip } = buildSandbox();
   assert.ok(grip.reasonText('GRIP_PROFILE_UNUSABLE').includes('Perfiles de apertura'), 'names the place');

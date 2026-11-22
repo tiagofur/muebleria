@@ -144,7 +144,8 @@ module Granete
           execute_bridge(dialog, 'onProjectGripApplied', {
                            'requestId' => request_id, 'status' => 'ok',
                            'projectId' => stored, 'grip' => grip,
-                           'canUndo' => project_grip_can_undo?(stored)
+                           'canUndo' => project_grip_can_undo?(stored),
+                           'model' => project_grip_converge_model
                          })
         rescue ::Granete::SketchUpExtension::Connection::ProjectFurniture::Service::Error => e
           execute_bridge(dialog, 'onProjectGripApplied', project_grip_error_answer(e, request_id, stored))
@@ -171,7 +172,8 @@ module Granete
           execute_bridge(dialog, 'onProjectGripApplied', {
                            'requestId' => request_id, 'status' => 'ok',
                            'projectId' => stored, 'grip' => grip,
-                           'canUndo' => project_grip_can_undo?(stored)
+                           'canUndo' => project_grip_can_undo?(stored),
+                           'model' => project_grip_converge_model
                          })
         rescue ::Granete::SketchUpExtension::Connection::ProjectFurniture::Service::Error => e
           execute_bridge(dialog, 'onProjectGripApplied', project_grip_error_answer(e, request_id, stored))
@@ -196,6 +198,49 @@ module Granete
 
         private
 
+        # #1683 — after a COMMITTED grip write, the model converges to the
+        # fresh grip truth: every PLACED furniture of the bound design
+        # rebuilds through the same design-pinned resolve the opening
+        # convergence owns (#1264) — the server resolves each unit's
+        # EFFECTIVE grip (its override, else the project snapshot) and the
+        # fronts/profiles/handles follow. ONE batch, single undo. The server
+        # write is already committed: a convergence failure NEVER reverts it
+        # — the honest outcome rides the bridge answer for the card to show.
+        def project_grip_converge_model
+          stored = design_opening_binding_store.read
+          return { 'status' => 'skipped', 'reason' => 'modelo sin diseño vinculado' } unless stored
+
+          items = Array(design_opening_placer.service.get_working_copy(stored.design_id)&.items)
+          return { 'status' => 'skipped', 'reason' => 'diseño sin muebles' } if items.empty?
+          return { 'status' => 'skipped' } unless active_model.respond_to?(:entities)
+
+          targets, _matched, skipped_definition = collect_placed_design_targets(active_model, items)
+          commands = targets.filter_map do |target|
+            design_opening_rebuild_command(target[:root], target[:definition], stored.design_id)
+          end
+          if commands.empty?
+            # The #1264 distinction, not a collapsed reason: a unit whose
+            # definition left the local catalog is a different honest absence
+            # than a unit that is simply not placed.
+            reason = if skipped_definition.positive?
+                       "la definición del mueble no está en el catálogo local (#{skipped_definition})"
+                     else
+                       'muebles no colocados'
+                     end
+            return { 'status' => 'unchanged', 'reason' => reason }
+          end
+
+          outcome = mutation_coordinator.execute_batch(commands)
+          if outcome.outcome == 'committed'
+            { 'status' => 'converged', 'units' => commands.length }
+          else
+            { 'status' => 'failed', 'reason' => outcome.reason.to_s }
+          end
+        rescue StandardError => e
+          @logger.error('project_grip_convergence_failed', error: e)
+          { 'status' => 'failed', 'reason' => e.message }
+        end
+
         def project_grip_replay_intention(dialog, payload_json, direction)
           payload = parse_bridge_payload(payload_json)
           request_id = payload['requestId']
@@ -218,7 +263,8 @@ module Granete
                            'requestId' => request_id, 'status' => 'ok',
                            'projectId' => stored, 'grip' => grip,
                            'canUndo' => project_grip_can_undo?(stored),
-                           'canRedo' => project_grip_can_redo?(stored)
+                           'canRedo' => project_grip_can_redo?(stored),
+                           'model' => project_grip_converge_model
                          })
         rescue ::Granete::SketchUpExtension::Connection::ProjectFurniture::Service::Error => e
           # A refused replay (422 GRIP_STYLE_NOT_OFFERED, …) is NOT re-armed:

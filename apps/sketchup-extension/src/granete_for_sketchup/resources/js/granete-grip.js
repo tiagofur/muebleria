@@ -246,6 +246,12 @@
       delete inflight[projectId];
       ensureLoaded(projectId);
       deps.showToast('success', 'Agarre aplicado.');
+      // #1683: the server write committed but the model could not rebuild —
+      // honest divergence, never a silent stale geometry.
+      if (payload.model && payload.model.status === 'failed') {
+        deps.showToast('error', 'Aplicado en el servidor, pero el modelo no se actualizó: ' +
+          workshopReason(payload.model.reason || 'reintentá desde el diseño'));
+      }
     } else if (payload.status === 'noop') {
       deps.showToast('info', 'Nada que deshacer o rehacer.');
     } else {
