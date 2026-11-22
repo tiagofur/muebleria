@@ -7,8 +7,8 @@ package api
 
 import (
 	"bytes"
-	"errors"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
