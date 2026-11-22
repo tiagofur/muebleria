@@ -235,6 +235,18 @@
   line-height: var(--leading-normal);
 }
 
+/* #1599: permanent dev-mode provenance — caution, never danger. */
+.project-detail__notes--caution {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--warning-700);
+}
+
+.project-detail__notes--caution svg {
+  flex-shrink: 0;
+}
+
 .project-detail__body {
   display: grid;
   /* Exactly two children: .project-detail__main | .project-totals */

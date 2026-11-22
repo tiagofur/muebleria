@@ -775,6 +775,14 @@ publicar una versión por cada ajuste.
 3. Cuando el catálogo quedó bien, **publicá una versión** y apagá el modo
    con el mismo ítem del menú («Modo dev de biblioteca: OFF»).
 
+**Proyectos hechos en modo dev.** Si con el modo encendido creás un proyecto
+desde SketchUp o sincronizás uno (diseño o muebles), la web lo marca para
+siempre: en Cotizaciones la tarjeta muestra «Modo desarrollador · sólo
+pruebas» y el detalle dice «Creado en modo desarrollador: se recomienda sólo
+para pruebas · desde <fecha>». Es sólo una recomendación: se puede cotizar y
+producir igual. La marca no se quita (apagar el modo después no la borra) y
+en SketchUp no se muestra nada.
+
 **Cómo saber si está encendido.** En el panel de Granete, en la tarjeta de tu
 sesión, la fila Biblioteca dice **«Modo desarrollo»** en lugar del número de
 versión.

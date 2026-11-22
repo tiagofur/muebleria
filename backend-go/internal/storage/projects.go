@@ -19,7 +19,7 @@ import (
 
 func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, committed_delivery_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, material_planning, authoring_surface, organization_id, sales_organization_id, manufacturing_organization_id, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, committed_delivery_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, material_planning, authoring_surface, dev_mode_marked_at, organization_id, sales_organization_id, manufacturing_organization_id, created_at, updated_at
 		FROM projects
 		WHERE organization_id = $1 OR sales_organization_id = $1 OR manufacturing_organization_id = $1
 		ORDER BY updated_at DESC;
@@ -58,7 +58,7 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		var materialPlanning []byte
 		var authoringSurface string
 		var orgID, salesOrgID, mfgOrgID *string
-		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &deliveryDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &partInstances, &moduleUnits, &materialPlanning, &authoringSurface, &orgID, &salesOrgID, &mfgOrgID, &p.CreatedAt, &p.UpdatedAt)
+		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &deliveryDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &partInstances, &moduleUnits, &materialPlanning, &authoringSurface, &p.DevModeMarkedAt, &orgID, &salesOrgID, &mfgOrgID, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -532,7 +532,7 @@ func (s *PostgresStore) DigitalThreadContextByProject(ctx context.Context, proje
 
 func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
 	query := `
-			SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, committed_delivery_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, installation, material_planning, quality, costing, site_survey, authoring_surface, organization_id, sales_organization_id, manufacturing_organization_id, created_at, updated_at
+			SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, committed_delivery_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, installation, material_planning, quality, costing, site_survey, authoring_surface, dev_mode_marked_at, organization_id, sales_organization_id, manufacturing_organization_id, created_at, updated_at
 			FROM projects
 			WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2);
 		`
@@ -567,7 +567,7 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	var siteSurvey []byte
 	var authoringSurface string
 	var orgID, salesOrgID, mfgOrgID *string
-	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &deliveryDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &partInstances, &moduleUnits, &installation, &materialPlanning, &quality, &costing, &siteSurvey, &authoringSurface, &orgID, &salesOrgID, &mfgOrgID, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &deliveryDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &partInstances, &moduleUnits, &installation, &materialPlanning, &quality, &costing, &siteSurvey, &authoringSurface, &p.DevModeMarkedAt, &orgID, &salesOrgID, &mfgOrgID, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}

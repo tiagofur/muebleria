@@ -306,6 +306,29 @@ class ApplicationTest < Minitest::Test
     end
   end
 
+  # #1599: the transport announces dev mode exactly while the store has it ON.
+  class ModeRecordingTransport < FakeCatalogTransport
+    attr_accessor :library_mode_provider
+  end
+
+  def test_library_dev_mode_state_reaches_every_request_through_the_transport
+    transport = ModeRecordingTransport.new
+    capabilities = { 'can_use_library_dev_mode' => true }
+    with_library_dev_mode_application(capabilities: capabilities, transport: transport) do |application, store|
+      application.start
+      refute_nil transport.library_mode_provider
+      assert_nil transport.library_mode_provider.call
+
+      dev_mode_menu_item.call
+      assert store.dev_mode?
+      assert_equal 'draft', transport.library_mode_provider.call
+
+      dev_mode_menu_item.call
+      refute store.dev_mode?
+      assert_nil transport.library_mode_provider.call
+    end
+  end
+
   def test_library_dev_mode_toggle_turns_on_with_the_capability
     with_library_dev_mode_application(capabilities: { 'can_use_library_dev_mode' => true }) do |application, store|
       application.start
@@ -365,7 +388,7 @@ class ApplicationTest < Minitest::Test
     end
   end
 
-  def with_library_dev_mode_application(capabilities:, profile_overrides: {})
+  def with_library_dev_mode_application(capabilities:, profile_overrides: {}, transport: FakeCatalogTransport.new)
     logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
     profile = {
       'user' => { 'name' => 'Ana Carpintera', 'email' => 'ana@taller.local' },
@@ -381,7 +404,7 @@ class ApplicationTest < Minitest::Test
           logger: logger, transport: RecordingSessionTransport.new({ 'status' => 200, 'body' => profile })
         )
         application = Granete::SketchUpExtension::Application.new(
-          transport: FakeCatalogTransport.new,
+          transport: transport,
           auth_provider: session,
           logger: logger,
           session_provider: session

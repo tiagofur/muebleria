@@ -21,6 +21,15 @@ module Granete
 
         attr_reader :base_url
 
+        # #1599: header announcing the library developer mode to the server.
+        LIBRARY_MODE_HEADER = 'X-Granete-Library-Mode'
+
+        # #1599: callable returning 'draft' while the library developer mode
+        # is ON (nil otherwise). Every request then carries the header, so the
+        # server can mark the projects it creates or syncs; it decides whether
+        # the caller may (only roles allowed to use the mode, #1598).
+        attr_writer :library_mode_provider
+
         def initialize(base_url: nil, logger: nil, timeout_seconds: DEFAULT_TIMEOUT_SECONDS)
           super()
           @base_url = normalize_base_url(base_url)
@@ -174,6 +183,7 @@ module Granete
           request = Net::HTTP.const_get(method.capitalize).new(uri.request_uri)
           request['Accept'] = 'application/json'
           request['Authorization'] = authorization_header if authorization_header
+          request[LIBRARY_MODE_HEADER] = 'draft' if library_draft_mode?
           if payload['headers'].is_a?(Hash)
             payload['headers'].each do |k, v|
               request[k.to_s] = v.to_s
@@ -184,6 +194,15 @@ module Granete
             request.body = JSON.generate(payload['body'])
           end
           request
+        end
+
+        def library_draft_mode?
+          return false unless @library_mode_provider
+
+          @library_mode_provider.call == 'draft'
+        rescue StandardError => e
+          @logger&.warn('library_mode_provider_failed', error: e)
+          false
         end
 
         def perform(http, request)

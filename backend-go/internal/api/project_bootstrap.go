@@ -96,6 +96,10 @@ func (s *Server) HandleProjectDesignBootstrap(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	if err := s.markProjectDevModeIfRequested(r, result.Project.ID); err != nil {
+		respondWithInternalError(w, err, "mark project dev mode")
+		return
+	}
 	ctx, err := s.Store.GetModelBindingContext(r.Context(), result.Project.ID, result.Design.ID, nil)
 	if err != nil {
 		respondWithInternalError(w, err, "read bootstrap binding context")

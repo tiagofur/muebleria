@@ -331,3 +331,22 @@ describe('#710 visible results summary + clear filters (ProjectsListView)', () =
     );
   });
 });
+
+describe('ProjectsListView — dev-mode provenance (#1599)', () => {
+  it('marks only the server-marked project with a caution badge and the full sentence', () => {
+    const marked: Project[] = [{ ...projects[0]!, devModeMarkedAt: '2026-11-03T15:00:00.000Z' }, projects[1]!];
+    renderView({ projects: marked, filtered: marked });
+    const badges = screen.getAllByTestId('project-card-dev-mode');
+    expect(badges).toHaveLength(1);
+    const badge = within(badges[0]!).getByText('Modo desarrollador · sólo pruebas');
+    expect(badge.className).toContain('status-badge--warning');
+    expect(badge.getAttribute('aria-label')).toMatch(/^Proyecto creado o sincronizado en modo desarrollador desde el .*2026: se recomienda usarlo sólo para pruebas$/);
+    expect(within(screen.getByTestId('project-card-prj-1')).queryByTestId('project-card-dev-mode')).not.toBeNull();
+    expect(within(screen.getByTestId('project-card-prj-2')).queryByTestId('project-card-dev-mode')).toBeNull();
+  });
+
+  it('shows nothing for unmarked projects (never inferred from createdAt)', () => {
+    renderView();
+    expect(screen.queryByTestId('project-card-dev-mode')).toBeNull();
+  });
+});

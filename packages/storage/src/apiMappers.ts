@@ -2341,6 +2341,7 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     marginFactor: num(raw.margin_factor ?? raw.marginFactor, 1.35),
     laborFixedCost: num(raw.labor_fixed_cost ?? raw.laborFixedCost),
     authoringSurface: (str(raw.authoring_surface ?? raw.authoringSurface) || 'sketchup') as Project['authoringSurface'],
+    ...(str(raw.dev_mode_marked_at ?? raw.devModeMarkedAt) ? { devModeMarkedAt: str(raw.dev_mode_marked_at ?? raw.devModeMarkedAt) } : {}),
     status: (['draft', 'quoted', 'accepted', 'produced'].includes(status)
       ? status
       : 'draft') as ProjectStatus,

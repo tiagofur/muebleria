@@ -337,6 +337,24 @@ describe('ProjectsScreen F022', () => {
     expect(summary.textContent).toContain('Bisagra');
   });
 
+  it('#1599: the detail of a dev-mode project shows the permanent caution note with its date', async () => {
+    const user = userEvent.setup();
+    const marked = projects.map((p, i) => (i === 0 ? { ...p, devModeMarkedAt: '2026-11-03T15:00:00.000Z' } : p));
+    renderScreen({ projects: marked });
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const note = screen.getByTestId('project-dev-mode-note');
+    expect(note.textContent).toMatch(/^Creado en modo desarrollador: se recomienda sólo para pruebas · desde .*2026$/);
+    expect(note.className).toContain('project-detail__notes--caution');
+    expect(note.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('#1599: an unmarked project detail has no dev-mode note', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    expect(screen.queryByTestId('project-dev-mode-note')).toBeNull();
+  });
+
   it('opens detail on card click with sticky chrome and back navigation', async () => {
     const user = userEvent.setup();
     const { onSelectionChange } = renderScreen();

@@ -124,6 +124,9 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectCosts(&p)
 		}
+		// #1599: server-stamped only; a client-sent value is never stored, so
+		// it is never echoed either.
+		p.DevModeMarkedAt = nil
 		if inlineCustomer != nil {
 			respondWithJSON(w, http.StatusCreated, createProjectResponse{Project: p, InlineCustomer: inlineCustomer})
 			return
