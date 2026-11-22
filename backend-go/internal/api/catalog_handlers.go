@@ -850,32 +850,30 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		err := s.Store.DeactivateHardware(r.Context(), id, expectedVersion)
+		// #1615: DELETE is the physical delete (deactivation stays on the
+		// PUT active=false path). ?deleteParts=true cascades a kit's parts.
+		claims := claimsFromRequest(r)
+		actorID := ""
+		if claims != nil {
+			actorID = claims.UserID
+		}
+		result, err := s.Store.DeleteHardware(r.Context(), storage.DeleteHardwareCommand{
+			ID:              id,
+			ExpectedVersion: expectedVersion,
+			DeleteParts:     r.URL.Query().Get("deleteParts") == "true",
+			ActorUserID:     actorID,
+			IP:              clientIP(r),
+			RequestID:       RequestIDFromContext(r.Context()),
+		})
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
-				respondWithError(w, http.StatusNotFound, err.Error())
-				return
-			}
-			if errors.Is(err, storage.ErrVersionConflict) {
-				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión del herraje cambió; recargá y reintentá", nil)
-				return
-			}
-			if errors.Is(err, storage.ErrHardwareInUse) {
-				// #1215: refuse to deactivate a referenced hardware with a
-				// clear 409 instead of a later opaque calculate failure.
-				respondWithError(w, http.StatusConflict, err.Error())
-				return
-			}
-			if errors.Is(err, storage.ErrHardwareKitHasParts) {
-				// #1422 slice 1 review: a kit with linked parts must not be
-				// deactivated — the parts' kit link would dangle.
-				respondWithError(w, http.StatusConflict, err.Error())
-				return
-			}
-			respondWithInternalError(w, err, "handler")
+			respondWithHardwareDeleteError(w, err)
 			return
 		}
-		respondWithJSON(w, http.StatusOK, map[string]string{"message": "hardware deactivated"})
+		respondWithJSON(w, http.StatusOK, map[string]any{
+			"deleted_ids":         result.DeletedIDs,
+			"removed_from_groups": result.RemovedFromGroups,
+			"updated_group_ids":   result.UpdatedGroupIDs,
+		})
 
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1010,5 +1008,46 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// respondWithHardwareDeleteError maps the #1615 delete verdicts: 404 (missing
+// or other organization), 412 (stale If-Match), 409 with per-family counts,
+// kit groups or kit parts.
+func respondWithHardwareDeleteError(w http.ResponseWriter, err error) {
+	var inUse *storage.HardwareInUseError
+	var groups *storage.HardwareKitGroupsError
+	var parts *storage.HardwareKitPartsError
+	switch {
+	case strings.Contains(err.Error(), "not found"):
+		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "el herraje no existe", nil)
+	case errors.Is(err, storage.ErrVersionConflict):
+		respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión del herraje cambió; recargá y reintentá", nil)
+	case errors.As(err, &inUse):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, inUse.Error(), map[string]any{
+			"reason": "in_use",
+			"usage": map[string]int64{
+				"templateLines":       inUse.Usage.TemplateLines,
+				"quoteChoices":        inUse.Usage.QuoteChoices,
+				"designAssets":        inUse.Usage.DesignAssets,
+				"componentPlacements": inUse.Usage.ComponentPlacements,
+				"agregados":           inUse.Usage.Agregados,
+				"hardwareProfiles":    inUse.Usage.HardwareProfiles,
+				"openingProfiles":     inUse.Usage.OpeningProfiles,
+				"gripStyles":          inUse.Usage.GripStyles,
+				"projectGrips":        inUse.Usage.ProjectGrips,
+				"designChoices":       inUse.Usage.DesignChoices,
+			},
+		})
+	case errors.As(err, &groups):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, groups.Error(), map[string]any{
+			"reason": "kit_groups", "groups": groups.Groups,
+		})
+	case errors.As(err, &parts):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, parts.Error(), map[string]any{
+			"reason": "kit_parts", "parts": parts.Parts,
+		})
+	default:
+		respondWithInternalError(w, err, "handler")
 	}
 }

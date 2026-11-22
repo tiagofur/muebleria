@@ -277,6 +277,7 @@ export function AppContent({
     newId,
     saveCatalog: (c) => getRepository().saveCatalog(c) as Promise<void>,
     getKnownEntityVersion: (family, id) => getRepository().knownEntityVersion?.(family, id),
+    forgetEntityVersions: (family, ids) => getRepository().forgetEntityVersions?.(family, ids),
     getAuthToken: () => useWorkspaceStore.getState().getAuthToken(),
     getSession: () => useWorkspaceStore.getState().session,
     getDraftProjectsCount: () =>
@@ -1209,6 +1210,7 @@ export function AppContent({
   const addSystemHeight = catalogActions.addSystemHeight;
   const updateHardware = catalogActions.updateHardware;
   const setHardwareActive = catalogActions.setHardwareActive;
+  const deleteHardware = catalogActions.deleteHardware;
   const createAmbientMaterial = catalogActions.createAmbientMaterial;
   const updateAmbientMaterial = catalogActions.updateAmbientMaterial;
   const setAmbientMaterialActive = catalogActions.setAmbientMaterialActive;
@@ -2105,6 +2107,7 @@ export function AppContent({
     setEdgeActive,
     setEditingModuleId,
     setHardwareActive,
+    deleteHardware,
     createHardwareCategory,
     updateHardwareCategory,
     deleteHardwareCategory,

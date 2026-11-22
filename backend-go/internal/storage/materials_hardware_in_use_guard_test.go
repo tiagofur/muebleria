@@ -116,7 +116,7 @@ func TestHardware_InUseDeactivationBlocked(t *testing.T) {
 		}
 		// El mensaje nombra las familias con conteos: 1 línea de plantilla,
 		// 2 elecciones (item + proyecto) y 1 activo de diseño.
-		for _, want := range []string{"1 línea", "2 elección", "1 activo"} {
+		for _, want := range []string{"1 línea", "2 elecciones", "1 activo"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Fatalf("mensaje sin conteo %q: %v", want, err)
 			}

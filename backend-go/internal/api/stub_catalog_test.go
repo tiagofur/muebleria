@@ -452,3 +452,13 @@ func (s *stubStore) ApplyDesignOpeningFacade(_ context.Context, designID string,
 	return nil
 }
 
+
+// #1615: physical delete stub.
+func (s *stubStore) DeleteHardware(_ context.Context, cmd storage.DeleteHardwareCommand) (*storage.DeleteHardwareResult, error) {
+	c := cmd
+	s.deleteHardwareCmd = &c
+	if s.deleteHardwareErr != nil {
+		return nil, s.deleteHardwareErr
+	}
+	return &storage.DeleteHardwareResult{DeletedIDs: []string{cmd.ID}}, nil
+}

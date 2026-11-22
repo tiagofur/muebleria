@@ -73,7 +73,7 @@ import type {
   HardwareAssetRevision,
   HardwareAssetRevisionGrant,
   HardwareAssetUploadSession,
-  HardwareDeactivation,
+  HardwareDeletion,
   HardwareKitSystemCreateRequest,
   HardwareKitSystemCreated,
   HardwareKitSystemHeightAddRequest,
@@ -412,7 +412,7 @@ export abstract class GeneratedGraneteApiClient {
   createHardware(token: string, body: HardwareWrite, signal?: AbortSignal): Promise<Hardware> { return this.request("POST", "/catalog/hardware", { schema: "Hardware", token, bodySchema: "HardwareWrite", body, signal }); }
   getHardware(token: string, hardwareId: string, signal?: AbortSignal): Promise<Hardware> { return this.request("GET", `/catalog/hardware/${encodeURIComponent(hardwareId)}`, { schema: "Hardware", token, signal }); }
   updateHardware(token: string, hardwareId: string, version: number, body: HardwareWrite, signal?: AbortSignal): Promise<Hardware> { return this.request("PUT", `/catalog/hardware/${encodeURIComponent(hardwareId)}`, { schema: "Hardware", token, ifMatch: version, bodySchema: "HardwareWrite", body, signal }); }
-  deactivateHardware(token: string, hardwareId: string, version: number, signal?: AbortSignal): Promise<HardwareDeactivation> { return this.request("DELETE", `/catalog/hardware/${encodeURIComponent(hardwareId)}`, { schema: "HardwareDeactivation", token, ifMatch: version, signal }); }
+  deleteHardware(token: string, hardwareId: string, version: number, signal?: AbortSignal): Promise<HardwareDeletion> { return this.request("DELETE", `/catalog/hardware/${encodeURIComponent(hardwareId)}`, { schema: "HardwareDeletion", token, ifMatch: version, signal }); }
   listHardwareProfiles(token: string, signal?: AbortSignal): Promise<ReadonlyArray<HardwareProfile>> { return this.request("GET", "/catalog/hardware-profiles", { arrayOf: "HardwareProfile", token, signal }); }
   createHardwareProfile(token: string, body: HardwareProfileWrite, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("POST", "/catalog/hardware-profiles", { schema: "HardwareProfile", token, bodySchema: "HardwareProfileWrite", body, signal }); }
   getHardwareProfile(token: string, profileId: string, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("GET", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, signal }); }

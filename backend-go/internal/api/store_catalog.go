@@ -122,6 +122,8 @@ type CatalogStore interface {
 	LockCatalogCodes(ctx context.Context, sortedCodes []string) error
 	UpdateHardware(ctx context.Context, id string, expectedVersion int64, h *domain.Hardware) error
 	DeactivateHardware(ctx context.Context, id string, expectedVersion int64) error
+	// #1615: physical delete with the unified guard.
+	DeleteHardware(ctx context.Context, cmd storage.DeleteHardwareCommand) (*storage.DeleteHardwareResult, error)
 
 	// Catalog: hardware profiles (#913 / HW-PROFILE)
 	ListHardwareProfiles(ctx context.Context) ([]domain.HardwareProfile, error)

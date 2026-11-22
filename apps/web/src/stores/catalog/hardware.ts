@@ -166,6 +166,7 @@ type HardwareSlice = Pick<
   | 'createInsertoForKit'
   | 'updateHardware'
   | 'setHardwareActive'
+  | 'deleteHardware'
   | 'createHardwareCategory'
   | 'updateHardwareCategory'
   | 'deleteHardwareCategory'
@@ -415,6 +416,43 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
         },
         '✓ Cambios guardados',
       );
+    },
+
+    deleteHardware: async (id, options) => {
+      // #1615: server first (contract #1606/#1511): the guard, membership
+      // cleanup and cascade run server-side in one transaction; only then
+      // the local catalog drops the row(s) and the group memberships.
+      const catalog = ctx.get().catalog;
+      if (!catalog) return;
+      const deleteParts = options?.deleteParts === true;
+      const partIds = deleteParts
+        ? catalog.hardware.filter((h) => h.kitHardwareId === id).map((h) => h.id)
+        : [];
+      const removed = new Set([id, ...partIds]);
+      const touchedGroupIds = catalog.optionGroups
+        .filter((g) => g.optionIds.some((optionId) => removed.has(optionId)))
+        .map((g) => g.id);
+      const ok = await ctx.hardDeleteOnAuth(
+        `/catalog/hardware/${id}${deleteParts ? '?deleteParts=true' : ''}`,
+      );
+      if (!ok) return;
+      // The server moved those groups' versions: forget the cached ones so
+      // the next save learns the current version (never a stale 412).
+      ctx.deps.forgetEntityVersions?.('option-groups', touchedGroupIds);
+      const saved = await ctx.patchSaved((c) => ({
+        ...c,
+        hardware: c.hardware.filter((h) => !removed.has(h.id)),
+        optionGroups: c.optionGroups.map((g) =>
+          g.optionIds.some((optionId) => removed.has(optionId))
+            ? { ...g, optionIds: g.optionIds.filter((optionId) => !removed.has(optionId)) }
+            : g,
+        ),
+      }));
+      if (!saved) return;
+      ctx.toast({
+        type: 'info',
+        message: removed.size > 1 ? `Herraje y ${removed.size - 1} parte(s) eliminados` : 'Herraje eliminado',
+      });
     },
 
     setHardwareActive: (id, active) => {

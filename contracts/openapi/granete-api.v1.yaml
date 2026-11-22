@@ -7110,20 +7110,29 @@
         }
       },
       "delete": {
-        "operationId": "deactivateHardware",
-        "description": "Soft-deletes (deactivates) the hardware. Refused with 409 while the item is still referenced by module template hardware lines, quote choices or design-revision hardware assets — the calculation engine fail-closes on inactive hardware, so deactivating a referenced item would break those designs' quotes. Reactivation is a normal PUT with active=true.",
+        "operationId": "deleteHardware",
+        "description": "#1615: PHYSICALLY deletes the hardware (deactivation is PUT active=false). One transaction: the unified reference guard (module template lines, quote choices, design-revision assets, component placements on modules/structures, agregado lines/components/current recipe, hardware profiles, gola/opening profile BOM members, grip style handles, frozen project/furniture-instance grip snapshots, design choices in working copies/authoring defaults/non-superseded revisions, choices of non-superseded quote revisions) answers 409 with per-family counts in details.usage; the id is canonicalized (case-insensitive); accessory option groups whose kit is this hardware answer 409 listing them (details.groups); a kit with linked design parts answers 409 listing them (details.parts) unless deleteParts=true, which cascades the parts (each passes its own guard; any part in use aborts everything). Membership in option groups is removed automatically and the affected groups' versions move. If-Match required (412 stale); another organization's hardware is a uniform 404. Historical library releases embed the hardware and keep resolving.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "name": "deleteParts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Cascade-delete the kit's linked design parts."
           }
         ],
         "responses": {
           "200": {
-            "description": "Hardware deactivated",
+            "description": "Hardware (and cascaded parts) deleted",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HardwareDeactivation"
+                  "$ref": "#/components/schemas/HardwareDeletion"
                 }
               }
             }
@@ -20465,14 +20474,31 @@
           }
         }
       },
-      "HardwareDeactivation": {
+      "HardwareDeletion": {
         "type": "object",
+        "description": "#1615: result of a physical hardware delete.",
         "required": [
-          "message"
+          "deleted_ids",
+          "removed_from_groups"
         ],
         "properties": {
-          "message": {
-            "type": "string"
+          "deleted_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removed_from_groups": {
+            "type": "integer"
+          },
+          "updated_group_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

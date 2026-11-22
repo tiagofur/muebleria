@@ -780,6 +780,20 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     return `${family}:${id}`;
   }
 
+  /**
+   * #1615: forget the cached If-Match version (and skip-unchanged baseline)
+   * of entities the SERVER just changed as a side effect (e.g. option groups
+   * a hardware delete removed it from), so the next save learns the current
+   * version instead of failing with a stale If-Match.
+   */
+  forgetEntityVersions(family: string, ids: readonly string[]): void {
+    for (const id of ids) {
+      const key = this.versionKey(family, id);
+      this.entityVersions.delete(key);
+      this.lastSentBody.delete(key);
+    }
+  }
+
   /** #1659: last server-confirmed version of a catalog entity this session. */
   knownEntityVersion(family: string, id: string): number | undefined {
     return this.entityVersions.get(this.versionKey(family, id));

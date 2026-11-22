@@ -395,6 +395,8 @@ type stubStore struct {
 	deactivateHardwareCalled      bool
 	deactivateHardwareExpectedVer int64
 	deactivateHardwareErr         error
+	deleteHardwareCmd             *storage.DeleteHardwareCommand
+	deleteHardwareErr             error
 	// #1091 (#443 slice 2): conflict injection for simple catalog families.
 	updateMaterialBoardErr error
 	updateCategoryErr      error

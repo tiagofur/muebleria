@@ -790,32 +790,6 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 // design that uses it at calculate time. Handlers map it to 409 via errors.Is.
 var ErrHardwareInUse = errors.New("herraje en uso")
 
-// countHardwareUsage counts the live references that pin this hardware, so a
-// deactivation cannot silently brick quote calculation (#1215): module
-// template hardware lines, quote choices (item- and project-level) and
-// design-revision hardware assets — the same reference families clean_demo.go
-// protects on physical delete. The engine fail-closes on inactive hardware,
-// so any of these references turns a deactivation into a 400 at calculate.
-func (s *PostgresStore) countHardwareUsage(ctx context.Context, id string) (lines, itemChoices, projectChoices, assets int64, err error) {
-	err = s.db(ctx).QueryRow(ctx, `
-		SELECT
-			(SELECT COUNT(*) FROM hardware_lines hl
-			 JOIN modules m ON m.id = hl.module_id
-			 WHERE hl.hardware_id::text = $1 AND m.organization_id = $2),
-			(SELECT COUNT(*) FROM project_item_choices pic
-			 JOIN project_items pi ON pi.id = pic.project_item_id
-			 JOIN projects p ON p.id = pi.project_id
-			 WHERE pic.choice_entity_id::text = $1 AND p.organization_id = $2),
-			(SELECT COUNT(*) FROM project_level_choices plc
-			 JOIN projects p ON p.id = plc.project_id
-			 WHERE plc.choice_entity_id = $1 AND p.organization_id = $2),
-			(SELECT COUNT(*) FROM design_revision_hardware_assets
-			 WHERE hardware_id::text = $1 AND organization_id = $2)`,
-		id, OrgFromCtx(ctx),
-	).Scan(&lines, &itemChoices, &projectChoices, &assets)
-	return
-}
-
 // ErrHardwareKitHasParts marks a refused active→false transition on a KIT
 // whose design parts still reference it (#1422 slice 1 review): deactivating
 // it would leave the parts' kit_hardware_id dangling.
@@ -857,17 +831,16 @@ func (s *PostgresStore) ensureHardwareNotReferencedAsKit(ctx context.Context, id
 }
 
 // ensureHardwareNotInUse rejects an active→false transition when the hardware
-// is still referenced (#1215).
+// is still referenced (#1215). #1615: the unified guard also counts the JSONB
+// families (component placements, agregados, hardware profiles), closing the
+// gap where a hardware placed only through JSONB could be deactivated.
 func (s *PostgresStore) ensureHardwareNotInUse(ctx context.Context, id string) error {
-	lines, itemChoices, projectChoices, assets, err := s.countHardwareUsage(ctx, id)
+	usage, err := s.HardwareUsageOf(ctx, id)
 	if err != nil {
 		return err
 	}
-	if lines+itemChoices+projectChoices+assets > 0 {
-		return fmt.Errorf(
-			"%w: %d línea(s) de muebles plantilla, %d elección(es) de cotización y %d activo(s) de diseño; quitá o reasigná esas referencias antes de desactivarlo",
-			ErrHardwareInUse, lines, itemChoices+projectChoices, assets,
-		)
+	if usage.Total() > 0 {
+		return &HardwareInUseError{Usage: usage, Action: "desactivarlo"}
 	}
 	return nil
 }

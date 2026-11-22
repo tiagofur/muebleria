@@ -327,6 +327,8 @@ export interface WorkspaceRepository {
    * accepted write). Undefined when the session never learned it.
    */
   knownEntityVersion?(family: string, id: string): number | undefined;
+  /** #1615: forget cached versions of entities changed server-side. */
+  forgetEntityVersions?(family: string, ids: readonly string[]): void;
   /** #1648 — committed delivery date (server-authored; API adapter only). */
   commitProjectDeliveryDate?(
     projectId: string,
