@@ -77,6 +77,8 @@ AS $$
     SELECT EXISTS (SELECT 1 FROM marked);
 $$;
 
+DROP TRIGGER IF EXISTS trg_quote_delivery_cancel_email ON quote_deliveries;
+DROP FUNCTION IF EXISTS cancel_quote_delivery_email();
 DROP FUNCTION IF EXISTS confirm_quote_delivery(UUID);
 DROP FUNCTION IF EXISTS record_quote_delivery_outcome(UUID, TEXT, TEXT);
 DROP TABLE IF EXISTS quote_deliveries;

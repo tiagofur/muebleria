@@ -131,10 +131,27 @@ VOLATILE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
+DECLARE
+    actor_organization UUID := public.app_current_organization_id();
 BEGIN
+    -- Same actor binding as delete_project_tree (000187): the GUC tenant must
+    -- be writable AND backed by the caller's live active membership before
+    -- definer privileges touch projects/project_events.
+    IF actor_organization IS NULL OR NOT public.app_can_write_organization(actor_organization) THEN
+        RETURN FALSE;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM public.memberships membership
+         WHERE membership.id = public.app_current_membership_id()
+           AND membership.user_id = public.app_current_user_id()
+           AND membership.organization_id = actor_organization
+           AND membership.status = 'active'
+    ) THEN
+        RETURN FALSE;
+    END IF;
     IF NOT EXISTS (
         SELECT 1 FROM quote_deliveries
-         WHERE id = p_delivery_id AND organization_id = app_current_organization_id() AND channel = 'whatsapp'
+         WHERE id = p_delivery_id AND organization_id = actor_organization AND channel = 'whatsapp'
     ) THEN
         RETURN FALSE;
     END IF;
@@ -168,7 +185,15 @@ BEGIN
         RETURN FALSE;
     END IF;
     IF v_kind = 'quote' THEN
-        PERFORM record_quote_delivery_outcome(v_ref::uuid, 'sent', NULL);
+        -- The email already left: the outbox mark must commit even if the
+        -- delivery bookkeeping fails (otherwise the row stays leased and the
+        -- customer gets the email again every lease period).
+        BEGIN
+            PERFORM record_quote_delivery_outcome(v_ref::uuid, 'sent', NULL);
+        EXCEPTION WHEN OTHERS THEN
+            UPDATE email_outbox SET last_error = left('quote delivery bookkeeping failed: ' || SQLSTATE, 500) WHERE id = p_id;
+            RAISE WARNING 'quote delivery bookkeeping failed for outbox %: %', p_id, SQLSTATE;
+        END;
     END IF;
     RETURN TRUE;
 END
@@ -197,7 +222,11 @@ BEGIN
         RETURN FALSE;
     END IF;
     IF p_final AND v_kind = 'quote' THEN
-        PERFORM record_quote_delivery_outcome(v_ref::uuid, 'failed', p_error);
+        BEGIN
+            PERFORM record_quote_delivery_outcome(v_ref::uuid, 'failed', p_error);
+        EXCEPTION WHEN OTHERS THEN
+            RAISE WARNING 'quote delivery bookkeeping failed for outbox %: %', p_id, SQLSTATE;
+        END;
     END IF;
     RETURN TRUE;
 END
@@ -227,7 +256,11 @@ BEGIN
         RETURNING o.kind, o.ref
     LOOP
         IF expired.kind = 'quote' THEN
-            PERFORM record_quote_delivery_outcome(expired.ref::uuid, 'failed', 'el email venció sin poder enviarse');
+            BEGIN
+                PERFORM record_quote_delivery_outcome(expired.ref::uuid, 'failed', 'el email venció sin poder enviarse');
+            EXCEPTION WHEN OTHERS THEN
+                RAISE WARNING 'quote delivery bookkeeping failed for expired %: %', expired.ref, SQLSTATE;
+            END;
         END IF;
     END LOOP;
 
@@ -249,6 +282,27 @@ BEGIN
     RETURNING o.id, o.kind, o.payload, o.attempts, o.lease_token;
 END
 $$;
+
+-- A delivery only disappears with its project (FK cascade via
+-- delete_project_tree): its still-queued email must not reach the customer
+-- after the project is gone.
+CREATE FUNCTION cancel_quote_delivery_email()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+    UPDATE email_outbox
+       SET status = 'cancelled', payload = NULL, lease_token = NULL
+     WHERE kind = 'quote' AND ref = OLD.id::text AND status = 'pending';
+    RETURN OLD;
+END
+$$;
+REVOKE ALL ON FUNCTION cancel_quote_delivery_email() FROM PUBLIC;
+CREATE TRIGGER trg_quote_delivery_cancel_email
+    BEFORE DELETE ON quote_deliveries
+    FOR EACH ROW EXECUTE FUNCTION cancel_quote_delivery_email();
 
 INSERT INTO rls_policy_inventory (table_name, classification, read_scope, write_scope, rationale)
 VALUES ('quote_deliveries', 'append-only', 'organization', 'insert-only-organization',

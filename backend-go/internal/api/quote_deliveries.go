@@ -217,6 +217,8 @@ func whatsAppDigits(phone string) (string, bool) {
 	return digits, len(digits) >= 8 && len(digits) <= 15
 }
 
+// formatQuoteAmount renders es-MX style ($125,430.50 MXN), the same
+// grouping the web uses for amounts.
 func formatQuoteAmount(value float64, currency string) string {
 	cents := int64(math.Round(value * 100))
 	sign := ""
@@ -230,7 +232,7 @@ func formatQuoteAmount(value float64, currency string) string {
 		whole = whole[:len(whole)-3]
 	}
 	grouped = append([]string{whole}, grouped...)
-	return fmt.Sprintf("%s$%s,%02d %s", sign, strings.Join(grouped, "."), cents%100, strings.TrimSpace(currency))
+	return fmt.Sprintf("%s$%s.%02d %s", sign, strings.Join(grouped, ","), cents%100, strings.TrimSpace(currency))
 }
 
 func quoteWhatsAppMessage(qc *storage.QuoteDeliveryContext) string {
@@ -247,7 +249,7 @@ func quoteWhatsAppMessage(qc *storage.QuoteDeliveryContext) string {
 	if o := fold(qc.OrganizationName); o != "" {
 		from = " de " + o
 	}
-	return fmt.Sprintf("%s, te comparto %s%s. Total: %s. Te envío el PDF por este chat.", greeting, what, from, formatQuoteAmount(qc.SaleTotal, qc.Currency))
+	return fmt.Sprintf("%s, te comparto %s%s. Total: %s. Te paso el PDF a continuación.", greeting, what, from, formatQuoteAmount(qc.SaleTotal, qc.Currency))
 }
 
 // HandlePrepareQuoteWhatsApp serves POST …/quote-revisions/{id}:prepare-whatsapp.

@@ -318,3 +318,80 @@ func TestQuoteDeliveriesMigrationDownAndUp(t *testing.T) {
 		t.Fatalf("re-applied up: %v", err)
 	}
 }
+
+func TestQuoteDeliveryReviewHardening(t *testing.T) {
+	ctx := context.Background()
+	fx, revisionID := quoteDeliveryFixture(t)
+
+	t.Run("a manufacturing-only organization cannot address the customer", func(t *testing.T) {
+		if err := fiTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
+			_, e := fx.store.GetProjectCustomerContact(ctx, fiSharedProject)
+			return e
+		}); err != storage.ErrQuoteDeliveryAmountsWithheld {
+			t.Fatalf("manufacturing partner must be refused, got %v", err)
+		}
+		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			_, e := fx.store.GetProjectCustomerContact(ctx, fiSharedProject)
+			return e
+		}); err != nil {
+			t.Fatalf("the owner organization reads its customer contact: %v", err)
+		}
+	})
+
+	t.Run("confirming needs the caller's live active membership", func(t *testing.T) {
+		var d *storage.QuoteDelivery
+		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			var e error
+			d, e = fx.store.CreateQuoteDelivery(ctx, storage.CreateQuoteDeliveryCommand{Delivery: storage.QuoteDelivery{
+				ProjectID: fx.projectID, QuoteRevisionID: revisionID, RevisionNumber: 1,
+				Channel: "whatsapp", Recipient: "+525512345678", RequestedBy: rlsUserA,
+			}})
+			return e
+		}); err != nil {
+			t.Fatal(err)
+		}
+		forged := fiActorA()
+		forged.MembershipID = "40000000-0000-0000-0000-0000000000ff"
+		if err := fiTx(t, fx.store, forged, func(ctx context.Context) error {
+			_, e := fx.store.ConfirmQuoteDelivery(ctx, fx.projectID, d.ID)
+			return e
+		}); err != storage.ErrQuoteDeliveryNotConfirmable {
+			t.Fatalf("a forged membership must not confirm, got %v", err)
+		}
+	})
+
+	t.Run("deleting the delivery with its project cancels the queued email", func(t *testing.T) {
+		d := requestQuoteEmail(t, fx, revisionID, []byte("%PDF-1.7\ndel"))
+		if _, err := fx.admin.Exec(ctx, `DELETE FROM quote_deliveries WHERE id = $1`, d.ID); err != nil {
+			t.Fatal(err)
+		}
+		if n := countRows(t, fx, `SELECT count(*) FROM email_outbox WHERE ref=$1 AND status='cancelled' AND payload IS NULL`, d.ID); n != 1 {
+			t.Fatal("the orphaned quote email must be cancelled, never sent")
+		}
+	})
+
+	t.Run("a bookkeeping failure never blocks marking the email as sent", func(t *testing.T) {
+		if _, err := fx.admin.Exec(ctx, `UPDATE email_outbox SET status='cancelled', payload=NULL WHERE status='pending'`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fx.store.EnqueueEmail(ctx, storage.OutboundEmail{Kind: storage.EmailKindQuote, Ref: "not-a-uuid",
+			Message: mail.Message{To: "a@b.test", Subject: "s", Text: "t"}, ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
+			t.Fatal(err)
+		}
+		batch, err := fx.store.ClaimEmailBatch(ctx, 5, time.Minute)
+		if err != nil || len(batch) != 1 {
+			t.Fatalf("claim: %d %v", len(batch), err)
+		}
+		held, err := fx.store.MarkEmailSent(ctx, batch[0].ID, batch[0].LeaseToken)
+		if err != nil || !held {
+			t.Fatalf("the outbox mark must commit even when the delivery bookkeeping fails: held=%t err=%v", held, err)
+		}
+		var status, lastError string
+		if err := fx.admin.QueryRow(ctx, `SELECT status, COALESCE(last_error,'') FROM email_outbox WHERE id=$1`, batch[0].ID).Scan(&status, &lastError); err != nil {
+			t.Fatal(err)
+		}
+		if status != "sent" || !strings.Contains(lastError, "bookkeeping") {
+			t.Fatalf("status=%s last_error=%q", status, lastError)
+		}
+	})
+}

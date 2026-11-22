@@ -69,6 +69,7 @@ describe('QuoteSendPanel (#1650)', () => {
     });
     const buildPdf = renderPanel(fetchMock);
     expect(await screen.findByText('Se envía a ana@cliente.test.')).toBeTruthy();
+    expect(document.querySelectorAll('.btn--primary')).toHaveLength(1);
     fireEvent.change(screen.getByLabelText('Mensaje para el cliente (opcional)'), { target: { value: 'Cualquier duda, avisame.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar por email' }));
     await waitFor(() => expect(sentBody).not.toBeNull());
@@ -115,6 +116,10 @@ describe('QuoteSendPanel (#1650)', () => {
     renderPanel(fetchMock);
     fireEvent.click(await screen.findByRole('button', { name: 'Preparar WhatsApp' }));
     const link = await screen.findByRole('link', { name: 'Abrir WhatsApp' });
+    // One primary action per state: confirming the WhatsApp send.
+    const primaries = document.querySelectorAll('.btn--primary');
+    expect(primaries).toHaveLength(1);
+    expect(primaries[0]!.textContent).toBe('Ya lo envié');
     expect(link.getAttribute('href')).toBe('https://wa.me/525512345678?text=Hola');
     expect(await screen.findByText(/Preparada, sin confirmar/)).toBeTruthy();
     expect(confirmed).toBe(false);
@@ -139,5 +144,31 @@ describe('QuoteSendPanel (#1650)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Enviar por email' }));
     expect((await screen.findByTestId('quote-send-error')).textContent).toContain('no tiene líneas');
     expect(fetchMock.mock.calls.some((call) => String(call[0]).endsWith(':send-email'))).toBe(false);
+  });
+});
+
+describe('QuoteSendPanel idempotency intents (#1650)', () => {
+  it('a definitive refusal and an edited input start a new Idempotency-Key', async () => {
+    const keys: string[] = [];
+    let attempt = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith(':send-email')) {
+        keys.push(new Headers(init?.headers).get('Idempotency-Key') ?? '');
+        attempt += 1;
+        if (attempt === 1) {
+          return json(409, { code: 'QUOTE_DELIVERY_NO_RECIPIENT', message: 'el cliente no tiene un email válido', fieldErrors: {}, requestId: 'r', retryable: false, details: {} });
+        }
+        return json(201, delivery());
+      }
+      return json(200, list());
+    });
+    renderPanel(fetchMock);
+    fireEvent.click(await screen.findByRole('button', { name: 'Enviar por email' }));
+    expect((await screen.findByTestId('quote-send-error')).textContent).toContain('no tiene un email');
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar por email' }));
+    await screen.findByTestId('quote-send-notice');
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toBe(keys[1]);
   });
 });

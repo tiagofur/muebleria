@@ -119,6 +119,14 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
   const whatsappKey = useRef<string | null>(null);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey });
+  // An Idempotency-Key belongs to ONE exact request: a changed input or a
+  // definitive (4xx) refusal starts a new intent; only a network/5xx retry
+  // reuses the key so a lost response replays instead of sending twice.
+  const resetIntents = () => {
+    emailKey.current = null;
+    whatsappKey.current = null;
+  };
+  const keepKeyFor = (err: unknown) => !(err instanceof GraneteApiError) || err.status >= 500;
 
   const sendEmail = useMutation({
     mutationFn: async () => {
@@ -141,7 +149,10 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
       setNotice(`Email en cola para ${delivery.recipient}. Figura «Enviada» cuando el servidor de correo lo acepte.`);
       await refresh();
     },
-    onError: (err) => setError(errorMessage(err, 'No se pudo enviar el email. Revisá tu conexión e intentá de nuevo.')),
+    onError: (err) => {
+      if (!keepKeyFor(err)) emailKey.current = null;
+      setError(errorMessage(err, 'No se pudo enviar el email. Revisá tu conexión e intentá de nuevo.'));
+    },
   });
 
   const prepareWhatsApp = useMutation({
@@ -157,7 +168,10 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
       setPrepared(result);
       await refresh();
     },
-    onError: (err) => setError(errorMessage(err, 'No se pudo preparar el mensaje de WhatsApp.')),
+    onError: (err) => {
+      if (!keepKeyFor(err)) whatsappKey.current = null;
+      setError(errorMessage(err, 'No se pudo preparar el mensaje de WhatsApp.'));
+    },
   });
 
   const confirm = useMutation({
@@ -246,6 +260,7 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
               onChange={(e) => {
                 setRevisionId(e.target.value);
                 setPrepared(null);
+                resetIntents();
               }}
               disabled={busy}
             >
@@ -259,11 +274,11 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
           <fieldset className="quote-send__variants" disabled={busy}>
             <legend className="label">PDF adjunto</legend>
             <label>
-              <input type="radio" name="quote-send-variant" checked={variant === 'detailed'} onChange={() => setVariant('detailed')} />{' '}
+              <input type="radio" name="quote-send-variant" checked={variant === 'detailed'} onChange={() => { setVariant('detailed'); resetIntents(); }} />{' '}
               Listado (muebles + total)
             </label>
             <label>
-              <input type="radio" name="quote-send-variant" checked={variant === 'summary'} onChange={() => setVariant('summary')} />{' '}
+              <input type="radio" name="quote-send-variant" checked={variant === 'summary'} onChange={() => { setVariant('summary'); resetIntents(); }} />{' '}
               Resumen (sólo total)
             </label>
           </fieldset>
@@ -277,7 +292,10 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
               rows={3}
               maxLength={1000}
               value={note}
-              onChange={(e) => setNote(e.target.value)}
+              onChange={(e) => {
+                setNote(e.target.value);
+                emailKey.current = null;
+              }}
               disabled={busy}
             />
           </div>
@@ -297,7 +315,7 @@ export function QuoteSendPanel({ baseUrl, token, projectId, queryKey, revisions,
           <div className="quote-send__actions">
             <button
               type="submit"
-              className="btn btn--primary btn--small"
+              className={`btn ${prepared ? 'btn--secondary' : 'btn--primary'} btn--small`}
               disabled={Boolean(emailBlocked) || busy}
               aria-describedby={emailBlocked ? 'quote-send-email-blocked' : undefined}
             >

@@ -49,7 +49,7 @@ func registerCommercialRoutes(server *Server, mux *http.ServeMux, authMW func(ht
 		"send-email":       server.RequireIdempotency("quote.send-email", http.HandlerFunc(server.HandleSendQuoteEmail)),
 		"prepare-whatsapp": server.RequireIdempotency("quote.prepare-whatsapp", http.HandlerFunc(server.HandlePrepareQuoteWhatsApp)),
 	}))))
-	mux.Handle("GET /api/projects/{projectId}/quote-deliveries", authMW(http.HandlerFunc(server.HandleListQuoteDeliveries)))
+	mux.Handle("GET /api/projects/{projectId}/quote-deliveries", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleListQuoteDeliveries))))
 	mux.Handle("POST /api/projects/{projectId}/quote-deliveries/{quoteDeliveryCommand...}", noStoreMiddleware(authMW(colonCommandRouter("quoteDeliveryCommand", "quoteDeliveryId", map[string]http.Handler{
 		"confirm": server.RequireIdempotency("quote.confirm-delivery", http.HandlerFunc(server.HandleConfirmQuoteDelivery)),
 	}))))

@@ -143,7 +143,7 @@ func TestPrepareQuoteWhatsAppBuildsPrefilledLinkWithoutMarkingSent(t *testing.T)
 	if err != nil || u.Host != "wa.me" || u.Path != "/525512345678" || u.Query().Get("text") != out.Message {
 		t.Fatalf("whatsapp url %q", out.WhatsappUrl)
 	}
-	if !strings.Contains(out.Message, "Q2") || !strings.Contains(out.Message, "$125.430,50 MXN") || !strings.Contains(out.Message, "Cocina Norte") {
+	if !strings.Contains(out.Message, "Q2") || !strings.Contains(out.Message, "$125,430.50 MXN") || !strings.Contains(out.Message, "Cocina Norte") {
 		t.Fatalf("message %q", out.Message)
 	}
 
