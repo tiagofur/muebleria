@@ -839,6 +839,10 @@ func (s *Server) HandleDesignWorkingCopy(w http.ResponseWriter, r *http.Request)
 			respondWithDesignError(w, err)
 			return
 		}
+		if err := s.markProjectDevModeIfRequested(r, wc.ProjectID); err != nil {
+			respondWithInternalError(w, err, "mark project dev mode")
+			return
+		}
 		respondWithJSON(w, http.StatusOK, toDesignWorkingCopyDTO(*wc))
 
 	default:

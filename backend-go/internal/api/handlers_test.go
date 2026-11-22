@@ -28,6 +28,8 @@ type stubStore struct {
 	// #1178 password reset: configurable issuance outcome, org team fixture
 	// and capture of the issued reset target.
 	passwordResetIssuance *storage.PasswordResetIssuance
+	// #1599 dev-mode marks recorded by the handlers.
+	devModeMarks []string
 	// #1650 quote deliveries.
 	quoteDeliveryCtx       *storage.QuoteDeliveryContext
 	quoteDeliveryErr       error

@@ -52,6 +52,15 @@ function quoteNoun(count: number): string {
 /** #1118: paginación incremental — 500 tab stops no son triage. */
 const LIST_PAGE_SIZE = 24;
 
+
+/** #1599: full sentence for the dev-mode badge (title + aria-label). */
+function devModeCardLabel(markedAt: string): string {
+  const day = formatIsoDate(markedAt);
+  return day && day !== '—' && day !== markedAt
+    ? `Proyecto creado o sincronizado en modo desarrollador desde el ${day}: se recomienda usarlo sólo para pruebas`
+    : 'Proyecto creado o sincronizado en modo desarrollador: se recomienda usarlo sólo para pruebas';
+}
+
 export interface ProjectsListViewProps {
   readonly projects: readonly Project[];
   readonly filtered: readonly Project[];
@@ -467,6 +476,18 @@ export function ProjectsListView({
                     <div className="project-card__legacy">
                       <span className="badge badge--neutral-subtle">
                         Cotización anterior
+                      </span>
+                    </div>
+                  ) : null}
+                  {project.devModeMarkedAt ? (
+                    <div className="project-card__legacy" data-testid="project-card-dev-mode">
+                      <span
+                        className="status-badge status-badge--warning"
+                        title={devModeCardLabel(project.devModeMarkedAt)}
+                        aria-label={devModeCardLabel(project.devModeMarkedAt)}
+                      >
+                        <span className="status-badge__dot" aria-hidden="true" />
+                        Modo desarrollador · sólo pruebas
                       </span>
                     </div>
                   ) : null}

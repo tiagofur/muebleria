@@ -220,6 +220,10 @@ func (s *Server) HandleProjectFurnitureInstances(w http.ResponseWriter, r *http.
 			return
 		}
 		w.Header().Set("ETag", FormatVersionETag(instance.Version))
+		if err := s.markProjectDevModeIfRequested(r, projectID); err != nil {
+			respondWithInternalError(w, err, "mark project dev mode")
+			return
+		}
 		respondWithJSON(w, http.StatusCreated, toFurnitureInstanceDTO(*instance))
 
 	default:
@@ -302,5 +306,9 @@ func (s *Server) HandleFurnitureInstanceDuplicate(w http.ResponseWriter, r *http
 	}
 
 	w.Header().Set("ETag", FormatVersionETag(instance.Version))
+	if err := s.markProjectDevModeIfRequested(r, projectID); err != nil {
+		respondWithInternalError(w, err, "mark project dev mode")
+		return
+	}
 	respondWithJSON(w, http.StatusCreated, toFurnitureInstanceDTO(*instance))
 }

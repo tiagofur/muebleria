@@ -1560,6 +1560,12 @@ export interface Project {
   readonly name: string;
   readonly customerId: string;
   readonly authoringSurface?: ProjectAuthoringSurface;
+  /**
+   * #1599: first moment the project was created or synced from SketchUp in
+   * library developer mode (server-stamped, permanent, read-only). Absent =
+   * not marked; never inferred from createdAt.
+   */
+  readonly devModeMarkedAt?: string;
   readonly organizationId?: string;
   readonly salesOrganizationId?: string;
   readonly manufacturingOrganizationId?: string;

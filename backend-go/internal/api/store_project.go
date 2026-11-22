@@ -10,6 +10,8 @@ import (
 // Contrato: proyectos CRUD + estado operativo bajo lock (piso, ejecuciones,
 // instalación, material planning, calidad, costing, survey) y eventos.
 type ProjectStore interface {
+	// #1599 permanent dev-mode provenance mark (no-op when already marked).
+	MarkProjectDevMode(ctx context.Context, projectID, actorUserID, ip, requestID string) (bool, error)
 	// Projects
 	ListProjects(ctx context.Context) ([]domain.Project, error)
 	GetProjectByID(ctx context.Context, id string) (*domain.Project, error)

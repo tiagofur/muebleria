@@ -444,6 +444,17 @@ describe('apiMappers', () => {
     expect(projectFromApi(apiProyectar as Record<string, unknown>).authoringSurface).toBe('proyectar');
   });
 
+  it('#1599: reads the server-stamped dev-mode mark and never writes it back', () => {
+    const base = { id: 'pr-dev', name: 'Dev', customer_id: 'c1', currency: 'MXN', status: 'draft', items: [] };
+    const marked = projectFromApi({ ...base, dev_mode_marked_at: '2026-11-03T15:00:00Z' });
+    expect(marked.devModeMarkedAt).toBe('2026-11-03T15:00:00Z');
+    expect(projectFromApi(base).devModeMarkedAt).toBeUndefined();
+    expect(projectFromApi({ ...base, dev_mode_marked_at: null }).devModeMarkedAt).toBeUndefined();
+    const out = projectToApi(marked) as Record<string, unknown>;
+    expect(out).not.toHaveProperty('dev_mode_marked_at');
+    expect(out).not.toHaveProperty('devModeMarkedAt');
+  });
+
   it('narrows the server-owned Digital Thread context projection to booleans', () => {
     const raw = {
       id: 'pr-dt',

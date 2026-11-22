@@ -243,3 +243,9 @@ func (s *stubStore) GetUserByEmailAnyState(_ context.Context, email string) (*do
 // #403 / MT-2 — ambiguous material binding roles are surfaced at authoring
 // time. The validation must reject BEFORE any store call (stubStore panics on
 // unexpected calls, so reaching the store would fail the test).
+
+// #1599 dev-mode mark capture.
+func (s *stubStore) MarkProjectDevMode(_ context.Context, projectID, actorUserID, _, _ string) (bool, error) {
+	s.devModeMarks = append(s.devModeMarks, projectID+":"+actorUserID)
+	return true, nil
+}

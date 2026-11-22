@@ -81,6 +81,10 @@ type Project struct {
 	ManufacturingOrganizationID string           `json:"manufacturing_organization_id,omitempty"`
 	CreatedBy                   string           `json:"created_by,omitempty"`
 	AuthoringSurface            AuthoringSurface `json:"authoring_surface,omitempty"`
+	// DevModeMarkedAt (#1599): first moment the project was created or synced
+	// from SketchUp with the library developer mode on. Server-stamped and
+	// read-only: saves never write it; nil = not marked.
+	DevModeMarkedAt *time.Time `json:"dev_mode_marked_at,omitempty"`
 	// OwnerUserID is the portfolio owner (F034). May differ from CreatedBy after reassignment.
 	OwnerUserID string `json:"owner_user_id,omitempty"`
 	// AssignedEngineerID is the technical / production engineer in charge (CRM Phase 2).
