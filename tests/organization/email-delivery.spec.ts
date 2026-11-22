@@ -12,7 +12,9 @@ import { linkTo, mailboxFor, waitForMessage } from './support/mailpit';
 const STORE_SLUG = 'tienda-email-1646';
 const MEMBER_EMAIL = 'browser-gate-email-member@example.com';
 const UNKNOWN_EMAIL = 'browser-gate-email-nobody@example.com';
-const NEW_PASSWORD = 'Email-1646-nueva';
+// Derived at runtime from the disposable gate credential (never a literal
+// in git): a fresh, policy-compliant value distinct from the old password.
+const newPassword = (): string => `${required('ORGANIZATION_GATE_PASSWORD')}-r1646`;
 
 test.describe.serial('Email delivery (#1646) through the outbox', () => {
   let resetLink: string;
@@ -86,20 +88,20 @@ test.describe.serial('Email delivery (#1646) through the outbox', () => {
     resetLink = linkTo(message.Text, '/reset-password');
 
     await page.goto(resetLink);
-    await page.getByRole('textbox', { name: 'Nueva contraseña *' }).fill(NEW_PASSWORD);
-    await page.getByRole('textbox', { name: 'Confirmar contraseña *' }).fill(NEW_PASSWORD);
+    await page.getByRole('textbox', { name: 'Nueva contraseña *' }).fill(newPassword());
+    await page.getByRole('textbox', { name: 'Confirmar contraseña *' }).fill(newPassword());
     await page.getByRole('button', { name: 'Actualizar contraseña' }).click();
     await expect(page.getByText('Tu contraseña se actualizó')).toBeVisible();
 
     const api = new GraneteApiClient(required('ORGANIZATION_API_BASE'));
-    const session = await api.login({ email: MEMBER_EMAIL, password: NEW_PASSWORD, transport: 'web', org: STORE_SLUG });
+    const session = await api.login({ email: MEMBER_EMAIL, password: newPassword(), transport: 'web', org: STORE_SLUG });
     expect(session.token).toBeTruthy();
   });
 
   test('the emailed link works only once', async ({ page }) => {
     await page.goto(resetLink);
-    await page.getByRole('textbox', { name: 'Nueva contraseña *' }).fill(NEW_PASSWORD);
-    await page.getByRole('textbox', { name: 'Confirmar contraseña *' }).fill(NEW_PASSWORD);
+    await page.getByRole('textbox', { name: 'Nueva contraseña *' }).fill(newPassword());
+    await page.getByRole('textbox', { name: 'Confirmar contraseña *' }).fill(newPassword());
     await page.getByRole('button', { name: 'Actualizar contraseña' }).click();
     await expect(page.getByText('El enlace de restablecimiento no es válido o ya fue utilizado')).toBeVisible();
   });
@@ -146,8 +148,8 @@ test.describe.serial('Email delivery (#1646) through the outbox', () => {
         [MEMBER_EMAIL],
       );
       await page.goto(expiredLink);
-      await page.getByRole('textbox', { name: 'Nueva contraseña *' }).fill(NEW_PASSWORD);
-      await page.getByRole('textbox', { name: 'Confirmar contraseña *' }).fill(NEW_PASSWORD);
+      await page.getByRole('textbox', { name: 'Nueva contraseña *' }).fill(newPassword());
+      await page.getByRole('textbox', { name: 'Confirmar contraseña *' }).fill(newPassword());
       await page.getByRole('button', { name: 'Actualizar contraseña' }).click();
       await expect(page.getByText('El enlace de restablecimiento no es válido o ya fue utilizado')).toBeVisible();
     } finally {
