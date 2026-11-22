@@ -279,8 +279,40 @@ module Granete
         def mirrored_local_transform(mirror_fn, furniture_width_mm)
           return nil if local_transform.nil?
 
-          t, b = mirror_fn.call(local_translation, basis, 0, furniture_width_mm)
+          t, b = mirror_fn.call(local_translation, basis, mirrored_x_extent_mm, furniture_width_mm)
           { 'translation' => t, 'basis' => b }
+        end
+
+        # #1693: a DERIVED CORNER box (the gola runs/supports/caps the engine
+        # materializes from the resolved grip) spans [0,dims] on local X like
+        # a board (#1689 corner convention) — the width reflection must FOLD
+        # that extent or the box lands outside the cabinet (a 600 run anchored
+        # at the mirrored point spans x∈[600,1200]).
+        # Las piezas de kit viajan como 'derived' con dimensiones TOO, pero su
+        # frame local ancla un PUNTO DE CARA (localTransform ≠ el AABB
+        # publicado): esas espejan como punto, extensión 0 — plegarlas
+        # desplazaría cada pieza de kit de cada mueble espejado (review r1
+        # P1). La firma de la convención esquina: el AABB publicado IGUALA al
+        # localTransform (cierto en el pass de apertura, falso en piezas de
+        # kit). El herraje montado es punto por la misma regla.
+        def mirrored_x_extent_mm
+          return 0.0 unless placement_kind == 'derived'
+          return 0.0 unless dimensions.is_a?(Array) && dimensions[0].to_f.positive?
+          return 0.0 unless corner_convention_box?
+
+          dimensions[0].to_f
+        end
+
+        # The anchor-convention discriminator: a corner box publishes its
+        # local frame AT the AABB translation; a face-point placement
+        # publishes the mount point as its local frame (the AABB rides
+        # separately in transform).
+        def corner_convention_box?
+          return false unless translation.is_a?(Array) && local_translation.is_a?(Array)
+
+          translation.each_index.all? do |axis|
+            (translation[axis].to_f - local_translation[axis].to_f).abs < 1.0e-6
+          end
         end
 
         # Legacy AABB-only placement (#414 compat): the point mirrors as-is.
