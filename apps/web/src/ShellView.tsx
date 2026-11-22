@@ -12,6 +12,7 @@
  */
 
 import {
+  useCallback,
   useMemo,
   useState,
   type ReactNode,
@@ -999,6 +1000,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     selectedProjectId,
     refreshWorkspace,
   });
+  const refreshAfterQuoteSent = useCallback(() => {
+    void refreshWorkspace?.();
+  }, [refreshWorkspace]);
   const renderQuoteSendPanel = useQuoteSendRenderer({
     session,
     authToken,
@@ -1007,9 +1011,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     baseUrl: DEFAULT_API_BASE,
     revisions: filterProjectsToPlant || quoteAuthority.kind === 'idle' ? undefined : quoteRevisions,
     buildPdf: buildCommercialQuotePdfForRevision,
-    onDeliverySent: () => {
-      void refreshWorkspace?.();
-    },
+    onDeliverySent: refreshAfterQuoteSent,
   });
   // #642 / 2A: ONE batch summaries request per session/organization scope
   // feeds every Cotizaciones list card (no per-card revision fetches).

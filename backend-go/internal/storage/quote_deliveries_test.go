@@ -551,7 +551,7 @@ func TestQuoteDeliveryRacesRollbackAndLegacyStatus(t *testing.T) {
 		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 			return fx.store.DeleteProject(ctx, fx.projectID)
 		}); err != nil {
-			t.Skipf("canonical project delete not available for this fixture: %v", err)
+			t.Fatalf("canonical project delete: %v", err)
 		}
 		if n := countRows(t, fx, `SELECT count(*) FROM email_outbox WHERE ref=$1 AND status='cancelled' AND payload IS NULL`, d.ID); n != 1 {
 			t.Fatal("deleting the project must cancel its queued quote email")

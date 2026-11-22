@@ -4093,6 +4093,9 @@
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
+          "429": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "default": {
             "$ref": "#/components/responses/ApiError"
           }
