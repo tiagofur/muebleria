@@ -63,7 +63,7 @@ func (s *PostgresStore) EnqueueEmail(ctx context.Context, email OutboundEmail) (
 	if s.EmailCipher == nil {
 		return "", ErrEmailCipherMissing
 	}
-	if email.Kind != EmailKindPasswordReset && email.Kind != EmailKindInvitation {
+	if email.Kind != EmailKindPasswordReset && email.Kind != EmailKindInvitation && email.Kind != EmailKindQuote {
 		return "", fmt.Errorf("email outbox: unknown kind %q", email.Kind)
 	}
 	if email.Ref == "" {

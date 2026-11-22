@@ -843,27 +843,39 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     [showCosts],
   );
 
-  const handleExportCommercialQuotePdf = useCallback(
+  /**
+   * #1650: the ONE builder of the client PDF for an exact revision — the
+   * download and «Enviar por email» call it with the same options, so the
+   * emailed attachment is byte-identical to the downloaded file.
+   */
+  const buildCommercialQuotePdfForRevision = useCallback(
     async (
       revisions: ReadonlyArray<QuoteRevisionDetail>,
       quoteRevisionId: string,
       variant: 'detailed' | 'summary',
     ) => {
       const resolved = resolveExactRevisionExportSource(revisions, quoteRevisionId);
-      if (!resolved.ok) {
-        await runExport({ build: async () => resolved });
-        return;
-      }
-      await runExport({
-        build: () =>
-          buildCommercialQuotePdfExport(resolved.source, {
-            amountsVisible: showCosts,
-            variant,
-            workshopName: workspaceSettings?.workshopName,
-          }),
+      if (!resolved.ok) return resolved;
+      return buildCommercialQuotePdfExport(resolved.source, {
+        amountsVisible: showCosts,
+        variant,
+        workshopName: workspaceSettings?.workshopName,
       });
     },
     [showCosts, workspaceSettings],
+  );
+
+  const handleExportCommercialQuotePdf = useCallback(
+    async (
+      revisions: ReadonlyArray<QuoteRevisionDetail>,
+      quoteRevisionId: string,
+      variant: 'detailed' | 'summary',
+    ) => {
+      await runExport({
+        build: () => buildCommercialQuotePdfForRevision(revisions, quoteRevisionId, variant),
+      });
+    },
+    [buildCommercialQuotePdfForRevision],
   );
 
   return {
@@ -884,5 +896,6 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     handleExportProductionPack,
     handleExportCommercialQuote,
     handleExportCommercialQuotePdf,
+    buildCommercialQuotePdfForRevision,
   };
 }

@@ -33,10 +33,16 @@ var designWorkingFingerprintPattern = regexp.MustCompile(`^sha256-[0-9a-f]{64}$`
 // wildcard must occupy an entire segment, so the revisionId:command segment is
 // captured and split here.
 func quoteRevisionCommandRouter(commands map[string]http.Handler) http.Handler {
+	return colonCommandRouter("quoteRevisionCommand", "quoteRevisionId", commands)
+}
+
+// colonCommandRouter splits a captured "{id}:{command}" segment (wildcard
+// segmentParam) into the idParam path value and dispatches the command.
+func colonCommandRouter(segmentParam, idParam string, commands map[string]http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		segment := r.PathValue("quoteRevisionCommand")
-		quoteRevisionID, command, ok := strings.Cut(segment, ":")
-		if !ok || quoteRevisionID == "" || command == "" || strings.Contains(command, ":") {
+		segment := r.PathValue(segmentParam)
+		id, command, ok := strings.Cut(segment, ":")
+		if !ok || id == "" || command == "" || strings.Contains(command, ":") {
 			http.NotFound(w, r)
 			return
 		}
@@ -45,7 +51,7 @@ func quoteRevisionCommandRouter(commands map[string]http.Handler) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		r.SetPathValue("quoteRevisionId", quoteRevisionID)
+		r.SetPathValue(idParam, id)
 		handler.ServeHTTP(w, r)
 	})
 }

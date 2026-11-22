@@ -354,6 +354,8 @@ export interface ProjectDetailViewProps {
   ) => boolean | void | Promise<boolean | void>;
   /** #1649: server-backed «Cobros» panel of the project (auth sessions only). */
   readonly renderPaymentsPanel?: (projectId: string) => import('react').ReactNode;
+  /** #1650: «Enviar cotización» panel of the project (auth sessions only). */
+  readonly renderQuoteSendPanel?: (projectId: string) => import('react').ReactNode;
   /** #1648: server-authored committed delivery date (absent → read-only). */
   readonly onCommitDelivery?: (projectId: string, input: import('@granete/domain').DeliveryCommitmentInput) => Promise<import('../delivery').DeliveryCommitResult>;
 }
@@ -886,6 +888,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onChangeCommercialStatus,
     onRecordDeposit,
     renderPaymentsPanel,
+    renderQuoteSendPanel,
     onCommitDelivery,
   } = props;
 
@@ -1011,6 +1014,9 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       renderPaymentsPanel: renderPaymentsPanel
         ? () => renderPaymentsPanel(project.id)
         : undefined,
+      renderQuoteSendPanel: renderQuoteSendPanel
+        ? () => renderQuoteSendPanel(project.id)
+        : undefined,
     }),
     [
       project,
@@ -1098,6 +1104,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onChangeCommercialStatus,
       onRecordDeposit,
       renderPaymentsPanel,
+      renderQuoteSendPanel,
       onCommitDelivery,
     ],
   );

@@ -143,6 +143,45 @@ type ProjectPaymentSummary struct {
 	OtherCurrencyPayments int64                `json:"otherCurrencyPayments"`
 }
 
+type SendQuoteEmailRequest struct {
+	Variant   string  `json:"variant"`
+	PdfBase64 string  `json:"pdfBase64"`
+	FileName  string  `json:"fileName"`
+	Note      *string `json:"note,omitempty"`
+}
+
+type QuoteDelivery struct {
+	ID              string  `json:"id"`
+	ProjectId       string  `json:"projectId"`
+	QuoteRevisionId string  `json:"quoteRevisionId"`
+	RevisionNumber  int64   `json:"revisionNumber"`
+	Channel         string  `json:"channel"`
+	Recipient       string  `json:"recipient"`
+	Variant         *string `json:"variant,omitempty"`
+	PdfSha256       *string `json:"pdfSha256,omitempty"`
+	PdfBytes        *int64  `json:"pdfBytes,omitempty"`
+	PdfFileName     *string `json:"pdfFileName,omitempty"`
+	Status          string  `json:"status"`
+	RequestedAt     string  `json:"requestedAt"`
+	SentAt          *string `json:"sentAt,omitempty"`
+	FailureReason   *string `json:"failureReason,omitempty"`
+}
+
+type PreparedQuoteWhatsApp struct {
+	Delivery    QuoteDelivery `json:"delivery"`
+	WhatsappUrl string        `json:"whatsappUrl"`
+	Message     string        `json:"message"`
+}
+
+type QuoteDeliveryList struct {
+	Items                  []QuoteDelivery `json:"items"`
+	EmailDeliveryAvailable bool            `json:"emailDeliveryAvailable"`
+	CustomerEmailAvailable bool            `json:"customerEmailAvailable"`
+	CustomerPhoneAvailable bool            `json:"customerPhoneAvailable"`
+	CustomerEmail          *string         `json:"customerEmail,omitempty"`
+	CustomerPhone          *string         `json:"customerPhone,omitempty"`
+}
+
 type VoidProjectPaymentRequest struct {
 	Reason string `json:"reason"`
 }
@@ -275,6 +314,12 @@ const (
 	ApiErrorCodePriceRefreshNoChange             ApiErrorCode = "PRICE_REFRESH_NO_CHANGE"
 	ApiErrorCodePriceRefreshConfigurationChanged ApiErrorCode = "PRICE_REFRESH_CONFIGURATION_CHANGED"
 	ApiErrorCodeQuoteExpired                     ApiErrorCode = "QUOTE_EXPIRED"
+	ApiErrorCodeQuoteDeliveryNotSendable         ApiErrorCode = "QUOTE_DELIVERY_NOT_SENDABLE"
+	ApiErrorCodeQuoteDeliveryNoRecipient         ApiErrorCode = "QUOTE_DELIVERY_NO_RECIPIENT"
+	ApiErrorCodeQuoteDeliveryEmailUnavailable    ApiErrorCode = "QUOTE_DELIVERY_EMAIL_UNAVAILABLE"
+	ApiErrorCodeQuoteDeliveryNotConfirmable      ApiErrorCode = "QUOTE_DELIVERY_NOT_CONFIRMABLE"
+	ApiErrorCodeQuoteDeliveryInvalidPdf          ApiErrorCode = "QUOTE_DELIVERY_INVALID_PDF"
+	ApiErrorCodeQuoteDeliveryRateLimited         ApiErrorCode = "QUOTE_DELIVERY_RATE_LIMITED"
 	ApiErrorCodeRefreshInvalid                   ApiErrorCode = "REFRESH_INVALID"
 	ApiErrorCodeRefreshExpired                   ApiErrorCode = "REFRESH_EXPIRED"
 	ApiErrorCodeRefreshRevoked                   ApiErrorCode = "REFRESH_REVOKED"

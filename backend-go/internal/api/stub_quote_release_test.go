@@ -379,3 +379,50 @@ func (s *stubStore) PriceRefreshQuoteRevision(_ context.Context, cmd storage.Pri
 	}
 	return result, nil
 }
+
+// #1650 quote deliveries (configurable via quoteDeliveryCtx / quoteDeliveryErr).
+func (s *stubStore) GetQuoteDeliveryContext(context.Context, string, string) (*storage.QuoteDeliveryContext, error) {
+	if s.quoteDeliveryErr != nil {
+		return nil, s.quoteDeliveryErr
+	}
+	if s.quoteDeliveryCtx == nil {
+		return nil, storage.ErrQuoteDeliveryTargetNotFound
+	}
+	c := *s.quoteDeliveryCtx
+	return &c, nil
+}
+
+func (s *stubStore) GetProjectCustomerContact(context.Context, string) (*storage.ProjectCustomerContact, error) {
+	if s.quoteDeliveryCtx == nil {
+		return nil, storage.ErrQuoteDeliveryTargetNotFound
+	}
+	return &storage.ProjectCustomerContact{Name: s.quoteDeliveryCtx.CustomerName, Email: s.quoteDeliveryCtx.CustomerEmail, Phone: s.quoteDeliveryCtx.CustomerPhone}, nil
+}
+
+func (s *stubStore) CreateQuoteDelivery(_ context.Context, cmd storage.CreateQuoteDeliveryCommand) (*storage.QuoteDelivery, error) {
+	if s.quoteDeliveryCreateErr != nil {
+		return nil, s.quoteDeliveryCreateErr
+	}
+	s.createdQuoteDeliveries = append(s.createdQuoteDeliveries, cmd)
+	d := cmd.Delivery
+	d.ID = "11111111-2222-4333-8444-555555555555"
+	d.RequestedAt = time.Now()
+	if d.Channel == "email" {
+		d.Status = "queued"
+	} else {
+		d.Status = "prepared"
+	}
+	return &d, nil
+}
+
+func (s *stubStore) ConfirmQuoteDelivery(_ context.Context, projectID, id string) (*storage.QuoteDelivery, error) {
+	if s.quoteDeliveryErr != nil {
+		return nil, s.quoteDeliveryErr
+	}
+	now := time.Now()
+	return &storage.QuoteDelivery{ID: id, ProjectID: projectID, Channel: "whatsapp", Status: "confirmed", RequestedAt: now, SentAt: &now}, nil
+}
+
+func (s *stubStore) ListQuoteDeliveries(context.Context, string) ([]storage.QuoteDelivery, error) {
+	return nil, nil
+}

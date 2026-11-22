@@ -9,6 +9,12 @@ import (
 // Contrato: ciclo comercial e industrial — reconciliación, QuoteRevision,
 // aprobaciones, ProductionRelease y estado de ingeniería (#502/#571/#739).
 type QuoteReleaseStore interface {
+	// #1650 sending the exact QuoteRevision to the customer.
+	GetQuoteDeliveryContext(ctx context.Context, projectID, quoteRevisionID string) (*storage.QuoteDeliveryContext, error)
+	GetProjectCustomerContact(ctx context.Context, projectID string) (*storage.ProjectCustomerContact, error)
+	CreateQuoteDelivery(ctx context.Context, cmd storage.CreateQuoteDeliveryCommand) (*storage.QuoteDelivery, error)
+	ConfirmQuoteDelivery(ctx context.Context, projectID, deliveryID string) (*storage.QuoteDelivery, error)
+	ListQuoteDeliveries(ctx context.Context, projectID string) ([]storage.QuoteDelivery, error)
 	// #393 / DT-9: QuoteRevision ↔ DesignRevision reconciliation by FurnitureInstance
 	ReconcileProject(ctx context.Context, projectID, quoteRevisionID, designRevisionID string) (*domain.ReconciliationResult, error)
 	// #500 / WEB-DT-1: immutable QuoteRevision read model with per-unit
