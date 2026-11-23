@@ -56,6 +56,12 @@ export {
 } from './hardware/HardwareCatalog';
 
 export {
+  hingeDemandFromDraft,
+  suggestedHingeDemandRows,
+  type HingeBandsDraftRow,
+} from './hardware/hardwareDraft';
+
+export {
   HardwareProfilesCatalog,
   type HardwareProfilesCatalogProps,
   type HardwareProfileRow,

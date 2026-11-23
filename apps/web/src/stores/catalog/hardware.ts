@@ -14,7 +14,7 @@ import {
   type OptionGroup,
 } from '@granete/domain';
 import type { Hardware } from '@granete/domain';
-import type { HardwareDraft } from '@granete/ui';
+import { hingeDemandFromDraft, type HardwareDraft } from '@granete/ui';
 
 import type { CatalogState, CatalogStoreCtx } from './shared';
 import { optionalNotes, parseDraftNum } from './shared';
@@ -199,6 +199,18 @@ function hardwareMachiningField(
     : {};
 }
 
+/**
+ * #1579: la tabla «bisagras por altura de puerta» viaja con el draft como
+ * filas de texto; el payload lleva el dato de dominio. Sin filas = sin tabla
+ * (y el PUT manda el null explícito que el servidor necesita para borrarla).
+ */
+function hardwareHingeDemandField(
+  draft: HardwareDraft,
+): Pick<Hardware, 'hingeDemand'> {
+  const hingeDemand = hingeDemandFromDraft(draft);
+  return hingeDemand ? { hingeDemand } : {};
+}
+
 export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
   return {
     createHardware: async (draft) => {
@@ -220,6 +232,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
         brand: draft.brand?.trim() || undefined,
         ...hardwarePreviewFields(draft),
         ...hardwareMachiningField(draft),
+        ...hardwareHingeDemandField(draft),
         ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
         ...(draft.pieces ? { pieces: draft.pieces } : {}),
         // #1596: el alta nueva declara «Al abrir» en la creación (el inserto
@@ -284,6 +297,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
         brand: draft.brand?.trim() || undefined,
         ...hardwarePreviewFields(draft),
         ...hardwareMachiningField(draft),
+        ...hardwareHingeDemandField(draft),
         ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
         ...(draft.pieces ? { pieces: draft.pieces } : {}),
         ...hardwareDesignPartsField(draft),
@@ -357,6 +371,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               categoryId: _dcat,
               brand: _dbrand,
               pieces: _dpieces,
+              hingeDemand: _dhinge,
               ...rest
             } = h;
             return {
@@ -372,6 +387,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               brand: draft.brand?.trim() || undefined,
               ...hardwarePreviewFields(draft),
               ...hardwareMachiningField(draft),
+              ...hardwareHingeDemandField(draft),
               ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
               ...(draft.pieces ? { pieces: draft.pieces } : {}),
               // #1596 (fix de raíz): el update re-aplica las filas del form —

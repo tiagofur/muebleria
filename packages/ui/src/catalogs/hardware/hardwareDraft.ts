@@ -3,12 +3,30 @@
  * screen and its form modal.
  */
 
-import type { Hardware, HardwareMachiningProfile, HardwarePiece, HardwareUnit, HardwareVisualAssetBinding } from '@granete/domain';
+import {
+  DEFAULT_HINGE_DEMAND_POLICY,
+  type Hardware,
+  type HingeDemandPolicy,
+  type HardwareMachiningProfile,
+  type HardwarePiece,
+  type HardwareUnit,
+  type HardwareVisualAssetBinding,
+} from '@granete/domain';
 
 export const UNIT_LABELS: Record<HardwareUnit, string> = {
   piece: 'Pieza',
   set: 'Juego',
   meter: 'Metro',
+};
+
+/**
+ * #1579: una fila de la tabla «bisagras por altura de puerta» — el alto
+ * máximo de la banda y cuántas bisagras lleva la puerta. Texto, como el
+ * resto del form.
+ */
+export type HingeBandsDraftRow = {
+  upToHeightMm: string;
+  hinges: string;
 };
 
 export type HardwareDraft = {
@@ -103,6 +121,18 @@ export type HardwareDraft = {
    * de crear un duplicado con 409 en bucle.
    */
   insertoPendingId?: string;
+  /**
+   * #1579: filas de la tabla «bisagras por altura de puerta» que este
+   * herraje declara para sí. Sin filas = sin tabla: la puerta que lo elige
+   * usa la política de fábrica y luego la escalera de librería. La
+   * validación estricta corre al enviar; `hingeDemandFromDraft` arma el dato.
+   */
+  hingeDemandRows?: HingeBandsDraftRow[];
+  /**
+   * #1579: umbral del recargo por ancho (+1 bisagra si la puerta es más
+   * ancha). Vacío = heredar la regla de librería (650 mm); «0» = sin recargo.
+   */
+  hingeDemandWidthSurgeMm?: string;
 };
 
 /** #1596: los cuatro tipos de ítem del alta (decisión 1). */
@@ -140,7 +170,45 @@ export const emptyDraft = (): HardwareDraft => ({
   designParts: [],
   categoryId: '',
   brand: '',
+  hingeDemandRows: [],
+  hingeDemandWidthSurgeMm: '',
 });
+
+/**
+ * #1579: la escalera de librería como filas de formulario — la sugerencia
+ * (Blum · Hettich · Salice) que el taller edita al crear una bisagra.
+ */
+export const suggestedHingeDemandRows = (): HingeBandsDraftRow[] =>
+  DEFAULT_HINGE_DEMAND_POLICY.bands.map((band) => ({
+    upToHeightMm: String(band.upToHeightMm),
+    hinges: String(band.hinges),
+  }));
+
+/** null y 0 significan «sin recargo por ancho»; undefined, heredar el de librería. */
+function widthSurgeToDraft(value: number | null | undefined): string {
+  if (value === undefined) return '';
+  return String(value ?? 0);
+}
+
+/**
+ * #1579: la tabla como dato de dominio, o undefined si el form no declara
+ * filas. NO valida: convierte los valores tal cual y la validación estricta
+ * (`validateHingeDemandTable`) decide si son usables.
+ */
+export function hingeDemandFromDraft(
+  draft: Pick<HardwareDraft, 'hingeDemandRows' | 'hingeDemandWidthSurgeMm'>,
+): HingeDemandPolicy | undefined {
+  const rows = draft.hingeDemandRows ?? [];
+  if (rows.length === 0) return undefined;
+  const surge = draft.hingeDemandWidthSurgeMm?.trim() ?? '';
+  return {
+    bands: rows.map((row) => ({
+      upToHeightMm: Number(row.upToHeightMm),
+      hinges: Number(row.hinges),
+    })),
+    ...(surge === '' ? {} : { widthSurgeOverMm: Number(surge) }),
+  };
+}
 
 export function toDraft(item: Hardware): HardwareDraft {
   return {
@@ -181,6 +249,11 @@ export function toDraft(item: Hardware): HardwareDraft {
     ...(item.pieces ? { pieces: item.pieces } : {}),
     categoryId: item.categoryId ?? '',
     brand: item.brand ?? '',
+    hingeDemandRows: (item.hingeDemand?.bands ?? []).map((band) => ({
+      upToHeightMm: String(band.upToHeightMm),
+      hinges: String(band.hinges),
+    })),
+    hingeDemandWidthSurgeMm: widthSurgeToDraft(item.hingeDemand?.widthSurgeOverMm),
     itemType: inferHardwareItemType(item),
   };
 }

@@ -557,6 +557,73 @@ describe('catalogStore — hardware / optionGroups / components', () => {
     expect(unbound?.visualAsset).toBeUndefined();
   });
 
+  it('createHardware y updateHardware llevan la tabla de bisagras por altura (#1579)', async () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+
+    const hingeDraft = {
+      code: 'BIS-TABLA',
+      name: 'Bisagra con tabla',
+      unit: 'piece' as const,
+      costPerUnit: 68,
+      packageSize: '',
+      imageUrl: '',
+      notes: '',
+      previewShape: 'hinge',
+      previewColor: '',
+      previewSizeMm: '',
+      previewDiameterMm: '',
+      previewProjectionMm: '',
+      dimensionWidthMm: '',
+      dimensionHeightMm: '',
+      dimensionDepthMm: '',
+      previewRoughness: '',
+      previewMetalness: '',
+      previewClearcoat: '',
+      partFinishes: { body: '', base: '', grip: '' },
+      machining: null,
+      visualAsset: null,
+      hingeDemandRows: [
+        { upToHeightMm: '900', hinges: '2' },
+        { upToHeightMm: '2400', hinges: '5' },
+      ],
+      hingeDemandWidthSurgeMm: '600',
+    };
+
+    await store.getState().createHardware(hingeDraft);
+    const created = store.getState().catalog!.hardware.find((h) => h.code === 'BIS-TABLA');
+    expect(created?.hingeDemand).toEqual({
+      bands: [
+        { upToHeightMm: 900, hinges: 2 },
+        { upToHeightMm: 2400, hinges: 5 },
+      ],
+      widthSurgeOverMm: 600,
+    });
+
+    // Sin filas el form declara «sin tabla»: el update la quita del registro.
+    // El PUT viaja con el null explícito que el servidor exige para borrarla
+    // (una clave omitida la conservaría) — fijado en el test del mapper
+    // hardwareToApi de @granete/storage.
+    await store
+      .getState()
+      .updateHardware(created!.id, { ...hingeDraft, hingeDemandRows: [], hingeDemandWidthSurgeMm: '' });
+    const cleared = store.getState().catalog!.hardware.find((h) => h.id === created!.id);
+    expect(cleared?.hingeDemand).toBeUndefined();
+
+    // Y un guardado SIN las filas no deja la tabla vieja en el registro (el
+    // update descarta la anterior antes de re-aplicar el form).
+    await store
+      .getState()
+      .updateHardware(created!.id, { ...hingeDraft, hingeDemandRows: [{ upToHeightMm: '900', hinges: '2' }] });
+    const { hingeDemandRows: _rows, hingeDemandWidthSurgeMm: _surge, ...formWithoutTable } = hingeDraft;
+    await store.getState().updateHardware(created!.id, formWithoutTable);
+    const afterLegacyForm = store
+      .getState()
+      .catalog!.hardware.find((h) => h.id === created!.id);
+    expect(afterLegacyForm?.hingeDemand).toBeUndefined();
+  });
+
   it('deleteOptionGroup removes by id (guest, no backend DELETE)', async () => {
     const fetchImpl = vi.fn<typeof fetch>();
     const { deps } = makeDeps({

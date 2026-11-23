@@ -32,6 +32,7 @@ import {
   formatKitPartPlacementLabel,
   isHardwareKitPart,
   validateMachiningProfile,
+  validateHingeDemandTable,
   suggestDuplicateCode,
   syncAgregadoWithKitParts,
 } from '@granete/domain';
@@ -74,6 +75,7 @@ import {
   UNIT_LABELS,
   type HardwareDraft,
   emptyDraft,
+  hingeDemandFromDraft,
   toDraft,
 } from './hardwareDraft';
 
@@ -570,6 +572,18 @@ export function HardwareCatalog({
         if (err instanceof ValidationError) return err.message;
         throw err;
       }
+    }
+    // #1579: la tabla de bisagras por altura — filas completas y la misma
+    // validación que el servidor (nunca un ida y vuelta para un error obvio).
+    if ((draft.hingeDemandRows ?? []).length > 0) {
+      const emptyBand = draft.hingeDemandRows!.findIndex(
+        (row) => row.upToHeightMm.trim() === '' || row.hinges.trim() === '',
+      );
+      if (emptyBand >= 0) {
+        return `Completá el alto y la cantidad de la banda ${emptyBand + 1} de la tabla de bisagras, o quitá la fila`;
+      }
+      const tableError = validateHingeDemandTable(hingeDemandFromDraft(draft));
+      if (tableError) return `${tableError.charAt(0).toUpperCase()}${tableError.slice(1)}`;
     }
     return null;
   };
