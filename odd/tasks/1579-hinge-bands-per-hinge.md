@@ -200,6 +200,17 @@ HardwarePlacementsEditor, pintado del aviso), `docs/guia-de-uso.md`,
   build Go 0, go test TestHinge ok (domain+engine), drift 0, types 0, vitest
   domain 61/61 · storage 120/120 · ui 14/14 · web 89/89. HEAD final: ver
   `git log`.
+- 2026-11-23 Ronda 2 (re-juicio acotado sobre el delta `48adb5f2..b199bc62`):
+  Juez A **limpio** (0 hallazgos; verificó por su cuenta 185/185 en los
+  archivos del delta, drift 0, texto nuevo sin restos). Juez B: 0
+  CRITICAL/0 WARNING + 1 SUGGESTION de redacción del comentario del mapper
+  (el guard cubre filas no-numéricas; surge/role mal tipados quedan del lado
+  de la validación de escritura; inalcanzable por la API — **info diferido a
+  PR2**, no re-abre ronda). Sin contradicciones ni severos: **terminal
+  `JUDGMENT: APPROVED`** sobre el delta del producto; el commit que registra
+  este veredicto es sólo el artefacto ODD. Restante para el merge: CI verde
+  en el HEAD final (12 checks pesados en curso al escribir esto) y vivo del
+  owner en web/SketchUp (NOT_RUN).
 
 ## Next step
 
