@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "description": "#1078 — TS y Go derivan la MISMA demanda de bisagras por banda de altura de puerta: escalera ≤900→2, 901–1600→3, 1601–2000→4, 2001–2400→5 (clamp sobre la última banda), recargo Blum +1 si ancho>650, bandas custom de fábrica reemplazan la escalera. Una sola autoridad para ambas implementaciones (packages/domain vitest + backend-go/internal/domain/engine go test).",
+  "description": "#1078 — TS y Go derivan la MISMA demanda de bisagras por banda de altura de puerta: escalera ≤900→2, 901–1600→3, 1601–2000→4, 2001–2400→5 (clamp sobre la última banda), recargo Blum +1 si ancho>650, bandas custom de fábrica reemplazan la escalera. #1579 — cada bisagra puede declarar su propia tabla (hingeTables/hingeTableCases), el orden de resolución es excepción del componente → tabla de la bisagra elegida → política de fábrica → escalera de librería (ladder), y una puerta más alta que la última banda toma el máximo con un aviso (overflowCases). Una sola autoridad para ambas implementaciones (packages/domain vitest + backend-go/internal/domain/engine go test).",
   "defaultPolicy": {
     "optionRole": "BISAGRA",
     "bands": [
@@ -60,6 +60,142 @@
         { "heightMm": 800, "widthMm": 601, "expectedHinges": 3 },
         { "heightMm": 1800, "widthMm": 600, "expectedHinges": 5 }
       ]
+    }
+  ],
+  "hingeTables": {
+    "standard": {
+      "bands": [
+        { "upToHeightMm": 900, "hinges": 2 },
+        { "upToHeightMm": 1600, "hinges": 3 },
+        { "upToHeightMm": 2000, "hinges": 4 },
+        { "upToHeightMm": 2400, "hinges": 5 }
+      ],
+      "widthSurgeOverMm": 650
+    },
+    "reinforced": {
+      "bands": [
+        { "upToHeightMm": 900, "hinges": 2 },
+        { "upToHeightMm": 1200, "hinges": 3 },
+        { "upToHeightMm": 2000, "hinges": 5 },
+        { "upToHeightMm": 2400, "hinges": 5 }
+      ],
+      "widthSurgeOverMm": 600
+    },
+    "short": {
+      "bands": [
+        { "upToHeightMm": 900, "hinges": 2 },
+        { "upToHeightMm": 1200, "hinges": 3 }
+      ]
+    },
+    "emptyBands": { "bands": [] },
+    "descending": {
+      "bands": [
+        { "upToHeightMm": 1600, "hinges": 3 },
+        { "upToHeightMm": 900, "hinges": 2 }
+      ]
+    },
+    "repeatedHeight": {
+      "bands": [
+        { "upToHeightMm": 900, "hinges": 2 },
+        { "upToHeightMm": 900, "hinges": 3 }
+      ]
+    },
+    "oneHinge": { "bands": [{ "upToHeightMm": 900, "hinges": 1 }] },
+    "sixHinges": { "bands": [{ "upToHeightMm": 900, "hinges": 6 }] },
+    "negativeSurge": { "bands": [{ "upToHeightMm": 900, "hinges": 2 }], "widthSurgeOverMm": -5 },
+    "withRole": { "optionRole": "BISAGRA", "bands": [{ "upToHeightMm": 900, "hinges": 2 }] }
+  },
+  "tableValidationCases": [
+    { "name": "sin tabla es válido", "table": null, "expectedError": null },
+    { "name": "tabla válida", "table": "standard", "expectedError": null },
+    { "name": "sin bandas", "table": "emptyBands", "expectedError": "la tabla de bisagras por altura debe tener al menos una banda" },
+    { "name": "alturas descendentes", "table": "descending", "expectedError": "bands[1].upToHeightMm debe ser positivo y ascendente (anterior 1600)" },
+    { "name": "una altura repetida no asciende", "table": "repeatedHeight", "expectedError": "bands[1].upToHeightMm debe ser positivo y ascendente (anterior 900)" },
+    { "name": "una bisagra está fuera del rango", "table": "oneHinge", "expectedError": "bands[0].hinges debe ser un entero entre 2 y 5" },
+    { "name": "seis bisagras están fuera del rango", "table": "sixHinges", "expectedError": "bands[0].hinges debe ser un entero entre 2 y 5" },
+    { "name": "recargo negativo", "table": "negativeSurge", "expectedError": "widthSurgeOverMm debe ser un número no negativo" },
+    { "name": "un herraje no elige grupo", "table": "withRole", "expectedError": "la tabla de bisagras por altura de un herraje no admite optionRole" }
+  ],
+  "hingeTableCases": [
+    {
+      "name": "bisagra estándar: la escalera del fabricante como tabla propia",
+      "table": "standard",
+      "cases": [
+        { "name": "720 compra 2 (aceptación #1579)", "heightMm": 720, "widthMm": 400, "expectedHinges": 2 },
+        { "name": "1200 compra 3 (aceptación #1579)", "heightMm": 1200, "widthMm": 400, "expectedHinges": 3 },
+        { "name": "1800 compra 4 (aceptación #1579)", "heightMm": 1800, "widthMm": 400, "expectedHinges": 4 },
+        { "name": "2200 compra 5 (aceptación #1579)", "heightMm": 2200, "widthMm": 400, "expectedHinges": 5 },
+        { "name": "su recargo por ancho manda (651 > 650)", "heightMm": 720, "widthMm": 651, "expectedHinges": 3 }
+      ]
+    },
+    {
+      "name": "bisagra reforzada: otra tabla en el mismo grupo",
+      "table": "reinforced",
+      "cases": [
+        { "name": "720 sigue en 2", "heightMm": 720, "widthMm": 400, "expectedHinges": 2 },
+        { "name": "1200 compra 3", "heightMm": 1200, "widthMm": 400, "expectedHinges": 3 },
+        { "name": "1201 ya compra 5", "heightMm": 1201, "widthMm": 400, "expectedHinges": 5 },
+        { "name": "su recargo por ancho manda (601 > 600)", "heightMm": 1800, "widthMm": 601, "expectedHinges": 6 },
+        { "name": "2200 compra 5", "heightMm": 2200, "widthMm": 400, "expectedHinges": 5 }
+      ]
+    },
+    {
+      "name": "la MISMA puerta compra distinto según la bisagra elegida (aceptación #1579)",
+      "table": "reinforced",
+      "against": "standard",
+      "cases": [
+        { "name": "1500×400: estándar 3, reforzada 5", "heightMm": 1500, "widthMm": 400, "expectedHinges": 5, "expectedHingesAgainst": 3 },
+        { "name": "1800×400: estándar 4, reforzada 5", "heightMm": 1800, "widthMm": 400, "expectedHinges": 5, "expectedHingesAgainst": 4 }
+      ]
+    },
+    {
+      "name": "tabla sin recargo declarado hereda el recargo de librería (650)",
+      "table": "short",
+      "cases": [
+        { "name": "1000 compra 3", "heightMm": 1000, "widthMm": 400, "expectedHinges": 3 },
+        { "name": "ancho 651 recarga", "heightMm": 1000, "widthMm": 651, "expectedHinges": 4 }
+      ]
+    }
+  ],
+  "ladder": {
+    "componentId": "comp-pue",
+    "factoryPolicy": {
+      "optionRole": "BISAGRA",
+      "bands": [
+        { "upToHeightMm": 1200, "hinges": 2 },
+        { "upToHeightMm": 2400, "hinges": 6 }
+      ],
+      "widthSurgeOverMm": 0
+    },
+    "exception": {
+      "bands": [{ "upToHeightMm": 2400, "hinges": 2 }]
+    },
+    "cases": [
+      { "name": "sin tabla y sin política: escalera de librería (byte-idéntico)", "factory": false, "table": null, "exception": false, "heightMm": 2100, "widthMm": 600, "expectedHinges": 5 },
+      { "name": "sin tabla: política de fábrica (byte-idéntico)", "factory": true, "table": null, "exception": false, "heightMm": 1500, "widthMm": 600, "expectedHinges": 6 },
+      { "name": "tabla de la bisagra gana a la política de fábrica", "factory": true, "table": "reinforced", "exception": false, "heightMm": 1500, "widthMm": 600, "expectedHinges": 5 },
+      { "name": "excepción del componente gana a la tabla y a la fábrica", "factory": true, "table": "reinforced", "exception": true, "heightMm": 1500, "widthMm": 600, "expectedHinges": 2 },
+      { "name": "sin política de fábrica: la tabla gana a la escalera", "factory": false, "table": "reinforced", "exception": false, "heightMm": 2100, "widthMm": 600, "expectedHinges": 5 }
+    ]
+  },
+  "overflowCases": [
+    {
+      "name": "2600 supera la última banda 2400: máximo y aviso visible, sin bloquear",
+      "table": "standard", "heightMm": 2600, "widthMm": 600,
+      "expectedHinges": 5, "expectedAboveLastBand": true, "expectedLastBandHeightMm": 2400,
+      "expectedNotice": "La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras."
+    },
+    {
+      "name": "2400 es la última banda: sin aviso",
+      "table": "standard", "heightMm": 2400, "widthMm": 600,
+      "expectedHinges": 5, "expectedAboveLastBand": false, "expectedLastBandHeightMm": 2400,
+      "expectedNotice": null
+    },
+    {
+      "name": "tabla que termina en 1200: 1600 la supera",
+      "table": "short", "heightMm": 1600, "widthMm": 400,
+      "expectedHinges": 3, "expectedAboveLastBand": true, "expectedLastBandHeightMm": 1200,
+      "expectedNotice": "La puerta mide 1600 mm: supera la última banda de la tabla (1200 mm). Se aplican 3 bisagras."
     }
   ]
 }

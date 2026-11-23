@@ -192,10 +192,17 @@ type Hardware struct {
 	// KitHardwareID (#1422 slice 1): when set, this hardware is a design
 	// part of the referenced kit (same organization). Server-validated:
 	// kit exists, never self, kit never itself a part.
-	KitHardwareID *string   `json:"kit_hardware_id,omitempty"`
-	Active        bool      `json:"active"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	KitHardwareID *string `json:"kit_hardware_id,omitempty"`
+	// HingeDemand (#1579) is the door height → quantity table this hinge
+	// declares for itself. Nil = no table: doors under this hinge inherit the
+	// factory policy, then the library ladder (byte-identical for every row
+	// that predates the column). It outranks the factory policy and yields to
+	// the per-component exception (FactoryConstructionPolicy.HingeDemandForDoor).
+	// Validated on writes by ValidateHingeDemandTable.
+	HingeDemand *HingeDemandPolicy `json:"hinge_demand,omitempty"`
+	Active      bool               `json:"active"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
 	// Version is server-owned optimistic-concurrency state (#443/#448):
 	// writes carry the expected version as If-Match and the server bumps it.
 	Version int64 `json:"version"`

@@ -649,6 +649,14 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		// #1579: the hinge's own height → quantity table (optional, 2..5).
+		if err := domain.ValidateHingeDemandTable(h.HingeDemand); err != nil {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "HINGE_DEMAND_INVALID",
+				"message": err.Error(),
+			})
+			return
+		}
 		if h.KitHardwareID != nil && *h.KitHardwareID != "" {
 			if err := s.validateHardwareKitLink(r.Context(), &h, h.ID); err != nil {
 				respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
@@ -752,6 +760,13 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		// #1579: an omitted hinge_demand keeps the stored table — a partial
+		// GET→PUT client must not silently drop it and move quotes back to the
+		// factory ladder (same class of loss as #1436); an explicit null is
+		// the deliberate clear.
+		if cur != nil && !present["hinge_demand"] {
+			h.HingeDemand = cur.HingeDemand
+		}
 		if h.KitHardwareID != nil && *h.KitHardwareID != "" {
 			if err := s.validateHardwareKitLink(r.Context(), &h, id); err != nil {
 				respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
@@ -776,6 +791,14 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		if err := domain.ValidateHardwarePieces(h.Pieces); err != nil {
 			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
 				"code":    "HARDWARE_PIECES_INVALID",
+				"message": err.Error(),
+			})
+			return
+		}
+		// #1579: the hinge's own height → quantity table (optional, 2..5).
+		if err := domain.ValidateHingeDemandTable(h.HingeDemand); err != nil {
+			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"code":    "HINGE_DEMAND_INVALID",
 				"message": err.Error(),
 			})
 			return

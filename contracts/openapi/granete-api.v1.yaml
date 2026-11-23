@@ -20658,6 +20658,17 @@
               "$ref": "#/components/schemas/HardwarePiece"
             }
           },
+          "hinge_demand": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HingeDemandPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "#1579 door height → quantity table this hinge declares for itself. Outranks the factory doorHingeDemand policy; yields to the per-component exception. null = no table (the hinge inherits the factory policy, then the library ladder — byte-identical to every row that predates it). PUT: an omitted key keeps the stored table, explicit null clears it. Writes validate server-side (HINGE_DEMAND_INVALID 422)."
+          },
           "active": {
             "type": "boolean"
           },
@@ -20925,6 +20936,52 @@
           }
         },
         "description": "#1453 F1 canonical physical bounding box of a hardware item. Complete or nothing; writes validate finite/positive axes (HARDWARE_DIMENSIONS_INVALID)."
+      },
+      "HingeDemandPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "bands"
+        ],
+        "properties": {
+          "bands": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HingeDemandBand"
+            },
+            "description": "Height ladder; must ascend by upToHeightMm. A door taller than the last band takes its hinges and the quote shows a warning."
+          },
+          "widthSurgeOverMm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "+1 hinge when the door width exceeds this (the Blum rule). Absent = inherit the library default (650); null or 0 = disabled."
+          }
+        },
+        "description": "#1579 hinge table declared by one hinge: how many hinges a door buys by height. Stored on hardwares.hinge_demand."
+      },
+      "HingeDemandBand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "upToHeightMm",
+          "hinges"
+        ],
+        "properties": {
+          "upToHeightMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Doors up to (inclusive) this height buy `hinges` hinges."
+          },
+          "hinges": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 5,
+            "description": "Hinges per door in this band (2 to 5 is the standard range)."
+          }
+        }
       },
       "CatalogModuleWrite": {
         "type": "object",
