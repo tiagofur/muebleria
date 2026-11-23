@@ -209,13 +209,12 @@ func TestOpeningMembersPlaceFromDeclaredDatasheet(t *testing.T) {
 	if profile.DimensionsMm != [3]float64{400, 27.2, 56.5} {
 		t.Fatalf("profile envelope = %v, want [400 27.2 56.5] (datasheet, front flush)", profile.DimensionsMm)
 	}
-	// #1689/#1696: min corner of the run band, riding the FRONT STACK's
-	// front plane — the overlay door's face (560+18=578), the reference the
-	// old channel placeholder anchored to. The box spans Y [550.8, 578],
-	// hanging from the top Z [663.5, 720].
-	if profile.Transform.TranslationMm != [3]float64{0, 550.8, 663.5} {
-		t.Fatalf("profile translation = %v, want [0 550.8 663.5] (min corner of the band at the front-stack plane)",
-			profile.Transform.TranslationMm)
+	// #1689: min corner of the run band — front face flush at Y=560 means the
+	// box spans Y [532.8, 560] and hangs from the top Z [663.5, 720], the same
+	// convention the caps below pin (the host extends +axes from the
+	// translation). The pre-#1689 anchor [0 560 720] floated the run outside.
+	if profile.Transform.TranslationMm != [3]float64{0, 532.8, 663.5} {
+		t.Fatalf("profile translation = %v, want [0 532.8 663.5] (min corner of the band)", profile.Transform.TranslationMm)
 	}
 
 	// #1296: the support's origin (the L's corner: plate face, arm rear,
@@ -223,15 +222,15 @@ func TestOpeningMembersPlaceFromDeclaredDatasheet(t *testing.T) {
 	// the profile band (arm tip at 560−27.2) and centered on the profile's
 	// height (720−56.5/2−39.5/2).
 	left := byID["opening-support-left-hw-su116"]
-	if left.Transform.TranslationMm != [3]float64{18, 531.3, 672} {
-		t.Fatalf("left support translation = %v, want [18 531.3 672] (inner face, behind the 578-plane profile, height-centered)", left.Transform.TranslationMm)
+	if left.Transform.TranslationMm != [3]float64{18, 513.3, 672} {
+		t.Fatalf("left support translation = %v, want [18 513.3 672] (inner face, behind profile, height-centered)", left.Transform.TranslationMm)
 	}
 	if left.DimensionsMm != [3]float64{17, 19.5, 39.5} {
 		t.Fatalf("support envelope = %v, want declared [17 19.5 39.5]", left.DimensionsMm)
 	}
 	right := byID["opening-support-right-hw-su116"]
-	if right.Transform.TranslationMm != [3]float64{382, 531.3, 672} {
-		t.Fatalf("right support translation = %v, want [382 531.3 672] (mirrored inner face)", right.Transform.TranslationMm)
+	if right.Transform.TranslationMm != [3]float64{382, 513.3, 672} {
+		t.Fatalf("right support translation = %v, want [382 513.3 672] (mirrored inner face)", right.Transform.TranslationMm)
 	}
 	if right.LocalTransform.Basis.X != [3]float64{-1, 0, 0} {
 		t.Fatalf("right support must stay mirrored in X, got %v", right.LocalTransform.Basis.X)
@@ -241,15 +240,15 @@ func TestOpeningMembersPlaceFromDeclaredDatasheet(t *testing.T) {
 	if capLeft.DimensionsMm != [3]float64{3, 28.8, 58} {
 		t.Fatalf("cap envelope = %v, want declared [3 28.8 58]", capLeft.DimensionsMm)
 	}
-	// #1292/#1696: the cap box sits INSIDE the profile band at the
-	// front-stack plane — Y [549.2, 578], Z [662, 720], left cap X [0, 3] /
-	// right cap X [397, 400].
-	if capLeft.Transform.TranslationMm != [3]float64{0, 549.2, 662} {
-		t.Fatalf("left cap translation = %v, want [0 549.2 662] (min corner of the cap band)", capLeft.Transform.TranslationMm)
+	// #1292: the cap box sits INSIDE the profile band (min-corner origin —
+	// the host fallback extends +axes from the translation): Y [531.2, 560],
+	// Z [662, 720], left cap X [0, 3] / right cap X [397, 400].
+	if capLeft.Transform.TranslationMm != [3]float64{0, 531.2, 662} {
+		t.Fatalf("left cap translation = %v, want [0 531.2 662] (min corner of the cap band)", capLeft.Transform.TranslationMm)
 	}
 	capRight := byID["opening-cap-right-hw-cf8006tp"]
-	if capRight.Transform.TranslationMm != [3]float64{400, 549.2, 662} {
-		t.Fatalf("right cap translation = %v, want [400 549.2 662] (mirrored)", capRight.Transform.TranslationMm)
+	if capRight.Transform.TranslationMm != [3]float64{400, 531.2, 662} {
+		t.Fatalf("right cap translation = %v, want [400 531.2 662] (mirrored)", capRight.Transform.TranslationMm)
 	}
 
 	// Idempotence: a second resolve is byte-identical (no duplicated members).

@@ -589,18 +589,17 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 		if hostBoardID == "" && len(boards) > 0 {
 			hostBoardID = boards[0].id
 		}
-		gripFrontY := gripFrontPlaneY(boards, float64(dims.DepthMm))
 		// #1296: the supports mount on the sides' INNER faces — the inset is
 		// the same cabinet's real side thickness (material-resolved board),
 		// never a fixed constant.
-		appendOpeningMemberLayoutHardware(&layout, catalog, *opts.openingMembers, dims, openingFrontsBottomBoundary(opts.fronts), hostBoardID, sideThicknessMm, gripFrontY)
+		appendOpeningMemberLayoutHardware(&layout, catalog, *opts.openingMembers, dims, openingFrontsBottomBoundary(opts.fronts), hostBoardID, sideThicknessMm)
 		// #1536: the BETWEEN profile's own hardware run (the C between
 		// fronts) — the top-run rule mirrored at every between edge of the
 		// resolved stack, the envelope from the frozen datasheet. Fail-soft
 		// like the top run: a catalog hardware absent or inactive places
 		// nothing (the quote's BOM still demands it).
 		if opts.openingMembers.BetweenProfileHardwareID != "" {
-			appendOpeningBetweenProfileHardware(&layout, catalog, *opts.openingMembers, dims, gripFrontY)
+			appendOpeningBetweenProfileHardware(&layout, catalog, *opts.openingMembers, dims)
 		}
 	}
 
@@ -1410,7 +1409,7 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 	// boxes into the side boards — before the projection, so the published
 	// components carry the exact local subtraction.
 	if len(opts.openingBodyModifiers) > 0 {
-		if err := applyOpeningNotchesToBoards(boards, opts.openingBodyModifiers, gripFrontPlaneY(boards, float64(dims.DepthMm))); err != nil {
+		if err := applyOpeningNotchesToBoards(boards, opts.openingBodyModifiers); err != nil {
 			return nil, err
 		}
 		// #1327 slice 3: the opening's declared door bevels cut their wedge
@@ -2095,26 +2094,6 @@ func mulMatVec3(m [9]float64, v [3]float64) [3]float64 {
 // [0,w]×[0,t]×[0,l] is compensated by shifting the translation one width
 // along the engine-local +X image, so the published box occupies exactly the
 // same physical region as the legacy AABB.
-// gripFrontPlaneY returns the front plane the grip band rides on: the FRONT
-// STACK's front (#1696) — overlay doors/drawer fronts sit proud of the
-// carcass, and the fingers reach past THEIR faces. The old channel
-// placeholder anchored exactly there (#1274/#1276 door_max.y). Fallback: the
-// carcass front plane (a stack without readable poses keeps the prior truth).
-func gripFrontPlaneY(boards []layoutBoard, fallback float64) float64 {
-	plane := fallback
-	for i := range boards {
-		if !boardIsOpeningFront(&boards[i]) {
-			continue
-		}
-		if _, min, size, err := boardLocalPose(&boards[i]); err == nil {
-			if front := min[1] + size[1]; front > plane {
-				plane = front
-			}
-		}
-	}
-	return plane
-}
-
 func boardLocalPose(board *layoutBoard) (lt LayoutLocalTransform, min [3]float64, size [3]float64, err error) {
 	m := eulerXyzMatrix(board.rotX, board.rotY, board.rotZ)
 	renderMin, _ := boardAABBRender(board)
