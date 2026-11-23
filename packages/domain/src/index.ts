@@ -1006,6 +1006,7 @@ export {
   HINGE_TABLE_MIN_HINGES,
   HINGE_TABLE_MAX_HINGES,
   validateHingeDemandTable,
+  resolvedHardwareNotices,
   type HingeCount,
   type HingeDemandBand,
   type HingeDemandPolicy,

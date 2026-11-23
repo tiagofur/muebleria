@@ -11,7 +11,6 @@ import type {
   Hardware,
   Module,
   ModuleCategory,
-  QuoteBreakdown,
   Structure,
 } from '@granete/domain';
 import { categoryPath } from '@granete/domain';
@@ -27,7 +26,7 @@ import { CatalogImage } from '../../common/CatalogImage';
 import { DropdownMenu } from '../../common/DropdownMenu';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
 import { formatModuleMoney } from '../moduleHelpers';
-import { CostPreviewPanel } from './CostPreviewPanel';
+import { CostPreviewPanel, type CostPreview } from './CostPreviewPanel';
 
 export type ModuleDetailViewProps = {
   readonly module: Module;
@@ -36,7 +35,7 @@ export type ModuleDetailViewProps = {
   readonly hardwareById: ReadonlyMap<string, Hardware>;
   /** Catalog structures — resolve structureId for summary. */
   readonly structures?: readonly Structure[];
-  readonly costPreview: QuoteBreakdown | null;
+  readonly costPreview: CostPreview | null;
   readonly previewBlocked: boolean;
   readonly previewError?: string | null;
   readonly missingGroups: readonly string[];

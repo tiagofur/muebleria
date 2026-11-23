@@ -125,6 +125,7 @@ export {
   validateModuleCode,
   type BoardPartDraft,
   type CategoryDraft,
+  type CostPreview,
   type HardwareLineDraft,
   type ModuleDraft,
   type ModulesScreenProps,

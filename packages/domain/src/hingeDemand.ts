@@ -143,6 +143,22 @@ export function hingeDemandNotice(doorHeightMm: number, count: HingeCount): stri
   return `La puerta mide ${doorHeightMm} mm: supera la última banda de la tabla (${count.lastBandHeightMm ?? 0} mm). Se aplican ${count.hinges} bisagras.`;
 }
 
+/**
+ * The engine notices carried by a resolved BOM's hardware lines (#1579) —
+ * unique, in first-appearance order. A furniture with several doors under
+ * the same hinge shows one warning, not one per door.
+ */
+export function resolvedHardwareNotices(
+  hardwareLines: readonly { readonly notice?: string }[],
+): string[] {
+  const notices: string[] = [];
+  for (const line of hardwareLines) {
+    const notice = line.notice?.trim();
+    if (notice && !notices.includes(notice)) notices.push(notice);
+  }
+  return notices;
+}
+
 /** Bounds of the quantity a hinge may declare per band (#1579: 2 to 5). */
 export const HINGE_TABLE_MIN_HINGES = 2;
 export const HINGE_TABLE_MAX_HINGES = 5;

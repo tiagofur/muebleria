@@ -38,4 +38,38 @@ describe('CostPreviewPanel (F087 follow-up)', () => {
     ).toBeTruthy();
     expect(screen.queryByRole('list')).toBeNull();
   });
+
+  it('#1579: muestra los avisos del motor junto al costo, y nada cuando no hay', () => {
+    const breakdown = {
+      materialsCost: 10,
+      edgeTotal: 1,
+      hardwareTotal: 340,
+      directCost: 351,
+      laborModular: 0,
+      laborFixedCost: 0,
+      marginFactor: 1.35,
+      salePrice: 474,
+    };
+    const notice =
+      'La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras.';
+
+    render(
+      <CostPreviewPanel
+        costPreview={{ ...breakdown, notices: [notice] }}
+        previewBlocked={false}
+        missingGroups={[]}
+      />,
+    );
+    // El aviso informa, no bloquea: el costo y el precio de venta siguen ahí.
+    expect(screen.getByText(notice)).toBeTruthy();
+    expect(screen.getByTestId('module-cost-preview-notices')).toBeTruthy();
+    expect(screen.getByText(/Precio de venta:/)).toBeTruthy();
+    cleanup();
+
+    render(
+      <CostPreviewPanel costPreview={breakdown} previewBlocked={false} missingGroups={[]} />,
+    );
+    expect(screen.queryByTestId('module-cost-preview-notices')).toBeNull();
+    expect(screen.queryByText(/La puerta mide/)).toBeNull();
+  });
 });

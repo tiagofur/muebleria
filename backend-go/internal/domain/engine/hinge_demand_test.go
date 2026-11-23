@@ -391,4 +391,17 @@ func TestHingeBandOverflowCarriesNotice(t *testing.T) {
 	if line := bandQuantityFor(t, mod, catalog, "hw-standard"); line.Notice != "" || line.Quantity != 5 {
 		t.Fatalf("a door inside the table must carry no notice: %+v", line)
 	}
+
+	// No table on the hinge: the library ladder governs — it is a table too,
+	// so a door past ITS last row warns the same way. The quantity is the one
+	// it always was; only the silence goes.
+	mod, catalog = twoHingeDoorCatalog(2600, 600, nil)
+	line = bandQuantityFor(t, mod, catalog, "hw-standard")
+	if line.Quantity != 5 || line.Notice != want {
+		t.Fatalf("a library-ladder overflow must keep 5 and warn: %+v", line)
+	}
+	mod, catalog = twoHingeDoorCatalog(2100, 600, nil)
+	if line := bandQuantityFor(t, mod, catalog, "hw-standard"); line.Notice != "" || line.Quantity != 5 {
+		t.Fatalf("a door inside the library ladder must carry no notice: %+v", line)
+	}
 }
