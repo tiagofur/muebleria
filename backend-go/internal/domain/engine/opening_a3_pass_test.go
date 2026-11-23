@@ -181,10 +181,7 @@ func TestOpeningA3BetweenEdgesBevelAndNotch(t *testing.T) {
 	modifiers := []ResolvedOpeningBodyModifier{
 		{Effect: OpeningModifierEffectBevel, Role: "door", ProfileID: "it", Boundary: "top", BevelAngleDeg: 45, BevelSizeMm: 10},
 		{Effect: OpeningModifierEffectBevel, Role: "door", ProfileID: "it", Boundary: "between:column", BevelAngleDeg: 45, BevelSizeMm: 10},
-		// #1696: the between band rides the front stack's plane (578, 18 mm
-		// proud of the 560 panel) — a 17 mm declared depth crosses nothing;
-		// 20 mm keeps a 2 mm crossing so each between edge still cuts.
-		{Effect: OpeningModifierEffectNotch, Role: "lateral", ProfileID: "it", Boundary: "between:column", NotchHeightMm: 71, NotchDepthMm: 20},
+		{Effect: OpeningModifierEffectNotch, Role: "lateral", ProfileID: "it", Boundary: "between:column", NotchHeightMm: 71, NotchDepthMm: 17},
 	}
 	_, boards, err := resolveFurnitureLayoutOpts(module, catalog, &LayoutDims{WidthMm: 600, HeightMm: 720, DepthMm: 560}, nil,
 		resolveOptions{fronts: fronts, openingBodyModifiers: modifiers})
@@ -217,10 +214,8 @@ func TestOpeningA3BetweenEdgesBevelAndNotch(t *testing.T) {
 			t.Fatalf("%s: one notch per between edge, got %d", board.id, len(board.notches))
 		}
 		for n, notch := range board.notches {
-			// #1696: the panel keeps only the 2 mm the proud band crosses
-			// (declared 20 − the 18 mm overlay).
-			if notch.SizeMm[1] != 2 && notch.SizeMm[0] != 2 && notch.SizeMm[2] != 2 {
-				t.Fatalf("%s notch %d: crossing depth 2 expected in %v", board.id, n, notch.SizeMm)
+			if notch.SizeMm[1] != 17 && notch.SizeMm[0] != 17 && notch.SizeMm[2] != 17 {
+				t.Fatalf("%s notch %d: depth 17 expected in %v", board.id, n, notch.SizeMm)
 			}
 		}
 	}

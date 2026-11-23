@@ -32,7 +32,7 @@ import (
 // and before the component projection, so AABB/transform derive with the
 // notch attached — the published board stays a valid AABB whose SUBTRACTION
 // is structured data, never a shrunk surrogate board.
-func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeningBodyModifier, gripFrontY float64) error {
+func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeningBodyModifier) error {
 	for _, modifier := range modifiers {
 		if modifier.Effect != OpeningModifierEffectNotch {
 			continue
@@ -75,32 +75,12 @@ func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeni
 			}
 		}
 		placed := false
-		crossedZero := 0
 		for i := range boards {
 			if !boardIsOpeningSide(&boards[i]) {
 				continue
 			}
-			// #1696: the band rides the front stack's plane (overlay fronts
-			// sit proud of the carcass); the side panel only meets the
-			// profile where their spans overlap. A proud band crosses just
-			// the front sliver of the panel — the notch keeps that overlap,
-			// never the full declared depth; a band entirely ahead of the
-			// panel crosses nothing (truthful absence for THIS board).
-			boardModifier := modifier
-			if _, min, size, err := boardLocalPose(&boards[i]); err == nil {
-				overlap := (min[1] + size[1]) - (gripFrontY - modifier.NotchDepthMm)
-				if overlap <= 1e-6 {
-					crossedZero++
-					continue
-				}
-				if overlap < modifier.NotchDepthMm {
-					reduced := modifier
-					reduced.NotchDepthMm = overlap
-					boardModifier = reduced
-				}
-			}
 			if kind != "between" {
-				notch, err := localNotchBox(&boards[i], boardModifier, kind)
+				notch, err := localNotchBox(&boards[i], modifier, kind)
 				if err != nil {
 					return err
 				}
@@ -109,7 +89,7 @@ func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeni
 				continue
 			}
 			for _, z := range hangFromZ {
-				notch, err := localNotchBoxAt(&boards[i], boardModifier, z)
+				notch, err := localNotchBoxAt(&boards[i], modifier, z)
 				if err != nil {
 					return err
 				}
@@ -118,11 +98,6 @@ func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeni
 			}
 		}
 		if !placed {
-			if crossedZero > 0 {
-				// The band passes entirely ahead of every side panel —
-				// nothing to cut on any of them (truthful absence).
-				continue
-			}
 			return fmt.Errorf(
 				"la muesca del perfil %s no encontró tableros laterales que recortar",
 				modifier.ProfileID)
