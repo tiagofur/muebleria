@@ -174,6 +174,19 @@ HardwarePlacementsEditor, pintado del aviso), `docs/guia-de-uso.md`,
   congelado en Q1, readback de la tabla íntegro); visual proyectar 12/12
   PASS. foundation-postgres: NOT_RUN local, lo cubre el CI del PR.
   NOT_RUN esperando al owner: vivo en web y SketchUp (aceptación explícita).
+- 2026-11-23 Review independiente fresco sobre `32337b88` (read-only):
+  **APPROVED, 0 blockers**, 8/8 focos verificados (escalera en ambas pilas,
+  byte-idéntico, tri-estado del surge en todo el viaje, omitido-conserva del
+  PUT, F129, aviso, migración/pin, forma del PR) + 5 sugerencias no
+  bloqueantes y escalación a juicio dual por tocar migraciones + contratos de
+  paridad (protocolo del reviewer; ceremonia función/contrato del taller).
+  S2 y S3 aplicadas en el mismo PR (comentario del PUT; retirar la sugerencia
+  intacta si el herraje deja de ser bisagra, respetando lo editado — 11/11
+  pruebas de la sección). S1 = nota para PR2 (rol por puerta en drilling);
+  S4/S5 = notas de precisión, sin cambio.
+- Escalación ejecutada: juicio dual (dos jueces ciegos read-only, mismo
+  alcance, prompt idéntico) sobre el HEAD final con S2+S3. Veredicto en el
+  ODD al cerrar.
 
 ## Next step
 

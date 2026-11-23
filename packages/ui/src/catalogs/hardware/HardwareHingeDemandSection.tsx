@@ -30,15 +30,24 @@ export function HardwareHingeDemandSection({
   const hasTable = rows.length > 0;
 
   // Los valores del fabricante como sugerencia: la escalera de librería. Sólo
-  // al crear y sólo la primera vez que el herraje pasa a ser bisagra — nunca
-  // pisa filas que el taller ya cargó.
+  // al crear — se cargan cuando el herraje pasa a ser bisagra y se retiran si
+  // deja de serlo (S3 del review #1701): sólo cuando las filas siguen siendo
+  // EXACTAMENTE la sugerencia, para no borrar nunca lo que el taller tocó.
   useEffect(() => {
-    if (!suggestOnCreate || !isHingeShape) return;
-    setDraft((prev) =>
-      prev.hingeDemandRows && prev.hingeDemandRows.length > 0
-        ? prev
-        : { ...prev, hingeDemandRows: suggestedHingeDemandRows() },
-    );
+    if (!suggestOnCreate) return;
+    setDraft((prev) => {
+      if (isHingeShape) {
+        return prev.hingeDemandRows && prev.hingeDemandRows.length > 0
+          ? prev
+          : { ...prev, hingeDemandRows: suggestedHingeDemandRows() };
+      }
+      const rows = prev.hingeDemandRows ?? [];
+      const suggested = suggestedHingeDemandRows();
+      const isUntouchedSuggestion =
+        rows.length === suggested.length &&
+        rows.every((row, i) => row.upToHeightMm === suggested[i]!.upToHeightMm && row.hinges === suggested[i]!.hinges);
+      return isUntouchedSuggestion ? { ...prev, hingeDemandRows: [] } : prev;
+    });
   }, [suggestOnCreate, isHingeShape, setDraft]);
 
   const updateRow = (idx: number, patch: Partial<HingeBandsDraftRow>) => {

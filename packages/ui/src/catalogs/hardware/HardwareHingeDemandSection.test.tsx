@@ -54,6 +54,18 @@ function Harness({
       />
       <output data-testid="rows-out">{JSON.stringify(draft.hingeDemandRows ?? null)}</output>
       <output data-testid="surge-out">{draft.hingeDemandWidthSurgeMm ?? ''}</output>
+      <button
+        type="button"
+        onClick={() =>
+          setDraft((prev) => ({
+            ...prev,
+            previewShape: prev.previewShape === 'hinge' ? 'bar-pull' : 'hinge',
+          }))
+        }
+        data-testid="flip-shape"
+      >
+        flip
+      </button>
     </>
   );
 }
@@ -79,6 +91,31 @@ describe('HardwareHingeDemandSection (#1579)', () => {
     render(<Harness initial={{ previewShape: 'hinge' }} suggestOnCreate />);
     expect(rowsOf()).toEqual(SUGGESTED);
     expect(screen.queryByTestId('hardware-hinge-demand-disclosure')).toBeNull();
+  });
+
+  it('si el herraje deja de ser bisagra, la sugerencia intacta se retira; lo editado se respeta (S3 del review)', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ previewShape: 'hinge' }} suggestOnCreate />);
+    expect(rowsOf()).toEqual(SUGGESTED);
+
+    // Sugerencia intacta + deja de ser bisagra → se retira sola.
+    await user.click(screen.getByTestId('flip-shape'));
+    expect(rowsOf()).toEqual([]);
+
+    // Vuelve a ser bisagra → la sugerencia vuelve.
+    await user.click(screen.getByTestId('flip-shape'));
+    expect(rowsOf()).toEqual(SUGGESTED);
+
+    // El taller edita una cantidad y cambia de forma → lo editado permanece.
+    await user.clear(screen.getByTestId('hardware-hinge-band-0-hinges'));
+    await user.type(screen.getByTestId('hardware-hinge-band-0-hinges'), '4');
+    await user.click(screen.getByTestId('flip-shape'));
+    expect(rowsOf()).toEqual([
+      { upToHeightMm: '900', hinges: '4' },
+      { upToHeightMm: '1600', hinges: '3' },
+      { upToHeightMm: '2000', hinges: '4' },
+      { upToHeightMm: '2400', hinges: '5' },
+    ]);
   });
 
   it('al crear un herraje que no es bisagra no se carga nada', () => {

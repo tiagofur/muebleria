@@ -763,7 +763,11 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		// #1579: an omitted hinge_demand keeps the stored table — a partial
 		// GET→PUT client must not silently drop it and move quotes back to the
 		// factory ladder (same class of loss as #1436); an explicit null is
-		// the deliberate clear.
+		// the deliberate clear. The validation below re-checks the (possibly
+		// restored) table: a stored-invalid one is only reachable through
+		// direct SQL outside the runtime role, and failing the PUT closed on
+		// it beats pricing against a table the ladder would misread (S2 del
+		// review #1701).
 		if cur != nil && !present["hinge_demand"] {
 			h.HingeDemand = cur.HingeDemand
 		}
