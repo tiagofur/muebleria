@@ -85,19 +85,26 @@ func TestOpeningGolaRunNeverCrossesFrontsOrTopPanel(t *testing.T) {
 		t.Fatalf("the gola run must span the declared 27.2 depth (y from 552.8), got back y=%g", run[0][1])
 	}
 
-	notched := 0
+	isFront := func(slot string) bool { return slot == "puerta" || slot == "frente_cajon" }
+	isLateral := func(slot string) bool {
+		return slot == "lateral_izquierdo" || slot == "lateral_derecho"
+	}
+	fronts, notched := 0, 0
 	for i := range layout.Components {
 		component := &layout.Components[i]
 		if component.Kind != "board" {
 			continue
 		}
+		if isFront(component.SlotID) {
+			fronts++
+		}
 		board := furnitureBox(component.Transform.TranslationMm, component.DimensionsMm)
 		if !boxesCross(run, board) {
 			continue
 		}
-		// A notched board is the profile's own crossing — the notch is cut
+		// A NOTCHED LATERAL is the profile's own crossing — the notch is cut
 		// for exactly that. Any other board the run enters is a collision.
-		if len(component.Notches) > 0 {
+		if isLateral(component.SlotID) && len(component.Notches) > 0 {
 			notched++
 			continue
 		}
@@ -105,7 +112,9 @@ func TestOpeningGolaRunNeverCrossesFrontsOrTopPanel(t *testing.T) {
 			component.Name, component.SlotID,
 			run[0][1], run[1][1], run[0][2], run[1][2], board[0][1], board[1][1], board[0][2], board[1][2])
 	}
-	if notched != 2 {
-		t.Fatalf("exactly the two notched laterals cross the run, got %d", notched)
+	// The guard must have had a front to clear, or it proves nothing.
+	if fronts != 1 || notched != 2 {
+		t.Fatalf("expected one front clear of the run and exactly the two notched laterals crossing it, got fronts=%d notched=%d",
+			fronts, notched)
 	}
 }
