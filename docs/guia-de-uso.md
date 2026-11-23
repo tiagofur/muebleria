@@ -629,6 +629,42 @@ receta.
 **Cómo saber que quedó bien:** al volver a la receta, los campos en solo
 lectura muestran el valor nuevo y el 3D del cajón lo refleja.
 
+### 8c.5c Bisagras por altura de puerta
+
+**Para qué sirve:** que cada modelo de bisagra declare cuántas bisagras
+lleva una puerta según su alto. Una puerta de 2100 mm no lleva las mismas
+que una de 720.
+
+**Cuándo se usa:** el taller declara la tabla una vez por bisagra, con los
+valores del fabricante como punto de partida. Se aplica a cada puerta que
+elige ese herraje.
+
+**Pasos:**
+
+1. **Herrajes** → abrí la ficha de la bisagra (o **Nuevo → Pieza** para darla
+   de alta).
+2. Sección **Bisagras por altura de puerta**: cada fila es una banda — puertas
+   de hasta N mm llevan X bisagras (de 2 a 5). Al crear una bisagra la tabla
+   sugerida (900 → 2, 1600 → 3, 2000 → 4, 2400 → 5) se carga sola; ajustala a
+   lo que indique el fabricante. Si el herraje no es una bisagra común (por
+   ejemplo un juego de bisagras), la sección aparece cerrada al pie: abrila y
+   tocá **Usar la tabla sugerida**.
+3. **Recargo por ancho desde (mm)**: si la puerta es más ancha que ese valor
+   se suma una bisagra. Vacío usa 650 mm; `0` lo desactiva.
+4. Guardá.
+
+**Qué manda sobre qué:** si el componente de la puerta tiene una excepción en
+la config de fábrica (§8b), manda la excepción; si no, la tabla de la bisagra
+elegida; si la bisagra no tiene tabla, la política de fábrica; y si tampoco
+hay política, la escalera de librería. Quitar todas las filas deja la bisagra
+sin tabla (vuelve a heredar).
+
+**Cómo saber que quedó bien:** en el editor del mueble, el **Preview de
+costo** suma la cantidad de bisagras que corresponde al alto de la puerta.
+Si la puerta es más alta que la última banda, se usan las bisagras de esa
+banda y el preview muestra el aviso con el alto de la puerta y el de la
+banda: informa, no bloquea la cotización.
+
 ### 8c.6 Agarres: estilos del taller y del proyecto
 
 **Para qué sirve:** definir cómo se agarran las puertas y frentes — el
