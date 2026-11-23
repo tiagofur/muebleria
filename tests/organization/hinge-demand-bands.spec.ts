@@ -14,6 +14,12 @@
  * swap de elección con re-cotización y la escalera C3 (fábrica + excepción
  * por componente) viven en contracts/hingeDemandBands.contract.json
  * (vitest + go test) y en PostgreSQL real (engine/storage Go tests).
+ *
+ * #1579 — la tabla que cada bisagra declara para sí (segundo test): la
+ * económica declara por API una tabla que termina en 2000 mm; la MISMA puerta
+ * de 2100 pasa de 5 a 4 bisagras en la cotización del servidor (Go +
+ * PostgreSQL reales), la Blum sin tabla sigue en la escalera de librería, y la
+ * tabla vuelve a leerse tal cual por la API (columna hardwares.hinge_demand).
  */
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
@@ -30,6 +36,17 @@ const HWG_CUSTOMER = 'c7777777-0000-4000-8000-000000010778';
 const HWG_PROJECT = '67777777-1111-4777-8777-111111111111';
 const HWG_TALL_LINE = '67777777-1212-4777-8777-121212121212';
 const HWG_FLAT_LINE = '67777777-1313-4777-8777-131313131313';
+// #1579: segunda obra con la bisagra que declara tabla.
+const HWG_TABLE_PROJECT = '67777777-2222-4777-8777-222222222222';
+const HWG_TABLE_TALL_LINE = '67777777-2323-4777-8777-232323232323';
+const HWG_TABLE_FLAT_LINE = '67777777-2424-4777-8777-242424242424';
+const ECO_TABLE = {
+  bands: [
+    { upToHeightMm: 900, hinges: 2 },
+    { upToHeightMm: 2000, hinges: 4 },
+  ],
+  widthSurgeOverMm: 0,
+};
 
 async function loginOwner(): Promise<{ token: string }> {
   return new GraneteApiClient(required('ORGANIZATION_API_BASE')).login({
@@ -256,5 +273,85 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
       (i) => i.materialChoices['FRENTE'] === frenteMaterialId,
     );
     expect(tallItem?.materialChoices['BISAGRA']).toBe(HWG_BLUM);
+  });
+
+  test('#1579 — la tabla que declara la bisagra cambia lo que cotiza la misma puerta', async ({ page }) => {
+    test.setTimeout(240_000);
+    const repository = new APIWorkspaceRepository(required('ORGANIZATION_API_BASE'), {
+      getAccessToken: () => owner.token,
+    });
+    const catalog = await repository.getCatalog();
+    const eco = (catalog.hardware ?? []).find((h) => h.id === HWG_ECO);
+    const frenteMaterialId = '77777777-0000-4777-8777-000000000001';
+
+    // La económica declara su tabla por la API del catálogo (sin tocar SQL).
+    await repository.saveCatalog({
+      ...catalog,
+      hardware: [
+        ...(catalog.hardware ?? []).filter((h) => h.id !== HWG_ECO),
+        { ...eco, hingeDemand: ECO_TABLE } as (typeof catalog.hardware)[number],
+      ],
+    });
+    try {
+      // Readback: la tabla vuelve del servidor tal cual (columna JSONB).
+      const reread = (await repository.getCatalog()).hardware.find((h) => h.id === HWG_ECO);
+      expect(reread?.hingeDemand).toEqual(ECO_TABLE);
+
+      const now = new Date().toISOString();
+      await repository.saveProject({
+        id: HWG_TABLE_PROJECT,
+        name: 'Bandas 1579 E2E (tabla por bisagra)',
+        customerId: HWG_CUSTOMER,
+        currency: 'MXN',
+        marginFactor: 1,
+        laborFixedCost: 0,
+        status: 'draft',
+        createdAt: now,
+        updatedAt: now,
+        items: [
+          {
+            id: HWG_TABLE_TALL_LINE,
+            moduleId: HWG_TALL_MODULE,
+            quantity: 1,
+            optionChoices: { FRENTE: frenteMaterialId, BISAGRA: HWG_ECO },
+          },
+          {
+            id: HWG_TABLE_FLAT_LINE,
+            moduleId: HWG_FLAT_MODULE,
+            quantity: 1,
+            optionChoices: {},
+          },
+        ],
+      });
+
+      // La MISMA puerta de 2100: con la económica (tabla hasta 2000) cotiza 4,
+      // no las 5 de la escalera de librería que sigue comprando la Blum.
+      const q1 = await client.createInitialProjectQuoteRevision(
+        owner.token,
+        HWG_TABLE_PROJECT,
+        { notes: '1579 — tabla declarada por la bisagra' },
+        'e2e1579-q1-create-20261123',
+      );
+      expect(q1.revisionNumber).toBe(1);
+
+      // Sesión del taller A: cada test abre una página nueva.
+      await loginToA(page);
+      await page.goto(`/quotes/${HWG_TABLE_PROJECT}`);
+      const totals = page.locator('.project-totals');
+      // 4 × $12 (puerta 2100 bajo la tabla de la económica) + 1 × $12 (línea
+      // bulk del módulo sin puerta, que no es puerta y no entra en la banda).
+      await expect(totals).toContainText('Herrajes$60.00 MXN', { timeout: 20_000 });
+    } finally {
+      // La bisagra vuelve a quedar sin tabla para los demás specs del shard.
+      const latest = await repository.getCatalog();
+      const { hingeDemand: _dropped, ...plainEco } = latest.hardware.find((h) => h.id === HWG_ECO) ?? eco ?? {};
+      await repository.saveCatalog({
+        ...latest,
+        hardware: [
+          ...latest.hardware.filter((h) => h.id !== HWG_ECO),
+          plainEco as (typeof latest.hardware)[number],
+        ],
+      });
+    }
   });
 });
