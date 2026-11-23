@@ -55,6 +55,19 @@ export const DEFAULT_HINGE_DEMAND_POLICY: HingeDemandPolicy = {
 };
 
 /**
+ * What one door buys under a policy, with the provenance of the last row
+ * (#1579). `aboveLastBand` is true when the door is taller than the table's
+ * last band: the count clamps to that row and the surface must say so (the
+ * owner's rule: use the maximum, never stay silent, never block).
+ */
+export interface HingeCount {
+  readonly hinges: number;
+  readonly aboveLastBand: boolean;
+  /** Height of the table's last band (the clamp row); null for no door. */
+  readonly lastBandHeightMm: number | null;
+}
+
+/**
  * Hinges DEMANDED by one door. Bands are the height ladder, the surge is the
  * Blum width rule; both come from the (possibly factory-overridden) policy.
  * A non-positive height demands nothing.
@@ -64,7 +77,22 @@ export function hingesForDoor(
   doorWidthMm: number | undefined,
   policy?: HingeDemandPolicy,
 ): number {
-  if (!(doorHeightMm > 0)) return 0;
+  return resolveHingeCount(doorHeightMm, doorWidthMm, policy).hinges;
+}
+
+/**
+ * `hingesForDoor` with the last-band provenance (#1579). One implementation
+ * serves both, so the numeric half can never drift from the Go mirror
+ * (domain.ResolveHingeCount) — pinned by contracts/hingeDemandBands.contract.json.
+ */
+export function resolveHingeCount(
+  doorHeightMm: number,
+  doorWidthMm: number | undefined,
+  policy?: HingeDemandPolicy,
+): HingeCount {
+  if (!(doorHeightMm > 0)) {
+    return { hinges: 0, aboveLastBand: false, lastBandHeightMm: null };
+  }
   // No policy = the whole library default (bands AND surge). A present
   // policy owns its bands; an omitted surge inherits the default rule and an
   // explicit null disables it (factory policies may opt out of the surge).
@@ -82,8 +110,9 @@ export function hingesForDoor(
       break;
     }
   }
+  const lastBand = bands[bands.length - 1]!;
   if (!matched) {
-    hinges = Math.max(0, Math.trunc(bands[bands.length - 1]!.hinges));
+    hinges = Math.max(0, Math.trunc(lastBand.hinges));
   }
   const surge =
     effective.widthSurgeOverMm === undefined
@@ -97,7 +126,65 @@ export function hingesForDoor(
   ) {
     hinges += 1;
   }
-  return hinges;
+  return {
+    hinges,
+    aboveLastBand: !matched,
+    lastBandHeightMm: lastBand.upToHeightMm,
+  };
+}
+
+/**
+ * The visible warning for a door taller than the table's last row (#1579,
+ * owner decision 3). Mirrors domain.HingeDemandAboveLastBandMessage character
+ * for character — the parity fixture pins the sentence on both stacks.
+ */
+export function hingeDemandNotice(doorHeightMm: number, count: HingeCount): string | undefined {
+  if (!count.aboveLastBand) return undefined;
+  return `La puerta mide ${doorHeightMm} mm: supera la última banda de la tabla (${count.lastBandHeightMm ?? 0} mm). Se aplican ${count.hinges} bisagras.`;
+}
+
+/** Bounds of the quantity a hinge may declare per band (#1579: 2 to 5). */
+export const HINGE_TABLE_MIN_HINGES = 2;
+export const HINGE_TABLE_MAX_HINGES = 5;
+
+/**
+ * Why the table a hinge declares is unusable, or null when it is valid
+ * (#1579): non-empty, ascending positive heights, whole hinge counts within
+ * 2..5, a non-negative surge. `optionRole` has no meaning on a hinge's own
+ * table — the hinge IS the chosen hardware — so a declared role is refused
+ * rather than ignored. Mirrors domain.ValidateHingeDemandTable message for
+ * message (the web rejects before the round-trip what the server would 422).
+ */
+export function validateHingeDemandTable(
+  policy: HingeDemandPolicy | null | undefined,
+): string | null {
+  if (!policy) return null;
+  if (policy.optionRole?.trim()) {
+    return 'la tabla de bisagras por altura de un herraje no admite optionRole';
+  }
+  if (!policy.bands || policy.bands.length === 0) {
+    return 'la tabla de bisagras por altura debe tener al menos una banda';
+  }
+  let previous = 0;
+  for (const [i, band] of policy.bands.entries()) {
+    const path = `bands[${i}]`;
+    if (!Number.isFinite(band.upToHeightMm) || band.upToHeightMm <= 0 || band.upToHeightMm <= previous) {
+      return `${path}.upToHeightMm debe ser positivo y ascendente (anterior ${previous})`;
+    }
+    previous = band.upToHeightMm;
+    if (
+      !Number.isInteger(band.hinges) ||
+      band.hinges < HINGE_TABLE_MIN_HINGES ||
+      band.hinges > HINGE_TABLE_MAX_HINGES
+    ) {
+      return `${path}.hinges debe ser un entero entre ${HINGE_TABLE_MIN_HINGES} y ${HINGE_TABLE_MAX_HINGES}`;
+    }
+  }
+  const surge = policy.widthSurgeOverMm;
+  if (typeof surge === 'number' && (!Number.isFinite(surge) || surge < 0)) {
+    return 'widthSurgeOverMm debe ser un número no negativo';
+  }
+  return null;
 }
 
 /** Effective option role a policy consumes (BISAGRA default). */

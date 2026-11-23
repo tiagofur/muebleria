@@ -511,6 +511,25 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     // #1507: category tree link + free-form brand; null/'' = unset.
     category_id: h.categoryId ?? null,
     brand: h.brand ?? '',
+    // #1579: the hinge's own height → quantity table; null = no table. Always
+    // sent: the PUT keeps the stored table only when the key is omitted.
+    hinge_demand: hingeDemandPolicyToApi(h.hingeDemand),
+  };
+}
+
+/** Wire form of a hinge demand policy (#1579): bands plus the surge tri-state. */
+function hingeDemandPolicyToApi(
+  policy: HingeDemandPolicy | undefined,
+): Record<string, unknown> | null {
+  if (!policy) return null;
+  return {
+    bands: policy.bands.map((band) => ({
+      upToHeightMm: band.upToHeightMm,
+      hinges: band.hinges,
+    })),
+    ...(policy.widthSurgeOverMm === undefined
+      ? {}
+      : { widthSurgeOverMm: policy.widthSurgeOverMm }),
   };
 }
 
@@ -582,6 +601,12 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
       ? { categoryId: str(raw.category_id ?? raw.categoryId) }
       : {}),
     ...(str(raw.brand) ? { brand: str(raw.brand) } : {}),
+    // #1579: tabla de bisagras por altura del propio herraje — una forma
+    // inservible nunca entra al catálogo (el servidor rechaza la escritura).
+    ...((): { hingeDemand: HingeDemandPolicy } | {} => {
+      const hingeDemand = hingeDemandPolicyFromApi(raw.hinge_demand ?? raw.hingeDemand);
+      return hingeDemand ? { hingeDemand } : {};
+    })(),
   };
 }
 
