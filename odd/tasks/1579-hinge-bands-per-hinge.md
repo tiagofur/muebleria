@@ -90,15 +90,15 @@ HardwarePlacementsEditor, pintado del aviso), `docs/guia-de-uso.md`,
 - [x] **T1 — Caracterización (Go + TS) del resolve actual con recetas `AGR-PUE-*`**
   - Route: inline.
   - Outcome: tests que fijan la salida actual; deben seguir verdes tras T2..T14.
-- [ ] **T2 — Migración `000195` + storage Go**
-- [ ] **T3 — Go: campo, validación API, `ResolveHingeCount`, selección de política**
-- [ ] **T4 — Contrato OpenAPI + regeneración**
-- [ ] **T5 — TS: dominio, banda, F129, mappers**
-- [ ] **T6 — Web: `HardwareHingeDemandSection` + draft**
-- [ ] **T7 — Aviso: `notice` en línea resuelta + pintado**
-- [ ] **T8 — Paridad: fixture ampliado + vitest + go test**
-- [ ] **T9 — Guía de uso + issue aparte (política de fábrica)**
-- [ ] **T10 — PR1: verificación, commits, PR, revisor**
+- [x] **T2 — Migración `000195` + storage Go**
+- [x] **T3 — Go: campo, validación API, `ResolveHingeCount`, selección de política**
+- [x] **T4 — Contrato OpenAPI + regeneración**
+- [x] **T5 — TS: dominio, banda, F129, mappers**
+- [x] **T6 — Web: `HardwareHingeDemandSection` + draft**
+- [x] **T7 — Aviso: `notice` en línea resuelta + pintado**
+- [x] **T8 — Paridad: fixture ampliado + vitest + go test**
+- [x] **T9 — Guía de uso + issue aparte (política de fábrica)**
+- [x] **T10 — PR1: verificación, commits, PR, revisor**
 - [ ] **T11 — `countRule` en tipos (TS+Go) y reglas de draft/transform**
 - [ ] **T12 — Expansión TS compartida**
 - [ ] **T13 — Go: expansión en layout + demanda con exclusividad**
@@ -142,7 +142,41 @@ HardwarePlacementsEditor, pintado del aviso), `docs/guia-de-uso.md`,
   componentes de puerta con rol `FRENTES`; `AGR-PUE-DER/IZQ/-ALA` con 2
   posiciones por rol BISAGRA a `y=90` y `PH-90`, sin línea bulk; `AGR-PUE-2P`
   con línea fija de 4 (id concreto) — la migración son 5 recetas.
+- 2026-11-23 T2..T9 (commits `47f10bc3`, `a1d270e9`, `718be526`, `e8348539`,
+  `42a6ce11`): migración 000195 (sin backfill a propósito), storage roundtrip
+  PG real fresh (195 migraciones aplicadas, exit 0), API 422 + PUT omitido
+  conserva/null borra, `HingeDemandForDoor` (excepción → tabla → fábrica →
+  librería), `ResolveHingeCount` + aviso en `ResolvedHardwareLine.Notice`,
+  tri-estado del surge protegido por `UnmarshalJSON` (null = desactivado),
+  OpenAPI regenerado drift 0, TS espejo (55 casos de contrato), F129 perfora
+  con la tabla de la bisagra elegida, ficha web con sugerencia precargada
+  (nunca pisa lo declarado), aviso en el preview de costo (`CostPreview =
+  QuoteBreakdown + notices`, cálculo aislado del costo), guía §8c.5c, issue
+  #1699 (pantalla de política de fábrica) fileada.
+- Decisión de diseño anotada: la escalera de librería es una tabla también —
+  sin tabla en la bisagra, un desborde de la escalera SE avisa (deja de ser
+  silencioso); la cantidad no cambia. Fijado por test en ambos stacks.
+- Hallazgo preexistente reportado al owner, fuera de alcance: el gate de
+  opciones exige BISAGRA en módulos con puerta colocada pero
+  `defaultOptionChoicesForModule` no lo pre-elige → el preview nace bloqueado
+  salvo que otra línea declare el rol (fileado como #1700).
+- 2026-11-23 T10 (commits `06b35986`, re-pin): verificación completa de PR1.
+  V0: gofmt limpio en los tocados; `pnpm typecheck` workspace 0 (incluye
+  tests); drift OpenAPI 0. V1: `pnpm test` workspace PASS (ui 2624 · web 663 ·
+  mobile 87 · isolation 16); suite Go completa `backend-test.sh ./...` 916s
+  contra PG efímero fresh — 15 paquetes ok + 1 fallo = el pin de esquema del
+  test de definiciones (184) que su propio comentario ordena re-anclar cuando
+  la lectura de catálogo requiere columnas nuevas → re-anclado a 195,
+  confirmado exit 0 en PG fresh (storage 7.4s); rubocop 322 archivos 0
+  ofensas + `rake unit` 1530/0 (el `rake verify` local cae sólo por
+  bundler/Ruby 4; cero archivos Ruby en el diff). V2: browser gate 2/2 PASS
+  (la misma puerta 2100 cotiza 5 vs 4 según la tabla de la bisagra, dinero
+  congelado en Q1, readback de la tabla íntegro); visual proyectar 12/12
+  PASS. foundation-postgres: NOT_RUN local, lo cubre el CI del PR.
+  NOT_RUN esperando al owner: vivo en web y SketchUp (aceptación explícita).
 
 ## Next step
 
-T2: migración `000195_hardware_hinge_demand` + storage Go.
+PR2 sobre este PR: countRule en la receta, expansión TS/Go, autoría mínima,
+migración de catálogo (autorizada por el owner 2026-11-23) y «lo congelado
+no se mueve».
