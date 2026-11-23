@@ -29644,7 +29644,7 @@
                 "transform": {
                   "translationMm": [
                     0,
-                    532.8,
+                    550.8,
                     663.5
                   ]
                 },
@@ -29656,7 +29656,7 @@
                 "localTransform": {
                   "translationMm": [
                     0,
-                    532.8,
+                    550.8,
                     663.5
                   ],
                   "basis": {
@@ -29690,7 +29690,7 @@
                 "transform": {
                   "translationMm": [
                     0,
-                    541,
+                    559,
                     466.5
                   ]
                 },
@@ -29702,7 +29702,7 @@
                 "localTransform": {
                   "translationMm": [
                     0,
-                    541,
+                    559,
                     466.5
                   ],
                   "basis": {
@@ -29736,7 +29736,7 @@
                 "transform": {
                   "translationMm": [
                     0,
-                    541,
+                    559,
                     228
                   ]
                 },
@@ -29748,7 +29748,7 @@
                 "localTransform": {
                   "translationMm": [
                     0,
-                    541,
+                    559,
                     228
                   ],
                   "basis": {
@@ -30008,51 +30008,7 @@
                 "widthMm": 560,
                 "thicknessMm": 18,
                 "optionRole": "LATERAL",
-                "materialColorHex": "#c8b89a",
-                "notches": [
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      650
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ],
-                    "profileId": "profile.italiana.70",
-                    "boundary": "top"
-                  },
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      412
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ],
-                    "profileId": "profile.italiana.70",
-                    "boundary": "between"
-                  },
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      172
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ],
-                    "profileId": "profile.italiana.70",
-                    "boundary": "between"
-                  }
-                ]
+                "materialColorHex": "#c8b89a"
               },
               {
                 "componentInstanceId": "mod-comp-lateral-1536-r-copy-0",
@@ -30101,51 +30057,7 @@
                 "widthMm": 560,
                 "thicknessMm": 18,
                 "optionRole": "LATERAL",
-                "materialColorHex": "#c8b89a",
-                "notches": [
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      650
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ],
-                    "profileId": "profile.italiana.70",
-                    "boundary": "top"
-                  },
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      412
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ],
-                    "profileId": "profile.italiana.70",
-                    "boundary": "between"
-                  },
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      172
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ],
-                    "profileId": "profile.italiana.70",
-                    "boundary": "between"
-                  }
-                ]
+                "materialColorHex": "#c8b89a"
               },
               {
                 "componentInstanceId": "agr-agr-cajon-1536-u0-comp-dfront-1536-copy-0",
@@ -30504,150 +30416,6 @@
           "machining": {
             "operations": [
               {
-                "operationId": "mod-comp-lateral-1536-copy-0:notch-0",
-                "hostComponentInstanceId": "mod-comp-lateral-1536-copy-0",
-                "provenance": {
-                  "sourceKind": "openingProfile",
-                  "openingProfileId": "profile.italiana.70",
-                  "boundary": "top"
-                },
-                "holes": [],
-                "routingCuts": [
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      650
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ]
-                  }
-                ]
-              },
-              {
-                "operationId": "mod-comp-lateral-1536-copy-0:notch-1",
-                "hostComponentInstanceId": "mod-comp-lateral-1536-copy-0",
-                "provenance": {
-                  "sourceKind": "openingProfile",
-                  "openingProfileId": "profile.italiana.70",
-                  "boundary": "between"
-                },
-                "holes": [],
-                "routingCuts": [
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      412
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ]
-                  }
-                ]
-              },
-              {
-                "operationId": "mod-comp-lateral-1536-copy-0:notch-2",
-                "hostComponentInstanceId": "mod-comp-lateral-1536-copy-0",
-                "provenance": {
-                  "sourceKind": "openingProfile",
-                  "openingProfileId": "profile.italiana.70",
-                  "boundary": "between"
-                },
-                "holes": [],
-                "routingCuts": [
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      172
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ]
-                  }
-                ]
-              },
-              {
-                "operationId": "mod-comp-lateral-1536-r-copy-0:notch-0",
-                "hostComponentInstanceId": "mod-comp-lateral-1536-r-copy-0",
-                "provenance": {
-                  "sourceKind": "openingProfile",
-                  "openingProfileId": "profile.italiana.70",
-                  "boundary": "top"
-                },
-                "holes": [],
-                "routingCuts": [
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      650
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ]
-                  }
-                ]
-              },
-              {
-                "operationId": "mod-comp-lateral-1536-r-copy-0:notch-1",
-                "hostComponentInstanceId": "mod-comp-lateral-1536-r-copy-0",
-                "provenance": {
-                  "sourceKind": "openingProfile",
-                  "openingProfileId": "profile.italiana.70",
-                  "boundary": "between"
-                },
-                "holes": [],
-                "routingCuts": [
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      412
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ]
-                  }
-                ]
-              },
-              {
-                "operationId": "mod-comp-lateral-1536-r-copy-0:notch-2",
-                "hostComponentInstanceId": "mod-comp-lateral-1536-r-copy-0",
-                "provenance": {
-                  "sourceKind": "openingProfile",
-                  "openingProfileId": "profile.italiana.70",
-                  "boundary": "between"
-                },
-                "holes": [],
-                "routingCuts": [
-                  {
-                    "startMm": [
-                      0,
-                      0,
-                      172
-                    ],
-                    "sizeMm": [
-                      16,
-                      18,
-                      70
-                    ]
-                  }
-                ]
-              },
-              {
                 "operationId": "agr-agr-cajon-1536-u0-comp-dfront-1536-copy-0:bevel-0",
                 "hostComponentInstanceId": "agr-agr-cajon-1536-u0-comp-dfront-1536-copy-0",
                 "provenance": {
@@ -30721,7 +30489,7 @@
               }
             ],
             "derivedHardwarePlacements": [],
-            "manufacturingFingerprint": "sha256-095eaf85ecebb6368e6684a94e09646712920df5104e43b5231c459d9b2f0c05"
+            "manufacturingFingerprint": "sha256-fe1fed097fea568dd55fe077c10e124ca292a21c1b6944390b0ac31b57bcc4d6"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",

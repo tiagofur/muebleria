@@ -54,9 +54,11 @@ func TestOpeningNotchMaterializesOnSideBoards(t *testing.T) {
 			t.Fatalf("notch provenance = %+v", notch)
 		}
 
-		// The local box must remove a 10×19×thickness corner: its volume is
-		// exact and it stays inside the board. The through dimension is the
-		// board's thickness — the smallest AABB extent.
+		// #1696: the band rides the FRONT STACK's front plane (the overlay
+		// door sits at 578, 18 mm proud of the 560 carcass). The side panel
+		// only meets the declared 19 mm band in its last 1 mm — the notch
+		// keeps exactly that crossing. Through dimension: the thickness.
+		crossing := 19.0 - (578 - 560)
 		vol := notch.SizeMm[0] * notch.SizeMm[1] * notch.SizeMm[2]
 		thickness := component.DimensionsMm[0]
 		for _, d := range component.DimensionsMm {
@@ -64,9 +66,9 @@ func TestOpeningNotchMaterializesOnSideBoards(t *testing.T) {
 				thickness = d
 			}
 		}
-		if vol != 10*19*thickness {
-			t.Fatalf("side %s notch box %v (thickness %g) is not the 10×19 through-cut",
-				component.ComponentInstanceID, notch.SizeMm, thickness)
+		if mathAbs(vol-10*crossing*thickness) > 1e-6 {
+			t.Fatalf("side %s notch box %v (thickness %g) is not the 10×%g through-cut",
+				component.ComponentInstanceID, notch.SizeMm, thickness, crossing)
 		}
 
 		// Furniture-frame verification from the PUBLISHED transform, derived
@@ -91,9 +93,9 @@ func TestOpeningNotchMaterializesOnSideBoards(t *testing.T) {
 						t.Fatalf("side %s notch corner %v is not on the top 10 mm band (board top %g)",
 							component.ComponentInstanceID, world, maxC[2])
 					}
-					if mathAbs(world[1]-(maxC[1]-19)) > 1e-6 && mathAbs(world[1]-maxC[1]) > 1e-6 {
-						t.Fatalf("side %s notch corner %v is not on the front 19 mm band (board front %g)",
-							component.ComponentInstanceID, world, maxC[1])
+					if mathAbs(world[1]-(maxC[1]-crossing)) > 1e-6 && mathAbs(world[1]-maxC[1]) > 1e-6 {
+						t.Fatalf("side %s notch corner %v is not on the front %g mm band (board front %g)",
+							component.ComponentInstanceID, world, crossing, maxC[1])
 					}
 					if world[0] < minC[0]-1e-6 || world[0] > maxC[0]+1e-6 {
 						t.Fatalf("side %s notch corner %v leaves the thickness span [%g %g]",

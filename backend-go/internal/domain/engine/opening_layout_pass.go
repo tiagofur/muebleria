@@ -112,7 +112,7 @@ func boardIsOpeningFront(board *layoutBoard) bool {
 // Fail-soft: a catalog hardware absent or inactive places nothing — the
 // quote's BOM still demands it (the model sketch is the representation,
 // never the demand).
-func appendOpeningBetweenProfileHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims) {
+func appendOpeningBetweenProfileHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims, gripFrontY float64) {
 	hw, ok := findHardware(catalog, members.BetweenProfileHardwareID)
 	if !ok || !hw.Active || members.BetweenProfileHeightMm <= 0 || members.BetweenProfileDepthMm <= 0 {
 		return
@@ -145,8 +145,8 @@ func appendOpeningBetweenProfileHardware(layout *FurnitureLayout, catalog domain
 			hw,
 			fmt.Sprintf("opening-profile-between-%s-%d", hw.ID, k),
 			// #1689: min corner — the run's depth reaches BACK from the
-			// front plane (dims[1] inside), never floating ahead of it.
-			[3]float64{0, float64(dims.DepthMm) - members.BetweenProfileDepthMm, z},
+			// band's front plane (#1696: the front stack's front).
+			[3]float64{0, gripFrontY - members.BetweenProfileDepthMm, z},
 			LayoutBasis{
 				X: [3]float64{1, 0, 0},
 				Y: [3]float64{0, 1, 0},
@@ -439,7 +439,7 @@ type OpeningComponentMember struct {
 //     support SKP must be modeled with its grip point as local origin.
 //   - Depth reference: the carcass front plane (the profile's front face is
 //     flush with it; the declared depth reaches back under the top).
-func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims, bottomBoundary bool, hostBoardID string, sideThicknessMm float64) {
+func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.Catalog, members OpeningMembers, dims LayoutDims, bottomBoundary bool, hostBoardID string, sideThicknessMm float64, gripFrontY float64) {
 	face := "top"
 	if bottomBoundary {
 		face = "bottom"
@@ -455,13 +455,16 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 	}
 	totalW := float64(dims.WidthMm)
 	totalH := float64(dims.HeightMm)
-	totalD := float64(dims.DepthMm)
 
 	zPos := totalH
 	if bottomBoundary {
 		zPos = 0
 	}
-	yPos := totalD
+	// #1696: the band's front plane is the FRONT STACK's front (overlay
+	// fronts sit proud of the carcass) — the same reference the old channel
+	// placeholder anchored to (#1274/#1276 door_max.y). Supports and caps
+	// derive from it below, so the whole grip rides one plane.
+	yPos := gripFrontY
 
 	// 1. Profile: spanning the entire furniture width from X = 0 to X = totalW,
 	// front face flush with the carcass front plane, vertical envelope from
