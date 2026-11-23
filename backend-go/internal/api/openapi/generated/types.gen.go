@@ -3327,6 +3327,7 @@ type HardwareWrite struct {
 	DesignParts         []map[string]any    `json:"design_parts,omitempty"`
 	KitHardwareID       *string             `json:"kit_hardware_id,omitempty"`
 	Pieces              []HardwarePiece     `json:"pieces,omitempty"`
+	HingeDemand         *HingeDemandPolicy  `json:"hinge_demand,omitempty"`
 	CategoryID          *string             `json:"category_id,omitempty"`
 	Brand               *string             `json:"brand,omitempty"`
 	Active              bool                `json:"active"`

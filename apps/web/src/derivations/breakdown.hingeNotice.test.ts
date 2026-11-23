@@ -102,7 +102,7 @@ describe('computeModuleCostPreview — avisos del motor (#1579)', () => {
     // 5 bisagras (el máximo de la tabla) a $68.
     expect(preview.costPreview!.hardwareTotal).toBe(5 * 68);
     expect(preview.costPreview!.notices).toEqual([
-      'La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras.',
+      'La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras por puerta.',
     ]);
   });
 

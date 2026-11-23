@@ -1891,6 +1891,16 @@ describe('hardwareToApi / hardwareFromApi — hinge table round-trip (#1579)', (
         hinge_demand: { bands: [{ upToHeightMm: 900, hinges: 'dos' }] },
       }).hingeDemand,
     ).toBeUndefined();
+    // S-A2 (juicio #1579): una fila inválida tira la TABLA entera — nunca una
+    // tabla recortada que clamparía antes y cambiaría el conteo de puertas.
+    expect(
+      hardwareFromApi({
+        ...base,
+        hinge_demand: {
+          bands: [{ upToHeightMm: 900, hinges: 2 }, { upToHeightMm: 1600, hinges: 'tres' }],
+        },
+      }).hingeDemand,
+    ).toBeUndefined();
   });
 });
 

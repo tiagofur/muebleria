@@ -183,7 +183,7 @@
       "name": "2600 supera la última banda 2400: máximo y aviso visible, sin bloquear",
       "table": "standard", "heightMm": 2600, "widthMm": 600,
       "expectedHinges": 5, "expectedAboveLastBand": true, "expectedLastBandHeightMm": 2400,
-      "expectedNotice": "La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras."
+      "expectedNotice": "La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras por puerta."
     },
     {
       "name": "2400 es la última banda: sin aviso",
@@ -195,7 +195,7 @@
       "name": "tabla que termina en 1200: 1600 la supera",
       "table": "short", "heightMm": 1600, "widthMm": 400,
       "expectedHinges": 3, "expectedAboveLastBand": true, "expectedLastBandHeightMm": 1200,
-      "expectedNotice": "La puerta mide 1600 mm: supera la última banda de la tabla (1200 mm). Se aplican 3 bisagras."
+      "expectedNotice": "La puerta mide 1600 mm: supera la última banda de la tabla (1200 mm). Se aplican 3 bisagras por puerta."
     }
   ]
 }

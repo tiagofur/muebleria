@@ -380,7 +380,7 @@ func TestHingeBandOverflowCarriesNotice(t *testing.T) {
 	if line.Quantity != 5 {
 		t.Fatalf("overflow door must take the table maximum: %+v, want 5", line)
 	}
-	want := "La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras."
+	want := "La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras por puerta."
 	if line.Notice != want {
 		t.Fatalf("notice = %q, want %q", line.Notice, want)
 	}

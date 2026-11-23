@@ -20863,6 +20863,17 @@
               "$ref": "#/components/schemas/HardwarePiece"
             }
           },
+          "hinge_demand": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HingeDemandPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "#1579 door height → quantity table this hinge declares for itself, on write. Tri-state: omitted key keeps the stored table (a partial GET→PUT client must not drop it), explicit null clears it, an object stores it (2..5 hinges per band, validated server-side — HINGE_DEMAND_INVALID 422)."
+          },
           "category_id": {
             "type": [
               "string",

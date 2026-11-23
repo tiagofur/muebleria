@@ -108,10 +108,10 @@ describe('#1579 — aviso de desborde en la línea de banda', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]!.quantity).toBe(5);
     expect(lines[0]!.notice).toBe(
-      'La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras.',
+      'La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras por puerta.',
     );
     expect(resolvedHardwareNotices(lines)).toEqual([
-      'La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras.',
+      'La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras por puerta.',
     ]);
   });
 
@@ -141,7 +141,7 @@ describe('#1579 — aviso de desborde en la línea de banda', () => {
     const line = bandLines(resolveBom(module, choices, withoutTable).hardwareLines)[0]!;
     expect(line.quantity).toBe(5);
     expect(line.notice).toBe(
-      'La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras.',
+      'La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras por puerta.',
     );
   });
 });

@@ -140,7 +140,7 @@ export function resolveHingeCount(
  */
 export function hingeDemandNotice(doorHeightMm: number, count: HingeCount): string | undefined {
   if (!count.aboveLastBand) return undefined;
-  return `La puerta mide ${doorHeightMm} mm: supera la última banda de la tabla (${count.lastBandHeightMm ?? 0} mm). Se aplican ${count.hinges} bisagras.`;
+  return `La puerta mide ${doorHeightMm} mm: supera la última banda de la tabla (${count.lastBandHeightMm ?? 0} mm). Se aplican ${count.hinges} bisagras por puerta.`;
 }
 
 /**

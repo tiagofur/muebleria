@@ -184,9 +184,22 @@ HardwarePlacementsEditor, pintado del aviso), `docs/guia-de-uso.md`,
   intacta si el herraje deja de ser bisagra, respetando lo editado — 11/11
   pruebas de la sección). S1 = nota para PR2 (rol por puerta en drilling);
   S4/S5 = notas de precisión, sin cambio.
-- Escalación ejecutada: juicio dual (dos jueces ciegos read-only, mismo
-  alcance, prompt idéntico) sobre el HEAD final con S2+S3. Veredicto en el
-  ODD al cerrar.
+- Escalación ejecutada: juicio dual ronda 1 (dos jueces ciegos read-only,
+  alcance y prompt idénticos) sobre `48adb5f2`. Ledger: **0 CRITICAL, 0
+  contradicciones**. Confirmado por AMBOS (WARNING): `HardwareWrite` del
+  OpenAPI sin `hinge_demand` — la escritura documentada no expresaba el campo
+  que el servidor acepta. Info: S-A2 mapper TS trunca tabla con fila inválida
+  (gemelo Go descarta entera), S-A3 texto del aviso ambiguo en el caso
+  multi-puerta por herraje, W-B2 aviso en escalera de librería vs. letra del
+  byte-idéntico (**decisión owner 3 explícita: deja de ser silencioso**),
+  S-B3 log en scan (espeja precedente pieces). Ronda 1 de pulido (ordenaria,
+  no de fix-day: ninguna era severa): `hinge_demand` declarada en
+  `HardwareWrite` + clientes regenerados + drift 0; mapper TS descarta la
+  tabla entera ante cualquier fila inválida (+test); aviso reredactado a
+  «…bisagras por puerta» en Go/TS/fixture/tests (9 anclas). Verificado:
+  build Go 0, go test TestHinge ok (domain+engine), drift 0, types 0, vitest
+  domain 61/61 · storage 120/120 · ui 14/14 · web 89/89. HEAD final: ver
+  `git log`.
 
 ## Next step
 

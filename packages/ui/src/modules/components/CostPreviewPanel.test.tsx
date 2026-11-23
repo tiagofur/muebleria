@@ -51,7 +51,7 @@ describe('CostPreviewPanel (F087 follow-up)', () => {
       salePrice: 474,
     };
     const notice =
-      'La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras.';
+      'La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras por puerta.';
 
     render(
       <CostPreviewPanel

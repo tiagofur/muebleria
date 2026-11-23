@@ -176,7 +176,7 @@ func HingeDemandAboveLastBandMessage(doorHeightMm float64, count HingeCount) str
 		return ""
 	}
 	return fmt.Sprintf(
-		"La puerta mide %s mm: supera la última banda de la tabla (%s mm). Se aplican %d bisagras.",
+		"La puerta mide %s mm: supera la última banda de la tabla (%s mm). Se aplican %d bisagras por puerta.",
 		strconv.FormatFloat(doorHeightMm, 'f', -1, 64),
 		strconv.FormatFloat(count.LastBandHeightMm, 'f', -1, 64),
 		count.Hinges,
