@@ -143,6 +143,47 @@ module Granete
           adapter
         end
 
+        # #1717: the Apertura card's button state is the pose the furniture
+        # REALLY has in this session — the cached adapter's open states, the
+        # same truth toggle_motion acts on. Decoration is read-only: a
+        # selection never builds an adapter. Absent/invalid adapter ⇒ closed,
+        # because a fresh or rebuilt furniture is built closed. The JS-side
+        # slot-keyed guess this replaces was shared across furniture and
+        # never reset on selection — the label desynced from the model.
+        def decorate_door_motion_state(payload)
+          return unless payload.is_a?(Hash) && payload['kind'] == 'furniture'
+
+          actors = payload['doorActors']
+          return unless Array(actors).any?
+
+          instance_ref = payload['furnitureInstanceRef']
+          entity = instance_ref && search_entities_for_instance(instance_ref)
+          adapter = entity && cached_motion_adapter_for(entity)
+          Array(actors).each_with_index do |actor, idx|
+            slot = actor['slotIndex'] || idx
+            # The open-states key is the raw slot string — toggle_motion is
+            # called with `slot_index.to_s` (handle_toggle_door_motion), not
+            # the motion id. Same key here, or the pose would read closed
+            # forever.
+            actor['isOpen'] = adapter&.open?(slot.to_s) || false
+          end
+        rescue StandardError => e
+          # Presentation affordance only: decoration must never take the
+          # selection publish down.
+          @logger.error('door_motion_state_decoration_failed', error: e)
+        end
+
+        # Read-only sibling of presentation_motion_adapter_for: reuse a
+        # living cached adapter, evict a dead one, never build.
+        def cached_motion_adapter_for(furniture_entity)
+          key = furniture_key(furniture_entity)
+          adapter = (@motion_adapters || {})[key]
+          return adapter if adapter&.entities_valid?
+
+          @motion_adapters&.delete(key)
+          nil
+        end
+
         def build_presentation_motions(doors, hw_scanned, drawers, open_angle_deg)
           motions = []
           component_map = {}

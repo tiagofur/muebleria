@@ -91,7 +91,21 @@ function buildSandbox() {
       created.push(el);
       return el;
     },
-    querySelector: () => createMockElement('q', 'BUTTON'), // tab probe: getAttribute -> null
+    querySelector: (selector) => {
+      // #1717: the Apertura card resolves its rendered button by
+      // .door-toggle-motion-btn[data-door-slot] — honor it over the real
+      // registry so the toggle feedback is observable. Anything else keeps
+      // the throwaway tab probe (getAttribute -> null).
+      const bySlot = selector && selector.match(/^\.door-toggle-motion-btn\[data-door-slot="(\d+)"\]$/);
+      if (bySlot) {
+        const flatten = (root) => (root.children || []).reduce((all, c) => all.concat([c], flatten(c)), []);
+        const candidates = Object.keys(registry).reduce((all, id) => all.concat(flatten(registry[id])), []);
+        const hit = candidates.find((node) => String(node.className || '').includes('door-toggle-motion-btn') &&
+          node.getAttribute && node.getAttribute('data-door-slot') === bySlot[1]);
+        if (hit) return hit;
+      }
+      return createMockElement('q', 'BUTTON'); // tab probe: getAttribute -> null
+    },
     querySelectorAll: () => [],
     addEventListener: (evt, cb) => {
       (registry.__docListeners = registry.__docListeners || {})[evt] =
@@ -502,6 +516,48 @@ function runTests() {
   check(el(sandbox, 'pane-inspector').classList.contains('active') &&
         tabs.inspector.classList.contains('active') && !tabs.library.classList.contains('active'),
     'activateInspectorTab lleva al Inspector aunque el configurador siga abierto');
+
+  // --- #1717 Apertura: el label del botón viene de la pose real que el
+  // bridge decora en el payload (isOpen), NUNCA de una caché del dialog.
+  // El bug: abrir la puerta del mueble A y seleccionar el mueble B cerrado
+  // mostraba «Cerrar» en B (estado heredado por slot compartido).
+  const doorContext = (ref, isOpen) => furnitureContext({
+    furnitureInstanceRef: ref,
+    definition: Object.assign({}, DEFINITION, {
+      parameters: DEFINITION.parameters.concat([{ name: 'doorSwing', defaultValue: 'left', type: 'string', label: 'Lado' }])
+    }),
+    doorActors: [{ slotIndex: 0, kind: 'door', isOpen }]
+  });
+  const doorBtn = () => descendants(el(sandbox, 'inspector-opening-accessories-container'))
+    .find((node) => node.className && String(node.className).includes('door-toggle-motion-btn'));
+
+  // Mueble A: puerta abierta de verdad (decorado por Ruby) → «Cerrar».
+  dialog.onSelectionChange(doorContext('ref-1', true));
+  check(visible(el(sandbox, 'inspector-opening-accessories-card')), 'la card Apertura aparece con doorActors');
+  check(doorBtn() && doorBtn().textContent === 'Cerrar', 'puerta abierta publicada muestra «Cerrar»');
+
+  // Mueble B (OTRA instancia), puerta cerrada → «Abrir». El slot es el
+  // mismo (0): el label no puede heredar el estado del mueble anterior.
+  dialog.onSelectionChange(doorContext('ref-2', false));
+  check(doorBtn() && doorBtn().textContent === 'Abrir',
+    'la selección de otro mueble repinta el label desde SU payload, sin heredar el estado');
+
+  // Toggle real: la respuesta del bridge muta el CONTEXTO actual (no un
+  // mapa global) — un re-render del mismo mueble conserva la pose togglada.
+  dialog.onDoorMotionToggled({ doorSlotIndex: 0, isOpen: true });
+  check(doorBtn().textContent === 'Cerrar', 'el toggle repinta su botón al instante');
+  dialog.onSelectionChange(doorContext('ref-2', false)); // Ruby re-publica verdad
+  check(doorBtn().textContent === 'Abrir',
+    'la próxima publicación del bridge manda: el re-render vuelve a la pose real');
+
+  // Sin isOpen en el payload (actores sin decorar) → fail-closed a cerrada.
+  dialog.onSelectionChange(furnitureContext({
+    definition: Object.assign({}, DEFINITION, {
+      parameters: DEFINITION.parameters.concat([{ name: 'doorSwing', defaultValue: 'left', type: 'string', label: 'Lado' }])
+    }),
+    doorActors: [{ slotIndex: 0, kind: 'door' }]
+  }));
+  check(doorBtn() && doorBtn().textContent === 'Abrir', 'actor sin isOpen se interpreta cerrado');
 
   return { success: true, testsPassed: passed };
 }
