@@ -80,7 +80,7 @@ jobs:
     needs: impact
     if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['proyectar-visual'] }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
