@@ -156,7 +156,11 @@ const hardwarePlacementRule = objectRule({
     doorSlotIndex: numberRule, doorLabel: stringRule,
     swingSide: enumRule('left', 'right'), accessoryRole: enumRule('hinge', 'handle'), accessoryIndex: numberRule })),
   derivedMachining: optionalRule(objectRule({ parts: arrayRule(objectRule({ ...stringFields('id', 'role'),
-    operations: arrayRule(machiningOperationRule) })) })) });
+    operations: arrayRule(machiningOperationRule) })) })),
+  // #1579 PR2: patrón de bisagras por altura — el motor expande con las
+  // medidas reales de la bahía. Cerrado a hingeDemand (único kind hoy).
+  countRule: optionalRule(objectRule({ kind: enumRule('hingeDemand'),
+    endOffsetBottomMm: numberRule, endOffsetTopMm: numberRule })) });
 export const componentInstanceDraftRule: DraftRule = objectRule({
   ...stringFields('componentId'), quantity: numberRule, placementOverride: optionalRule(placementRule),
   overrides: optionalRule(objectRule({ ...Object.fromEntries(

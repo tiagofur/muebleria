@@ -11,7 +11,8 @@
 import { generateCutRowsWithLinks, type CutRowPieceLink } from './engine/cut';
 import { componentIdFromComposedPartId, resolveBom } from './engine/bom';
 import { hingePolicyForDoor } from './engine/hingeBandDemand';
-import { hingeDemandRole } from './hingeDemand';
+import { hingeDemandRole, resolveHingeCount } from './hingeDemand';
+import { expandHingeCountRulePositions } from './agregados';
 import { resolvePlacementHardwareId } from './hardwarePlacement';
 import { resolveModuleMeasurePreset } from './measurePresets';
 import {
@@ -108,6 +109,15 @@ function manualPlacementsForPart(
 export interface AgregadoPlacementLookup {
   readonly placements: readonly HardwarePlacement[];
   /**
+   * #1579 PR2: la regla de cantidad del patrón en esta pieza (sólo puertas).
+   * El caller la expande con las medidas REALES de la pieza (que este lookup
+   * no conoce) y la política efectiva.
+   */
+  readonly countRule?: {
+    readonly rule: NonNullable<HardwarePlacement['countRule']>;
+    readonly optionRole?: string;
+  };
+  /**
    * Set ONLY for an `agr-*` part id that could not resolve to its host
    * component (broken link, missing definition or missing component) — the
    * fail-closed signal: the piece's manual drilling is NOT computed and the
@@ -176,7 +186,14 @@ export function agregadoManualPlacementsForPart(
         if (!componentId || !component) {
           return { placements: [], unresolved: partId };
         }
-        return { placements: component.overrides?.hardwarePlacements ?? [] };
+        const placements = component.overrides?.hardwarePlacements ?? [];
+        const pattern = placements.find((p) => p.countRule);
+        return {
+          placements,
+          ...(pattern?.countRule
+            ? { countRule: { rule: pattern.countRule, optionRole: pattern.optionRole } }
+            : {}),
+        };
       }
     }
   }
@@ -211,6 +228,66 @@ function chosenBandHinge(
     return undefined;
   }
   return catalog.hardware.find((hw) => hw.id === resolution.hardwareId);
+}
+
+/**
+ * #1579 PR2: expande el patrón de bisagras de una pieza-agregado a las
+ * posiciones reales para PERFORAR — mismo conteo que la demanda compra
+ * (escalera: excepción → tabla de la bisagra elegida → fábrica → escalera).
+ * Perforado = comprado: si el patrón no aporta demanda (sin elección para su
+ * rol, o posiciones fijas del mismo herraje que ya ganan), tampoco se taladra.
+ * Las posiciones fijas del autor pasan intactas.
+ */
+function expandAgregadoCountRulePlacements(
+  placements: readonly HardwarePlacement[],
+  params: {
+    readonly countRule?: {
+      readonly rule: NonNullable<HardwarePlacement['countRule']>;
+      readonly optionRole?: string;
+    };
+    readonly catalog: Catalog;
+    readonly choices: OptionChoices | undefined;
+    readonly partLengthMm: number;
+    readonly partWidthMm: number;
+    readonly partComponentId?: string;
+  },
+): readonly HardwarePlacement[] {
+  const pattern = params.countRule;
+  if (!pattern) return placements;
+  const hinge = chosenBandHinge(params.catalog, params.choices);
+  if (!hinge) return placements.filter((p) => !p.countRule); // sin elección → sin patrón (ni demanda)
+  const policy = hingePolicyForDoor(
+    params.catalog.constructionPolicy,
+    params.partComponentId,
+    hinge,
+  );
+  const count = resolveHingeCount(
+    params.partLengthMm,
+    params.partWidthMm,
+    policy,
+  );
+  const role = pattern.optionRole?.trim() || hingeDemandRole(policy);
+  const fixedSameHardware = placements.some((p) => {
+    if (p.countRule) return false;
+    const resolved =
+      p.hardwareId ||
+      params.choices?.[p.optionRole ?? ''] ||
+      '';
+    return resolved === hinge.id;
+  });
+  const positions = expandHingeCountRulePositions(
+    pattern.rule,
+    params.partLengthMm,
+    count.hinges,
+  );
+  return placements.flatMap((p) => {
+    if (!p.countRule) return [p];
+    if (fixedSameHardware || positions.length === 0) return []; // perforado = comprado: el fijo gana, el patrón no taladra
+    return positions.map((y) => ({
+      ...p,
+      relativePosition: { ...p.relativePosition, yMm: y, yFormula: undefined },
+    }));
+  });
 }
 
 /**
@@ -437,10 +514,20 @@ export function resolveProjectDrilling(
         blocking: true,
       });
     }
-    const manualForPart = [
-      ...manualPlacementsForPart(instances, link.partId),
-      ...(agregadoForPart?.placements ?? []),
-    ];
+    const manualForPart = expandAgregadoCountRulePlacements(
+      [
+        ...manualPlacementsForPart(instances, link.partId),
+        ...(agregadoForPart?.placements ?? []),
+      ],
+      {
+        countRule: agregadoForPart?.countRule,
+        catalog,
+        choices: cacheKey ? choicesByKey.get(cacheKey) : undefined,
+        partLengthMm: link.part.lengthMm,
+        partWidthMm: link.part.widthMm,
+        partComponentId: componentIdFromComposedPartId(link.partId) ?? undefined,
+      },
+    );
     const derivedForPart = (cacheKey ? derivedByKey.get(cacheKey) ?? [] : []).filter(
       (p) => p.partId === link.partId,
     );

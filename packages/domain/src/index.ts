@@ -1197,7 +1197,10 @@ export {
   mirrorComponentInstance,
   resolveAgregadoInstance,
   calculateAgregadoSubspaceUnits,
+  expandHingeCountRulePositions,
+  hasHingeCountRuleDoor,
   resolveEffectiveAgregadoId,
+  type HingeCountRuleContext,
   type SubspaceUnit,
 } from './agregados';
 

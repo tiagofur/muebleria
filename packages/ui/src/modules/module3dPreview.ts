@@ -61,6 +61,8 @@ export type Module3DCatalogInput = {
   readonly ambientMaterials?: readonly AmbientMaterial[];
   /** Presentation-only ambient categories for hierarchical finishes. */
   readonly ambientCategories?: readonly AmbientCategory[];
+  /** #1579 PR2: la política de construcción para el conteo del patrón de bisagras. */
+  readonly constructionPolicy?: Catalog['constructionPolicy'];
 };
 
 function dimsFromModule(

@@ -13,8 +13,10 @@ import {
 import { applyPanelThicknessDim } from '../itemDims';
 import {
   calculateAgregadoSubspaceUnits,
+  hasHingeCountRuleDoor,
   resolveAgregadoInstance,
   resolveEffectiveAgregadoId,
+  type HingeCountRuleContext,
   type SubspaceUnit,
 } from '../agregados';
 import {
@@ -373,6 +375,8 @@ function resolveBoardPartsAndHardware(
       descriptionOverride: line.descriptionOverride,
       optionRole: line.optionRole,
       hardwareId,
+      // #1579: el aviso del patrón/delinea viaja con la línea resuelta.
+      ...(line.notice ? { notice: line.notice } : {}),
     });
   }
 
@@ -974,6 +978,74 @@ export function resolveComposedModule(
       }
 
       const unitInst = { ...agrInst, agregadoId: effectiveAgregadoId, quantity: 1 };
+      // #1579 PR2: medidas REALES de la puerta de esta bahía — la fórmula del
+      // componente puerta evaluada contra la caja de la unidad (mismo marco
+      // que expandComponentInstances: PW/PH de la unidad, T 18). Sin formulas
+      // → la caja de la unidad. Con ellas, la banda no se equivoca de peldaño
+      // por 3 mm de repliegue (L=PH-3).
+      const countRuleDoor = (unitAgregado?.components ?? []).find(
+        (c) =>
+          c.placementOverride === 'puerta' &&
+          (c.overrides?.hardwarePlacements ?? []).some((p) => p.countRule),
+      );
+      let countRuleContext: HingeCountRuleContext | undefined;
+      if (countRuleDoor) {
+        // Las fórmulas reales de la puerta viven en la GEOMETRÍA del
+        // componente de catálogo (COM-PUE-*: L=PH-3, W=PW-3); los overrides
+        // de la instancia pueden reemplazarlas. Mismo marco de evaluación
+        // que expandComponentInstances: PW/PH de la unidad, T 18.
+        const catalogDoor = (catalog.components ?? []).find(
+          (c) => c.id === countRuleDoor.componentId,
+        );
+        const doorDimsForCount = {
+          W: unit.width,
+          H: unit.height,
+          D: unit.depth,
+          PW: unit.width,
+          PH: unit.height,
+          PD: unit.depth,
+          T: 18,
+        };
+        const evalDim = (
+          formula: string | undefined,
+          fallback: number,
+          field: 'length' | 'width',
+        ): number => {
+          const v = formula
+            ? evaluatePartFormula(formula, doorDimsForCount, {
+                structureCode: unitAgregado?.code ?? '',
+                partDescription: 'Puerta (countRule)',
+                field,
+              })
+            : NaN;
+          return Number.isFinite(v) && v > 0 ? v : fallback;
+        };
+        const lenFormula =
+          countRuleDoor.overrides?.lengthFormula ||
+          catalogDoor?.geometry.lengthFormula ||
+          undefined;
+        const widthFormula =
+          countRuleDoor.overrides?.widthFormula ||
+          catalogDoor?.geometry.widthFormula ||
+          undefined;
+        const heightFallback =
+          catalogDoor?.geometry.lengthMm && catalogDoor.geometry.lengthMm > 0
+            ? catalogDoor.geometry.lengthMm
+            : unit.height;
+        const widthFallback =
+          catalogDoor?.geometry.widthMm && catalogDoor.geometry.widthMm > 0
+            ? catalogDoor.geometry.widthMm
+            : unit.width;
+        countRuleContext = {
+          doorDims: {
+            heightMm: evalDim(lenFormula, heightFallback, 'length'),
+            widthMm: evalDim(widthFormula, widthFallback, 'width'),
+          },
+          effectiveChoices: optionChoices,
+          catalogHardware: catalog.hardware,
+          policySource: catalog.constructionPolicy,
+        };
+      }
       const res = resolveAgregadoInstance(
         unitInst,
         catalogAgregados,
@@ -982,6 +1054,7 @@ export function resolveComposedModule(
         // fábrica que el servidor cotiza.
         catalog.constructionPolicy?.doorHingeDemand,
         unitKitId,
+        countRuleContext,
       );
       agregadosHardware.push(...res.hardwareLines);
 
@@ -1187,8 +1260,22 @@ export function resolveBom(
     // governing), and a role without a choice contributes nothing (the
     // quote gate owns that failure). Band demand rides pre-treatment parts
     // (doors are never base parts) — same order as the Go resolve.
+    // #1579 PR2: las puertas de instancias con countRule cotizan su demanda
+    // en la línea del agregado (hingeband-agr-…) — el colector de módulo las
+    // excluye para no emitir el mismo herraje dos veces.
+    const countRulePrefixes: string[] = [];
+    for (const agrInst of [...(structure.agregados ?? []), ...(module.agregados ?? [])]) {
+      const effId = resolveEffectiveAgregadoId(agrInst, optionChoices);
+      const agr = (catalog.agregados ?? []).find((a) => a.id === effId);
+      if (agr && hasHingeCountRuleDoor(agr)) countRulePrefixes.push(`agr-${effId}-`);
+    }
     const hingeBand = collectHingeBandDemand({
-      parts: allParts,
+      parts:
+        countRulePrefixes.length > 0
+          ? allParts.filter(
+              (p) => !countRulePrefixes.some((pref) => p.id.startsWith(pref)),
+            )
+          : allParts,
       catalogHardware: catalog.hardware,
       policySource: catalog.constructionPolicy,
       optionChoices,
