@@ -218,9 +218,30 @@ func expandHingeCountRuleComponentsForUnit(agr domain.Agregado, inst domain.Modu
 				placements = append(placements, expanded)
 			}
 		}
-		out[i].Overrides.HardwarePlacements = placements
+		out[i].Overrides = cloneOverridesWithPlacements(out[i].Overrides, placements)
 	}
 	return out
+}
+
+// cloneOverridesWithPlacements returns a NEW ComponentOverrides carrying the
+// given placements. The instance copy above shares the Overrides POINTER with
+// the caller's catalog entry (#1710): assigning HardwarePlacements in place
+// rewrote the shared recipe, so the estimate pass (choices=nil, which drops
+// the pattern) silently stripped the count rule from the live catalog and
+// every later resolution in the same process bought jaladera-only. The
+// pattern lives in the recipe; expansions are per-resolution views.
+//
+// The clone still SHARES Edges, RotateX/Y/Z and the rule pointers with the
+// recipe — fine today because the engine only READS them per resolution
+// (#1710 review): any future per-resolution write to those fields needs the
+// same clone treatment, or it corrupts the shared catalog again.
+func cloneOverridesWithPlacements(src *domain.ComponentInstanceOverrides, placements []domain.HardwarePlacement) *domain.ComponentInstanceOverrides {
+	if src == nil {
+		return nil
+	}
+	clone := *src
+	clone.HardwarePlacements = placements
+	return &clone
 }
 
 // dropHingeCountRulePlacements removes pattern placements (suppressed
@@ -248,7 +269,7 @@ func dropHingeCountRulePlacements(components []domain.ComponentInstance) []domai
 				placements = append(placements, p)
 			}
 		}
-		out[i].Overrides.HardwarePlacements = placements
+		out[i].Overrides = cloneOverridesWithPlacements(out[i].Overrides, placements)
 	}
 	return out
 }
