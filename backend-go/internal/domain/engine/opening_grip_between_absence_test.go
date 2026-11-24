@@ -33,7 +33,7 @@ func gripBetweenAbsenceRecipe() *domain.GripSnapshotRecipe {
 			ProfileID: "profile.gola-c-8007", Code: "GOLA-C-8007", Name: "Gola C Cymisa 8007",
 			ProfileHeightMm: floatPtr60(73), ProfileDepthMm: floatPtr60(27.2),
 			FrontDiscountBetweenMm: intPtr60(38),
-			CompatiblePlacements: []string{"between"},
+			CompatiblePlacements:   []string{"between"},
 			BOMMembers: map[string]domain.OpeningBOMMember{
 				"profile": {HardwareID: "80000000-0000-4000-8000-000000000801"},
 			},
@@ -147,8 +147,9 @@ func TestProjectGripBetweenProfileOnStackedFrontsStillMounts(t *testing.T) {
 			betweenRuns++
 		}
 	}
-	// 3 rows → 2 between edges → 2 between runs.
-	if betweenRuns != 2 {
-		t.Fatalf("3 rows must mount 2 between runs, got %d (hardware %+v)", betweenRuns, layout.Hardware)
+	// #1706: 3 rows → 1 gripped edge (below the middle front) → 1 between
+	// run, and the top run still mounts (the top front opens with the L).
+	if betweenRuns != 1 {
+		t.Fatalf("3 rows must mount 1 between run, got %d (hardware %+v)", betweenRuns, layout.Hardware)
 	}
 }

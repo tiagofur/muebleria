@@ -418,6 +418,13 @@ golaProfile:                         # org-scoped row (opening_profiles today)
 
 ### 14.3. Grip style and project grip
 
+> *Between edges are superseded by §14.3.1 (#1706).* The rule "every
+> between edge of a stacked front column receives the between profile"
+> below described the amendment as written; the implemented engine
+> distributes the grips the workshop's way: pairs of fronts share one
+> between grip from the bottom up, and the top profile mounts only when
+> the topmost front is left without one.
+
 ```yaml
 gripStyle:                           # new org-scoped table (#1531)
   name: Gola negra Cymisa
@@ -441,6 +448,38 @@ The server resolves the inheritance. A furniture without an override uses the pr
 - the top edge receives the style's top profile, or the overhang for `bottom_overhang`;
 - every between edge of a stacked front column receives the between profile when the style defines one;
 - otherwise, between edges keep the normal gap.
+
+#### 14.3.1. Implemented: grip distribution (#1706)
+
+The between profile opens the **two** fronts it touches, so the engine
+distributes the grips instead of repeating them at every joint. One pure
+rule (`OpeningGripPlacementFor`), derived at resolve time from the stack's
+row count — styles, frozen snapshots and catalogs keep zero new fields.
+Counting fronts **from the bottom**:
+
+- the between grips go in **pairs**: below fronts 1–2, below fronts 3–4, …;
+- the top profile mounts **always with 1–3 fronts**; with 4 or more, only
+  when the top front is left without a between grip.
+
+| Fronts | Distribution |
+| --- | --- |
+| 1 | L top |
+| 2 | L top + C below them |
+| 3 | L top + C below fronts 1–2 |
+| 4 | C below 1–2 and 3–4, **no L** |
+| 5 | L top + C below 1–2 and 3–4 |
+| 6 | C below 1–2, 3–4 and 5–6, **no L** |
+
+Every consumer reads the same placement — the A3 pass (un-gripped edges
+keep the catalog gap), the notch/bevel passes (only gripped boundaries),
+the derived runs and strips (one per gripped edge), the despiece and the
+quote/release BOM (the C quantity is the gripped-edge count; without a
+top grip the L profile buys nothing). A stack that cannot be read fails
+closed; a furniture without front rows keeps the historical rule. The
+project grip report exposes the resolved distribution (`topGrip`,
+`betweenGripped`) for the grip card. Designs that are not released yet
+re-resolve with the new distribution; published releases and frozen
+quotes keep their numbers.
 
 ### 14.4. Front discount rule
 

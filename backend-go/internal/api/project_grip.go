@@ -55,6 +55,12 @@ type projectGripReportItemLayout struct {
 	BottomEdgeMm *float64                             `json:"bottomEdgeMm,omitempty"`
 	Rows         []engine.OpeningEdgeStackResolvedRow `json:"rows,omitempty"`
 	RemainderRow string                               `json:"remainderRowId,omitempty"`
+	// #1706: the stack's resolved distribution — whether the top profile
+	// mounts and which boundary carries the between profile (index r = the
+	// edge below row r, top → bottom). Additive: lets the grip card show
+	// the real distribution without recomputing it.
+	TopGrip        *bool  `json:"topGrip,omitempty"`
+	BetweenGripped []bool `json:"betweenGripped,omitempty"`
 }
 
 func gripStringPtr(value string) *string {
@@ -385,6 +391,11 @@ func (s *Server) projectGripReport(r *http.Request, projectID string, grip *stor
 			layout.BottomEdgeMm = &bottomEdge
 			layout.Rows = resolution.Rows
 			layout.RemainderRow = resolution.RemainderRow
+			placement := engine.OpeningGripPlacementFor(len(resolution.Rows))
+			layout.TopGrip = &placement.TopGrip
+			if len(placement.BetweenGripped) > 0 {
+				layout.BetweenGripped = placement.BetweenGripped
+			}
 		}
 		item.Layout = layout
 		report.Items = append(report.Items, item)

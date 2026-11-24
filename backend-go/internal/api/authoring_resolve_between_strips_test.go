@@ -232,8 +232,9 @@ func TestAuthoringResolveDesignOpeningBetweenStrips(t *testing.T) {
 			}{comp.ComponentInstanceID, comp.Transform.TranslationMm[2], comp.Role})
 		}
 	}
-	if len(strips) != 2 {
-		t.Fatalf("3 frentes → 2 tiras entre cajones, got %d (%+v)", len(strips), strips)
+	// #1706: the 3-row distribution grips ONE edge → ONE between strip.
+	if len(strips) != 1 {
+		t.Fatalf("3 frentes → 1 tira entre cajones (la junta con gola), got %d (%+v)", len(strips), strips)
 	}
 	for _, strip := range strips {
 		if strip.role != "FRENTE" {
@@ -336,8 +337,9 @@ func TestAuthoringResolveDesignOpeningBetweenProfileHardware(t *testing.T) {
 			runs = append(runs, hw.Transform.TranslationMm[2])
 		}
 	}
-	if len(runs) != 2 {
-		t.Fatalf("3 frentes → 2 corridas del C entre frentes, got %d", len(runs))
+	// #1706: the 3-row distribution grips ONE edge → ONE C run.
+	if len(runs) != 1 {
+		t.Fatalf("3 frentes → 1 corrida del C entre frentes, got %d", len(runs))
 	}
 	for _, runZ := range runs {
 		// r2: the run hangs below the upper ROW's bottom edge (#1300 the

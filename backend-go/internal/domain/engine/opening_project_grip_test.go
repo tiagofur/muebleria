@@ -30,7 +30,11 @@ func TestResolveProjectGripBOMBetweenRunsMultiplyPerEdge(t *testing.T) {
 		Ends:                   OpeningBOMDefaultEnds,
 		Top:                    gripBOMTestProfile("p-top", "top"),
 		Between:                gripBOMTestProfile("p-between", "between"),
-		BetweenEdgeCount:       2,
+		// #1706: a mounted top profile + two gripped edges (a 5-row stack).
+		Placement: OpeningGripPlacement{
+			TopGrip:        true,
+			BetweenGripped: []bool{false, true, false, true},
+		},
 	})
 	if resErr != nil {
 		t.Fatalf("resolve: %s (%s)", resErr.Code, resErr.Message)
@@ -74,10 +78,39 @@ func TestResolveProjectGripBOMFailsClosedWithoutBetweenProfile(t *testing.T) {
 		Ends:                   OpeningBOMDefaultEnds,
 		Top:                    gripBOMTestProfile("p-top", "top"),
 		Between:                nil,
-		BetweenEdgeCount:       2,
+		Placement: OpeningGripPlacement{
+			TopGrip:        true,
+			BetweenGripped: []bool{true, true},
+		},
 	})
 	if resErr == nil || resErr.Code != OpeningErrBOMInvalid {
-		t.Fatalf("a stack with between edges and no between profile must fail closed, got %v", resErr)
+		t.Fatalf("a stack with gripped edges and no between profile must fail closed, got %v", resErr)
+	}
+}
+
+func TestResolveProjectGripBOMNoTopGripOmitsTopLines(t *testing.T) {
+	// #1706: a 4-row distribution reaches the top front with the pairs —
+	// the top profile does not mount and its members never reach the BOM.
+	lines, resErr := ResolveProjectGripBOM(ProjectGripBOMInput{
+		CabinetInteriorWidthMm: 564,
+		Ends:                   OpeningBOMDefaultEnds,
+		Top:                    gripBOMTestProfile("p-top", "top"),
+		Between:                gripBOMTestProfile("p-between", "between"),
+		Placement:              OpeningGripPlacementFor(4),
+	})
+	if resErr != nil {
+		t.Fatalf("resolve: %s (%s)", resErr.Code, resErr.Message)
+	}
+	for _, line := range lines {
+		if line.Boundary == "top" {
+			t.Fatalf("no top line may exist without a top grip: %+v", line)
+		}
+		if line.Boundary == "between" && line.MemberKey == "profile" && line.Quantity != 1.128 {
+			t.Fatalf("two gripped edges must buy 2×0.564: %+v", line)
+		}
+	}
+	if len(lines) != 3 { // the between profile's 3 members only
+		t.Fatalf("lines = %d, want 3", len(lines))
 	}
 }
 
@@ -101,13 +134,14 @@ func TestOpeningFrontStackReportBetweenEdgesFromAStack(t *testing.T) {
 	if stack == nil || len(stack.Rows) != 3 {
 		t.Fatalf("3-drawer column must report 3 rows, got %+v", stack)
 	}
-	// The between edges the BOM consumes: rows − 1.
+	// #1706: the BOM consumes the stack's resolved distribution — a 3-row
+	// column grips ONE edge (below the middle front) and mounts the top.
 	lines, resErr := ResolveProjectGripBOM(ProjectGripBOMInput{
 		CabinetInteriorWidthMm: 564,
 		Ends:                   OpeningBOMDefaultEnds,
 		Top:                    gripBOMTestProfile("p-top", "top"),
 		Between:                gripBOMTestProfile("p-between", "between"),
-		BetweenEdgeCount:       len(stack.Rows) - 1,
+		Placement:              OpeningGripPlacementFor(len(stack.Rows)),
 	})
 	if resErr != nil {
 		t.Fatalf("resolve: %s", resErr.Code)
@@ -116,15 +150,15 @@ func TestOpeningFrontStackReportBetweenEdgesFromAStack(t *testing.T) {
 	for _, line := range lines {
 		if line.Boundary == "between" && line.MemberKey == "profile" {
 			betweenRuns++
-			if line.Quantity != 1.128 { // 2 edges × 0.564
-				t.Fatalf("between run = %v, want 1.128 (2 edges)", line.Quantity)
+			if line.Quantity != 0.564 { // 1 gripped edge × 0.564
+				t.Fatalf("between run = %v, want 0.564 (1 gripped edge)", line.Quantity)
 			}
 		}
 	}
 	if betweenRuns != 1 {
 		t.Fatalf("aggregated between run missing: %d", betweenRuns)
 	}
-	if len(lines) != 6 { // 3 members × 2 boundaries
+	if len(lines) != 6 { // 3 members × 2 boundaries (top mounted with 3 rows)
 		t.Fatalf("lines = %d, want 6", len(lines))
 	}
 }

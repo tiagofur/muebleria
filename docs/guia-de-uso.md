@@ -679,8 +679,20 @@ estilo (perfil, gola, jaladera) se define una vez y se aplica al proyecto.
   mueble muestra el **agarre efectivo y de dónde sale** (heredado del
   proyecto, excepción del mueble o valores congelados de la receta).
 
+**Reparto de las golas (#1706):** el sistema no pone una gola C en cada
+junta — una C abre los **dos** frentes que toca. Contando los frentes
+desde abajo, las C van de a pares (entre el 1º y el 2º, entre el 3º y el
+4º…) y la L va arriba siempre con 1, 2 o 3 frentes; con 4 o más, sólo si
+el frente superior queda sin C. Ejemplos: 3 cajones → L arriba + una C
+entre el del medio y el de abajo; 4 cajones → dos C (1º–2º y 3º–4º), sin
+L. La cantidad de perfil y soportes de la cotización sale de ese reparto:
+se compra menos perfil que antes y las juntas sin gola quedan con su
+hueco normal.
+
 **Cómo saber que quedó bien:** la ficha del mueble nombra el estilo y su
-procedencia; el despiece y la cotización traen el agarre elegido.
+procedencia; el despiece y la cotización traen el agarre elegido; en el
+modelo 3D cada gola abre el par de frentes que le corresponde y ninguna
+queda flotando en una junta que ya abre otra.
 
 ## 8d. SketchUp: llevar el diseño al modelo y publicar la biblioteca
 

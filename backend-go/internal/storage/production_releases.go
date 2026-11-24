@@ -501,7 +501,7 @@ func (s *PostgresStore) resolveReleaseOpenings(ctx context.Context, gripCtx *rel
 				depthMm = dims.DepthMm
 			}
 			interiorWidth := releaseOpeningInteriorWidth(item.FurnitureDefinitionID, widthMm, catalog)
-			betweenEdges, err := releaseGripBetweenEdges(catalog, item, recipe, widthMm, heightMm, depthMm)
+			placement, err := releaseGripPlacement(catalog, item, recipe, widthMm, heightMm, depthMm)
 			if err != nil {
 				return nil, err
 			}
@@ -510,7 +510,7 @@ func (s *PostgresStore) resolveReleaseOpenings(ctx context.Context, gripCtx *rel
 				Ends:                   engine.OpeningBOMDefaultEnds,
 				Top:                    frozenBOMProfile(recipe.TopProfile),
 				Between:                frozenBOMProfile(recipe.BetweenProfile),
-				BetweenEdgeCount:       betweenEdges,
+				Placement:              placement,
 			})
 			if bomErr != nil {
 				return nil, fmt.Errorf("el BOM de la apertura no puede resolverse (%s) para %s", bomErr.Code, item.FurnitureInstanceID)
@@ -541,12 +541,10 @@ func (s *PostgresStore) resolveReleaseOpenings(ctx context.Context, gripCtx *rel
 	return openings, nil
 }
 
-// releaseGripBetweenEdges counts the unit's between edges when the recipe
-// declares a between profile — the same stack the BOM-side derivation reads.
-func releaseGripBetweenEdges(catalog domain.Catalog, item domain.DesignRevisionItem, recipe *domain.GripSnapshotRecipe, widthMm, heightMm, depthMm int) (int, error) {
-	if recipe.BetweenProfile == nil {
-		return 0, nil
-	}
+// releaseGripPlacement resolves the unit's stack grip distribution (#1706) —
+// the same stack the BOM-side derivation reads: whether the top profile
+// mounts and which between edges carry the between profile.
+func releaseGripPlacement(catalog domain.Catalog, item domain.DesignRevisionItem, recipe *domain.GripSnapshotRecipe, widthMm, heightMm, depthMm int) (engine.OpeningGripPlacement, error) {
 	var module *domain.Module
 	for i := range catalog.Modules {
 		if catalog.Modules[i].ID == item.FurnitureDefinitionID {
@@ -555,22 +553,25 @@ func releaseGripBetweenEdges(catalog domain.Catalog, item domain.DesignRevisionI
 		}
 	}
 	if module == nil {
-		return 0, fmt.Errorf("la definición %s del mueble %s no existe en el catálogo congelado", item.FurnitureDefinitionID, item.FurnitureInstanceID)
+		return engine.OpeningGripPlacement{}, fmt.Errorf("la definición %s del mueble %s no existe en el catálogo congelado", item.FurnitureDefinitionID, item.FurnitureInstanceID)
 	}
 	grips, gripsErr := engine.ProjectGripEdgeGrips(recipe)
 	if gripsErr != nil {
-		return 0, fmt.Errorf("el agarre de %s no se puede resolver: %s", item.FurnitureInstanceID, gripsErr.Message)
+		return engine.OpeningGripPlacement{}, fmt.Errorf("el agarre de %s no se puede resolver: %s", item.FurnitureInstanceID, gripsErr.Message)
 	}
 	stack, stackErr := engine.OpeningFrontStackReport(*module, catalog, engine.LayoutDims{
 		WidthMm: widthMm, HeightMm: heightMm, DepthMm: depthMm,
 	}, item.MaterialChoices, grips)
 	if stackErr != nil {
-		return 0, fmt.Errorf("la pila de frentes de %s no se puede leer: %s", item.FurnitureInstanceID, stackErr.Error())
+		return engine.OpeningGripPlacement{}, fmt.Errorf("la pila de frentes de %s no se puede leer: %s", item.FurnitureInstanceID, stackErr.Error())
 	}
-	if stack == nil || len(stack.Rows) <= 1 {
-		return 0, nil
+	if stack == nil {
+		// #1706: no front rows — no stack to consult, so the distribution
+		// does not apply; the historical rule keeps the top profile's
+		// purchase (the §14.3.1 exemption, on the money surface too).
+		return engine.OpeningGripPlacement{TopGrip: true}, nil
 	}
-	return len(stack.Rows) - 1, nil
+	return engine.OpeningGripPlacementFor(len(stack.Rows)), nil
 }
 
 func releaseOpeningDims(item domain.DesignRevisionItem) (int, int, bool) {

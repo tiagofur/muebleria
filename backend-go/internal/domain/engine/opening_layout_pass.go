@@ -118,7 +118,10 @@ func appendOpeningBetweenProfileHardware(layout *FurnitureLayout, catalog domain
 		return
 	}
 	rows := componentFrontRows(layout.Components)
-	if len(rows) < 2 {
+	// #1706: one run per GRIPT edge of the resolved distribution — never one
+	// per boundary.
+	placement := OpeningGripPlacementFor(len(rows))
+	if placement.BetweenEdgeCount() == 0 {
 		return
 	}
 	// Carcass host (#1300): the first board that is NOT a stack front and
@@ -138,6 +141,9 @@ func appendOpeningBetweenProfileHardware(layout *FurnitureLayout, catalog domain
 		return
 	}
 	for k := 1; k < len(rows); k++ {
+		if !placement.BetweenGripped[k-1] {
+			continue
+		}
 		// Run k hangs below row k−1 (the upper row of the pair): its top
 		// edge = the upper row's bottom edge.
 		z := rows[k-1][0] - members.BetweenProfileHeightMm
@@ -443,6 +449,17 @@ func appendOpeningMemberLayoutHardware(layout *FurnitureLayout, catalog domain.C
 	face := "top"
 	if bottomBoundary {
 		face = "bottom"
+	}
+	// #1706: the stack's distribution decides whether the top profile mounts
+	// at all — with four or more fronts the between pairs reach the top
+	// front and the top run/soportes/tapas do not exist. A furniture without
+	// front rows keeps the historical rule (no stack to consult), and a
+	// bottom boundary (v1) keeps its own mounting.
+	if !bottomBoundary {
+		rows := componentFrontRows(layout.Components)
+		if len(rows) > 0 && !OpeningGripPlacementFor(len(rows)).TopGrip {
+			return
+		}
 	}
 	if members.ProfileHardwareID == "" {
 		return

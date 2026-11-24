@@ -101,7 +101,7 @@ func (s *PostgresStore) deriveDesignOpeningCommercial(ctx context.Context, proje
 			return nil, fmt.Errorf("%w: la apertura del diseño no puede resolverse sin dimensiones explícitas", domain.ErrInvalidRevisionSnapshot)
 		}
 		interiorWidth := openingQuoteInteriorWidth(unit, dims.WidthMm, catalog)
-		betweenEdges, err := s.designGripBetweenEdges(ctx, catalog, unit, recipe, dims)
+		placement, err := s.designGripPlacement(ctx, catalog, unit, recipe, dims)
 		if err != nil {
 			return nil, err
 		}
@@ -110,14 +110,15 @@ func (s *PostgresStore) deriveDesignOpeningCommercial(ctx context.Context, proje
 			Ends:                   engine.OpeningBOMDefaultEnds,
 			Top:                    frozenBOMProfile(recipe.TopProfile),
 			Between:                frozenBOMProfile(recipe.BetweenProfile),
-			BetweenEdgeCount:       betweenEdges,
+			Placement:              placement,
 		})
 		if bomErr != nil {
 			return nil, fmt.Errorf("%w: el BOM de apertura del diseño no puede resolverse (%s)", domain.ErrInvalidRevisionSnapshot, bomErr.Code)
 		}
 		if len(lines) == 0 {
-			// The frozen profiles declare no hardware members: nothing to
-			// price, no section to freeze — the truthful emptiness.
+			// The frozen profiles declare no hardware members — or the
+			// distribution mounts nothing (a stack the pairs cover): nothing
+			// to price, no section to freeze — the truthful emptiness.
 			continue
 		}
 		if unit.QuoteLineID == "" {
@@ -133,7 +134,7 @@ func (s *PostgresStore) deriveDesignOpeningCommercial(ctx context.Context, proje
 				LineID: line.LineID, MemberKey: line.MemberKey, HardwareID: line.HardwareID,
 				ProfileID: line.ProfileID, ProfileCode: frozenProfileCode(recipe, line.ProfileID),
 				ProfileVersion: line.ProfileVersion,
-				Boundary: line.Boundary, Rule: line.Rule, Quantity: line.Quantity,
+				Boundary:       line.Boundary, Rule: line.Rule, Quantity: line.Quantity,
 				Unit: line.Unit, CutLengthMm: line.CutLengthMm,
 			})
 			demand = append(demand, engine.HardwareProfileDemandLine{
@@ -154,14 +155,11 @@ func (s *PostgresStore) deriveDesignOpeningCommercial(ctx context.Context, proje
 	return commercial, nil
 }
 
-// designGripBetweenEdges counts the between edges of a unit's front stack —
-// the number of between-profile runs the BOM adds. Only a recipe that
-// declares a between profile needs the stack; a unit whose stack cannot be
-// read fails closed (never a guessed count).
-func (s *PostgresStore) designGripBetweenEdges(ctx context.Context, catalog domain.Catalog, unit designOpeningUnit, recipe *domain.GripSnapshotRecipe, dims *domain.ItemCustomDims) (int, error) {
-	if recipe.BetweenProfile == nil {
-		return 0, nil
-	}
+// designGripPlacement resolves the unit's stack grip distribution (#1706) —
+// whether the top profile mounts and which between edges carry the between
+// profile, the exact input the BOM's run count needs. A unit whose stack
+// cannot be read fails closed (never a guessed distribution).
+func (s *PostgresStore) designGripPlacement(ctx context.Context, catalog domain.Catalog, unit designOpeningUnit, recipe *domain.GripSnapshotRecipe, dims *domain.ItemCustomDims) (engine.OpeningGripPlacement, error) {
 	var module *domain.Module
 	for i := range catalog.Modules {
 		if catalog.Modules[i].ID == unit.FurnitureDefinitionID {
@@ -170,25 +168,25 @@ func (s *PostgresStore) designGripBetweenEdges(ctx context.Context, catalog doma
 		}
 	}
 	if module == nil {
-		return 0, fmt.Errorf("%w: la definición %s del mueble no existe en el catálogo", domain.ErrInvalidRevisionSnapshot, unit.FurnitureDefinitionID)
+		return engine.OpeningGripPlacement{}, fmt.Errorf("%w: la definición %s del mueble no existe en el catálogo", domain.ErrInvalidRevisionSnapshot, unit.FurnitureDefinitionID)
 	}
 	grips, gripsErr := engine.ProjectGripEdgeGrips(recipe)
 	if gripsErr != nil {
-		return 0, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, gripsErr.Message)
+		return engine.OpeningGripPlacement{}, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, gripsErr.Message)
 	}
 	stack, stackErr := engine.OpeningFrontStackReport(*module, catalog, engine.LayoutDims{
 		WidthMm: dims.WidthMm, HeightMm: dims.HeightMm, DepthMm: dims.DepthMm,
 	}, unit.MaterialChoices, grips)
 	if stackErr != nil {
-		return 0, fmt.Errorf("%w: la pila de frentes de %s no se puede leer: %s", domain.ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, stackErr.Error())
+		return engine.OpeningGripPlacement{}, fmt.Errorf("%w: la pila de frentes de %s no se puede leer: %s", domain.ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, stackErr.Error())
 	}
 	if stack == nil {
-		return 0, nil
+		// #1706: no front rows — no stack to consult, so the distribution
+		// does not apply; the historical rule keeps the top profile's
+		// purchase (the §14.3.1 exemption, on the money surface too).
+		return engine.OpeningGripPlacement{TopGrip: true}, nil
 	}
-	if len(stack.Rows) <= 1 {
-		return 0, nil
-	}
-	return len(stack.Rows) - 1, nil
+	return engine.OpeningGripPlacementFor(len(stack.Rows)), nil
 }
 
 // frozenBOMProfile adapts a frozen profile onto the engine's BOM slice.

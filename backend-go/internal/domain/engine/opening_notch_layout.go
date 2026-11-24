@@ -53,24 +53,42 @@ func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeni
 				"la muesca del perfil %s con offset %d mm no tiene consumidor de geometría en v1 (sólo la esquina)",
 				modifier.ProfileID, modifier.NotchOffsetMm)
 		}
-		// #1529: a between notch hangs from the bottom edge of the front
-		// above each between edge of the stack (the strip runs behind the
-		// gap, as it does under the top at a top boundary).
+		// #1529 + #1706: a between notch hangs from the bottom edge of the
+		// front above each GRIPT between edge of the stack (the resolved
+		// distribution, not every boundary), and a top notch only exists
+		// when the top profile mounts. The strip runs behind the gap, as it
+		// does under the top at a top boundary.
 		var hangFromZ []float64
 		if kind == "between" {
 			rows, err := openingFrontRows(boards)
 			if err != nil {
 				return err
 			}
-			for r := 0; r+1 < len(rows); r++ {
-				hangFromZ = append(hangFromZ, rows[r].bottomMm)
+			placement := OpeningGripPlacementFor(len(rows))
+			for r, gripped := range placement.BetweenGripped {
+				if gripped {
+					hangFromZ = append(hangFromZ, rows[r].bottomMm)
+				}
 			}
 			if len(hangFromZ) == 0 {
-				// #1685: a furniture without stacked fronts has no between
-				// edges — the boundary this modifier addresses does not
-				// exist here. Truthful absence, exactly like the between
+				// #1685/#1706: a furniture without stacked fronts — or whose
+				// distribution grips no edge — has no boundary this modifier
+				// addresses. Truthful absence, exactly like the between
 				// runs/strips/BOM treat zero edges: nothing to cut, the
 				// resolve keeps the boundaries that do exist.
+				continue
+			}
+		}
+		if kind == "top" {
+			rows, err := openingFrontRows(boards)
+			if err != nil {
+				return err
+			}
+			if len(rows) > 0 && !OpeningGripPlacementFor(len(rows)).TopGrip {
+				// #1706: the distribution leaves the top front to a between
+				// grip — no top profile mounts, so its notch does not exist.
+				// A furniture without front rows keeps the historical rule
+				// (no stack to consult).
 				continue
 			}
 		}
