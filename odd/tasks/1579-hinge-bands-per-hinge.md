@@ -236,10 +236,24 @@ HardwarePlacementsEditor, pintado del aviso), `docs/guia-de-uso.md`,
   Todos corregidos; trampas fijadas en memoria
   [[granete-e2e-spec-api-traps]].
 
+- 2026-11-24 PR #1705 publicado (base main, HEAD `cddbb5ac`, Refs #1579 +
+  Delivery: partial). Ronda 1 del juicio (A+B sobre 0a872c83): CRITICAL
+  confirmado por ambos (dedupe de bulk muerto por clave del mapa covered) +
+  WARNINGs de identidad del drilling, cantidad y rol. Ronda de corrección
+  (`cddbb5ac`): dedupe operativo, fixed-wins con override de instancia, rol
+  policy-aware en lookup, componentId para la rung de excepción en
+  drilling, UI del patrón restringida a recetas. Re-juicio final (A+B sobre
+  0a872c83..cddbb5ac): A 0 CRITICAL + 2W (rol hardcodeado en lookup →
+  policy-aware; fixed-wins sin pierna de override → corregidos), B 0
+  CRITICAL + 3W (mismos dos + covered-union entre instancias → diferido,
+  divergencia sólo con 2+ instancias de overrides distintos + bulk).
+- Hallazgo fileado **#1704**: ítems con customDims cotizan con la envolvente
+  sembrada (evidencia del spec: 2100 custom congeló 2/$24 vía instancia;
+  módulo dedicado 2100 cotiza 4/$48) — fuera de #1579.
+
 ## Next step
 
-Verificación final (gofmt/drift/preflight clean), ODD al día, push, PR
-encadenado con Refs #1579 + Delivery: partial (resta la migración de
-catálogo post-merge), judgment-day sobre el HEAD congelado. Después del
-merge del owner: migración de catálogo AUTORIZADA (tablas en 3 bisagras + 5
-recetas AGR-PUE-*) con backup y readback, y vivo del owner.
+Veredicto terminal cuando el CI del PR cierre (16 checks pesados en curso);
+push de los commits finales; PR_READY tras CI verde. Después del merge del
+owner: migración de catálogo AUTORIZADA (tablas en 3 bisagras + 5 recetas
+AGR-PUE-*) con backup y readback, y vivo del owner.
