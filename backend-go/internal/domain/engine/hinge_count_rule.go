@@ -230,6 +230,11 @@ func expandHingeCountRuleComponentsForUnit(agr domain.Agregado, inst domain.Modu
 // the pattern) silently stripped the count rule from the live catalog and
 // every later resolution in the same process bought jaladera-only. The
 // pattern lives in the recipe; expansions are per-resolution views.
+//
+// The clone still SHARES Edges, RotateX/Y/Z and the rule pointers with the
+// recipe — fine today because the engine only READS them per resolution
+// (#1710 review): any future per-resolution write to those fields needs the
+// same clone treatment, or it corrupts the shared catalog again.
 func cloneOverridesWithPlacements(src *domain.ComponentInstanceOverrides, placements []domain.HardwarePlacement) *domain.ComponentInstanceOverrides {
 	if src == nil {
 		return nil
