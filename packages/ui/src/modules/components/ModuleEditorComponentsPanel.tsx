@@ -174,6 +174,7 @@ export function ModuleEditorComponentsPanel({
                   testIdSuffix={String(idx)}
                   catalogHardware={catalogHardware}
                   optionGroups={optionGroups}
+                  isDoor={comp.placementOverride === 'puerta'}
                   onChange={(next) => {
                     setDraft((prev) => ({
                       ...prev,

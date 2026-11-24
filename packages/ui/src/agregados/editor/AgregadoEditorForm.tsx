@@ -418,6 +418,7 @@ export function AgregadoEditorForm({
                         <InstanceOverridesEditor
                           overrides={comp.overrides}
                           testIdSuffix={String(idx)}
+                          isDoor={(comp.placementOverride ?? info?.placement) === 'puerta'}
                           onChange={(nextOverrides) =>
                             updateComponentInstance(idx, { overrides: nextOverrides })
                           }
@@ -714,6 +715,7 @@ export function AgregadoEditorForm({
                           optionGroups={optionGroups}
                           containerLabel={info ? info.code : comp.componentId}
                           testIdSuffix={`hw-pc-${idx}`}
+                          isDoor={(comp.placementOverride ?? info?.placement) === 'puerta'}
                           onChange={(next) => {
                             const current = comp.overrides ?? {};
                             if (!next || next.length === 0) {
