@@ -450,23 +450,6 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
           active: true,
         },
       ],
-      structures: [
-        ...(catalog.structures ?? []).filter((s) => s.id !== PAT_STRUCT),
-        {
-          id: PAT_STRUCT,
-          code: 'HWG-EST-PATRON',
-          name: 'Cuerpo patrón',
-          components: [],
-          agregados: [
-            {
-              id: 'inst-patron',
-              agregadoId: PAT_AGR,
-              quantity: 1,
-            },
-          ],
-          active: true,
-        } as (typeof catalog.structures)[number],
-      ],
       agregados: [
         ...(catalog.agregados ?? []).filter((a) => a.id !== PAT_AGR),
         {
@@ -495,7 +478,21 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
         } as unknown as (typeof catalog.agregados)[number],
       ],
       structures: [
-        ...(catalog.structures ?? []).filter((s) => s.id !== PAT_STRUCT_2100),
+        ...(catalog.structures ?? []).filter((s) => s.id !== PAT_STRUCT && s.id !== PAT_STRUCT_2100),
+        {
+          id: PAT_STRUCT,
+          code: 'HWG-EST-PATRON',
+          name: 'Cuerpo patrón',
+          components: [],
+          agregados: [
+            {
+              id: 'inst-patron',
+              agregadoId: PAT_AGR,
+              quantity: 1,
+            },
+          ],
+          active: true,
+        } as (typeof catalog.structures)[number],
         {
           id: PAT_STRUCT_2100,
           code: 'HWG-EST-PATRON-2100',
