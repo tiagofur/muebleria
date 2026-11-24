@@ -566,7 +566,10 @@ func releaseGripPlacement(catalog domain.Catalog, item domain.DesignRevisionItem
 		return engine.OpeningGripPlacement{}, fmt.Errorf("la pila de frentes de %s no se puede leer: %s", item.FurnitureInstanceID, stackErr.Error())
 	}
 	if stack == nil {
-		return engine.OpeningGripPlacement{}, nil
+		// #1706: no front rows — no stack to consult, so the distribution
+		// does not apply; the historical rule keeps the top profile's
+		// purchase (the §14.3.1 exemption, on the money surface too).
+		return engine.OpeningGripPlacement{TopGrip: true}, nil
 	}
 	return engine.OpeningGripPlacementFor(len(stack.Rows)), nil
 }

@@ -116,8 +116,9 @@ func (s *PostgresStore) deriveDesignOpeningCommercial(ctx context.Context, proje
 			return nil, fmt.Errorf("%w: el BOM de apertura del diseño no puede resolverse (%s)", domain.ErrInvalidRevisionSnapshot, bomErr.Code)
 		}
 		if len(lines) == 0 {
-			// The frozen profiles declare no hardware members: nothing to
-			// price, no section to freeze — the truthful emptiness.
+			// The frozen profiles declare no hardware members — or the
+			// distribution mounts nothing (a stack the pairs cover): nothing
+			// to price, no section to freeze — the truthful emptiness.
 			continue
 		}
 		if unit.QuoteLineID == "" {
@@ -180,7 +181,10 @@ func (s *PostgresStore) designGripPlacement(ctx context.Context, catalog domain.
 		return engine.OpeningGripPlacement{}, fmt.Errorf("%w: la pila de frentes de %s no se puede leer: %s", domain.ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, stackErr.Error())
 	}
 	if stack == nil {
-		return engine.OpeningGripPlacement{}, nil
+		// #1706: no front rows — no stack to consult, so the distribution
+		// does not apply; the historical rule keeps the top profile's
+		// purchase (the §14.3.1 exemption, on the money surface too).
+		return engine.OpeningGripPlacement{TopGrip: true}, nil
 	}
 	return engine.OpeningGripPlacementFor(len(stack.Rows)), nil
 }
@@ -213,7 +217,7 @@ func frozenProfileCode(recipe *domain.GripSnapshotRecipe, profileID string) stri
 	return ""
 }
 
-// catalogModuleType maps a definition id onto its furniture type (” =
+// catalogModuleType maps a definition id onto its furniture type ('' =
 // inferior) — the recipe lookup key.
 func catalogModuleType(catalog domain.Catalog, definitionID string) string {
 	for i := range catalog.Modules {
