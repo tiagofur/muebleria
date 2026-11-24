@@ -196,7 +196,6 @@ export function StructureEditorComponentsPanel({
                       testIdSuffix={String(idx)}
                       catalogHardware={catalogInput?.hardware}
                       optionGroups={catalogInput?.optionGroups}
-                      isDoor={comp.placementOverride === 'puerta'}
                       onChange={(next) => {
                         setDraft((prev) => ({
                           ...prev,

@@ -236,3 +236,41 @@ func TestHingeCountRuleLayoutExpandsPositions(t *testing.T) {
 		t.Fatalf("layout draws %d pattern hinges, want 5", positions)
 	}
 }
+func TestHingeCountRuleKillsRecipeBulkOfSameHardware(t *testing.T) {
+	// The owner's migrated shape (AGR-PUE-2P): the recipe carries a bulk
+	// hinge line AND the pattern. The exclusive hingeband-agr line buys the
+	// pattern; the recipe bulk of the same hardware must die (CRITICAL from
+	// the judgment round: the covered map was keyed wrong and both quoted).
+	mod, catalog := countRuleDoorCatalog(2100, domain.HingeDemandRole)
+	agr := &catalog.Agregados[0]
+	agr.HardwareLines = []domain.HardwareLine{{
+		ID: "agr-bulk-bisagra", Quantity: 3, OptionRole: domain.HingeDemandRole,
+	}}
+
+	choices := map[string]string{
+		"INTERIOR":             "mat-1",
+		"FRENTES":              "mat-1",
+		domain.HingeDemandRole: "hw-standard",
+	}
+	bom, err := ResolveBom(mod, choices, catalog)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	standard := 0.0
+	sawBulk := false
+	for _, line := range bom.HardwareLines {
+		if line.HardwareID != "hw-standard" {
+			continue
+		}
+		standard += line.Quantity
+		if line.ID == "agr-bulk-bisagra" {
+			sawBulk = true
+		}
+	}
+	if sawBulk {
+		t.Fatalf("the recipe bulk of the pattern hardware must die: %+v", bom.HardwareLines)
+	}
+	if standard != 5 {
+		t.Fatalf("pattern hardware total = %v, want 5 (2097 door under the standard table)", standard)
+	}
+}

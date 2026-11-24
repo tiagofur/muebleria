@@ -115,7 +115,8 @@ export interface AgregadoPlacementLookup {
    */
   readonly countRule?: {
     readonly rule: NonNullable<HardwarePlacement['countRule']>;
-    readonly optionRole?: string;
+    /** Identidad CONCRETA del patrón (hardwareId → override → elección). */
+    readonly hardwareId: string;
   };
   /**
    * Set ONLY for an `agr-*` part id that could not resolve to its host
@@ -188,11 +189,21 @@ export function agregadoManualPlacementsForPart(
         }
         const placements = component.overrides?.hardwarePlacements ?? [];
         const pattern = placements.find((p) => p.countRule);
+        if (!pattern?.countRule) {
+          return { placements };
+        }
+        // #1579 PR2 (juicio): la identidad del patrón se resuelve con la
+        // MISMA cadena que la demanda — hardwareId → override de instancia →
+        // elección efectiva — nunca con el rol de banda del ítem.
+        const patternRole = pattern.optionRole?.trim() || 'BISAGRA';
+        const patternHardwareId =
+          pattern.hardwareId?.trim() ||
+          inst.optionOverrides?.[patternRole]?.trim() ||
+          optionChoices?.[patternRole]?.trim() ||
+          '';
         return {
           placements,
-          ...(pattern?.countRule
-            ? { countRule: { rule: pattern.countRule, optionRole: pattern.optionRole } }
-            : {}),
+          countRule: { rule: pattern.countRule, hardwareId: patternHardwareId },
         };
       }
     }
@@ -238,12 +249,12 @@ function chosenBandHinge(
  * rol, o posiciones fijas del mismo herraje que ya ganan), tampoco se taladra.
  * Las posiciones fijas del autor pasan intactas.
  */
-function expandAgregadoCountRulePlacements(
+export function expandAgregadoCountRulePlacements(
   placements: readonly HardwarePlacement[],
   params: {
     readonly countRule?: {
       readonly rule: NonNullable<HardwarePlacement['countRule']>;
-      readonly optionRole?: string;
+      readonly hardwareId: string;
     };
     readonly catalog: Catalog;
     readonly choices: OptionChoices | undefined;
@@ -254,8 +265,14 @@ function expandAgregadoCountRulePlacements(
 ): readonly HardwarePlacement[] {
   const pattern = params.countRule;
   if (!pattern) return placements;
-  const hinge = chosenBandHinge(params.catalog, params.choices);
-  if (!hinge) return placements.filter((p) => !p.countRule); // sin elección → sin patrón (ni demanda)
+  // Perforado = comprado: el patrón gobierna su herraje con SU identidad
+  // (hardwareId → override de instancia → elección), resuelta en el lookup.
+  const hinge = pattern.hardwareId
+    ? params.catalog.hardware.find((hw) => hw.id === pattern.hardwareId)
+    : undefined;
+  if (!hinge || !hinge.active) {
+    return placements.filter((p) => !p.countRule); // sin identidad → sin patrón (ni demanda)
+  }
   const policy = hingePolicyForDoor(
     params.catalog.constructionPolicy,
     params.partComponentId,
@@ -266,7 +283,6 @@ function expandAgregadoCountRulePlacements(
     params.partWidthMm,
     policy,
   );
-  const role = pattern.optionRole?.trim() || hingeDemandRole(policy);
   const fixedSameHardware = placements.some((p) => {
     if (p.countRule) return false;
     const resolved =

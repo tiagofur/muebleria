@@ -5,6 +5,7 @@ import {
   expandHingeCountRulePositions,
   resolveAgregadoInstance,
 } from './agregados';
+import { expandAgregadoCountRulePlacements } from './projectDrilling';
 import type {
   Agregado,
   HardwarePlacement,
@@ -337,5 +338,99 @@ describe('resolveBom — puerta-agregado con countRule (extremo a extremo)', () 
     const lines = hingeLines(bom.hardwareLines);
     // La banda de módulo ve la puerta (colector por placement 'puerta') → ×5.
     expect(lines).toEqual(['hingeband-hw-standard×5']);
+  });
+});
+
+
+describe('expandAgregadoCountRulePlacements — perforado = comprado (juicio PR2)', () => {
+  const REINFORCED = {
+    bands: [
+      { upToHeightMm: 900, hinges: 2 },
+      { upToHeightMm: 1200, hinges: 3 },
+      { upToHeightMm: 2000, hinges: 5 },
+      { upToHeightMm: 2400, hinges: 5 },
+    ],
+    widthSurgeOverMm: 600,
+  };
+  const STANDARD = {
+    bands: [
+      { upToHeightMm: 900, hinges: 2 },
+      { upToHeightMm: 1600, hinges: 3 },
+      { upToHeightMm: 2000, hinges: 4 },
+      { upToHeightMm: 2400, hinges: 5 },
+    ],
+    widthSurgeOverMm: 650,
+  };
+  const catalog = {
+    hardware: [
+      { id: 'hw-standard', code: 'BIS-STD', name: 'std', unit: 'piece', costPerUnit: 40, active: true },
+      { id: 'hw-reinforced', code: 'BIS-REF', name: 'ref', unit: 'piece', costPerUnit: 45, active: true, hingeDemand: REINFORCED },
+    ],
+    constructionPolicy: undefined,
+  } as unknown as Catalog;
+  const pattern = {
+    rule: { kind: 'hingeDemand' as const, endOffsetBottomMm: 90, endOffsetTopMm: 90 },
+    hardwareId: 'hw-reinforced',
+  };
+  const placements = [
+    {
+      optionRole: 'BISAGRA',
+      anchorFace: 'back' as const,
+      countRule: pattern.rule,
+      relativePosition: { xMm: 20.5, yMm: 90 },
+    },
+    {
+      optionRole: 'JALADERA',
+      anchorFace: 'front' as const,
+      relativePosition: { xMm: 0, yMm: 50 },
+    },
+  ];
+
+  it('el patrón con herraje concreto perfora con SU tabla aunque el ítem elija otra', () => {
+    // Puerta 1497: reforzada → 5; estándar → 3. El patrón declara concreto
+    // hw-reinforced: perfora 5 posiciones con la identidad del patrón.
+    const out = expandAgregadoCountRulePlacements(placements, {
+      countRule: pattern,
+      catalog,
+      choices: { BISAGRA: 'hw-standard' },
+      partLengthMm: 1497,
+      partWidthMm: 594,
+      partComponentId: 'comp-door',
+    });
+    const hinges = out.filter((p) => p.optionRole === 'BISAGRA');
+    expect(hinges).toHaveLength(5);
+    expect(hinges[0]!.relativePosition.yMm).toBe(90);
+    expect(hinges[4]!.relativePosition.yMm).toBe(1407);
+    // La jaladera fija pasa intacta.
+    expect(out.filter((p) => p.optionRole === 'JALADERA')).toHaveLength(1);
+  });
+
+  it('sin identidad el patrón no taladra (perforado = comprado)', () => {
+    const out = expandAgregadoCountRulePlacements(
+      placements.filter((p) => p.optionRole === 'BISAGRA'),
+      {
+        countRule: pattern,
+        catalog: { ...catalog, hardware: catalog.hardware.filter((h) => h.id !== 'hw-reinforced') },
+        choices: {},
+        partLengthMm: 1497,
+        partWidthMm: 594,
+        partComponentId: 'comp-door',
+      },
+    );
+    expect(out).toEqual([]);
+  });
+
+  it('posiciones fijas del mismo herraje ganan: el patrón no taladra', () => {
+    const fixed = { hardwareId: 'hw-reinforced', anchorFace: 'back' as const, relativePosition: { xMm: 20.5, yMm: 90 } };
+    const out = expandAgregadoCountRulePlacements([fixed, ...placements], {
+      countRule: pattern,
+      catalog,
+      choices: {},
+      partLengthMm: 1497,
+      partWidthMm: 594,
+      partComponentId: 'comp-door',
+    });
+    // La fija queda + la jaladera fija (otro herraje); el patrón no taladra.
+    expect(out).toEqual([fixed, placements[1]]);
   });
 });

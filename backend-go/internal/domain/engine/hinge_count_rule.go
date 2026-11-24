@@ -129,13 +129,13 @@ func hingeCountRuleDoorDims(catalog domain.Catalog, comp *domain.ComponentInstan
 // hingeCountRuleResolvedHardware resolves the pattern's hardware identity:
 // concrete id → instance option override → effective option choices. Empty
 // when the role has no choice anywhere (the quote gate owns that failure).
-func hingeCountRuleResolvedHardware(pattern *domain.HardwarePlacement, inst domain.ModuleAgregadoInstance, optionChoices map[string]string) string {
+func hingeCountRuleResolvedHardware(pattern *domain.HardwarePlacement, inst domain.ModuleAgregadoInstance, optionChoices map[string]string, preHingePolicy *domain.HingeDemandPolicy) string {
 	if id := strings.TrimSpace(pattern.HardwareID); id != "" {
 		return id
 	}
 	role := strings.TrimSpace(pattern.OptionRole)
 	if role == "" {
-		role = domain.HingeDemandRole
+		role = domain.HingeDemandEffectiveRole(preHingePolicy)
 	}
 	if id := strings.TrimSpace(inst.OptionOverrides[role]); id != "" {
 		return id
@@ -146,7 +146,7 @@ func hingeCountRuleResolvedHardware(pattern *domain.HardwarePlacement, inst doma
 // hingeCountRuleFixedSameHardware reports whether the recipe carries a FIXED
 // placement (no count rule) of the same resolved hardware — authored intent
 // wins: the pattern stays out of demand and drawing.
-func hingeCountRuleFixedSameHardware(agr domain.Agregado, inst domain.ModuleAgregadoInstance, optionChoices map[string]string, hardwareID string) bool {
+func hingeCountRuleFixedSameHardware(catalog domain.Catalog, agr domain.Agregado, inst domain.ModuleAgregadoInstance, optionChoices map[string]string, hardwareID string) bool {
 	for _, comp := range agr.Components {
 		if comp.Overrides == nil {
 			continue
@@ -155,7 +155,7 @@ func hingeCountRuleFixedSameHardware(agr domain.Agregado, inst domain.ModuleAgre
 			if p.CountRule != nil {
 				continue
 			}
-			resolved := hingeCountRuleResolvedHardware(&p, inst, optionChoices)
+			resolved := hingeCountRuleResolvedHardware(&p, inst, optionChoices, catalog.ConstructionPolicy.HingeDemandForComponent(comp.ComponentID))
 			if resolved != "" && resolved == hardwareID {
 				return true
 			}
@@ -175,11 +175,12 @@ func expandHingeCountRuleComponentsForUnit(agr domain.Agregado, inst domain.Modu
 		return agr.Components
 	}
 	doorHeight, doorWidth := hingeCountRuleDoorDims(catalog, doorComp, unit)
-	hardwareID := hingeCountRuleResolvedHardware(pattern, inst, optionChoices)
+	preHingePolicy := catalog.ConstructionPolicy.HingeDemandForComponent(doorComp.ComponentID)
+	hardwareID := hingeCountRuleResolvedHardware(pattern, inst, optionChoices, preHingePolicy)
 	if hardwareID == "" {
 		return dropHingeCountRulePlacements(agr.Components)
 	}
-	if hingeCountRuleFixedSameHardware(agr, inst, optionChoices, hardwareID) {
+	if hingeCountRuleFixedSameHardware(catalog, agr, inst, optionChoices, hardwareID) {
 		return dropHingeCountRulePlacements(agr.Components)
 	}
 	hinge, hasHinge := findHardwareByID(catalog, hardwareID)
@@ -386,11 +387,12 @@ func hingeCountRuleDemandForInstance(inst domain.ModuleAgregadoInstance, catalog
 	if doorComp == nil || pattern == nil {
 		return nil
 	}
-	hardwareID := hingeCountRuleResolvedHardware(pattern, inst, optionChoices)
+	preHingePolicy := catalog.ConstructionPolicy.HingeDemandForComponent(doorComp.ComponentID)
+	hardwareID := hingeCountRuleResolvedHardware(pattern, inst, optionChoices, preHingePolicy)
 	if hardwareID == "" {
 		return nil
 	}
-	if hingeCountRuleFixedSameHardware(agr, inst, optionChoices, hardwareID) {
+	if hingeCountRuleFixedSameHardware(catalog, agr, inst, optionChoices, hardwareID) {
 		return nil
 	}
 	doorHeight, doorWidth := hingeCountRuleDoorDims(catalog, doorComp, unit)
@@ -404,18 +406,20 @@ func hingeCountRuleDemandForInstance(inst domain.ModuleAgregadoInstance, catalog
 	if count.Hinges <= 0 {
 		return nil
 	}
-	if covered[hardwareID] == nil {
-		covered[hardwareID] = map[string]bool{}
+	if covered[effectiveID] == nil {
+		covered[effectiveID] = map[string]bool{}
 	}
-	covered[hardwareID][hardwareID] = true
+	covered[effectiveID][hardwareID] = true
 	instanceKey := strings.TrimSpace(inst.ID)
 	if instanceKey == "" {
 		instanceKey = effectiveID
 	}
 	role := domain.HingeDemandEffectiveRole(policy)
 	line := domain.ResolvedHardwareLine{
-		ID:                  fmt.Sprintf("%sagr-%s-u%d-%s", domain.HingeDemandLinePrefix, instanceKey, unitIndex, hardwareID),
-		Quantity:            float64(count.Hinges),
+		ID: fmt.Sprintf("%sagr-%s-u%d-%s", domain.HingeDemandLinePrefix, instanceKey, unitIndex, hardwareID),
+		// TS parity (agregados.ts): la cantidad de la puerta en la receta
+		// multiplica la demanda del patrón.
+		Quantity:            float64(count.Hinges * max(doorComp.Quantity, 1)),
 		DescriptionOverride: domain.HingeDemandLineDescription,
 		OptionRole:          role,
 		HardwareID:          hardwareID,
