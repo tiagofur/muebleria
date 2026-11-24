@@ -299,26 +299,15 @@ func resolveBomCommon(
 	// depth as the width, the FRENTE material role (color de puerta) — the
 	// exact board the layout places in the gola band. No depth reduction
 	// applies to them (the annotation keys on the module's own parts).
+	//
+	// #1706: WHICH bands exist is the stack's resolved distribution — the
+	// top band only with a mounted top profile, the between bands one per
+	// GRIPT edge — the SAME placement the layout reads, so the cut list and
+	// the model cannot drift. Fail-closed on an unreadable stack: the layout
+	// already placed the boards, an unreadable distribution would drift.
 	var stripParts []domain.BoardPart
 	if openingMembers != nil {
-		// Top band strip (#1327).
-		for _, strip := range openingMembers.ComponentMembers {
-			stripParts = append(stripParts, domain.BoardPart{
-				ID:                 "opening-strip-" + strip.Key,
-				Description:        "Tira " + strip.Key,
-				Quantity:           1,
-				LengthMm:           float64(widthMm),
-				WidthMm:            int(math.Round(strip.DepthMm)),
-				OptionRole:         "FRENTE",
-				Placement:          string(domain.PlacementSuperior),
-				CatalogComponentID: strip.ComponentID,
-			})
-		}
-		// #1536 r2: the BETWEEN strips join the cut list too — one board per
-		// between edge of the stack (rows − 1), the SAME count the layout
-		// places, read from the same stack report the release lane uses
-		// (ONE projection). Fail-closed on an unreadable stack: the layout
-		// already placed the boards, an unreadable count would drift.
+		placement, placementKnown := OpeningGripPlacement{}, false
 		if len(openingFronts) > 0 && openingFronts[0].EdgeGrips != nil &&
 			strings.TrimSpace(module.StructureID) != "" && moduleDims.H > 0 {
 			stack, stackErr := OpeningFrontStackReport(module, catalog, LayoutDims{
@@ -326,24 +315,48 @@ func resolveBomCommon(
 			}, optionChoices, *openingFronts[0].EdgeGrips)
 			if stackErr != nil {
 				return domain.ResolvedBom{}, fmt.Errorf(
-					"la pila de frentes del mueble %s no se puede leer para las tiras entre frentes: %s",
+					"la pila de frentes del mueble %s no se puede leer para las tiras de la apertura: %s",
 					module.Code, stackErr.Error())
 			}
-			if stack != nil && len(stack.Rows) > 1 {
-				for _, strip := range openingMembers.BetweenComponentMembers {
-					for k := 1; k < len(stack.Rows); k++ {
-						stripParts = append(stripParts, domain.BoardPart{
-							ID:                 "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k),
-							Description:        "Tira entre frentes " + strip.Key + " (" + strconv.Itoa(k) + ")",
-							Quantity:           1,
-							LengthMm:           float64(widthMm),
-							WidthMm:            int(math.Round(strip.DepthMm)),
-							OptionRole:         "FRENTE",
-							Placement:          string(domain.PlacementSuperior),
-							CatalogComponentID: strip.ComponentID,
-						})
-					}
+			if stack != nil {
+				placement = OpeningGripPlacementFor(len(stack.Rows))
+				placementKnown = true
+			}
+		}
+		// Top band strip (#1327): only when the distribution mounts the top
+		// profile (a member set without a readable stack keeps the
+		// historical unconditional rule).
+		if !placementKnown || placement.TopGrip {
+			for _, strip := range openingMembers.ComponentMembers {
+				stripParts = append(stripParts, domain.BoardPart{
+					ID:                 "opening-strip-" + strip.Key,
+					Description:        "Tira " + strip.Key,
+					Quantity:           1,
+					LengthMm:           float64(widthMm),
+					WidthMm:            int(math.Round(strip.DepthMm)),
+					OptionRole:         "FRENTE",
+					Placement:          string(domain.PlacementSuperior),
+					CatalogComponentID: strip.ComponentID,
+				})
+			}
+		}
+		// #1536 r2: the BETWEEN strips join the cut list too — one board per
+		// gripped edge, the same edges the layout places (ONE rule).
+		for _, strip := range openingMembers.BetweenComponentMembers {
+			for k, gripped := range placement.BetweenGripped {
+				if !gripped {
+					continue
 				}
+				stripParts = append(stripParts, domain.BoardPart{
+					ID:                 "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k+1),
+					Description:        "Tira entre frentes " + strip.Key + " (" + strconv.Itoa(k+1) + ")",
+					Quantity:           1,
+					LengthMm:           float64(widthMm),
+					WidthMm:            int(math.Round(strip.DepthMm)),
+					OptionRole:         "FRENTE",
+					Placement:          string(domain.PlacementSuperior),
+					CatalogComponentID: strip.ComponentID,
+				})
 			}
 		}
 	}

@@ -46,10 +46,12 @@ func applyOpeningBevelsToBoards(boards []layoutBoard, modifiers []ResolvedOpenin
 		if err != nil {
 			return err
 		}
-		if kind == "between" && len(targets) == 0 {
-			// #1685: no stacked fronts → no between edges; the boundary does
-			// not exist in this furniture. Truthful absence (nothing to
-			// bevel), mirroring the notch pass and the between runs/BOM.
+		if len(targets) == 0 && (kind == "between" || kind == "top") {
+			// #1685/#1706: no stacked fronts, a distribution that grips no
+			// edge, or a top edge the distribution leaves to the between
+			// profile — the boundary does not exist in this furniture.
+			// Truthful absence (nothing to bevel), mirroring the notch pass
+			// and the between runs/BOM.
 			continue
 		}
 		edgeKind := kind
@@ -152,21 +154,28 @@ func localBevelPrism(board *layoutBoard, modifier ResolvedOpeningBodyModifier, k
 }
 
 // openingFrontsAtEdge returns the front boards at one edge of the stack
-// (#1529): the top row, the lowest row, or every row below a between edge.
+// (#1529): the top row (only when the distribution mounts the top profile,
+// #1706), the lowest row, or every row below a GRIPT between edge.
 func openingFrontsAtEdge(boards []layoutBoard, kind string) ([]int, error) {
 	rows, err := openingFrontRows(boards)
 	if err != nil || len(rows) == 0 {
 		return nil, err
 	}
+	placement := OpeningGripPlacementFor(len(rows))
 	switch kind {
 	case "top":
+		if !placement.TopGrip {
+			return nil, nil
+		}
 		return rows[0].boards, nil
 	case "bottom":
 		return rows[len(rows)-1].boards, nil
 	default:
 		var targets []int
-		for _, row := range rows[1:] {
-			targets = append(targets, row.boards...)
+		for r, row := range rows[1:] {
+			if placement.BetweenGripped[r] {
+				targets = append(targets, row.boards...)
+			}
 		}
 		return targets, nil
 	}

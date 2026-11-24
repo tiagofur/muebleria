@@ -166,11 +166,11 @@ func TestOpeningV1PinSingleRowRegression(t *testing.T) {
 	}
 }
 
-// #1529 acceptance — the notch and the bevel come from one definition at
-// the between edges too: on a v2 Italian drawer column (36 top, 36 between)
-// the top bevel cuts only the top drawer, the between bevel cuts the top
-// edge of the two lower drawers, and the between notch hangs from the bottom
-// edge of each upper drawer on both sides.
+// #1529 acceptance, distribution per #1706 — the notch and the bevel come
+// from one definition at the GRIPT edges only: on a v2 Italian drawer column
+// (36 top, 36 between) the 3-row distribution grips the lower edge, so the
+// between bevel cuts the top edge of the bottom drawer alone and the between
+// notch hangs from the middle drawer's bottom edge on both sides.
 func TestOpeningA3BetweenEdgesBevelAndNotch(t *testing.T) {
 	module, catalog := drawerColumnCatalog()
 	top, between := 36.0, 36.0
@@ -201,7 +201,7 @@ func TestOpeningA3BetweenEdgesBevelAndNotch(t *testing.T) {
 		}
 		edgesByRow = append(edgesByRow, edges)
 	}
-	if edgesByRow[0] != "top;" || edgesByRow[1] != "between:column;" || edgesByRow[2] != "between:column;" {
+	if edgesByRow[0] != "top;" || edgesByRow[1] != "" || edgesByRow[2] != "between:column;" {
 		t.Fatalf("bevels by row (top → bottom) = %v", edgesByRow)
 	}
 	sides := 0
@@ -210,8 +210,8 @@ func TestOpeningA3BetweenEdgesBevelAndNotch(t *testing.T) {
 			continue
 		}
 		sides++
-		if len(board.notches) != 2 {
-			t.Fatalf("%s: one notch per between edge, got %d", board.id, len(board.notches))
+		if len(board.notches) != 1 {
+			t.Fatalf("%s: one notch at the gripped edge, got %d", board.id, len(board.notches))
 		}
 		for n, notch := range board.notches {
 			if notch.SizeMm[1] != 17 && notch.SizeMm[0] != 17 && notch.SizeMm[2] != 17 {

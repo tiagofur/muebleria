@@ -454,29 +454,38 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 	// missing or inactive in the catalog fails closed — never a silently
 	// absent board.
 	if opts.openingMembers != nil {
-		for _, strip := range opts.openingMembers.ComponentMembers {
-			comp, found := findComponent(catalog, strip.ComponentID)
-			if !found || !comp.Active {
-				return FurnitureLayout{}, nil, fmt.Errorf(
-					"el componente %s del elemento %q de la apertura no existe o está inactivo",
-					strip.ComponentID, strip.Key)
+		// #1706: the top strip exists only when the stack's distribution
+		// mounts the top profile. The boards are post-A3 here, so the rows
+		// (and the placement) are the resolved ones.
+		frontRows, rowErr := openingFrontRows(boards)
+		if rowErr != nil {
+			return FurnitureLayout{}, nil, rowErr
+		}
+		if len(frontRows) == 0 || OpeningGripPlacementFor(len(frontRows)).TopGrip {
+			for _, strip := range opts.openingMembers.ComponentMembers {
+				comp, found := findComponent(catalog, strip.ComponentID)
+				if !found || !comp.Active {
+					return FurnitureLayout{}, nil, fmt.Errorf(
+						"el componente %s del elemento %q de la apertura no existe o está inactivo",
+						strip.ComponentID, strip.Key)
+				}
+				boards = append(boards, layoutBoard{
+					id:                 "opening-strip-" + strip.Key,
+					defID:              "opening-strip-" + strip.Key,
+					name:               strip.Key,
+					placement:          string(domain.PlacementSuperior),
+					optionRole:         "FRENTE",
+					openingStrip:       true,
+					x:                  0,
+					y:                  float64(dims.DepthMm) - strip.DepthMm,
+					z:                  float64(dims.HeightMm) - strip.HeightMm,
+					rotY:               90,
+					widthMm:            strip.DepthMm,
+					thicknessMm:        strip.HeightMm,
+					lengthMm:           float64(dims.WidthMm),
+					catalogComponentID: strip.ComponentID,
+				})
 			}
-			boards = append(boards, layoutBoard{
-				id:                 "opening-strip-" + strip.Key,
-				defID:              "opening-strip-" + strip.Key,
-				name:               strip.Key,
-				placement:          string(domain.PlacementSuperior),
-				optionRole:         "FRENTE",
-				openingStrip:       true,
-				x:                  0,
-				y:                  float64(dims.DepthMm) - strip.DepthMm,
-				z:                  float64(dims.HeightMm) - strip.HeightMm,
-				rotY:               90,
-				widthMm:            strip.DepthMm,
-				thicknessMm:        strip.HeightMm,
-				lengthMm:           float64(dims.WidthMm),
-				catalogComponentID: strip.ComponentID,
-			})
 		}
 	}
 
@@ -1284,8 +1293,11 @@ func appendOpeningBetweenStripBoards(boards *[]layoutBoard, catalog domain.Catal
 	if err != nil {
 		return err
 	}
-	if len(rows) < 2 {
-		return nil // fewer than two rows: no between edges
+	// #1706: one strip per GRIPT edge of the resolved distribution — never
+	// one per boundary.
+	placement := OpeningGripPlacementFor(len(rows))
+	if placement.BetweenEdgeCount() == 0 {
+		return nil // no gripped edge: no between strips
 	}
 	for _, strip := range strips {
 		comp, found := findComponent(catalog, strip.ComponentID)
@@ -1295,6 +1307,9 @@ func appendOpeningBetweenStripBoards(boards *[]layoutBoard, catalog domain.Catal
 				strip.ComponentID, strip.Key)
 		}
 		for k := 1; k < len(rows); k++ {
+			if !placement.BetweenGripped[k-1] {
+				continue
+			}
 			// Strip k hangs below row k−1 (the upper row of the pair): its
 			// top edge = the upper row's bottom edge.
 			z := rows[k-1].bottomMm - strip.HeightMm

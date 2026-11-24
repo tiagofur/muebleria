@@ -19,9 +19,12 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
-// OpeningEdgeGrips is the per-edge grip declaration of contract v2. Between
-// applies to every edge between two stacked rows (§14.3: the style's between
-// profile grips every between edge of a stacked front column).
+// OpeningEdgeGrips is the per-edge grip declaration of contract v2: the
+// recipe's top discount and between discount. WHICH edges carry the between
+// grip (and whether the top edge carries the top grip at all) is the stack's
+// resolved distribution (#1706, OpeningGripPlacementFor) — never "every
+// edge": the between profile opens the two fronts it touches, so pairs of
+// fronts share one grip from the bottom up.
 type OpeningEdgeGrips struct {
 	TopDiscountMm     *float64 `json:"topDiscountMm,omitempty"`
 	BetweenDiscountMm *float64 `json:"betweenDiscountMm,omitempty"`
@@ -102,19 +105,26 @@ func openingA3Poses(boards []layoutBoard, grips OpeningEdgeGrips, cabinetHeightM
 		return nil, nil, err
 	}
 	floor := openingBodyBottomZ(boards)
+	// #1706: the stack's resolved distribution decides which edges the
+	// recipe's discounts land on — the top discount only with a mounted top
+	// profile, the between discount only on gripped edges. Un-gripped edges
+	// keep their catalog gap.
+	placement := OpeningGripPlacementFor(len(rows))
 	input := OpeningEdgeStackInput{
 		CabinetHeightMm:  cabinetHeightMm - floor,
 		TopRevealMm:      cabinetHeightMm - rows[0].topMm,
 		BottomRevealMm:   rows[len(rows)-1].bottomMm - floor,
-		TopDiscountMm:    grips.TopDiscountMm,
 		BottomOverhangMm: grips.BottomOverhangMm,
+	}
+	if placement.TopGrip {
+		input.TopDiscountMm = grips.TopDiscountMm
 	}
 	for r, row := range rows {
 		id := fmt.Sprintf("row-%d", r+1)
 		input.Rows = append(input.Rows, OpeningEdgeStackRow{ID: id, Weight: row.topMm - row.bottomMm})
 		if r < len(rows)-1 {
 			input.GapsMm = append(input.GapsMm, row.bottomMm-rows[r+1].topMm)
-			if grips.BetweenDiscountMm != nil {
+			if grips.BetweenDiscountMm != nil && placement.BetweenGripped[r] {
 				input.BetweenGrips = append(input.BetweenGrips, OpeningEdgeBetweenGrip{UpperRowID: id, DiscountMm: *grips.BetweenDiscountMm})
 			}
 		}

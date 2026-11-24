@@ -54,8 +54,10 @@ func TestOpeningBetweenStripBoardsOnePerBetweenEdge(t *testing.T) {
 			strips = append(strips, board)
 		}
 	}
-	if len(strips) != 2 {
-		t.Fatalf("3 fronts → 2 between strips, got %d (%v)", len(strips),
+	// #1706: the 3-row distribution grips ONE edge (below the middle front)
+	// → exactly ONE between strip.
+	if len(strips) != 1 {
+		t.Fatalf("3 fronts → 1 between strip (the gripped edge), got %d (%v)", len(strips),
 			func() []string {
 				ids := []string{}
 				for _, b := range boards {
@@ -64,8 +66,8 @@ func TestOpeningBetweenStripBoardsOnePerBetweenEdge(t *testing.T) {
 				return ids
 			}())
 	}
-	// The front boards' resolved rows, top first: the strip between the
-	// upper pair hangs from the UPPER front's bottom edge.
+	// The front boards' resolved rows, top first: the single strip hangs
+	// from the MIDDLE front's bottom edge (the gripped edge sits below it).
 	rows, err := openingFrontRows(boards)
 	if err != nil || len(rows) != 3 {
 		t.Fatalf("3 rows expected: %v %v", rows, err)
@@ -79,24 +81,28 @@ func TestOpeningBetweenStripBoardsOnePerBetweenEdge(t *testing.T) {
 		board := boards[row.boards[0]]
 		frontsPose = append(frontsPose, frontPose{z: board.z, length: board.lengthMm})
 	}
-	// rows are top → bottom: the upper front of pair k is frontsPose[k].
-	for k, strip := range strips {
-		upper := frontsPose[k]
+	// rows are top → bottom: the gripped edge sits below row 1.
+	strip := strips[0]
+	if !strings.HasSuffix(strip.id, "-2") {
+		t.Fatalf("the gripped edge is row 1's: strip id = %s, want suffix -2", strip.id)
+	}
+	{
+		upper := frontsPose[1]
 		wantZ := upper.z - 70.0
 		if strip.z != wantZ {
-			t.Fatalf("between strip %d: z = %.2f, want %.2f (upper front bottom %.2f − 70)", k+1, strip.z, wantZ, upper.z)
+			t.Fatalf("between strip: z = %.2f, want %.2f (middle front bottom %.2f − 70)", strip.z, wantZ, upper.z)
 		}
 		if strip.widthMm != 16 || strip.thicknessMm != 70 {
-			t.Fatalf("between strip %d: declared dims drift (depth 16, height 70): %.2f × %.2f", k+1, strip.widthMm, strip.thicknessMm)
+			t.Fatalf("between strip: declared dims drift (depth 16, height 70): %.2f × %.2f", strip.widthMm, strip.thicknessMm)
 		}
 		if strip.lengthMm != 600 {
-			t.Fatalf("between strip %d: full furniture width expected (600), got %.2f", k+1, strip.lengthMm)
+			t.Fatalf("between strip: full furniture width expected (600), got %.2f", strip.lengthMm)
 		}
 		if strip.optionRole != "FRENTE" {
-			t.Fatalf("between strip %d: FRENTE material role expected, got %q", k+1, strip.optionRole)
+			t.Fatalf("between strip: FRENTE material role expected, got %q", strip.optionRole)
 		}
 		if strip.catalogComponentID != "comp-tira-1536" {
-			t.Fatalf("between strip %d: catalog component id expected", k+1)
+			t.Fatalf("between strip: catalog component id expected")
 		}
 	}
 	// The strips are REAL cut-list boards: they join the components the

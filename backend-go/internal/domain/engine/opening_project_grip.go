@@ -262,22 +262,24 @@ type ProjectGripBOMProfile struct {
 
 // ProjectGripBOMInput is the body context the project grip's BOM needs: the
 // run's physical inputs (interior width, end conditions), the frozen top and
-// between profiles and the number of between edges the furniture's stack has.
+// between profiles and the stack's resolved grip distribution (#1706).
 type ProjectGripBOMInput struct {
 	CabinetInteriorWidthMm int
 	Ends                   OpeningBOMEndConditions
 	Top                    *ProjectGripBOMProfile
 	Between                *ProjectGripBOMProfile
-	// BetweenEdgeCount is the stack's between edges (rows − 1, read from the
-	// furniture's boards). 0 = a single-row front: no between run exists.
-	BetweenEdgeCount int
+	// Placement is the front stack's resolved distribution: TopGrip mounts
+	// the top profile's run once; the between profile runs once per gripped
+	// edge. The zero value mounts nothing.
+	Placement OpeningGripPlacement
 }
 
 // ResolveProjectGripBOM generates the project grip's BOM lines: the top
-// profile's run (the v1 rules verbatim) plus, when the stack has between
-// edges, the between profile's runs — aggregated into one line per member
-// with the edge count as the multiplier. Pure and deterministic; the same
-// member rules, units and identities as ResolveOpeningBOM.
+// profile's run (the v1 rules verbatim) when the distribution mounts it,
+// plus the between profile's runs — one per gripped edge, aggregated into
+// one line per member with the gripped count as the multiplier. Pure and
+// deterministic; the same member rules, units and identities as
+// ResolveOpeningBOM.
 func ResolveProjectGripBOM(input ProjectGripBOMInput) ([]OpeningResolvedBOMLine, *OpeningResolutionError) {
 	if input.CabinetInteriorWidthMm <= 0 {
 		return nil, openingFail(OpeningErrBOMInvalid,
@@ -297,17 +299,21 @@ func ResolveProjectGripBOM(input ProjectGripBOMInput) ([]OpeningResolvedBOMLine,
 	}
 	lines := []OpeningResolvedBOMLine{}
 	type mounted struct {
-		profile *ProjectGripBOMProfile
+		profile  *ProjectGripBOMProfile
 		boundary string
-		runs    int
+		runs     int
 	}
-	mountedProfiles := []mounted{{input.Top, "top", 1}}
-	if input.BetweenEdgeCount > 0 {
+	mountedProfiles := []mounted{}
+	if input.Placement.TopGrip {
+		mountedProfiles = append(mountedProfiles, mounted{input.Top, "top", 1})
+	}
+	betweenRuns := input.Placement.BetweenEdgeCount()
+	if betweenRuns > 0 {
 		if input.Between == nil {
 			return nil, openingFail(OpeningErrBOMInvalid,
-				"la pila tiene aristas entre frentes pero la receta congelada no declara perfil entre frentes")
+				"la pila tiene aristas con gola entre frentes pero la receta congelada no declara perfil entre frentes")
 		}
-		mountedProfiles = append(mountedProfiles, mounted{input.Between, "between", input.BetweenEdgeCount})
+		mountedProfiles = append(mountedProfiles, mounted{input.Between, "between", betweenRuns})
 	}
 	for _, run := range mountedProfiles {
 		if run.profile == nil || len(run.profile.BOMMembers) == 0 {

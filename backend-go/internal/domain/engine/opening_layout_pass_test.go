@@ -429,9 +429,12 @@ func TestOpeningFrontsV2DrawerColumnTopAndBetween(t *testing.T) {
 	if _, err := applyOpeningFrontsToBoards(boards, front, 720); err != nil {
 		t.Fatalf("v2 column must resolve: %v", err)
 	}
-	// top edge 682, bottom 2, gaps 36 + 36: remaining 608 → 202.5, 202.5, 203.
+	// #1706: 3 rows grip ONE edge (below the middle front). Top edge 682,
+	// bottom 2, upper gap = catalog 4, gripped lower gap 36: remaining 640
+	// → 213, 213.5, 213.5 (the leftover half millimetres go to the lowest
+	// rows first, the #1529 remainder policy).
 	assertFrontPoses(t, boards, map[string][2]float64{
-		"frente-1": {479.5, 202.5}, "frente-2": {241, 202.5}, "frente-3": {2, 203},
+		"frente-1": {469, 213}, "frente-2": {251.5, 213.5}, "frente-3": {2, 213.5},
 	})
 }
 
