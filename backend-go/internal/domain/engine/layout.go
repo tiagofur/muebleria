@@ -887,6 +887,8 @@ func parseKitPartPlacementLabelGo(label string) (domain.AssemblyAxisRef, float64
 		xRef = domain.AxisRefMax
 	case "center":
 		xRef = domain.AxisRefCenter
+	case "hinge":
+		xRef = domain.AxisRefHinge
 	default:
 		return "", 0, 0, 0, false
 	}
@@ -2608,6 +2610,18 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 				// a declaration.
 				var targetFurnitureX float64
 				switch {
+				case declared && declaredRef == domain.AxisRefHinge:
+					// #1715: the anchor panel is the door's HINGE side,
+					// derived from the placement itself exactly like the
+					// #1592 heuristic below (a kit serves both hands; the
+					// authored min pins one hand and inverts on the other).
+					// The declared X rides from that panel; Y/Z ride as
+					// deltas (applyKitPieceDepthHeightDeltas).
+					if xMm <= w/2 {
+						targetFurnitureX = furnitureWidthMm - tSide
+					} else {
+						targetFurnitureX = tSide
+					}
 				case declared && declaredRef == domain.AxisRefMin:
 					targetFurnitureX = tSide
 					declaredX = -declaredX

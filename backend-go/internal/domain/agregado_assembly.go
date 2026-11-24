@@ -44,6 +44,12 @@ const (
 	AxisRefMin    AssemblyAxisRef = "min"    // minX = 0, minY = 0, minZ = 0
 	AxisRefMax    AssemblyAxisRef = "max"    // maxX = W, maxY = D, maxZ = H
 	AxisRefCenter AssemblyAxisRef = "center" // centerX = W/2, centerY = D/2, centerZ = H/2
+	// AxisRefHinge (#1715) is a kit-part placement label ref (`pos:hinge:…`)
+	// for parts mounted on DOOR boards: the anchor panel is the door's HINGE
+	// side, derived from the placement itself (a kit serves both hands — the
+	// authored min/max pins one hand and inverts on the other). The X offset
+	// rides from that panel; Y/Z ride as depth/height deltas.
+	AxisRefHinge AssemblyAxisRef = "hinge"
 )
 
 // AssemblyAxisPlacement positions a coordinate along an axis via a reference point and offset in mm.
@@ -101,12 +107,12 @@ type HardwareDimensionOverride struct {
 
 // AgregadoRigidMember defines an autonomous bought rigid hardware component inside an Agregado recipe.
 type AgregadoRigidMember struct {
-	MemberID        string            `json:"memberId"`
-	Role            string            `json:"role"` // e.g. "side_left", "side_right", "runner_left", "runner_right"
-	Source          RigidMemberSource `json:"source"`
-	Placement       AssemblyAnchorRule `json:"placement"`
-	BOMRole         RigidMemberBOMRole `json:"bomRole"`
-	ActorMembership string             `json:"actorMembership,omitempty"`    // #1376: "body" | "actor:<id>" | ""
+	MemberID           string                     `json:"memberId"`
+	Role               string                     `json:"role"` // e.g. "side_left", "side_right", "runner_left", "runner_right"
+	Source             RigidMemberSource          `json:"source"`
+	Placement          AssemblyAnchorRule         `json:"placement"`
+	BOMRole            RigidMemberBOMRole         `json:"bomRole"`
+	ActorMembership    string                     `json:"actorMembership,omitempty"`    // #1376: "body" | "actor:<id>" | ""
 	DimensionOverrides *HardwareDimensionOverride `json:"dimensionOverrides,omitempty"` // #1460 F2: Ancho×Alto×Fondo mm|fórmula.
 	// HostPlacement (#1429 slice A): the placement-vocabulary role of the
 	// EXTERNAL module board this member's hardware fastens to (e.g.
@@ -283,12 +289,12 @@ type ResolvedRigidMember struct {
 	// copied from the recipe member so the machining derivation can project
 	// the hardware's catalog profile onto that board. Empty = no external
 	// host (the historical behavior).
-	HostPlacement    string                  `json:"hostPlacement,omitempty"`
+	HostPlacement string `json:"hostPlacement,omitempty"`
 	// Hand (#1512 M3): the member's side copied from the recipe member —
 	// drives the per-hand asset binding in attachHardwareAssetsToMembers and
 	// the default X anchor. Empty = symmetric/legacy.
-	Hand             string                  `json:"hand,omitempty"`
-	DesignParts      []HardwareDesignPart    `json:"designParts,omitempty"`     // #1417: parts of the member's hardware (by SKP component name).
+	Hand        string               `json:"hand,omitempty"`
+	DesignParts []HardwareDesignPart `json:"designParts,omitempty"` // #1417: parts of the member's hardware (by SKP component name).
 	// #1460 F2: dimensiones efectivas tras aplicar DimensionOverrides (merge
 	// sobre catálogo). Sólo con override — payloads legacy byte-idénticos.
 	ResolvedDimensions *HardwareDimensions `json:"resolvedDimensions,omitempty"`
