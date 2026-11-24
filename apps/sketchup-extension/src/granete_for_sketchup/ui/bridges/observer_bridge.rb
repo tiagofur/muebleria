@@ -43,7 +43,7 @@ module Granete
           # furniture republishes the BatchContext, exactly as the live
           # observer would — never just the first entity.
           context = @selection_observer.resolve_selection(selection)
-          payload = context && context.to_payload
+          payload = context&.to_payload
           decorate_door_motion_state(payload)
           execute_bridge(dialog, 'onSelectionChange', payload)
         end

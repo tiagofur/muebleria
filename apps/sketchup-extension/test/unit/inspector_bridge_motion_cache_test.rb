@@ -532,14 +532,14 @@ class InspectorBridgeDoorMotionStateDecorationTest < Minitest::Test
     host.send(:decorate_door_motion_state, payload)
 
     refute payload['doorActors'][0]['isOpen']
-    assert(host.logger.events.none? { |(level, event, _)| level == :error },
+    assert(host.logger.events.none? { |(level, _event, _)| level == :error },
            'una referencia sin entidad no es error: es un mueble sin poses de sesión')
   end
 
   def test_selection_publish_runs_the_decoration_before_executing
     context = Object.new
     context.define_singleton_method(:to_payload) do
-      @payload ||= { 'kind' => 'furniture', 'furnitureInstanceRef' => 'ref-1',
+      @to_payload ||= { 'kind' => 'furniture', 'furnitureInstanceRef' => 'ref-1',
                      'doorActors' => [{ 'slotIndex' => 0, 'kind' => 'door' }] }
     end
     host = SelectionPublishHost.new(context)
