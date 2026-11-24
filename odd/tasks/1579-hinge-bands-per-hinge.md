@@ -253,7 +253,9 @@ HardwarePlacementsEditor, pintado del aviso), `docs/guia-de-uso.md`,
 
 ## Next step
 
-Veredicto terminal cuando el CI del PR cierre (16 checks pesados en curso);
-push de los commits finales; PR_READY tras CI verde. Después del merge del
-owner: migración de catálogo AUTORIZADA (tablas en 3 bisagras + 5 recetas
-AGR-PUE-*) con backup y readback, y vivo del owner.
+**CI 20/20 PASS en `3efe077d`, MERGEABLE/CLEAN** (confirmado 24-11).
+`JUDGMENT: APPROVED` (ronda 2 limpia; residuos: 1 SUGGESTION preexistente y
+diferidos documentados). **PR_READY_FOR_HUMAN_MERGE** — merge del owner.
+Post-merge: reinicio backend dev con el código nuevo, migración de catálogo
+AUTORIZADA (tablas en 3 bisagras + 5 recetas AGR-PUE-*) con backup y
+readback, release nueva y vivo del owner para cerrar #1579.
