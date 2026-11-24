@@ -851,6 +851,17 @@ func agregadoAssemblyInstanceID(agrInst domain.ModuleAgregadoInstance, qty int, 
 	return fmt.Sprintf("asm-%s-%d", agrInst.AgregadoID, unitIndex)
 }
 
+// kitPartPlacementLabel returns the web piece's pos: placement label — the
+// workshop's declared anchor/offsets for this kit piece (#1702), authored in
+// DesignParts[0].Label by the hardware pieces editor. Empty when the piece
+// declares none.
+func kitPartPlacementLabel(hw domain.Hardware) string {
+	if len(hw.DesignParts) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(hw.DesignParts[0].Label)
+}
+
 func parseKitPartPlacementLabelGo(label string) (domain.AssemblyAxisRef, float64, float64, float64, bool) {
 	if !strings.HasPrefix(label, "pos:") {
 		return "", 0, 0, 0, false
@@ -2471,6 +2482,25 @@ func resolveKitPartActorMembership(child domain.Hardware, kitHw domain.Hardware,
 	return ""
 }
 
+// applyKitPieceDepthHeightDeltas (#1702) shifts a FIXED kit child by the
+// web-declared depth (y) and height (z) deltas, in furniture frame, after
+// the resolve. Fixed pieces don't swing, so the world frame is stable;
+// actor children swing with the door and are placed in board-local frame
+// before the resolve (their deltas don't ride this helper).
+func applyKitPieceDepthHeightDeltas(resolved *LayoutHardware, declared bool, yOff, zOff float64, actor string) {
+	if !declared || actor != "body" {
+		return
+	}
+	if yOff != 0 {
+		resolved.Transform.TranslationMm[1] += yOff
+		resolved.LocalTransform.TranslationMm[1] += yOff
+	}
+	if zOff != 0 {
+		resolved.Transform.TranslationMm[2] += zOff
+		resolved.LocalTransform.TranslationMm[2] += zOff
+	}
+}
+
 // resolveHardwareOrKitToWorld resolves a board HardwarePlacement into one or more
 // LayoutHardware entries. When the referenced hardware is a commercial Kit that has
 // active child hardware parts (child.KitHardwareID == hw.ID), each child part is
@@ -2523,6 +2553,7 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 		for _, item := range items {
 			childHp := hp
 			childHp.HardwareID = item.hw.ID
+			declaredRef, declaredX, declaredY, declaredZ, declared := parseKitPartPlacementLabelGo(kitPartPlacementLabel(item.hw))
 			if item.actor == "body" && board != nil && (board.placement == string(domain.PlacementPuerta) || isDoorBoard(board)) {
 				tSide := sideThicknessMm
 				if tSide <= 0 {
@@ -2551,13 +2582,33 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 				// the flipped local frame). The historic ±sideThickness
 				// local shift moved the plate AWAY from the panel (inward
 				// into the cabinet), leaving it floating off the face.
+				// #1702: when the workshop DECLARED the side for this piece
+				// (the web piece's pos: label anchor min/max), the declared
+				// side rules the reference and the offset rides from it —
+				// the formula-half heuristic only applies to pieces without
+				// a declaration.
 				var targetFurnitureX float64
-				if xMm <= w/2 {
-					targetFurnitureX = furnitureWidthMm - tSide
-				} else {
+				switch {
+				case declared && declaredRef == domain.AxisRefMin:
 					targetFurnitureX = tSide
+					declaredX = -declaredX
+				case declared && declaredRef == domain.AxisRefMax:
+					targetFurnitureX = furnitureWidthMm - tSide
+				case declared && declaredRef == domain.AxisRefCenter:
+					targetFurnitureX = board.x + w - xMm
+					declaredX = -declaredX
+				default:
+					if xMm <= w/2 {
+						targetFurnitureX = furnitureWidthMm - tSide
+					} else {
+						targetFurnitureX = tSide
+					}
 				}
-				xMm = board.x + w - targetFurnitureX
+				// #1702 (review r1): the board-local X runs OPPOSITE the
+				// furniture X on this door frame — a positive web offset
+				// means INTO the cabinet interior (the #1613 convention),
+				// so min/center negate it in board-local and max keeps it.
+				xMm = board.x + w - targetFurnitureX + declaredX
 				childHp.RelativePosition.XMm = xMm
 				childHp.RelativePosition.XFormula = ""
 			}
@@ -2571,6 +2622,7 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 				// the normalized snapshot's catalogHardwareId.
 				resolved.HardwareID = hw.ID
 				resolved.ActorMembership = item.actor
+				applyKitPieceDepthHeightDeltas(&resolved, declared, declaredY, declaredZ, item.actor)
 				out = append(out, resolved)
 			} else {
 				partPlacementID := fmt.Sprintf("%s-part-%d", placementID, len(out))
@@ -2579,6 +2631,7 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 					continue
 				}
 				resolved.ActorMembership = item.actor
+				applyKitPieceDepthHeightDeltas(&resolved, declared, declaredY, declaredZ, item.actor)
 				out = append(out, resolved)
 			}
 		}
