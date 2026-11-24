@@ -557,6 +557,10 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
       expect(q720.revisionNumber).toBe(1);
       const q2100 = await quoteOrThrow(PAT_PROJECT_2100, '1579 PR2 — patrón 2100', 'e2e1579-pr2-create-2100');
       expect(q2100.revisionNumber).toBe(1);
+      // Diagnóstico temporal (retirar al cerrar): líneas congeladas reales.
+      const revisions2100 = await client.listProjectQuoteRevisions(owner.token, PAT_PROJECT_2100);
+      const frozen2100 = revisions2100.find((r) => r.id === q2100.id);
+      (await import('node:fs')).writeFileSync('/tmp/granete-1579/frozen2100.json', JSON.stringify(frozen2100 ?? null));
       expect(q2100.revisionNumber).toBe(1);
 
       await loginToA(page);
