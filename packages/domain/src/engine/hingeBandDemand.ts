@@ -17,8 +17,10 @@
 import {
   HINGE_DEMAND_DESCRIPTION,
   HINGE_DEMAND_LINE_PREFIX,
-  hingesForDoor,
+  hingeDemandNotice,
   hingeDemandRole,
+  resolveHingeCount,
+  type HingeCount,
   type HingeDemandPolicy,
 } from '../hingeDemand';
 import { resolvePlacementHardwareId } from '../hardwarePlacement';
@@ -61,6 +63,30 @@ export function hingePolicyForComponent(
   return policy?.doorHingeDemand;
 }
 
+/**
+ * The policy ONE door buys under (#1579). Ladder, first match wins:
+ *  1. the door component's exception (explicit authored intent);
+ *  2. the table declared by the hinge effectively chosen for that door — so
+ *     two hinges in the same group buy differently;
+ *  3. the factory-wide family.
+ * Undefined everywhere inherits the library ladder inside `resolveHingeCount`.
+ * The hinge's table never carries a role: the role still comes from the
+ * exception/factory rungs (`hingePolicyForComponent`). Mirrors
+ * domain.FactoryConstructionPolicy.HingeDemandForDoor.
+ */
+export function hingePolicyForDoor(
+  policy: CatalogHingePolicySource | undefined,
+  catalogComponentId: string | undefined,
+  hinge?: Pick<Hardware, 'hingeDemand'>,
+): HingeDemandPolicy | undefined {
+  if (policy && catalogComponentId) {
+    const exception = policy.componentOverrides?.[catalogComponentId]?.hingeDemand;
+    if (exception) return exception;
+  }
+  if (hinge?.hingeDemand) return hinge.hingeDemand;
+  return policy?.doorHingeDemand;
+}
+
 export interface HingeBandDemand {
   readonly counts: ReadonlyMap<string, number>;
   readonly lines: readonly ResolvedHardwareLine[];
@@ -85,7 +111,12 @@ export function collectHingeBandDemand(params: {
     return { counts: new Map(), lines: [] };
   }
 
-  const quantities = new Map<string, { quantity: number; role: string }>();
+  // #1579: per resolved hardware; `overflowHeightMm` > 0 marks the tallest
+  // door that exceeded the table's last band under that hardware.
+  const quantities = new Map<
+    string,
+    { quantity: number; role: string; overflowHeightMm: number; overflow?: HingeCount }
+  >();
   for (const door of doors) {
     const policy = hingePolicyForComponent(
       params.policySource,
@@ -116,10 +147,26 @@ export function collectHingeBandDemand(params: {
     if (params.placementCounts.has(hardwareId)) {
       continue;
     }
-    const perDoor = hingesForDoor(door.lengthMm, door.widthMm, policy);
+    // #1579: the hinge effectively chosen for THIS door may declare its own
+    // table; it outranks the factory family, the component exception
+    // outranks it.
+    const hinge = params.catalogHardware.find((hw) => hw.id === hardwareId);
+    const count = resolveHingeCount(
+      door.lengthMm,
+      door.widthMm,
+      hingePolicyForDoor(params.policySource, door.catalogComponentId, hinge),
+    );
     const doorQty = door.quantity > 0 ? door.quantity : 1;
-    const entry = quantities.get(hardwareId) ?? { quantity: 0, role };
-    entry.quantity += perDoor * doorQty;
+    const entry = quantities.get(hardwareId) ?? {
+      quantity: 0,
+      role,
+      overflowHeightMm: 0,
+    };
+    entry.quantity += count.hinges * doorQty;
+    if (count.aboveLastBand && door.lengthMm > entry.overflowHeightMm) {
+      entry.overflowHeightMm = door.lengthMm;
+      entry.overflow = count;
+    }
     quantities.set(hardwareId, entry);
   }
 
@@ -130,12 +177,16 @@ export function collectHingeBandDemand(params: {
   const lines: ResolvedHardwareLine[] = [];
   for (const [hardwareId, entry] of quantities) {
     counts.set(hardwareId, entry.quantity);
+    const notice = entry.overflow
+      ? hingeDemandNotice(entry.overflowHeightMm, entry.overflow)
+      : undefined;
     lines.push({
       id: `${HINGE_DEMAND_LINE_PREFIX}${hardwareId}`,
       quantity: entry.quantity,
       descriptionOverride: HINGE_DEMAND_DESCRIPTION,
       optionRole: entry.role,
       hardwareId,
+      ...(notice ? { notice } : {}),
     });
   }
   return { counts, lines };

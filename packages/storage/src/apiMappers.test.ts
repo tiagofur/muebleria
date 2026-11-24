@@ -1838,6 +1838,72 @@ describe('hardwareToApi / hardwareFromApi — dimensions round-trip (#1453 F1)',
   });
 });
 
+describe('hardwareToApi / hardwareFromApi — hinge table round-trip (#1579)', () => {
+  const base: Hardware = {
+    id: 'hw-1',
+    code: 'HW-BIS',
+    name: 'Bisagra',
+    unit: 'piece',
+    costPerUnit: 68,
+    active: true,
+  };
+  const bands = [
+    { upToHeightMm: 900, hinges: 2 },
+    { upToHeightMm: 2400, hinges: 5 },
+  ];
+
+  it('round-trips the bands and keeps the surge tri-state', () => {
+    // Absent surge = inherit the library rule.
+    const inherit: Hardware = { ...base, hingeDemand: { bands } };
+    const inheritApi = hardwareToApi(inherit);
+    expect(inheritApi.hinge_demand).toEqual({ bands });
+    expect(hardwareFromApi(inheritApi as Record<string, unknown>).hingeDemand).toEqual(inherit.hingeDemand);
+
+    // An explicit null = no width surge; it must reach the wire as null.
+    const disabled: Hardware = { ...base, hingeDemand: { bands, widthSurgeOverMm: null } };
+    const disabledApi = hardwareToApi(disabled);
+    expect(disabledApi.hinge_demand).toEqual({ bands, widthSurgeOverMm: null });
+    expect(hardwareFromApi(disabledApi as Record<string, unknown>).hingeDemand).toEqual(disabled.hingeDemand);
+
+    const custom: Hardware = { ...base, hingeDemand: { bands, widthSurgeOverMm: 600 } };
+    expect(hardwareToApi(custom).hinge_demand).toEqual({ bands, widthSurgeOverMm: 600 });
+  });
+
+  it('always sends the key: null when the hinge declares no table', () => {
+    // The PUT keeps the stored table only when the key is omitted, so a
+    // client that means "no table" has to say it with an explicit null.
+    expect(hardwareToApi(base).hinge_demand).toBeNull();
+    expect(
+      hardwareFromApi({ ...base, hinge_demand: null }).hingeDemand,
+    ).toBeUndefined();
+  });
+
+  it('never ingests a table without usable bands', () => {
+    expect(
+      hardwareFromApi({ ...base, hinge_demand: { bands: [] } }).hingeDemand,
+    ).toBeUndefined();
+    expect(
+      hardwareFromApi({ ...base, hinge_demand: 'basura' }).hingeDemand,
+    ).toBeUndefined();
+    expect(
+      hardwareFromApi({
+        ...base,
+        hinge_demand: { bands: [{ upToHeightMm: 900, hinges: 'dos' }] },
+      }).hingeDemand,
+    ).toBeUndefined();
+    // S-A2 (juicio #1579): una fila inválida tira la TABLA entera — nunca una
+    // tabla recortada que clamparía antes y cambiaría el conteo de puertas.
+    expect(
+      hardwareFromApi({
+        ...base,
+        hinge_demand: {
+          bands: [{ upToHeightMm: 900, hinges: 2 }, { upToHeightMm: 1600, hinges: 'tres' }],
+        },
+      }).hingeDemand,
+    ).toBeUndefined();
+  });
+});
+
 describe('hardwareToApi / hardwareFromApi — PBR round-trip (F069)', () => {
   it('round-trips preview fields (shape + PBR)', () => {
     const hw: Hardware = {

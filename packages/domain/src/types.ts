@@ -333,6 +333,13 @@ export interface Hardware {
    */
   readonly pieces?: readonly HardwarePiece[];
   /**
+   * #1579: the door height → quantity table this hinge declares for itself.
+   * Unset = no table: doors under this hinge inherit the factory policy, then
+   * the library ladder. Outranks the factory policy; yields to the
+   * per-component exception (`hingePolicyForDoor`).
+   */
+  readonly hingeDemand?: HingeDemandPolicy;
+  /**
    * #1507: category tree link (subgrupos de herrajes como los muebles F142).
    * Unset = uncategorized. FK enforced server-side.
    */
@@ -2051,6 +2058,12 @@ export interface ResolvedHardwareLine {
   readonly descriptionOverride?: string;
   readonly optionRole: string;
   readonly hardwareId: string;
+  /**
+   * #1579: a visible warning the engine attaches to a derived line — today,
+   * a door taller than the hinge table's last band. Never blocks and never
+   * changes the quantity; surfaces render it next to the line.
+   */
+  readonly notice?: string;
 }
 
 export interface ResolvedBom {

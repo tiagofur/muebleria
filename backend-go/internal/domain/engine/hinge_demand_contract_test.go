@@ -43,6 +43,50 @@ func TestHingeDemandBandsContract(t *testing.T) {
 				ExpectedHinges int  `json:"expectedHinges"`
 			} `json:"cases"`
 		} `json:"overrideCases"`
+		// #1579: the table a hinge declares for itself, the resolution ladder
+		// and the last-band overflow warning.
+		HingeTables     map[string]domain.HingeDemandPolicy `json:"hingeTables"`
+		HingeTableCases []struct {
+			Name    string `json:"name"`
+			Table   string `json:"table"`
+			Against string `json:"against"`
+			Cases   []struct {
+				Name                  string `json:"name"`
+				HeightMm              int    `json:"heightMm"`
+				WidthMm               *int   `json:"widthMm"`
+				ExpectedHinges        int    `json:"expectedHinges"`
+				ExpectedHingesAgainst *int   `json:"expectedHingesAgainst"`
+			} `json:"cases"`
+		} `json:"hingeTableCases"`
+		Ladder struct {
+			ComponentID   string                   `json:"componentId"`
+			FactoryPolicy domain.HingeDemandPolicy `json:"factoryPolicy"`
+			Exception     domain.HingeDemandPolicy `json:"exception"`
+			Cases         []struct {
+				Name           string  `json:"name"`
+				Factory        bool    `json:"factory"`
+				Table          *string `json:"table"`
+				Exception      bool    `json:"exception"`
+				HeightMm       int     `json:"heightMm"`
+				WidthMm        *int    `json:"widthMm"`
+				ExpectedHinges int     `json:"expectedHinges"`
+			} `json:"cases"`
+		} `json:"ladder"`
+		OverflowCases []struct {
+			Name                     string  `json:"name"`
+			Table                    string  `json:"table"`
+			HeightMm                 int     `json:"heightMm"`
+			WidthMm                  *int    `json:"widthMm"`
+			ExpectedHinges           int     `json:"expectedHinges"`
+			ExpectedAboveLastBand    bool    `json:"expectedAboveLastBand"`
+			ExpectedLastBandHeightMm float64 `json:"expectedLastBandHeightMm"`
+			ExpectedNotice           *string `json:"expectedNotice"`
+		} `json:"overflowCases"`
+		TableValidationCases []struct {
+			Name          string  `json:"name"`
+			Table         *string `json:"table"`
+			ExpectedError *string `json:"expectedError"`
+		} `json:"tableValidationCases"`
 	}
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatalf("decode fixture: %v", err)
@@ -100,4 +144,95 @@ func TestHingeDemandBandsContract(t *testing.T) {
 			}
 		}
 	}
+
+	// #1579 — the table a hinge declares for itself.
+	for _, group := range fixture.HingeTableCases {
+		table := fixture.HingeTables[group.Table]
+		against := fixture.HingeTables[group.Against]
+		for _, tc := range group.Cases {
+			width := 0
+			if tc.WidthMm != nil {
+				width = *tc.WidthMm
+			}
+			if got := domain.HingesForDoor(float64(tc.HeightMm), width, &table); got != tc.ExpectedHinges {
+				t.Fatalf("%s / %s: HingesForDoor(table) = %d, want %d", group.Name, tc.Name, got, tc.ExpectedHinges)
+			}
+			// Same door, other hinge: the count follows the hinge chosen.
+			if tc.ExpectedHingesAgainst != nil {
+				if got := domain.HingesForDoor(float64(tc.HeightMm), width, &against); got != *tc.ExpectedHingesAgainst {
+					t.Fatalf("%s / %s: HingesForDoor(against %s) = %d, want %d", group.Name, tc.Name, group.Against, got, *tc.ExpectedHingesAgainst)
+				}
+			}
+		}
+	}
+
+	// #1579 — exception → the chosen hinge's table → factory → library.
+	for _, tc := range fixture.Ladder.Cases {
+		policy := &domain.FactoryConstructionPolicy{}
+		if tc.Factory {
+			factory := fixture.Ladder.FactoryPolicy
+			policy.DoorHingeDemand = &factory
+		}
+		if tc.Exception {
+			exception := fixture.Ladder.Exception
+			policy.ComponentOverrides = map[string]*domain.ComponentConstructionOverride{
+				fixture.Ladder.ComponentID: {HingeDemand: &exception},
+			}
+		}
+		hinge := &domain.Hardware{}
+		if tc.Table != nil {
+			table := fixture.HingeTables[*tc.Table]
+			hinge.HingeDemand = &table
+		}
+		width := 0
+		if tc.WidthMm != nil {
+			width = *tc.WidthMm
+		}
+		count := domain.ResolveHingeCount(float64(tc.HeightMm), width, policy.HingeDemandForDoor(fixture.Ladder.ComponentID, hinge))
+		if count.Hinges != tc.ExpectedHinges {
+			t.Fatalf("ladder %s: hinges = %d, want %d", tc.Name, count.Hinges, tc.ExpectedHinges)
+		}
+	}
+
+	// #1579 — a door taller than the last band: the maximum, and the warning.
+	for _, tc := range fixture.OverflowCases {
+		table := fixture.HingeTables[tc.Table]
+		width := 0
+		if tc.WidthMm != nil {
+			width = *tc.WidthMm
+		}
+		count := domain.ResolveHingeCount(float64(tc.HeightMm), width, &table)
+		if count.Hinges != tc.ExpectedHinges || count.AboveLastBand != tc.ExpectedAboveLastBand ||
+			count.LastBandHeightMm != tc.ExpectedLastBandHeightMm {
+			t.Fatalf("overflow %s: got %+v, want hinges %d above %v last %v", tc.Name, count, tc.ExpectedHinges, tc.ExpectedAboveLastBand, tc.ExpectedLastBandHeightMm)
+		}
+		notice := domain.HingeDemandAboveLastBandMessage(float64(tc.HeightMm), count)
+		if notice != derefOrEmpty(tc.ExpectedNotice) {
+			t.Fatalf("overflow %s: notice = %q, want %q", tc.Name, notice, derefOrEmpty(tc.ExpectedNotice))
+		}
+	}
+
+	// #1579 — why a hinge table is not writable: the same sentence the web
+	// shows before the round-trip.
+	for _, tc := range fixture.TableValidationCases {
+		var table *domain.HingeDemandPolicy
+		if tc.Table != nil {
+			declared := fixture.HingeTables[*tc.Table]
+			table = &declared
+		}
+		var got string
+		if err := domain.ValidateHingeDemandTable(table); err != nil {
+			got = err.Error()
+		}
+		if got != derefOrEmpty(tc.ExpectedError) {
+			t.Fatalf("table validation %s: error = %q, want %q", tc.Name, got, derefOrEmpty(tc.ExpectedError))
+		}
+	}
+}
+
+func derefOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

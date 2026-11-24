@@ -11,24 +11,52 @@ import type {
   QuoteBreakdown,
   Workspace,
 } from '@granete/domain';
-import { calcProjectBreakdown, calcProjectBreakdownWithProfileDemand, defaultMeasurePresetId, type ProfileDemandLine } from '@granete/domain';
+import {
+  calcProjectBreakdown,
+  calcProjectBreakdownWithProfileDemand,
+  defaultMeasurePresetId,
+  resolveBom,
+  resolvedHardwareNotices,
+  type ProfileDemandLine,
+} from '@granete/domain';
 import {
   canShowPricePreview,
   canShowProjectPricePreview,
   defaultOptionChoicesForModule,
   requiredGroupCodesForModule,
   selectableGroupCodesForModule,
+  type CostPreview,
 } from '@granete/ui';
 
 /**
+ * #1579: los avisos del motor para el mueble del preview, leídos del BOM
+ * resuelto con las mismas opciones y el mismo preset que el costo. Best
+ * effort a propósito: sin avisos no hay lista, y nunca hay error.
+ */
+function modulePreviewNotices(
+  module: Module,
+  choices: OptionChoices,
+  catalog: Workspace['catalog'],
+  measurePresetId: string | undefined,
+): readonly string[] {
+  try {
+    return resolvedHardwareNotices(
+      resolveBom(module, choices, catalog, measurePresetId).hardwareLines,
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
  * MOD-06: domain cost preview for a single saved module using default option
- * choices. Pure wiring in the shell — UI only receives QuoteBreakdown props.
+ * choices. Pure wiring in the shell — UI only receives the cost preview.
  */
 export function computeModuleCostPreview(
   module: Module,
   catalog: Workspace['catalog'],
 ): {
-  costPreview: QuoteBreakdown | null;
+  costPreview: CostPreview | null;
   previewBlocked: boolean;
   missingGroups: readonly string[];
   previewError: string | null;
@@ -51,6 +79,7 @@ export function computeModuleCostPreview(
     };
   }
 
+  const measurePresetId = defaultMeasurePresetId(module);
   const now = new Date().toISOString();
   const project: Project = {
     id: 'module-preview-project',
@@ -68,7 +97,7 @@ export function computeModuleCostPreview(
         optionChoices: choices,
         // Modules with commercial presets demand a selection — preview with
         // the default one (first), like the add-item flow does.
-        measurePresetId: defaultMeasurePresetId(module),
+        measurePresetId,
       },
     ],
     createdAt: now,
@@ -77,7 +106,18 @@ export function computeModuleCostPreview(
 
   try {
     const costPreview = calcProjectBreakdown(project, catalog);
-    return { costPreview, previewBlocked: false, missingGroups: [], previewError: null };
+    return {
+      costPreview: {
+        ...costPreview,
+        // #1579: avisos del motor junto al costo (una puerta más alta que la
+        // última banda de la tabla de bisagras). Aislados del costo: un fallo
+        // al calcularlos nunca bloquea un preview que antes funcionaba.
+        notices: modulePreviewNotices(module, choices, catalog, measurePresetId),
+      },
+      previewBlocked: false,
+      missingGroups: [],
+      previewError: null,
+    };
   } catch (e) {
     // Honest missing list: every used group (required or optional) without a
     // default choice — NOT a blanket dump of all required groups, which

@@ -164,6 +164,28 @@ func (p *FactoryConstructionPolicy) HingeDemandForComponent(componentID string) 
 	return p.DoorHingeDemand
 }
 
+// HingeDemandForDoor resolves the policy ONE door buys under (#1579). Ladder,
+// first match wins:
+//  1. the door component's stored exception (explicit authored intent);
+//  2. the table declared by the hinge effectively chosen for that door — the
+//     hardware itself, so two hinges in the same group buy differently;
+//  3. the factory-wide doorHingeDemand family.
+//
+// nil everywhere inherits the library ladder inside ResolveHingeCount. The
+// hinge's table never carries a role: the role still comes from the
+// exception/factory rungs (HingeDemandForComponent).
+func (p *FactoryConstructionPolicy) HingeDemandForDoor(componentID string, hinge *Hardware) *HingeDemandPolicy {
+	if p != nil && componentID != "" {
+		if override := p.ComponentOverrides[componentID]; override != nil && override.HingeDemand != nil {
+			return override.HingeDemand
+		}
+	}
+	if hinge != nil && hinge.HingeDemand != nil {
+		return hinge.HingeDemand
+	}
+	return p.HingeDemandForComponent(componentID)
+}
+
 // Engine-consumption defaults mirrored from the engine package's parse
 // fallbacks (library defaults last — same scalars as #875 C1).
 const (

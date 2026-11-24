@@ -993,14 +993,21 @@ export {
   connectionFaceViolatesCapacity,
 } from './joinerySystem';
 
-// --- Hinge demand by door height band (#1078) ---
+// --- Hinge demand by door height band (#1078, per-hinge table #1579) ---
 export {
   HINGE_DEMAND_ROLE,
   HINGE_DEMAND_DESCRIPTION,
   HINGE_DEMAND_LINE_PREFIX,
   DEFAULT_HINGE_DEMAND_POLICY,
   hingesForDoor,
+  resolveHingeCount,
+  hingeDemandNotice,
   hingeDemandRole,
+  HINGE_TABLE_MIN_HINGES,
+  HINGE_TABLE_MAX_HINGES,
+  validateHingeDemandTable,
+  resolvedHardwareNotices,
+  type HingeCount,
   type HingeDemandBand,
   type HingeDemandPolicy,
 } from './hingeDemand';

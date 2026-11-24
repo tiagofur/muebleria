@@ -49,6 +49,11 @@ type ResolvedHardwareLine struct {
 	DescriptionOverride string  `json:"description_override,omitempty"`
 	OptionRole          string  `json:"option_role"`
 	HardwareID          string  `json:"hardware_id"`
+	// Notice (#1579) is a visible warning the engine attaches to a derived
+	// line — today: a door taller than the hinge table's last band. It never
+	// blocks and never changes the quantity; surfaces render it next to the
+	// line so the clamp stops being silent. Empty on every other line.
+	Notice string `json:"notice,omitempty"`
 }
 
 // ResolvedBom is the fully resolved module BOM.

@@ -14,7 +14,6 @@ import type {
   Module,
   ModuleCategory,
   OptionGroup,
-  QuoteBreakdown,
   Structure,
   MaterialBoard,
   EdgeBand,
@@ -35,7 +34,7 @@ import {
 } from './moduleHelpers';
 import { ModuleCategoryModals } from './components/ModuleCategoryModals';
 import { ModuleComponentAdderModal } from './components/ModuleComponentAdderModal';
-import { CostPreviewPanel } from './components/CostPreviewPanel';
+import { CostPreviewPanel, type CostPreview } from './components/CostPreviewPanel';
 import { ModuleDetailView } from './components/ModuleDetailView';
 import { ModuleEditorForm } from './components/ModuleEditorForm';
 import { ModuleListView } from './components/ModuleListView';
@@ -67,8 +66,9 @@ export interface ModulesScreenProps {
    * (detail selection or edit modal). Null = none / create mode.
    */
   readonly onEditingChange?: (moduleId: string | null) => void;
-  /** Domain QuoteBreakdown from shell (MOD-06). Null when blocked/unavailable. */
-  readonly costPreview?: QuoteBreakdown | null;
+  /** Domain cost preview from shell (MOD-06): the breakdown plus the
+   * engine's notices (#1579). Null when blocked/unavailable. */
+  readonly costPreview?: CostPreview | null;
   readonly previewBlocked?: boolean;
   readonly previewError?: string | null;
   readonly missingGroups?: readonly string[];

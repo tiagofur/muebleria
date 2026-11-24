@@ -16,10 +16,10 @@ import type {
   Component,
   Hardware,
   OptionGroup,
-  QuoteBreakdown,
   Structure,
 } from '@granete/domain';
 import type { HardwareLineDraft, ModuleDraft } from '../moduleHelpers';
+import type { CostPreview } from './CostPreviewPanel';
 import {
   ModuleEditorComponentsPanel,
 } from './ModuleEditorComponentsPanel';
@@ -81,7 +81,7 @@ export type ModuleEditorFormProps = {
   readonly onPreviewAuthoring?: (
     request: import('@granete/domain').FurnitureAuthoringPreviewRequest,
   ) => Promise<import('@granete/domain').FurnitureAuthoringPreviewResponse>;
-  readonly costPreview: QuoteBreakdown | null;
+  readonly costPreview: CostPreview | null;
   readonly previewBlocked: boolean;
   readonly previewError?: string | null;
   readonly missingGroups: readonly string[];

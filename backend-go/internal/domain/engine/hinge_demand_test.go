@@ -291,3 +291,117 @@ func TestHingeBandGranularOverlayInheritsLibraryLadder(t *testing.T) {
 		t.Fatalf("nil family must inherit the library ladder (5)")
 	}
 }
+
+// #1579 — the table a hinge declares for itself governs the doors it hangs.
+
+func hingeTableWithSurge(surgeMm float64, bands ...domain.HingeDemandBand) *domain.HingeDemandPolicy {
+	return &domain.HingeDemandPolicy{Bands: bands, WidthSurgeOverMm: &surgeMm}
+}
+
+var (
+	standardHingeTable = hingeTableWithSurge(650,
+		domain.HingeDemandBand{UpToHeightMm: 900, Hinges: 2},
+		domain.HingeDemandBand{UpToHeightMm: 1600, Hinges: 3},
+		domain.HingeDemandBand{UpToHeightMm: 2000, Hinges: 4},
+		domain.HingeDemandBand{UpToHeightMm: 2400, Hinges: 5},
+	)
+	reinforcedHingeTable = hingeTableWithSurge(600,
+		domain.HingeDemandBand{UpToHeightMm: 900, Hinges: 2},
+		domain.HingeDemandBand{UpToHeightMm: 1200, Hinges: 3},
+		domain.HingeDemandBand{UpToHeightMm: 2000, Hinges: 5},
+		domain.HingeDemandBand{UpToHeightMm: 2400, Hinges: 5},
+	)
+)
+
+// twoHingeDoorCatalog builds the band fixture with ONE static door of the
+// given size and two hinges in the BISAGRA group: a standard one and a
+// reinforced one that declares a steeper table.
+func twoHingeDoorCatalog(doorLen, doorW int, policy *domain.FactoryConstructionPolicy) (domain.Module, domain.Catalog) {
+	mod := bandTestModule(doorLen, nil, 0)
+	catalog := bandTestCatalog(mod, policy, 0)
+	catalog.Components[0].LengthMm = doorLen
+	catalog.Components[0].WidthMm = doorW
+	catalog.Hardware = []domain.Hardware{
+		{ID: "hw-standard", Code: "BIS-STD", Name: "Bisagra estándar", Active: true},
+		{ID: "hw-reinforced", Code: "BIS-REF", Name: "Bisagra reforzada", Active: true, HingeDemand: reinforcedHingeTable},
+	}
+	return mod, catalog
+}
+
+func bandQuantityFor(t *testing.T, mod domain.Module, catalog domain.Catalog, hingeID string) domain.ResolvedHardwareLine {
+	t.Helper()
+	bom, err := ResolveBom(mod, map[string]string{"INTERIOR": "mat-1", "FRENTE": "mat-1", domain.HingeDemandRole: hingeID}, catalog)
+	if err != nil {
+		t.Fatalf("resolve with %s: %v", hingeID, err)
+	}
+	bands := hingeBandLines(bom)
+	if len(bands) != 1 || bands[0].HardwareID != hingeID {
+		t.Fatalf("expected one band line for %s, got %+v", hingeID, bom.HardwareLines)
+	}
+	return bands[0]
+}
+
+func TestHingeTablePerHingeBuysDifferently(t *testing.T) {
+	// Aceptación #1579: two hinges with different tables in the same group —
+	// the SAME door buys a different quantity depending on the one chosen.
+	mod, catalog := twoHingeDoorCatalog(1800, 400, nil)
+	// Neither hinge declares a table yet: both inherit the library ladder (4).
+	if got := bandQuantityFor(t, mod, catalog, "hw-standard").Quantity; got != 4 {
+		t.Fatalf("standard hinge without table = %v, want 4 (library ladder)", got)
+	}
+	if got := bandQuantityFor(t, mod, catalog, "hw-reinforced").Quantity; got != 5 {
+		t.Fatalf("reinforced hinge with its table = %v, want 5", got)
+	}
+}
+
+func TestHingeTableWithoutTableStaysByteIdentical(t *testing.T) {
+	// No table on the hinge → the factory family governs exactly as before.
+	overlay := `{"joint.constructionPolicy":{"version":1,"doorHingeDemand":{"bands":[{"upToHeightMm":1200,"hinges":2},{"upToHeightMm":2400,"hinges":6}]}}}`
+	policy, err := ParseFactoryConstructionPolicy([]byte(overlay))
+	if err != nil {
+		t.Fatalf("parse policy: %v", err)
+	}
+	mod, catalog := twoHingeDoorCatalog(1500, 600, policy)
+	if got := bandQuantityFor(t, mod, catalog, "hw-standard").Quantity; got != 6 {
+		t.Fatalf("hinge without table must follow the factory family: %v, want 6", got)
+	}
+	// The chosen hinge's table outranks that factory family.
+	if got := bandQuantityFor(t, mod, catalog, "hw-reinforced").Quantity; got != 5 {
+		t.Fatalf("hinge table must outrank the factory family: %v, want 5", got)
+	}
+}
+
+func TestHingeBandOverflowCarriesNotice(t *testing.T) {
+	// Owner decision 3: a door taller than the table's last band takes the
+	// maximum AND the line says so — it never blocks, never stays silent.
+	mod, catalog := twoHingeDoorCatalog(2600, 600, nil)
+	catalog.Hardware[0].HingeDemand = standardHingeTable
+	line := bandQuantityFor(t, mod, catalog, "hw-standard")
+	if line.Quantity != 5 {
+		t.Fatalf("overflow door must take the table maximum: %+v, want 5", line)
+	}
+	want := "La puerta mide 2600 mm: supera la última banda de la tabla (2400 mm). Se aplican 5 bisagras por puerta."
+	if line.Notice != want {
+		t.Fatalf("notice = %q, want %q", line.Notice, want)
+	}
+
+	// The last band itself is in range: no notice, same count.
+	mod, catalog = twoHingeDoorCatalog(2400, 600, nil)
+	catalog.Hardware[0].HingeDemand = standardHingeTable
+	if line := bandQuantityFor(t, mod, catalog, "hw-standard"); line.Notice != "" || line.Quantity != 5 {
+		t.Fatalf("a door inside the table must carry no notice: %+v", line)
+	}
+
+	// No table on the hinge: the library ladder governs — it is a table too,
+	// so a door past ITS last row warns the same way. The quantity is the one
+	// it always was; only the silence goes.
+	mod, catalog = twoHingeDoorCatalog(2600, 600, nil)
+	line = bandQuantityFor(t, mod, catalog, "hw-standard")
+	if line.Quantity != 5 || line.Notice != want {
+		t.Fatalf("a library-ladder overflow must keep 5 and warn: %+v", line)
+	}
+	mod, catalog = twoHingeDoorCatalog(2100, 600, nil)
+	if line := bandQuantityFor(t, mod, catalog, "hw-standard"); line.Notice != "" || line.Quantity != 5 {
+		t.Fatalf("a door inside the library ladder must carry no notice: %+v", line)
+	}
+}

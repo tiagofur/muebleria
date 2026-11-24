@@ -3,12 +3,11 @@
  */
 
 import type { ReactNode } from 'react';
-import type { QuoteBreakdown } from '@granete/domain';
-import { CostPreviewPanel } from './CostPreviewPanel';
+import { CostPreviewPanel, type CostPreview } from './CostPreviewPanel';
 
 export type ModuleEditorCostPanelProps = {
   readonly editingId: string | null;
-  readonly costPreview: QuoteBreakdown | null;
+  readonly costPreview: CostPreview | null;
   readonly previewBlocked: boolean;
   readonly previewError?: string | null;
   readonly missingGroups: readonly string[];

@@ -26,6 +26,11 @@ import (
 // Scope: module board parts (FRENTE role, composed expansion sets the
 // catalog component id). Agregado doors keep their authored demand —
 // extending the band there is named remaining work in the ODD.
+//
+// #1579: the count policy per door is FactoryConstructionPolicy.HingeDemandForDoor
+// — component exception, then the chosen hinge's own table, then the factory
+// family. A door taller than the table's last band takes the maximum and the
+// line carries the warning (Notice) instead of clamping silently.
 
 // hingeDemandDoorRole is the canonical door option role (same criterion as
 // isDoorBoard / the layout resolver).
@@ -63,6 +68,10 @@ func collectHingeBandDemand(
 	type bandDemand struct {
 		quantity int
 		role     string
+		// overflowHeightMm > 0 marks the tallest door under this hardware
+		// that exceeded the table's last band (#1579).
+		overflowHeightMm float64
+		overflowCount    domain.HingeCount
 	}
 	demand := make(map[string]*bandDemand)
 	for _, door := range doors {
@@ -85,12 +94,21 @@ func collectHingeBandDemand(
 			// Positions already bought this hardware — #1210 wins.
 			continue
 		}
+		// #1579: the hinge effectively chosen for THIS door may declare its
+		// own table; it outranks the factory family, the component exception
+		// outranks it.
+		countPolicy := policy.HingeDemandForDoor(door.CatalogComponentID, hw)
+		count := domain.ResolveHingeCount(door.LengthMm, door.WidthMm, countPolicy)
 		entry := demand[hw.ID]
 		if entry == nil {
 			entry = &bandDemand{role: role}
 			demand[hw.ID] = entry
 		}
-		entry.quantity += domain.HingesForDoor(door.LengthMm, door.WidthMm, doorPolicy) * max(door.Quantity, 1)
+		entry.quantity += count.Hinges * max(door.Quantity, 1)
+		if count.AboveLastBand && door.LengthMm > entry.overflowHeightMm {
+			entry.overflowHeightMm = door.LengthMm
+			entry.overflowCount = count
+		}
 	}
 	if len(demand) == 0 {
 		return nil, nil, nil
@@ -100,12 +118,17 @@ func collectHingeBandDemand(
 	lines := make([]domain.ResolvedHardwareLine, 0, len(demand))
 	for hwID, entry := range demand {
 		counts[hwID] = entry.quantity
+		notice := ""
+		if entry.overflowHeightMm > 0 {
+			notice = domain.HingeDemandAboveLastBandMessage(entry.overflowHeightMm, entry.overflowCount)
+		}
 		lines = append(lines, domain.ResolvedHardwareLine{
 			ID:                  domain.HingeDemandLinePrefix + hwID,
 			Quantity:            float64(entry.quantity),
 			DescriptionOverride: domain.HingeDemandLineDescription,
 			OptionRole:          entry.role,
 			HardwareID:          hwID,
+			Notice:              notice,
 		})
 	}
 	return counts, lines, nil

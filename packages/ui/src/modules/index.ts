@@ -18,6 +18,8 @@ export {
 
 export type { ComponentInstanceDraft } from './moduleHelpers';
 
+export type { CostPreview } from './components/CostPreviewPanel';
+
 export {
   defaultOptionChoicesForModule,
   edgesFromFlags,

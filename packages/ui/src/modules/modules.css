@@ -447,6 +447,27 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* #1579: avisos del motor junto al costo del mueble (p. ej. una puerta más
+   alta que la última banda de la tabla de bisagras). Informan, no bloquean:
+   el preview conserva su borde y fondo de «disponible». */
+.module-cost-preview__notices {
+  margin: 0.65rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.module-cost-preview__notice {
+  padding: 0.35rem var(--space-3);
+  border-left: 3px solid var(--warning-500);
+  border-radius: var(--radius-md);
+  background: var(--warning-50);
+  color: var(--warning-800);
+  font-size: var(--text-md);
+}
+
 .module-cost-preview__missing {
   margin: 0.35rem 0 0;
   padding-left: 1.1rem;

@@ -14,10 +14,14 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_HINGE_DEMAND_POLICY,
   HINGE_DEMAND_ROLE,
+  hingeDemandNotice,
   hingeDemandRole,
   hingesForDoor,
+  resolveHingeCount,
+  validateHingeDemandTable,
   type HingeDemandPolicy,
 } from './hingeDemand';
+import { hingePolicyForDoor } from './engine/hingeBandDemand';
 import { hingePositions } from './jointDrillingRules';
 
 interface DemandCase {
@@ -33,11 +37,58 @@ interface OverrideCase {
   readonly cases: readonly DemandCase[];
 }
 
+/** #1579: one hinge's table checked against one door. */
+interface HingeTableCase extends DemandCase {
+  /** The count the `against` table buys for the SAME door. */
+  readonly expectedHingesAgainst?: number;
+}
+
+interface HingeTableGroup {
+  readonly name: string;
+  readonly table: string;
+  readonly against?: string;
+  readonly cases: readonly HingeTableCase[];
+}
+
+interface LadderCase {
+  readonly name: string;
+  readonly factory: boolean;
+  readonly table: string | null;
+  readonly exception: boolean;
+  readonly heightMm: number;
+  readonly widthMm?: number;
+  readonly expectedHinges: number;
+}
+
+interface OverflowCase extends DemandCase {
+  readonly table: string;
+  readonly expectedAboveLastBand: boolean;
+  readonly expectedLastBandHeightMm: number;
+  readonly expectedNotice: string | null;
+}
+
+/** #1579: a hinge table and the reason it is (or is not) writable. */
+interface TableValidationCase {
+  readonly name: string;
+  readonly table: string | null;
+  readonly expectedError: string | null;
+}
+
 interface Fixture {
   readonly schema: number;
   readonly defaultPolicy: HingeDemandPolicy & { readonly optionRole: string };
   readonly demandCases: readonly DemandCase[];
   readonly overrideCases: readonly OverrideCase[];
+  readonly hingeTables: Readonly<Record<string, HingeDemandPolicy>>;
+  readonly hingeTableCases: readonly HingeTableGroup[];
+  readonly ladder: {
+    readonly componentId: string;
+    readonly factoryPolicy: HingeDemandPolicy;
+    readonly exception: HingeDemandPolicy;
+    readonly cases: readonly LadderCase[];
+  };
+  readonly overflowCases: readonly OverflowCase[];
+  readonly tableValidationCases: readonly TableValidationCase[];
 }
 
 const fixturePath = resolve(
@@ -103,4 +154,75 @@ describe('contracts/hingeDemandBands.contract.json (#1078)', () => {
     expect(hingeDemandRole({ bands: [] })).toBe(HINGE_DEMAND_ROLE);
     expect(hingeDemandRole(fixture.overrideCases[1]!.policy)).toBe('BISAGRA_PREMIUM');
   });
+
+  // --- #1579: the table a hinge declares for itself ---
+
+  it.each(
+    fixture.hingeTableCases.flatMap((group) =>
+      group.cases.map((c) => [group.name, c] as const),
+    ),
+  )('hinge table: %s → %s', (groupName, testCase) => {
+    const group = fixture.hingeTableCases.find((g) => g.name === groupName)!;
+    const table = fixture.hingeTables[group.table]!;
+    expect(hingesForDoor(testCase.heightMm, testCase.widthMm, table)).toBe(
+      testCase.expectedHinges,
+    );
+    // Same door, other hinge: the count follows the hinge effectively chosen.
+    if (group.against && testCase.expectedHingesAgainst !== undefined) {
+      expect(
+        hingesForDoor(
+          testCase.heightMm,
+          testCase.widthMm,
+          fixture.hingeTables[group.against]!,
+        ),
+      ).toBe(testCase.expectedHingesAgainst);
+    }
+  });
+
+  it.each(fixture.ladder.cases.map((c) => [c.name, c] as const))(
+    'ladder: %s',
+    (_name, testCase) => {
+      const { componentId, factoryPolicy, exception } = fixture.ladder;
+      const policySource = {
+        ...(testCase.factory ? { doorHingeDemand: factoryPolicy } : {}),
+        ...(testCase.exception
+          ? { componentOverrides: { [componentId]: { hingeDemand: exception } } }
+          : {}),
+      };
+      const hinge = testCase.table
+        ? { hingeDemand: fixture.hingeTables[testCase.table]! }
+        : {};
+      const count = resolveHingeCount(
+        testCase.heightMm,
+        testCase.widthMm,
+        hingePolicyForDoor(policySource, componentId, hinge),
+      );
+      expect(count.hinges).toBe(testCase.expectedHinges);
+    },
+  );
+
+  it.each(fixture.overflowCases.map((c) => [c.name, c] as const))(
+    'overflow: %s',
+    (_name, testCase) => {
+      const count = resolveHingeCount(
+        testCase.heightMm,
+        testCase.widthMm,
+        fixture.hingeTables[testCase.table]!,
+      );
+      expect(count.hinges).toBe(testCase.expectedHinges);
+      expect(count.aboveLastBand).toBe(testCase.expectedAboveLastBand);
+      expect(count.lastBandHeightMm).toBe(testCase.expectedLastBandHeightMm);
+      expect(hingeDemandNotice(testCase.heightMm, count) ?? null).toBe(
+        testCase.expectedNotice,
+      );
+    },
+  );
+
+  it.each(fixture.tableValidationCases.map((c) => [c.name, c] as const))(
+    'table validation: %s',
+    (_name, testCase) => {
+      const table = testCase.table ? fixture.hingeTables[testCase.table] : null;
+      expect(validateHingeDemandTable(table)).toBe(testCase.expectedError);
+    },
+  );
 });

@@ -3293,6 +3293,7 @@ type Hardware struct {
 	DesignParts         []map[string]any    `json:"design_parts,omitempty"`
 	KitHardwareID       *string             `json:"kit_hardware_id,omitempty"`
 	Pieces              []HardwarePiece     `json:"pieces,omitempty"`
+	HingeDemand         *HingeDemandPolicy  `json:"hinge_demand,omitempty"`
 	Active              bool                `json:"active"`
 	CreatedAt           *string             `json:"created_at,omitempty"`
 	UpdatedAt           *string             `json:"updated_at,omitempty"`
@@ -3326,6 +3327,7 @@ type HardwareWrite struct {
 	DesignParts         []map[string]any    `json:"design_parts,omitempty"`
 	KitHardwareID       *string             `json:"kit_hardware_id,omitempty"`
 	Pieces              []HardwarePiece     `json:"pieces,omitempty"`
+	HingeDemand         *HingeDemandPolicy  `json:"hinge_demand,omitempty"`
 	CategoryID          *string             `json:"category_id,omitempty"`
 	Brand               *string             `json:"brand,omitempty"`
 	Active              bool                `json:"active"`
@@ -3341,6 +3343,16 @@ type HardwareDimensions struct {
 	WidthMm  float64 `json:"widthMm"`
 	HeightMm float64 `json:"heightMm"`
 	DepthMm  float64 `json:"depthMm"`
+}
+
+type HingeDemandPolicy struct {
+	Bands            []HingeDemandBand `json:"bands"`
+	WidthSurgeOverMm *float64          `json:"widthSurgeOverMm,omitempty"`
+}
+
+type HingeDemandBand struct {
+	UpToHeightMm float64 `json:"upToHeightMm"`
+	Hinges       int64   `json:"hinges"`
 }
 
 type CatalogModuleWrite struct {

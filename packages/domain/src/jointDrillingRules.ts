@@ -82,6 +82,13 @@ export interface DeriveJointPlacementsParams {
    * with the quote. Omitted = library default ladder.
    */
   readonly hingeDemandPolicy?: HingeDemandPolicy;
+  /**
+   * #1579: per-door policy for the cups. The caller returns a policy when the
+   * hinge chosen for that door declares its own table (the component exception
+   * still outranks it); undefined keeps `hingeDemandPolicy`, so a catalog
+   * without hinge tables drills exactly as before.
+   */
+  readonly hingeDemandPolicyForDoor?: (door: JointPart) => HingeDemandPolicy | undefined;
 }
 
 const LATERAL_PLACEMENTS: ReadonlySet<string> = new Set([
@@ -343,6 +350,7 @@ function doorHingePlacements(
   grid: number,
   out: DerivedJointPlacement[],
   hingeDemandPolicy?: HingeDemandPolicy,
+  hingeDemandPolicyForDoor?: (door: JointPart) => HingeDemandPolicy | undefined,
 ): void {
   if (doors.length === 0 || laterals.length === 0) return;
   const rule = rules.doorHinge;
@@ -356,13 +364,14 @@ function doorHingePlacements(
 
   for (const door of doors) {
     // #1078: cups follow the DEMAND count (same policy the quote buys with),
-    // width included — the surge hinge is drilled too.
+    // width included — the surge hinge is drilled too. #1579: the chosen
+    // hinge's own table governs when it declares one.
     const positions = hingePositions(
       door.lengthMm,
       endMargin,
       grid,
       door.widthMm,
-      hingeDemandPolicy,
+      hingeDemandPolicyForDoor?.(door) ?? hingeDemandPolicy,
     );
     for (const y of positions) {
       if (hingeId) {
@@ -430,6 +439,7 @@ export function deriveJointHardwarePlacements(
     grid,
     out,
     params.hingeDemandPolicy,
+    params.hingeDemandPolicyForDoor,
   );
 
   return out;

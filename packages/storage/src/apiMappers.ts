@@ -511,6 +511,25 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     // #1507: category tree link + free-form brand; null/'' = unset.
     category_id: h.categoryId ?? null,
     brand: h.brand ?? '',
+    // #1579: the hinge's own height → quantity table; null = no table. Always
+    // sent: the PUT keeps the stored table only when the key is omitted.
+    hinge_demand: hingeDemandPolicyToApi(h.hingeDemand),
+  };
+}
+
+/** Wire form of a hinge demand policy (#1579): bands plus the surge tri-state. */
+function hingeDemandPolicyToApi(
+  policy: HingeDemandPolicy | undefined,
+): Record<string, unknown> | null {
+  if (!policy) return null;
+  return {
+    bands: policy.bands.map((band) => ({
+      upToHeightMm: band.upToHeightMm,
+      hinges: band.hinges,
+    })),
+    ...(policy.widthSurgeOverMm === undefined
+      ? {}
+      : { widthSurgeOverMm: policy.widthSurgeOverMm }),
   };
 }
 
@@ -582,6 +601,12 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
       ? { categoryId: str(raw.category_id ?? raw.categoryId) }
       : {}),
     ...(str(raw.brand) ? { brand: str(raw.brand) } : {}),
+    // #1579: tabla de bisagras por altura del propio herraje — una forma
+    // inservible nunca entra al catálogo (el servidor rechaza la escritura).
+    ...((): { hingeDemand: HingeDemandPolicy } | {} => {
+      const hingeDemand = hingeDemandPolicyFromApi(raw.hinge_demand ?? raw.hingeDemand);
+      return hingeDemand ? { hingeDemand } : {};
+    })(),
   };
 }
 
@@ -3955,15 +3980,22 @@ function hingeDemandPolicyFromApi(raw: unknown): HingeDemandPolicy | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const r = raw as Record<string, unknown>;
   if (!Array.isArray(r.bands) || r.bands.length === 0) return undefined;
-  const bands = r.bands
-    .map((b) => b as Record<string, unknown>)
-    .filter((b) => typeof b.upToHeightMm === 'number' && typeof b.hinges === 'number')
-    .map((b) => ({ upToHeightMm: b.upToHeightMm as number, hinges: b.hinges as number }));
-  if (bands.length === 0) return undefined;
+  // Una fila inservible tira la TABLA entera (S-A2 del juicio #1579): una
+  // truncada cambiaría el conteo de puertas clampando antes — mismo criterio
+  // del gemelo Go scanHingeDemandPolicy, que descarta ante cualquier decode
+  // fallido. Nunca una tabla recortada que parezca válida.
+  const bands = r.bands.map((b) => b as Record<string, unknown>);
+  if (
+    !bands.every(
+      (b) => typeof b.upToHeightMm === 'number' && typeof b.hinges === 'number',
+    )
+  ) {
+    return undefined;
+  }
   const surge = r.widthSurgeOverMm;
   return {
     optionRole: typeof r.optionRole === 'string' && r.optionRole.trim() ? r.optionRole : undefined,
-    bands,
+    bands: bands.map((b) => ({ upToHeightMm: b.upToHeightMm as number, hinges: b.hinges as number })),
     widthSurgeOverMm:
       typeof surge === 'number'
         ? surge

@@ -10,6 +10,9 @@
 
 import { generateCutRowsWithLinks, type CutRowPieceLink } from './engine/cut';
 import { componentIdFromComposedPartId, resolveBom } from './engine/bom';
+import { hingePolicyForDoor } from './engine/hingeBandDemand';
+import { hingeDemandRole } from './hingeDemand';
+import { resolvePlacementHardwareId } from './hardwarePlacement';
 import { resolveModuleMeasurePreset } from './measurePresets';
 import {
   deriveJointHardwarePlacements,
@@ -32,6 +35,7 @@ import {
 import type {
   Agregado,
   Catalog,
+  Hardware,
   HardwarePlacement,
   JointDrillingRules,
   Module,
@@ -189,6 +193,24 @@ function instancesForModule(
     ...(structure?.components ?? []),
     ...(moduleInstances ?? []),
   ];
+}
+
+/**
+ * #1579: the hinge the DEMAND buys for the band role under these choices —
+ * the hardware whose own table governs the cups. Undefined when the role has
+ * no concrete choice or it points outside the catalog (the band collector
+ * owns failing closed on that; drilling simply keeps its usual source).
+ */
+function chosenBandHinge(
+  catalog: Catalog,
+  choices: OptionChoices | undefined,
+): Hardware | undefined {
+  const role = hingeDemandRole(catalog.constructionPolicy?.doorHingeDemand);
+  const resolution = resolvePlacementHardwareId({ optionRole: role }, choices);
+  if (resolution.status !== 'resolved' && resolution.status !== 'concrete') {
+    return undefined;
+  }
+  return catalog.hardware.find((hw) => hw.id === resolution.hardwareId);
 }
 
 /**
@@ -353,6 +375,18 @@ export function resolveProjectDrilling(
         // #1218: the cup count rides the SAME demand policy the server
         // quotes with — factory overrides govern previews too.
         hingeDemandPolicy: catalog.constructionPolicy?.doorHingeDemand,
+        // #1579: a hinge that declares its own table governs the cups of the
+        // doors it hangs (the component exception still wins). Without a
+        // table the factory source above stands: drilling is unchanged.
+        hingeDemandPolicyForDoor: (door) => {
+          const hinge = chosenBandHinge(catalog, choices);
+          if (!hinge?.hingeDemand) return undefined;
+          return hingePolicyForDoor(
+            catalog.constructionPolicy,
+            componentIdFromComposedPartId(door.id) ?? undefined,
+            hinge,
+          );
+        },
       }),
     );
   }

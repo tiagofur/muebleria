@@ -36,6 +36,7 @@ import { CatalogImage, Modal } from '../../common';
 import { Hardware3DSection } from './Hardware3DSection';
 import { HardwareKitAccessoriesSection } from './HardwareKitAccessoriesSection';
 import { HardwarePiecesSection } from './HardwarePiecesSection';
+import { HardwareHingeDemandSection } from './HardwareHingeDemandSection';
 import { HardwareMachiningSection } from './HardwareMachiningSection';
 import { HardwareDesignPartsSection } from './HardwareDesignPartsSection';
 import { UNIT_LABELS, type HardwareDraft, type HardwareItemType } from './hardwareDraft';
@@ -783,6 +784,18 @@ export function HardwareFormModal({
             canMutate={canMutate}
             assetService={assetService}
             itemType={isPairLike ? itemType : undefined}
+          />
+        ) : null}
+
+        {/* #1579: la tabla «bisagras por altura de puerta» que este herraje
+            declara para sí. Una parte de juego no declara tabla (la declara
+            el juego). */}
+        {!isKitChildPart ? (
+          <HardwareHingeDemandSection
+            draft={draft}
+            setDraft={setDraft}
+            canMutate={canMutate}
+            suggestOnCreate={!editingId}
           />
         ) : null}
 
