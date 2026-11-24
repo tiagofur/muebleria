@@ -134,3 +134,66 @@ func TestKitPlateFallbackSideThickness(t *testing.T) {
 		t.Fatalf("copa furniture x: want 782 (fallback tSide=door thickness), got %.3f", copa)
 	}
 }
+
+// #1715: the copa's placement label may declare the `hinge` ref — the anchor
+// panel is the door's HINGE side (derived, hand-aware) and the label's Y/Z
+// offsets ride as depth/height deltas (the authored `pos:min` pinned the left
+// panel and landed the plate on the wrong side of a derecha door).
+func kitPlateLabeledCopa() domain.Catalog {
+	cat := kitPlateCatalog()
+	for i := range cat.Hardware {
+		if cat.Hardware[i].ID == "copa-1" {
+			cat.Hardware[i].DesignParts = []domain.HardwareDesignPart{
+				{ActorMembership: "body", Label: "pos:hinge:0:-37:0"},
+			}
+		}
+	}
+	return cat
+}
+
+func TestKitPlateHingeRefMountsOnHingeSideWithDepthDelta(t *testing.T) {
+	rows := resolveHardwareOrKitToWorld(kitPlateBoard(402), kitPlatePlacement(),
+		kitPlateLabeledCopa(), 15, 800, "hp-kit-hinge")
+	if len(rows) != 2 {
+		t.Fatalf("want 2 kit rows, got %d", len(rows))
+	}
+	copa := kitPlateX(t, rows, "body")
+	if math.Abs(copa-785) > 0.01 {
+		t.Fatalf("copa furniture x: want 785 (hinge side = right inner face), got %.3f", copa)
+	}
+	var copaRow *LayoutHardware
+	for i := range rows {
+		if rows[i].ActorMembership == "body" {
+			copaRow = &rows[i]
+		}
+	}
+	// The depth delta rides on top of the same-geometry unlabeled baseline:
+	// labeled baseline − 37 = the plate sits 37mm hacia atrás.
+	baseRows := resolveHardwareOrKitToWorld(kitPlateBoard(402), kitPlatePlacement(),
+		kitPlateCatalog(), 15, 800, "hp-kit-hinge-base")
+	var baseline float64
+	for i := range baseRows {
+		if baseRows[i].ActorMembership == "body" {
+			baseline = baseRows[i].Transform.TranslationMm[1]
+		}
+	}
+	if got := copaRow.Transform.TranslationMm[1]; math.Abs(got-(baseline-37)) > 0.01 {
+		t.Fatalf("copa depth y: want %.3f (baseline %.3f − 37 delta), got %.3f", baseline-37, baseline, got)
+	}
+}
+
+func TestKitPlateHingeRefMirroredDoor(t *testing.T) {
+	rows := resolveHardwareOrKitToWorld(kitPlateBoard(2), domain.HardwarePlacement{
+		HardwareID:       "9f8212fb-f210-4862-a085-78e2f9ff2bc4",
+		AnchorFace:       "back",
+		RelativePosition: domain.HardwareRelPosition{XMm: 20.5, YMm: 90, XFormula: "PW-20.5"},
+		RotationDeg:      &domain.HardwareRotationDeg{Y: 180},
+	}, kitPlateLabeledCopa(), 15, 800, "hp-kit-hinge-izq")
+	if len(rows) != 2 {
+		t.Fatalf("want 2 kit rows, got %d", len(rows))
+	}
+	copa := kitPlateX(t, rows, "body")
+	if math.Abs(copa-15) > 0.01 {
+		t.Fatalf("copa furniture x: want 15 (hinge side = left inner face), got %.3f", copa)
+	}
+}
