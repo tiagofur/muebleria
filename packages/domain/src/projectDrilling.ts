@@ -117,7 +117,11 @@ export interface AgregadoPlacementLookup {
     readonly rule: NonNullable<HardwarePlacement['countRule']>;
     /** Identidad CONCRETA del patrón (hardwareId → override → elección). */
     readonly hardwareId: string;
+    /** Componente de la receta que porta el patrón (rung de excepción). */
+    readonly componentId: string;
   };
+  /** Overrides de la INSTANCIA (pierna de override de las fijas). */
+  readonly instanceOptionOverrides?: Readonly<Record<string, string>>;
   /**
    * Set ONLY for an `agr-*` part id that could not resolve to its host
    * component (broken link, missing definition or missing component) — the
@@ -148,6 +152,8 @@ export function agregadoManualPlacementsForPart(
   module: Pick<Module, 'agregados'> | undefined,
   catalogAgregados: readonly Agregado[],
   optionChoices?: OptionChoices,
+  // #1579 PR2 (juicio): el catálogo para el rol POLICY-AWARE del patrón.
+  catalog?: Pick<Catalog, 'constructionPolicy'>,
 ): AgregadoPlacementLookup {
   if (!partId.startsWith('agr-')) return { placements: [] };
 
@@ -194,8 +200,12 @@ export function agregadoManualPlacementsForPart(
         }
         // #1579 PR2 (juicio): la identidad del patrón se resuelve con la
         // MISMA cadena que la demanda — hardwareId → override de instancia →
-        // elección efectiva — nunca con el rol de banda del ítem.
-        const patternRole = pattern.optionRole?.trim() || 'BISAGRA';
+        // elección efectiva — con rol POLICY-AWARE (la política puede
+        // declarar otro grupo), y se devuelven el componente de la receta
+        // (rung de excepción) y los overrides de la instancia (fijas).
+        const patternRole =
+          pattern.optionRole?.trim() ||
+          hingeDemandRole(catalog?.constructionPolicy?.doorHingeDemand);
         const patternHardwareId =
           pattern.hardwareId?.trim() ||
           inst.optionOverrides?.[patternRole]?.trim() ||
@@ -203,7 +213,12 @@ export function agregadoManualPlacementsForPart(
           '';
         return {
           placements,
-          countRule: { rule: pattern.countRule, hardwareId: patternHardwareId },
+          countRule: {
+            rule: pattern.countRule,
+            hardwareId: patternHardwareId,
+            componentId: component.componentId,
+          },
+          instanceOptionOverrides: inst.optionOverrides,
         };
       }
     }
@@ -254,19 +269,24 @@ export function expandAgregadoCountRulePlacements(
   params: {
     readonly countRule?: {
       readonly rule: NonNullable<HardwarePlacement['countRule']>;
+      /** Identidad CONCRETA del patrón (hardwareId → override → elección). */
       readonly hardwareId: string;
+      /** Componente de la receta que porta el patrón (rung de excepción). */
+      readonly componentId: string;
     };
+    /** Overrides de la INSTANCIA (pierna de override de las fijas). */
+    readonly instanceOptionOverrides?: Readonly<Record<string, string>>;
     readonly catalog: Catalog;
     readonly choices: OptionChoices | undefined;
     readonly partLengthMm: number;
     readonly partWidthMm: number;
-    readonly partComponentId?: string;
   },
 ): readonly HardwarePlacement[] {
   const pattern = params.countRule;
   if (!pattern) return placements;
   // Perforado = comprado: el patrón gobierna su herraje con SU identidad
-  // (hardwareId → override de instancia → elección), resuelta en el lookup.
+  // (hardwareId → override de instancia → elección) y SU componente (rung
+  // de excepción), ambos resueltos en el lookup.
   const hinge = pattern.hardwareId
     ? params.catalog.hardware.find((hw) => hw.id === pattern.hardwareId)
     : undefined;
@@ -275,7 +295,7 @@ export function expandAgregadoCountRulePlacements(
   }
   const policy = hingePolicyForDoor(
     params.catalog.constructionPolicy,
-    params.partComponentId,
+    pattern.componentId,
     hinge,
   );
   const count = resolveHingeCount(
@@ -287,6 +307,7 @@ export function expandAgregadoCountRulePlacements(
     if (p.countRule) return false;
     const resolved =
       p.hardwareId ||
+      params.instanceOptionOverrides?.[p.optionRole ?? ''] ||
       params.choices?.[p.optionRole ?? ''] ||
       '';
     return resolved === hinge.id;
@@ -509,13 +530,14 @@ export function resolveProjectDrilling(
       : undefined;
     // F131: only evaluated when the secondary BOM resolved — a BOM failure
     // already reports its own blocking issue and must not double-report.
-    const agregadoForPart = cacheKey
+    const agregadoForPart: import('./projectDrilling').AgregadoPlacementLookup | undefined = cacheKey
       ? agregadoManualPlacementsForPart(
           link.partId,
           structure,
           module,
           catalog.agregados ?? [],
           choicesByKey.get(cacheKey),
+          catalog,
         )
       : undefined;
     if (agregadoForPart?.unresolved && !reportedUnresolvedHosts.has(agregadoForPart.unresolved)) {
@@ -537,11 +559,11 @@ export function resolveProjectDrilling(
       ],
       {
         countRule: agregadoForPart?.countRule,
+        instanceOptionOverrides: agregadoForPart?.instanceOptionOverrides,
         catalog,
         choices: cacheKey ? choicesByKey.get(cacheKey) : undefined,
         partLengthMm: link.part.lengthMm,
         partWidthMm: link.part.widthMm,
-        partComponentId: componentIdFromComposedPartId(link.partId) ?? undefined,
       },
     );
     const derivedForPart = (cacheKey ? derivedByKey.get(cacheKey) ?? [] : []).filter(

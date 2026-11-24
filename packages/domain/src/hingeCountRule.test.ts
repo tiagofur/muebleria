@@ -390,12 +390,11 @@ describe('expandAgregadoCountRulePlacements — perforado = comprado (juicio PR2
     // Puerta 1497: reforzada → 5; estándar → 3. El patrón declara concreto
     // hw-reinforced: perfora 5 posiciones con la identidad del patrón.
     const out = expandAgregadoCountRulePlacements(placements, {
-      countRule: pattern,
+      countRule: { ...pattern, componentId: 'comp-door' },
       catalog,
       choices: { BISAGRA: 'hw-standard' },
       partLengthMm: 1497,
       partWidthMm: 594,
-      partComponentId: 'comp-door',
     });
     const hinges = out.filter((p) => p.optionRole === 'BISAGRA');
     expect(hinges).toHaveLength(5);
@@ -409,26 +408,49 @@ describe('expandAgregadoCountRulePlacements — perforado = comprado (juicio PR2
     const out = expandAgregadoCountRulePlacements(
       placements.filter((p) => p.optionRole === 'BISAGRA'),
       {
-        countRule: pattern,
+        countRule: { ...pattern, componentId: 'comp-door' },
         catalog: { ...catalog, hardware: catalog.hardware.filter((h) => h.id !== 'hw-reinforced') },
         choices: {},
         partLengthMm: 1497,
         partWidthMm: 594,
-        partComponentId: 'comp-door',
       },
     );
     expect(out).toEqual([]);
   });
 
+  it('fixed-wins con override de INSTANCIA: la fija por rol+override gana y el patrón no taladra', () => {
+    // Fija por rol (sin id concreto) + patrón; la instancia hace override
+    // BISAGRA → hw-reinforced. Demanda: patrón suprimido (fija hw-ref gana,
+    // 1×hw-ref). Drilling: la fija resuelve hw-ref vía override → patrón no
+    // taladra (perforado = comprado).
+    const fixedByRole = {
+      optionRole: 'BISAGRA',
+      anchorFace: 'back' as const,
+      relativePosition: { xMm: 20.5, yMm: 90 },
+    };
+    const out = expandAgregadoCountRulePlacements([fixedByRole, ...placements], {
+      countRule: { ...pattern, componentId: 'comp-door' },
+      instanceOptionOverrides: { BISAGRA: 'hw-reinforced' },
+      catalog,
+      choices: { BISAGRA: 'hw-standard' },
+      partLengthMm: 1497,
+      partWidthMm: 594,
+    });
+    // La fija (resuelta hw-reinforced vía override) queda; el patrón no.
+    // La jaladera fija (otro herraje) también.
+    const jaladera = placements[1];
+    expect(out).toEqual([fixedByRole, jaladera]);
+  });
+
   it('posiciones fijas del mismo herraje ganan: el patrón no taladra', () => {
     const fixed = { hardwareId: 'hw-reinforced', anchorFace: 'back' as const, relativePosition: { xMm: 20.5, yMm: 90 } };
     const out = expandAgregadoCountRulePlacements([fixed, ...placements], {
-      countRule: pattern,
+      countRule: { ...pattern, componentId: 'comp-door' },
+      instanceOptionOverrides: { BISAGRA: 'hw-reinforced' },
       catalog,
-      choices: {},
+      choices: { BISAGRA: 'hw-standard' },
       partLengthMm: 1497,
       partWidthMm: 594,
-      partComponentId: 'comp-door',
     });
     // La fija queda + la jaladera fija (otro herraje); el patrón no taladra.
     expect(out).toEqual([fixed, placements[1]]);
