@@ -94,6 +94,16 @@ func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeni
 		}
 		placed := false
 		for i := range boards {
+			// #1708: the truthful host of a side notch is a CARCASS side
+			// panel — the profile band lives at the carcass front plane, the
+			// same host doctrine #1300 applies to the profile run. Drawer-box
+			// walls carry the same lateral placement but are their own
+			// agregado boards: their extent is the box's, and a joint the
+			// distribution moved can fall outside it (the live failure that
+			// froze a whole batch). Never cut an assembly board.
+			if boards[i].assemblyInstanceID != "" {
+				continue
+			}
 			if !boardIsOpeningSide(&boards[i]) {
 				continue
 			}
