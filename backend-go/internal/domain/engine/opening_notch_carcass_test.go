@@ -19,10 +19,10 @@ import (
 func notchCarcassBoards() []layoutBoard {
 	return []layoutBoard{
 		// The resolved front stack (the geometry the notch hangs from) — the
-		// pose fields mirror what the expansion emits (probe: rotY 180).
-		{id: "frente-1", placement: string(domain.PlacementFrenteCajon), x: 2, y: 560, z: 482, lengthMm: 236, widthMm: 596, thicknessMm: 18, rotY: 180},
-		{id: "frente-2", placement: string(domain.PlacementFrenteCajon), x: 2, y: 560, z: 242, lengthMm: 236, widthMm: 596, thicknessMm: 18, rotY: 180},
-		{id: "frente-3", placement: string(domain.PlacementFrenteCajon), x: 2, y: 560, z: 2, lengthMm: 236, widthMm: 596, thicknessMm: 18, rotY: 180},
+		// pose fields mirror what the expansion emits (probe: rot 90/180/90).
+		{id: "frente-1", placement: string(domain.PlacementFrenteCajon), x: 2, y: 560, z: 482, lengthMm: 236, widthMm: 596, thicknessMm: 18, rotX: 90, rotY: 180},
+		{id: "frente-2", placement: string(domain.PlacementFrenteCajon), x: 2, y: 560, z: 242, lengthMm: 236, widthMm: 596, thicknessMm: 18, rotX: 90, rotY: 180},
+		{id: "frente-3", placement: string(domain.PlacementFrenteCajon), x: 2, y: 560, z: 2, lengthMm: 236, widthMm: 596, thicknessMm: 18, rotX: 90, rotY: 180},
 		// The carcass side: spans the full body height, owns no assembly —
 		// the pose mirrors what the expansion emits (probe: rot 90/180/90).
 		{id: "st-comp-side", placement: string(domain.PlacementLateralIzquierdo), x: 0, y: 0, z: 0, lengthMm: 684, widthMm: 560, thicknessMm: 18, rotX: 90, rotY: 180, rotZ: 90},
