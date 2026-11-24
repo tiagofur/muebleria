@@ -376,7 +376,9 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
     };
     const PAT_AGR = '67777777-3333-4733-8777-333333333333';
     const PAT_STRUCT = '67777777-3434-4734-8777-343434343434';
-    const PAT_MODULE = '67777777-3535-4735-8777-353535353535';
+    const PAT_MODULE_720 = '67777777-3535-4735-8777-353535353535';
+    const PAT_MODULE_2100 = '67777777-3d3d-473d-8777-3d3d3d3d3d3d';
+    const PAT_STRUCT_2100 = '67777777-3e3e-473e-8777-3e3e3e3e3e3e';
     const PAT_DOOR_COMP = '67777777-3636-4736-8777-363636363636';
     const PAT_PROJECT_720 = '67777777-3737-4737-8777-373737373737';
     const PAT_PROJECT_2100 = '67777777-3838-4738-8777-383838383838';
@@ -492,14 +494,40 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
           hardwareLines: [],
         } as unknown as (typeof catalog.agregados)[number],
       ],
-      modules: [
-        ...catalog.modules.filter((m) => m.id !== PAT_MODULE),
+      structures: [
+        ...(catalog.structures ?? []).filter((s) => s.id !== PAT_STRUCT_2100),
         {
-          id: PAT_MODULE,
-          code: 'HWG-PATRON-1579',
-          name: 'Módulo puerta patrón',
+          id: PAT_STRUCT_2100,
+          code: 'HWG-EST-PATRON-2100',
+          name: 'Cuerpo patrón 2100',
+          components: [],
+          agregados: [
+            {
+              id: 'inst-patron-2100',
+              agregadoId: PAT_AGR,
+              quantity: 1,
+            },
+          ],
+          active: true,
+        } as (typeof catalog.structures)[number],
+      ],
+      modules: [
+        ...catalog.modules.filter((m) => m.id !== PAT_MODULE_720 && m.id !== PAT_MODULE_2100),
+        {
+          id: PAT_MODULE_720,
+          code: 'HWG-PATRON-1579-720',
+          name: 'Módulo puerta patrón 720',
           structureId: PAT_STRUCT,
           externalDims: { width: 600, height: 720, depth: 560 },
+          components: [],
+          hardwareLines: [],
+        },
+        {
+          id: PAT_MODULE_2100,
+          code: 'HWG-PATRON-1579-2100',
+          name: 'Módulo puerta patrón 2100',
+          structureId: PAT_STRUCT_2100,
+          externalDims: { width: 600, height: 2100, depth: 560 },
           components: [],
           hardwareLines: [],
         },
@@ -516,7 +544,12 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
       });
 
       const now = new Date().toISOString();
-      const projectFor = (id: string, name: string, heightMm: number, itemId: string) => ({
+      // Un módulo POR alto (sin customDims): la cotización de ítems con
+      // instancia de mueble resuelve desde la instancia sembrada al crear la
+      // obra (envolvente del módulo) — el interplay customDims→cotización es
+      // otra superficie, fuera de #1579. La RECETA es la misma; lo que
+      // cambia el conteo es la envolvente de la bahía.
+      const projectFor = (id: string, name: string, moduleId: string, itemId: string) => ({
         id,
         name,
         customerId: HWG_CUSTOMER,
@@ -529,18 +562,17 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
         items: [
           {
             id: itemId,
-            moduleId: PAT_MODULE,
+            moduleId,
             quantity: 1,
-            customDims: { widthMm: 600, heightMm, depthMm: 560 },
             optionChoices: { FRENTES: frenteMaterialId, BISAGRA: HWG_ECO },
           },
         ],
       });
       await repository.saveProject(
-        projectFor(PAT_PROJECT_720, 'Patrón 1579 (720)', 720, '67777777-3939-4739-8777-393939393939') as Parameters<typeof repository.saveProject>[0],
+        projectFor(PAT_PROJECT_720, 'Patrón 1579 (720)', PAT_MODULE_720, '67777777-3939-4739-8777-393939393939') as Parameters<typeof repository.saveProject>[0],
       );
       await repository.saveProject(
-        projectFor(PAT_PROJECT_2100, 'Patrón 1579 (2100)', 2100, '67777777-3a3a-473a-8777-3a3a3a3a3a3a') as Parameters<typeof repository.saveProject>[0],
+        projectFor(PAT_PROJECT_2100, 'Patrón 1579 (2100)', PAT_MODULE_2100, '67777777-3a3a-473a-8777-3a3a3a3a3a3a') as Parameters<typeof repository.saveProject>[0],
       );
 
       // La MISMA receta en dos bahías: 717 mm (PH-3) compra 2; 2097 mm cae en
