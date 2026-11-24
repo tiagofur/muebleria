@@ -127,6 +127,29 @@ func TestKitChildZeroOffsetsMeansNoDisplacement(t *testing.T) {
 	}
 }
 
+// A positive X offset moves the piece INTO the cabinet interior from the
+// declared side's inner face (the #1613 convention; review r1): min anchor
+// negates it in the flipped board frame — 18 + 10 = 28.
+func TestKitChildPositiveXOffsetMovesInward(t *testing.T) {
+	module, catalog := kitOffsetsFixture()
+	for i := range catalog.Hardware {
+		if catalog.Hardware[i].ID == "hw-copa" {
+			catalog.Hardware[i].DesignParts[0].Label = "pos:min:10:-37:0"
+		}
+	}
+	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, &LayoutDims{WidthMm: 600, HeightMm: 720, DepthMm: 560}, nil, resolveOptions{})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	copa := hardwareByChildID(layout, "hw-copa")
+	if copa == nil {
+		t.Fatalf("copa missing")
+	}
+	if pos := copa.LocalTransform.TranslationMm; pos[0] != 28 {
+		t.Fatalf("positive X offset must move inward from the left inner face (x=28), got x=%g", pos[0])
+	}
+}
+
 // Lado Derecha (label max) flips the reference to the right panel's inner
 // face; the y delta still rides.
 func TestKitChildMaxSideReferencesTheOtherPanel(t *testing.T) {
@@ -171,9 +194,9 @@ func TestKitChildWithoutDeclarationKeepsLegacySnap(t *testing.T) {
 	if copa == nil {
 		t.Fatalf("copa missing")
 	}
-	// The hinge mount sits on the door's max half (xFormula-less x=20.5 on
-	// a 595 door → max half): the legacy snap targets W − tSide = 582, the
-	// RIGHT panel's inner face.
+	// The hinge mount sits on the door's board-max half (x=20.5 on a 595
+	// door → in furniture terms the MIN half): the legacy snap targets
+	// W − tSide = 582, the RIGHT panel's inner face.
 	if pos := copa.LocalTransform.TranslationMm; pos[0] != 582 {
 		t.Fatalf("legacy snap must land at x=582 (W−tSide), got x=%g", pos[0])
 	}

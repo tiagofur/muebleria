@@ -2591,10 +2591,12 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 				switch {
 				case declared && declaredRef == domain.AxisRefMin:
 					targetFurnitureX = tSide
+					declaredX = -declaredX
 				case declared && declaredRef == domain.AxisRefMax:
 					targetFurnitureX = furnitureWidthMm - tSide
 				case declared && declaredRef == domain.AxisRefCenter:
 					targetFurnitureX = board.x + w - xMm
+					declaredX = -declaredX
 				default:
 					if xMm <= w/2 {
 						targetFurnitureX = furnitureWidthMm - tSide
@@ -2602,6 +2604,10 @@ func resolveHardwareOrKitToWorld(board *layoutBoard, hp domain.HardwarePlacement
 						targetFurnitureX = tSide
 					}
 				}
+				// #1702 (review r1): the board-local X runs OPPOSITE the
+				// furniture X on this door frame — a positive web offset
+				// means INTO the cabinet interior (the #1613 convention),
+				// so min/center negate it in board-local and max keeps it.
 				xMm = board.x + w - targetFurnitureX + declaredX
 				childHp.RelativePosition.XMm = xMm
 				childHp.RelativePosition.XFormula = ""
