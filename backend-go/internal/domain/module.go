@@ -345,6 +345,24 @@ type HardwarePlacement struct {
 	// SketchUp inspector UI. Pure presentation metadata; never used as
 	// manufacturing identity. Nil for non-door hardware.
 	DoorAffinity *DoorAffinity `json:"doorAffinity,omitempty"`
+	// CountRule (#1579 PR2) turns the placement into a PATTERN: the engine
+	// expands it to as many hinges as the door's effective demand buys (the
+	// same ladder the quote resolves: component exception → the chosen
+	// hinge's table → factory policy → library ladder), using the door
+	// board's REAL bay dimensions. relativePosition keeps the hinge edge (x);
+	// the end offsets replace the placement's y. Doors only — a countRule on
+	// any other placement is an authoring error at resolve time. Nil = a
+	// fixed placement (authored intent, byte-identical behavior).
+	CountRule *HingeCountRule `json:"countRule,omitempty"`
+}
+
+// HingeCountRule is the one count derivation a placement may declare today:
+// the door-height demand. End offsets are millimetres from each door end to
+// the first/last hinge; intermediates distribute evenly between them.
+type HingeCountRule struct {
+	Kind              string  `json:"kind"`
+	EndOffsetBottomMm float64 `json:"endOffsetBottomMm"`
+	EndOffsetTopMm    float64 `json:"endOffsetTopMm"`
 }
 
 // DoorAccessoryRole identifies a door-accessory kind in a grouped inspector view.

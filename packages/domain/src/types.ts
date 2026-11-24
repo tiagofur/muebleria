@@ -626,6 +626,13 @@ export interface HardwareLine {
   readonly optionRole: string;
   readonly hardwareId?: string;
   /**
+   * #1579: a visible warning the resolve attaches to a derived line — today,
+   * a door taller than the hinge table's last band. Never blocks and never
+   * changes the quantity; surfaces render it next to the line. Mirrors
+   * ResolvedHardwareLine.notice (carried through the resolve).
+   */
+  readonly notice?: string;
+  /**
    * #1394 — optional link to the catalog component this line belongs to.
    * Set ⇒ the line is PER-COPY: the resolved BOM multiplies the quantity by
    * that component's effective copies after bindings (the same N of
@@ -973,6 +980,29 @@ export interface HardwarePlacement {
    * metadata. Leave undefined for non-door hardware (connectors, slides, etc.).
    */
   readonly doorAffinity?: DoorAffinity;
+  /**
+   * #1579 PR2: the placement is a PATTERN, not a piece — the engine expands it
+   * to as many positions as the door's effective hinge count demands, using
+   * the door board's REAL bay dimensions. `relativePosition.xMm/xFormula`
+   * keeps the hinge edge; the end offsets (bottom/top, in mm from each door
+   * end) replace the placement's y. Doors only: a countRule on any other
+   * placement is an authoring error at resolve time. Fixed placements without
+   * it remain authored intent and keep winning.
+   */
+  readonly countRule?: HingeCountRule;
+}
+
+/**
+ * #1579 PR2: how one hinge placement pattern derives its count. One kind
+ * today: the door-height demand (exception → the chosen hinge's table →
+ * factory policy → library ladder, the same ladder the quote buys with).
+ */
+export interface HingeCountRule {
+  readonly kind: 'hingeDemand';
+  /** Distance from the door's bottom end to the first hinge, in mm. */
+  readonly endOffsetBottomMm: number;
+  /** Distance from the door's top end to the last hinge, in mm. */
+  readonly endOffsetTopMm: number;
 }
 
 /**

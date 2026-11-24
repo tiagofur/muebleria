@@ -54,14 +54,18 @@ sin mover lo cotizado o liberado.
 
 ## Constraints
 
-- Issue #1579 `status:approved`; base `origin/main` @ `879ae6a7`.
-- Un escritor; worktree `../muebles-1579`, rama `feat/1579-hinge-bands-per-hinge`.
+- Issue #1579 `status:approved`; PR1 **MERGED** (merge `b97fbcad` en main,
+  2026-11-24, CI 23/23). PR2: base `origin/main` @ `b97fbcad`, rama
+  `feat/1579-hinge-count-rule`, mismo worktree `../muebles-1579`.
+- Un escritor; un solo artefacto (este).
 - Cotizaciones cerradas se re-resuelven contra pins: todo cambio debe ser
   byte-idéntico con datos que no declaren `hingeDemand` ni `countRule`.
 - Sin backfill de tablas (la tabla pasaría sobre una política de fábrica y
   movería cotizaciones cerradas).
 - Posiciones fijas siguen siendo intención de autor y siguen ganando.
 - Counts válidos en la tabla de la bisagra: 2 a 5.
+- Migración de catálogo AUTORIZADA por el owner (2026-11-23): tablas en las 3
+  bisagras de venta + 5 recetas `AGR-PUE-*`, con backup y readback, al final.
 
 ## Authorized scope
 
@@ -212,8 +216,46 @@ HardwarePlacementsEditor, pintado del aviso), `docs/guia-de-uso.md`,
   en el HEAD final (12 checks pesados en curso al escribir esto) y vivo del
   owner en web/SketchUp (NOT_RUN).
 
+- 2026-11-24 PR1 MERGEADO por el owner (`b97fbcad`); PR2 arranca en
+  `feat/1579-hinge-count-rule` desde el main nuevo. T11-T13 (commits
+  `854f765c`, `2846166f`): countRule en tipos y recetas, expansión TS/Go con
+  las medidas reales de la bahía, demanda exclusiva hingeband-agr con
+  exclusión de banda y bulk muerta, drilling y preview 3D. T14 autoría
+  (`e5529f37`). T15 browser (commits `06b35986`, `bb4ebf0c`, `f6e2d192`):
+  tres tests verdes — banda PR1, tabla por bisagra, patrón countRule en dos
+  bahías ($24/$48 congelados). Verificación: pnpm workspace PASS, Go full
+  EXIT 0 (16 paquetes, PG efímero con las 195 migraciones), typecheck 0,
+  drift 0, rubocop+unit Ruby verdes (cero Ruby en el diff).
+- Hallazgo fileado **#1704**: ítems con customDims cotizan con la envolvente
+  del módulo sembrada al crear la obra (evidencia del spec PR2: 2100 custom
+  congeló 2 bisagras/$24 vía instancia de mueble; el módulo dedicado 2100
+  cotiza 4/$48) — fuera de #1579, issue aparte SIN status:approved.
+- Diagnóstico del test 3 (spec, no motor): ids de ítem no-UUID → 500;
+  Idempotency-Key <16 chars → 400; clave FRENTE vs rol FRENTES → snapshot
+  inválido; claves structures duplicadas en el payload → siembra pisada.
+  Todos corregidos; trampas fijadas en memoria
+  [[granete-e2e-spec-api-traps]].
+
+- 2026-11-24 PR #1705 publicado (base main, HEAD `cddbb5ac`, Refs #1579 +
+  Delivery: partial). Ronda 1 del juicio (A+B sobre 0a872c83): CRITICAL
+  confirmado por ambos (dedupe de bulk muerto por clave del mapa covered) +
+  WARNINGs de identidad del drilling, cantidad y rol. Ronda de corrección
+  (`cddbb5ac`): dedupe operativo, fixed-wins con override de instancia, rol
+  policy-aware en lookup, componentId para la rung de excepción en
+  drilling, UI del patrón restringida a recetas. Re-juicio final (A+B sobre
+  0a872c83..cddbb5ac): A 0 CRITICAL + 2W (rol hardcodeado en lookup →
+  policy-aware; fixed-wins sin pierna de override → corregidos), B 0
+  CRITICAL + 3W (mismos dos + covered-union entre instancias → diferido,
+  divergencia sólo con 2+ instancias de overrides distintos + bulk).
+- Hallazgo fileado **#1704**: ítems con customDims cotizan con la envolvente
+  sembrada (evidencia del spec: 2100 custom congeló 2/$24 vía instancia;
+  módulo dedicado 2100 cotiza 4/$48) — fuera de #1579.
+
 ## Next step
 
-PR2 sobre este PR: countRule en la receta, expansión TS/Go, autoría mínima,
-migración de catálogo (autorizada por el owner 2026-11-23) y «lo congelado
-no se mueve».
+**CI 20/20 PASS en `3efe077d`, MERGEABLE/CLEAN** (confirmado 24-11).
+`JUDGMENT: APPROVED` (ronda 2 limpia; residuos: 1 SUGGESTION preexistente y
+diferidos documentados). **PR_READY_FOR_HUMAN_MERGE** — merge del owner.
+Post-merge: reinicio backend dev con el código nuevo, migración de catálogo
+AUTORIZADA (tablas en 3 bisagras + 5 recetas AGR-PUE-*) con backup y
+readback, release nueva y vivo del owner para cerrar #1579.

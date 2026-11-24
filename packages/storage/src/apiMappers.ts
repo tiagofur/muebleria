@@ -1193,6 +1193,22 @@ function hardwarePlacementFromApi(
     raw.doorAffinity && typeof raw.doorAffinity === 'object'
       ? (raw.doorAffinity as import('@granete/domain').DoorAffinity)
       : undefined;
+  // #1579 PR2: patrón de bisagras por altura — sólo un kind usable entra
+  // (kind hingeDemand + offsets numéricos no negativos); basura nunca.
+  const countRuleRaw = raw.countRule as Record<string, unknown> | undefined;
+  const countRule =
+    countRuleRaw &&
+    countRuleRaw.kind === 'hingeDemand' &&
+    typeof countRuleRaw.endOffsetBottomMm === 'number' &&
+    typeof countRuleRaw.endOffsetTopMm === 'number' &&
+    countRuleRaw.endOffsetBottomMm >= 0 &&
+    countRuleRaw.endOffsetTopMm >= 0
+      ? {
+          kind: 'hingeDemand' as const,
+          endOffsetBottomMm: countRuleRaw.endOffsetBottomMm,
+          endOffsetTopMm: countRuleRaw.endOffsetTopMm,
+        }
+      : undefined;
 
   return {
     hardwareId: str(raw.hardwareId ?? raw.hardware_id),
@@ -1219,6 +1235,7 @@ function hardwarePlacementFromApi(
       : {}),
     ...(derivedMachining ? { derivedMachining } : {}),
     ...(doorAffinity ? { doorAffinity } : {}),
+    ...(countRule ? { countRule } : {}),
   };
 }
 

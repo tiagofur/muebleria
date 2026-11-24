@@ -18,6 +18,7 @@ import type {
   Structure,
   VisualAssetLookup,
 } from '@granete/domain';
+import { hasHingeCountRuleDoor } from '@granete/domain';
 import {
   defaultMeasurePresetId,
   evaluatePartFormula,
@@ -207,6 +208,8 @@ function resolveItemBom(
     // agregado components never reach the preview BOM (engine/bom.ts reads
     // `catalog.agregados ?? []`).
     agregados: catalogInput.agregados,
+    // #1579 PR2: la política del catálogo gobierna el conteo del patrón.
+    constructionPolicy: catalogInput.constructionPolicy,
   };
 
   // F087 — base treatment for the 3D scene: mode (item → module) plus the
@@ -253,6 +256,7 @@ function resolveItemBom(
           structures: catalogInput.structures,
           agregados: catalogInput.agregados,
           optionChoices: choices,
+          constructionPolicy: catalogInput.constructionPolicy,
         },
       ),
       resolvedAssemblies,
@@ -533,6 +537,8 @@ export function resolveModuleHardwarePlacements(
     readonly structures?: readonly Structure[];
     readonly agregados?: readonly Agregado[];
     readonly optionChoices?: OptionChoices;
+    /** #1579 PR2: la política del catálogo para el conteo del patrón. */
+    readonly constructionPolicy?: import('@granete/domain').Catalog['constructionPolicy'];
   } = {},
 ): ResolvedHardwarePlacement[] {
   // AH-03: part ids are collision-free. Structure + module components expand
@@ -597,10 +603,35 @@ export function resolveModuleHardwarePlacements(
     for (let unitIndex = 0; unitIndex < qty; unitIndex++) {
       const prefix = `agr-${agrInst.agregadoId}-${instanceTag}u${unitIndex}-`;
       const unitInst = { ...agrInst, quantity: 1 };
+      // #1579 PR2: el patrón de bisagras se expande con las medidas REALES
+      // del tablero-puerta de esta unidad (la parte ya resuelta la trae) y
+      // la política del catálogo — mismo conteo que la cotización.
+      let countRuleContext: import('@granete/domain').HingeCountRuleContext | undefined;
+      const agrDef = agregadosCatalog.find((a) => a.id === agrInst.agregadoId);
+      if (agrDef && hasHingeCountRuleDoor(agrDef)) {
+        const doorPart = [...partById.values()].find(
+          (p) =>
+            p.id.startsWith(prefix) &&
+            p.componentPlacement === 'puerta',
+        );
+        if (doorPart) {
+          countRuleContext = {
+            doorDims: { heightMm: doorPart.lengthMm, widthMm: doorPart.widthMm },
+            effectiveChoices: options.optionChoices,
+            catalogHardware: hardwareCatalog,
+            policySource: options.constructionPolicy,
+          };
+        }
+      }
       sourceGroups.push(
-        resolveAgregadoInstance(unitInst, agregadosCatalog, unitIndex).components.map(
-          (inst) => ({ inst, prefix }),
-        ),
+        resolveAgregadoInstance(
+          unitInst,
+          agregadosCatalog,
+          unitIndex,
+          options.constructionPolicy?.doorHingeDemand,
+          undefined,
+          countRuleContext,
+        ).components.map((inst) => ({ inst, prefix })),
       );
     }
   });

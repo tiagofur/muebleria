@@ -253,12 +253,41 @@ func resolveBomCommon(
 		module.HardwareLines = kept
 	}
 
+	// #1579 PR2: el patrón countRule de las puertas-agregado compra por la
+	// línea hingeband-agr del agregado (exclusiva): se deriva ANTES de la
+	// banda de módulo para excluir las puertas de esas instancias (mismo
+	// herraje, una sola línea) y para que la bulk de la receta del mismo
+	// herraje muera. Sólo el brazo compuesto tiene agregados.
+	var countRuleLines []domain.ResolvedHardwareLine
+	countRuleCovered := map[string]map[string]bool{}
+	var countRulePrefixes []string
+	if strings.TrimSpace(module.StructureID) != "" && moduleDims.H > 0 {
+		countRuleLines, countRuleCovered, countRulePrefixes = collectAgregadoHingeCountDemand(module, catalog, optionChoices, moduleDims, baseClearance)
+	}
+
 	// #1078: door height bands are the middle rung of the demand ladder —
 	// placements (#1210) win over the band, the band replaces bulk BISAGRA
 	// lines of the same resolved hardware (the fixed seed line stops
 	// governing), and an unresolved choice contributes nothing (the quote
-	// gate owns that failure).
-	bandCounts, bandLines, err := collectHingeBandDemand(module, rawParts, catalog, optionChoices, placementCounts)
+	// gate owns that failure). Las puertas de instancias con patrón no
+	// participan (su demanda ya está en hingeband-agr-…).
+	bandParts := rawParts
+	if len(countRulePrefixes) > 0 {
+		bandParts = make([]domain.BoardPart, 0, len(rawParts))
+		for _, part := range rawParts {
+			excluded := false
+			for _, prefix := range countRulePrefixes {
+				if strings.HasPrefix(part.ID, prefix) {
+					excluded = true
+					break
+				}
+			}
+			if !excluded {
+				bandParts = append(bandParts, part)
+			}
+		}
+	}
+	bandCounts, bandLines, err := collectHingeBandDemand(module, bandParts, catalog, optionChoices, placementCounts)
 	if err != nil {
 		return domain.ResolvedBom{}, err
 	}
@@ -273,7 +302,7 @@ func resolveBomCommon(
 		module.HardwareLines = kept
 	}
 
-	hardware := collectAllHardwareLines(module, catalog, optionChoices)
+	hardware := collectAllHardwareLinesWithCountRule(module, catalog, optionChoices, countRuleCovered)
 	// #1493 slice 3: el kit comercial de la variante se cotiza por bahía —
 	// las recetas legacy (sin kits de variante) no aportan líneas nuevas.
 	if moduleDims.W > 0 && moduleDims.H > 0 && moduleDims.D > 0 {
@@ -350,8 +379,9 @@ func resolveBomCommon(
 	partsForResolve := append(append([]domain.BoardPart{}, treatedParts...), stripParts...)
 
 	// #1078: band demand rides the same appended channel as positioned
-	// lines (after them — origin-visible, priced identically).
-	return resolveBomFromParts(module, optionChoices, catalog, partsForResolve, treatedHardware, append(placementLines, bandLines...), depthReductions)
+	// lines (after them — origin-visible, priced identically). #1579 PR2:
+	// la demanda del patrón countRule viaja ya resuelta por el mismo canal.
+	return resolveBomFromParts(module, optionChoices, catalog, partsForResolve, treatedHardware, append(append(placementLines, bandLines...), countRuleLines...), depthReductions)
 }
 
 // resolveBomFromParts resolves material/edge/hardware IDs for already-expanded
@@ -449,7 +479,9 @@ func resolveBomFromParts(
 	}
 
 	// #1210: the positioned demand rides the resolved BOM with the same
-	// shape and pricing path as bulk lines.
+	// shape and pricing path as bulk lines. #1579 PR2: la demanda del patrón
+	// countRule viaja por este mismo canal (ya resuelta, escalera aplicada
+	// con el herraje elegido) — el caller la pasa junto a bandLines.
 	hardwareResolved = append(hardwareResolved, positionedLines...)
 
 	return domain.ResolvedBom{
@@ -459,6 +491,16 @@ func resolveBomFromParts(
 }
 
 func collectAllHardwareLines(module domain.Module, catalog domain.Catalog, optionChoices map[string]string) []domain.HardwareLine {
+	return collectAllHardwareLinesWithCountRule(module, catalog, optionChoices, nil)
+}
+
+// collectAllHardwareLinesWithCountRule is collectAllHardwareLines plus the
+// #1579 PR2 exclusion: a recipe with a hinge count pattern buys its pattern
+// hardware through the exclusive hingeband-agr line, so the recipe's own
+// bulk lines of that hardware die (single source of truth). `covered` keys
+// the effective agregado id → the hardware ids its patterns bought; nil
+// keeps the exact previous behavior for catalogs without patterns.
+func collectAllHardwareLinesWithCountRule(module domain.Module, catalog domain.Catalog, optionChoices map[string]string, countRuleCovered map[string]map[string]bool) []domain.HardwareLine {
 	lines := make([]domain.HardwareLine, 0, len(module.HardwareLines))
 	lines = append(lines, module.HardwareLines...)
 
@@ -473,6 +515,9 @@ func collectAllHardwareLines(module domain.Module, catalog domain.Catalog, optio
 						qty = 1
 					}
 					for _, hl := range agr.HardwareLines {
+						if countRuleCovers(countRuleCovered, effectiveID, resolvedBulkHardwareID(hl, optionChoices)) {
+							continue
+						}
 						copyHl := hl
 						copyHl.Quantity = hl.Quantity * float64(qty)
 						lines = append(lines, copyHl)
@@ -491,6 +536,9 @@ func collectAllHardwareLines(module domain.Module, catalog domain.Catalog, optio
 				qty = 1
 			}
 			for _, hl := range agr.HardwareLines {
+				if countRuleCovers(countRuleCovered, effectiveID, resolvedBulkHardwareID(hl, optionChoices)) {
+					continue
+				}
 				copyHl := hl
 				copyHl.Quantity = hl.Quantity * float64(qty)
 				lines = append(lines, copyHl)

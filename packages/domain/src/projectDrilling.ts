@@ -11,7 +11,8 @@
 import { generateCutRowsWithLinks, type CutRowPieceLink } from './engine/cut';
 import { componentIdFromComposedPartId, resolveBom } from './engine/bom';
 import { hingePolicyForDoor } from './engine/hingeBandDemand';
-import { hingeDemandRole } from './hingeDemand';
+import { hingeDemandRole, resolveHingeCount } from './hingeDemand';
+import { expandHingeCountRulePositions } from './agregados';
 import { resolvePlacementHardwareId } from './hardwarePlacement';
 import { resolveModuleMeasurePreset } from './measurePresets';
 import {
@@ -108,6 +109,20 @@ function manualPlacementsForPart(
 export interface AgregadoPlacementLookup {
   readonly placements: readonly HardwarePlacement[];
   /**
+   * #1579 PR2: la regla de cantidad del patrón en esta pieza (sólo puertas).
+   * El caller la expande con las medidas REALES de la pieza (que este lookup
+   * no conoce) y la política efectiva.
+   */
+  readonly countRule?: {
+    readonly rule: NonNullable<HardwarePlacement['countRule']>;
+    /** Identidad CONCRETA del patrón (hardwareId → override → elección). */
+    readonly hardwareId: string;
+    /** Componente de la receta que porta el patrón (rung de excepción). */
+    readonly componentId: string;
+  };
+  /** Overrides de la INSTANCIA (pierna de override de las fijas). */
+  readonly instanceOptionOverrides?: Readonly<Record<string, string>>;
+  /**
    * Set ONLY for an `agr-*` part id that could not resolve to its host
    * component (broken link, missing definition or missing component) — the
    * fail-closed signal: the piece's manual drilling is NOT computed and the
@@ -137,6 +152,8 @@ export function agregadoManualPlacementsForPart(
   module: Pick<Module, 'agregados'> | undefined,
   catalogAgregados: readonly Agregado[],
   optionChoices?: OptionChoices,
+  // #1579 PR2 (juicio): el catálogo para el rol POLICY-AWARE del patrón.
+  catalog?: Pick<Catalog, 'constructionPolicy'>,
 ): AgregadoPlacementLookup {
   if (!partId.startsWith('agr-')) return { placements: [] };
 
@@ -176,7 +193,33 @@ export function agregadoManualPlacementsForPart(
         if (!componentId || !component) {
           return { placements: [], unresolved: partId };
         }
-        return { placements: component.overrides?.hardwarePlacements ?? [] };
+        const placements = component.overrides?.hardwarePlacements ?? [];
+        const pattern = placements.find((p) => p.countRule);
+        if (!pattern?.countRule) {
+          return { placements };
+        }
+        // #1579 PR2 (juicio): la identidad del patrón se resuelve con la
+        // MISMA cadena que la demanda — hardwareId → override de instancia →
+        // elección efectiva — con rol POLICY-AWARE (la política puede
+        // declarar otro grupo), y se devuelven el componente de la receta
+        // (rung de excepción) y los overrides de la instancia (fijas).
+        const patternRole =
+          pattern.optionRole?.trim() ||
+          hingeDemandRole(catalog?.constructionPolicy?.doorHingeDemand);
+        const patternHardwareId =
+          pattern.hardwareId?.trim() ||
+          inst.optionOverrides?.[patternRole]?.trim() ||
+          optionChoices?.[patternRole]?.trim() ||
+          '';
+        return {
+          placements,
+          countRule: {
+            rule: pattern.countRule,
+            hardwareId: patternHardwareId,
+            componentId: component.componentId,
+          },
+          instanceOptionOverrides: inst.optionOverrides,
+        };
       }
     }
   }
@@ -211,6 +254,77 @@ function chosenBandHinge(
     return undefined;
   }
   return catalog.hardware.find((hw) => hw.id === resolution.hardwareId);
+}
+
+/**
+ * #1579 PR2: expande el patrón de bisagras de una pieza-agregado a las
+ * posiciones reales para PERFORAR — mismo conteo que la demanda compra
+ * (escalera: excepción → tabla de la bisagra elegida → fábrica → escalera).
+ * Perforado = comprado: si el patrón no aporta demanda (sin elección para su
+ * rol, o posiciones fijas del mismo herraje que ya ganan), tampoco se taladra.
+ * Las posiciones fijas del autor pasan intactas.
+ */
+export function expandAgregadoCountRulePlacements(
+  placements: readonly HardwarePlacement[],
+  params: {
+    readonly countRule?: {
+      readonly rule: NonNullable<HardwarePlacement['countRule']>;
+      /** Identidad CONCRETA del patrón (hardwareId → override → elección). */
+      readonly hardwareId: string;
+      /** Componente de la receta que porta el patrón (rung de excepción). */
+      readonly componentId: string;
+    };
+    /** Overrides de la INSTANCIA (pierna de override de las fijas). */
+    readonly instanceOptionOverrides?: Readonly<Record<string, string>>;
+    readonly catalog: Catalog;
+    readonly choices: OptionChoices | undefined;
+    readonly partLengthMm: number;
+    readonly partWidthMm: number;
+  },
+): readonly HardwarePlacement[] {
+  const pattern = params.countRule;
+  if (!pattern) return placements;
+  // Perforado = comprado: el patrón gobierna su herraje con SU identidad
+  // (hardwareId → override de instancia → elección) y SU componente (rung
+  // de excepción), ambos resueltos en el lookup.
+  const hinge = pattern.hardwareId
+    ? params.catalog.hardware.find((hw) => hw.id === pattern.hardwareId)
+    : undefined;
+  if (!hinge || !hinge.active) {
+    return placements.filter((p) => !p.countRule); // sin identidad → sin patrón (ni demanda)
+  }
+  const policy = hingePolicyForDoor(
+    params.catalog.constructionPolicy,
+    pattern.componentId,
+    hinge,
+  );
+  const count = resolveHingeCount(
+    params.partLengthMm,
+    params.partWidthMm,
+    policy,
+  );
+  const fixedSameHardware = placements.some((p) => {
+    if (p.countRule) return false;
+    const resolved =
+      p.hardwareId ||
+      params.instanceOptionOverrides?.[p.optionRole ?? ''] ||
+      params.choices?.[p.optionRole ?? ''] ||
+      '';
+    return resolved === hinge.id;
+  });
+  const positions = expandHingeCountRulePositions(
+    pattern.rule,
+    params.partLengthMm,
+    count.hinges,
+  );
+  return placements.flatMap((p) => {
+    if (!p.countRule) return [p];
+    if (fixedSameHardware || positions.length === 0) return []; // perforado = comprado: el fijo gana, el patrón no taladra
+    return positions.map((y) => ({
+      ...p,
+      relativePosition: { ...p.relativePosition, yMm: y, yFormula: undefined },
+    }));
+  });
 }
 
 /**
@@ -416,13 +530,14 @@ export function resolveProjectDrilling(
       : undefined;
     // F131: only evaluated when the secondary BOM resolved — a BOM failure
     // already reports its own blocking issue and must not double-report.
-    const agregadoForPart = cacheKey
+    const agregadoForPart: import('./projectDrilling').AgregadoPlacementLookup | undefined = cacheKey
       ? agregadoManualPlacementsForPart(
           link.partId,
           structure,
           module,
           catalog.agregados ?? [],
           choicesByKey.get(cacheKey),
+          catalog,
         )
       : undefined;
     if (agregadoForPart?.unresolved && !reportedUnresolvedHosts.has(agregadoForPart.unresolved)) {
@@ -437,10 +552,20 @@ export function resolveProjectDrilling(
         blocking: true,
       });
     }
-    const manualForPart = [
-      ...manualPlacementsForPart(instances, link.partId),
-      ...(agregadoForPart?.placements ?? []),
-    ];
+    const manualForPart = expandAgregadoCountRulePlacements(
+      [
+        ...manualPlacementsForPart(instances, link.partId),
+        ...(agregadoForPart?.placements ?? []),
+      ],
+      {
+        countRule: agregadoForPart?.countRule,
+        instanceOptionOverrides: agregadoForPart?.instanceOptionOverrides,
+        catalog,
+        choices: cacheKey ? choicesByKey.get(cacheKey) : undefined,
+        partLengthMm: link.part.lengthMm,
+        partWidthMm: link.part.widthMm,
+      },
+    );
     const derivedForPart = (cacheKey ? derivedByKey.get(cacheKey) ?? [] : []).filter(
       (p) => p.partId === link.partId,
     );

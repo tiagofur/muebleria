@@ -26,6 +26,8 @@ export type InstanceOverridesEditorProps = {
   readonly catalogHardware?: readonly Hardware[];
   /** Hardware option groups for the "por grupo" placement mode (#1046). */
   readonly optionGroups?: readonly OptionGroup[];
+  /** #1579 PR2: la pieza es una puerta — habilita el patrón de bisagras. */
+  readonly isDoor?: boolean;
 };
 
 export function InstanceOverridesEditor({
@@ -34,6 +36,7 @@ export function InstanceOverridesEditor({
   testIdSuffix = '',
   catalogHardware,
   optionGroups,
+  isDoor,
 }: InstanceOverridesEditorProps): ReactNode {
   const formId = useId();
   const [open, setOpen] = useState(false);
@@ -280,6 +283,7 @@ export function InstanceOverridesEditor({
           optionGroups={optionGroups}
           onChange={handlePlacementsChange}
           testIdSuffix={testIdSuffix}
+          isDoor={isDoor}
         />
       ) : null}
     </div>

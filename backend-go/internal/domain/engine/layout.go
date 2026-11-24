@@ -1944,8 +1944,12 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 		// quote excludes.
 		// #1493: las reglas de dimensión por variante de esta bahía.
 		ruleCtx := agregadoDimensionRuleContext(agr, unit)
+		// #1579 PR2: el patrón countRule se expande a N posiciones con las
+		// medidas reales de ESTA bahía antes del armado de tableros — el
+		// dibujo (hosts) muestra exactamente lo que la cotización compra.
+		unitComponents := expandHingeCountRuleComponentsForUnit(agr, agrInst, catalog, optionChoices, unit)
 		unitBoards, err := expandLayoutInstances(
-			filterInstancesForBaseMode(agr.Components, catalog, baseMode),
+			filterInstancesForBaseMode(unitComponents, catalog, baseMode),
 			catalog, unitDims, fmt.Sprintf("agr-%s-%su%d-", effectiveID, instanceTag, unit.index), baseClearance, optionChoices, opts, ruleCtx)
 		if err != nil {
 			return nil, err

@@ -354,4 +354,258 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
       });
     }
   });
+
+  test('#1579 PR2 — la receta con patrón countRule compra por el alto REAL de cada bahía', async ({ page }) => {
+    test.setTimeout(240_000);
+    const repository = new APIWorkspaceRepository(required('ORGANIZATION_API_BASE'), {
+      getAccessToken: () => owner.token,
+    });
+    const catalog = await repository.getCatalog();
+    const frenteMaterialId = '77777777-0000-4777-8777-000000000001';
+
+    // AUTOCONTENIDO: este test puede correr solo en una org fresca (--grep),
+    // así que siembra TODO lo que necesita con ids fijos (upserts
+    // idempotentes — los mismos del test 1) antes de su siembra propia.
+    const ecoSeeded: (typeof catalog.hardware)[number] = (catalog.hardware ?? []).find((h) => h.id === HWG_ECO) ?? {
+      id: HWG_ECO,
+      code: 'HWG-ECO-1078',
+      name: 'Bisagra económica',
+      unit: 'piece' as const,
+      costPerUnit: 12,
+      active: true,
+    };
+    const PAT_AGR = '67777777-3333-4733-8777-333333333333';
+    const PAT_STRUCT = '67777777-3434-4734-8777-343434343434';
+    const PAT_MODULE_720 = '67777777-3535-4735-8777-353535353535';
+    const PAT_MODULE_2100 = '67777777-3d3d-473d-8777-3d3d3d3d3d3d';
+    const PAT_STRUCT_2100 = '67777777-3e3e-473e-8777-3e3e3e3e3e3e';
+    const PAT_DOOR_COMP = '67777777-3636-4736-8777-363636363636';
+    const PAT_PROJECT_720 = '67777777-3737-4737-8777-373737373737';
+    const PAT_PROJECT_2100 = '67777777-3838-4738-8777-383838383838';
+
+    await repository.saveCatalog({
+      ...catalog,
+      materials: [
+        ...(catalog.materials ?? []).filter((m) => m.id !== frenteMaterialId),
+        {
+          id: frenteMaterialId,
+          code: 'MEL-BL-18',
+          name: 'Melamina blanca 18',
+          widthMm: 2750,
+          lengthMm: 1850,
+          thicknessMm: 18,
+          grainDefault: false,
+          boardPrice: 480,
+          wastePercent: 10,
+          costPerM2: 132,
+          active: true,
+        },
+      ],
+      hardware: [
+        ...(catalog.hardware ?? []).filter((h) => h.id !== HWG_ECO),
+        { ...ecoSeeded, hingeDemand: ECO_TABLE } as (typeof catalog.hardware)[number],
+      ],
+      optionGroups: [
+        {
+          id: '77777777-0000-4777-8777-000000000002',
+          code: 'FRENTES',
+          name: 'Frentes',
+          kind: 'board' as const,
+          required: true,
+          optionIds: [frenteMaterialId],
+        },
+        ...((catalog.optionGroups ?? []).filter(
+          (g) => g.code !== 'BISAGRA' && g.id !== '77777777-0000-4777-8777-000000000002',
+        ) as (typeof catalog.optionGroups)[number][]),
+        {
+          id: HWG_GROUP,
+          code: 'BISAGRA',
+          name: 'Bisagras',
+          kind: 'hardware' as const,
+          required: true,
+          optionIds: [HWG_BLUM, HWG_ECO],
+        },
+      ],
+      customers: [
+        ...(catalog.customers ?? []).filter((c) => c.id !== HWG_CUSTOMER),
+        { id: HWG_CUSTOMER, name: 'Cliente 1078 E2E', active: true },
+      ],
+      components: [
+        ...(catalog.components ?? []).filter((c) => c.id !== PAT_DOOR_COMP),
+        {
+          id: PAT_DOOR_COMP,
+          code: 'HWG-PUE-PATRON',
+          name: 'Puerta patrón (fórmulas)',
+          placement: 'puerta' as const,
+          geometry: {
+            kind: 'rectangular_board' as const,
+            lengthMm: 700,
+            widthMm: 600,
+            thicknessMm: 18,
+            lengthFormula: 'PH - 3',
+            widthFormula: 'PW - 3',
+          },
+          defaultEdges: [],
+          optionRoles: ['FRENTES'],
+          active: true,
+        },
+      ],
+      agregados: [
+        ...(catalog.agregados ?? []).filter((a) => a.id !== PAT_AGR),
+        {
+          id: PAT_AGR,
+          code: 'HWG-AGR-PUE-PATRON',
+          name: 'Puerta patrón (countRule)',
+          active: true,
+          components: [
+            {
+              componentId: PAT_DOOR_COMP,
+              quantity: 1,
+              placementOverride: 'puerta' as const,
+              overrides: {
+                hardwarePlacements: [
+                  {
+                    optionRole: 'BISAGRA',
+                    anchorFace: 'back' as const,
+                    countRule: { kind: 'hingeDemand' as const, endOffsetBottomMm: 90, endOffsetTopMm: 90 },
+                    relativePosition: { xMm: 20.5, yMm: 90 },
+                  },
+                ],
+              },
+            },
+          ],
+          hardwareLines: [],
+        } as unknown as (typeof catalog.agregados)[number],
+      ],
+      structures: [
+        ...(catalog.structures ?? []).filter((s) => s.id !== PAT_STRUCT && s.id !== PAT_STRUCT_2100),
+        {
+          id: PAT_STRUCT,
+          code: 'HWG-EST-PATRON',
+          name: 'Cuerpo patrón',
+          components: [],
+          agregados: [
+            {
+              id: 'inst-patron',
+              agregadoId: PAT_AGR,
+              quantity: 1,
+            },
+          ],
+          active: true,
+        } as (typeof catalog.structures)[number],
+        {
+          id: PAT_STRUCT_2100,
+          code: 'HWG-EST-PATRON-2100',
+          name: 'Cuerpo patrón 2100',
+          components: [],
+          agregados: [
+            {
+              id: 'inst-patron-2100',
+              agregadoId: PAT_AGR,
+              quantity: 1,
+            },
+          ],
+          active: true,
+        } as (typeof catalog.structures)[number],
+      ],
+      modules: [
+        ...catalog.modules.filter((m) => m.id !== PAT_MODULE_720 && m.id !== PAT_MODULE_2100),
+        {
+          id: PAT_MODULE_720,
+          code: 'HWG-PATRON-1579-720',
+          name: 'Módulo puerta patrón 720',
+          structureId: PAT_STRUCT,
+          externalDims: { width: 600, height: 720, depth: 560 },
+          components: [],
+          hardwareLines: [],
+        },
+        {
+          id: PAT_MODULE_2100,
+          code: 'HWG-PATRON-1579-2100',
+          name: 'Módulo puerta patrón 2100',
+          structureId: PAT_STRUCT_2100,
+          externalDims: { width: 600, height: 2100, depth: 560 },
+          components: [],
+          hardwareLines: [],
+        },
+      ],
+    });
+    try {
+      // Readback: el patrón sobrevive el round-trip de la API (countRule).
+      const reread = (await repository.getCatalog()).agregados?.find((a) => a.id === PAT_AGR);
+      const patternPlacement = reread?.components?.[0]?.overrides?.hardwarePlacements?.[0];
+      expect(patternPlacement?.countRule).toEqual({
+        kind: 'hingeDemand',
+        endOffsetBottomMm: 90,
+        endOffsetTopMm: 90,
+      });
+
+      const now = new Date().toISOString();
+      // Un módulo POR alto (sin customDims): la cotización de ítems con
+      // instancia de mueble resuelve desde la instancia sembrada al crear la
+      // obra (envolvente del módulo) — el interplay customDims→cotización es
+      // otra superficie, fuera de #1579. La RECETA es la misma; lo que
+      // cambia el conteo es la envolvente de la bahía.
+      const projectFor = (id: string, name: string, moduleId: string, itemId: string) => ({
+        id,
+        name,
+        customerId: HWG_CUSTOMER,
+        currency: 'MXN',
+        marginFactor: 1,
+        laborFixedCost: 0,
+        status: 'draft',
+        createdAt: now,
+        updatedAt: now,
+        items: [
+          {
+            id: itemId,
+            moduleId,
+            quantity: 1,
+            optionChoices: { FRENTES: frenteMaterialId, BISAGRA: HWG_ECO },
+          },
+        ],
+      });
+      await repository.saveProject(
+        projectFor(PAT_PROJECT_720, 'Patrón 1579 (720)', PAT_MODULE_720, '67777777-3939-4739-8777-393939393939') as Parameters<typeof repository.saveProject>[0],
+      );
+      await repository.saveProject(
+        projectFor(PAT_PROJECT_2100, 'Patrón 1579 (2100)', PAT_MODULE_2100, '67777777-3a3a-473a-8777-3a3a3a3a3a3a') as Parameters<typeof repository.saveProject>[0],
+      );
+
+      // La MISMA receta en dos bahías: 717 mm (PH-3) compra 2; 2097 mm cae en
+      // la banda ≤2000 de la económica → 4. Congelado en Q1 de cada obra.
+      const quoteOrThrow = async (projectId: string, notes: string, key: string) => {
+        try {
+          return await client.createInitialProjectQuoteRevision(owner.token, projectId, { notes }, key);
+        } catch (err) {
+          const payload = (err as { payload?: unknown }).payload ?? err;
+          throw new Error(`Q rechazada (${key}): ${JSON.stringify(payload)}`);
+        }
+      };
+      const q720 = await quoteOrThrow(PAT_PROJECT_720, '1579 PR2 — patrón 720', 'e2e1579-pr2-create-720');
+      expect(q720.revisionNumber).toBe(1);
+      const q2100 = await quoteOrThrow(PAT_PROJECT_2100, '1579 PR2 — patrón 2100', 'e2e1579-pr2-create-2100');
+      expect(q2100.revisionNumber).toBe(1);
+
+      expect(q2100.revisionNumber).toBe(1);
+
+      await loginToA(page);
+      await page.goto(`/quotes/${PAT_PROJECT_720}`);
+      await expect(page.locator('.project-totals')).toContainText('Herrajes$24.00 MXN', { timeout: 20_000 });
+      await page.goto(`/quotes/${PAT_PROJECT_2100}`);
+      await expect(page.locator('.project-totals')).toContainText('Herrajes$48.00 MXN', { timeout: 20_000 });
+    } finally {
+      // La bisagra vuelve a quedar sin tabla para el resto del shard.
+      const latest = await repository.getCatalog();
+      const current = latest.hardware.find((h) => h.id === HWG_ECO) ?? eco ?? {};
+      const { hingeDemand: _dropped, ...plainEco } = current;
+      await repository.saveCatalog({
+        ...latest,
+        hardware: [
+          ...latest.hardware.filter((h) => h.id !== HWG_ECO),
+          plainEco as (typeof latest.hardware)[number],
+        ],
+      });
+    }
+  });
 });

@@ -34,6 +34,12 @@ export type HardwarePlacementsEditorProps = {
   readonly testIdSuffix?: string;
   /** #1451: pieza contenedora — el título nombra el contexto («Herraje 2 · en LAT»). */
   readonly containerLabel?: string;
+  /**
+   * #1579 PR2: la pieza es una PUERTA (placementOverride puerta) — los
+   * herrajes de bisagra pueden declarar el patrón «cantidad por altura».
+   * Ausente (piezas que no son puerta) el patrón no se ofrece.
+   */
+  readonly isDoor?: boolean;
 };
 
 const ANCHOR_FACE_OPTIONS: readonly { value: AnchorFace; label: string }[] = [
@@ -71,6 +77,7 @@ export function HardwarePlacementsEditor({
   onChange,
   testIdSuffix,
   containerLabel,
+  isDoor,
 }: HardwarePlacementsEditorProps): ReactNode {
   const suffix = testIdSuffix ? `-${testIdSuffix}` : '';
   const pickerItems = catalogHardware.map((h) => ({
@@ -335,28 +342,117 @@ export function HardwarePlacementsEditor({
                 </div>
                 <div className="catalog-form__field">
                   <label htmlFor={`hw-placement-y-${idx}${suffix}`}>Y (mm o fórmula)</label>
-                  <input
-                    id={`hw-placement-y-${idx}${suffix}`}
-                    type="text"
-                    className="catalog-form__input"
-                    placeholder="ej: 50 ó L - 80"
-                    value={p.relativePosition.yFormula ?? p.relativePosition.yMm}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const num = Number(val);
-                      const isSimpleNum = !isNaN(num) && val.trim() !== '';
-                      update(idx, {
-                        relativePosition: {
-                          ...p.relativePosition,
-                          yMm: isSimpleNum ? num : (p.relativePosition.yMm ?? 0),
-                          yFormula: isSimpleNum ? undefined : val,
-                        },
-                      });
-                    }}
-                    data-testid={`instance-hardware-placement-${idx}${suffix}-y`}
-                  />
+                  {p.countRule ? (
+                    <>
+                      <input
+                        id={`hw-placement-y-${idx}${suffix}`}
+                        type="text"
+                        className="catalog-form__input"
+                        value="cantidad por altura de puerta"
+                        disabled
+                        data-testid={`instance-hardware-placement-${idx}${suffix}-y`}
+                      />
+                      <p className="catalog-form__hint">
+                        La Y la deriva el motor por banda de altura (extremos según los offsets de abajo).
+                      </p>
+                    </>
+                  ) : (
+                    <input
+                      id={`hw-placement-y-${idx}${suffix}`}
+                      type="text"
+                      className="catalog-form__input"
+                      placeholder="ej: 50 ó L - 80"
+                      value={p.relativePosition.yFormula ?? p.relativePosition.yMm}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const num = Number(val);
+                        const isSimpleNum = !isNaN(num) && val.trim() !== '';
+                        update(idx, {
+                          relativePosition: {
+                            ...p.relativePosition,
+                            yMm: isSimpleNum ? num : (p.relativePosition.yMm ?? 0),
+                            yFormula: isSimpleNum ? undefined : val,
+                          },
+                        });
+                      }}
+                      data-testid={`instance-hardware-placement-${idx}${suffix}-y`}
+                    />
+                  )}
                 </div>
               </div>
+
+              {/* #1579 PR2: patrón «cantidad por altura de puerta» — sólo en
+                  puertas y con los offsets de extremos editables. El kind hoy
+                  es único (hingeDemand); la Y arriba queda derivada. */}
+              {isDoor ? (
+                <div className="module-editor__grid module-editor__grid--rotations">
+                  <div className="catalog-form__field catalog-form__field--narrow">
+                    <label htmlFor={`hw-placement-countrule-${idx}${suffix}`}>Cantidad</label>
+                    <select
+                      id={`hw-placement-countrule-${idx}${suffix}`}
+                      value={p.countRule ? 'hingeDemand' : ''}
+                      onChange={(e) =>
+                        update(idx, {
+                          countRule:
+                            e.target.value === 'hingeDemand'
+                              ? {
+                                  kind: 'hingeDemand',
+                                  endOffsetBottomMm: p.countRule?.endOffsetBottomMm ?? 90,
+                                  endOffsetTopMm: p.countRule?.endOffsetTopMm ?? 90,
+                                }
+                              : undefined,
+                        })
+                      }
+                      data-testid={`instance-hardware-placement-${idx}${suffix}-countrule`}
+                    >
+                      <option value="">Fija (posición manual)</option>
+                      <option value="hingeDemand">Por altura de puerta</option>
+                    </select>
+                  </div>
+                  {p.countRule ? (
+                    <>
+                      <div className="catalog-form__field catalog-form__field--narrow">
+                        <label htmlFor={`hw-placement-offset-bottom-${idx}${suffix}`}>Abajo desde (mm)</label>
+                        <input
+                          id={`hw-placement-offset-bottom-${idx}${suffix}`}
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={p.countRule.endOffsetBottomMm}
+                          onChange={(e) =>
+                            update(idx, {
+                              countRule: {
+                                ...p.countRule!,
+                                endOffsetBottomMm: Math.max(0, Number(e.target.value) || 0),
+                              },
+                            })
+                          }
+                          data-testid={`instance-hardware-placement-${idx}${suffix}-offset-bottom`}
+                        />
+                      </div>
+                      <div className="catalog-form__field catalog-form__field--narrow">
+                        <label htmlFor={`hw-placement-offset-top-${idx}${suffix}`}>Arriba desde (mm)</label>
+                        <input
+                          id={`hw-placement-offset-top-${idx}${suffix}`}
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={p.countRule.endOffsetTopMm}
+                          onChange={(e) =>
+                            update(idx, {
+                              countRule: {
+                                ...p.countRule!,
+                                endOffsetTopMm: Math.max(0, Number(e.target.value) || 0),
+                              },
+                            })
+                          }
+                          data-testid={`instance-hardware-placement-${idx}${suffix}-offset-top`}
+                        />
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
 
               {/* #1453 F2: panel-side references + hardware-side anchor. */}
               <div className="module-editor__grid module-editor__grid--rotations">
