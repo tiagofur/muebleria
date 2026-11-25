@@ -62,9 +62,15 @@ module Granete
         end
 
         # Closes all open doors/actors and restores canonical transforms.
+        # Only actors that carry a record are touched — the rest are already
+        # closed — because the sweep covers the whole model (#1717) and
+        # must not rewrite, nor mark as changed, what has nothing to close.
         def close_all(_furniture_transform = nil)
           @motions.each do |m|
-            (m['componentInstanceIds'] || []).each do |comp_id|
+            comp_ids = m['componentInstanceIds'] || []
+            next unless PresentationPoseStore.recorded?(@component_map[comp_ids.first])
+
+            comp_ids.each do |comp_id|
               door = @component_map[comp_id]
               restore_actor_closed_pose(door, comp_id) if door
             end

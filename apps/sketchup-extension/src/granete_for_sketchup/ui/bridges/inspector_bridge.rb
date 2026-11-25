@@ -161,20 +161,22 @@ module Granete
           end
         end
 
-        # The pose AND its record change together (#1717): one undo step, or
-        # nothing — a failure mid-way leaves the model as it was.
+        # The pose AND its record change together (#1717): one undo step.
+        # A failure that escapes to here aborts the whole change, so the
+        # model never keeps a pose without its record or the other way
+        # around. (The close-all sweep isolates each door's failure inside
+        # the block: the doors that did close stay closed and it is reported.)
         def within_motion_operation(model, operation_name)
           return yield unless model.respond_to?(:start_operation)
 
-          model.start_operation(operation_name, true)
-          begin
-            result = yield
-          rescue StandardError
-            model.abort_operation
-            raise
-          end
-          model.commit_operation
+          journal = Host::OperationJournal.new(model)
+          journal.start_operation(operation_name, true)
+          result = yield
+          journal.commit_operation
           result
+        rescue StandardError
+          journal&.abort_if_open!
+          raise
         end
 
         def build_presentation_motions(doors, hw_scanned, drawers, open_angle_deg)

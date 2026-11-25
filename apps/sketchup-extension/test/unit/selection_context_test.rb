@@ -37,9 +37,8 @@ class SelectionContextTest < Minitest::Test
     )
   end
 
-  def pose_store
-    Granete::SketchUpExtension::Motion::PresentationPoseStore
-  end
+  # #1717: the pose record lives on the opening entities.
+  PoseStore = Granete::SketchUpExtension::Motion::PresentationPoseStore
 
   def test_top_level_furniture_produces_furniture_kind_with_local_ref_identity
     definition = @provider.find_definition('kitchen-base-standard')
@@ -99,17 +98,19 @@ class SelectionContextTest < Minitest::Test
   # still publishes the opening door actors discovered from managed metadata,
   # so the Inspector card can offer Abrir/Cerrar on real library furniture.
   def test_furniture_payload_publishes_door_actors_discovered_from_metadata
-    definition = @provider.find_definition('kitchen-base-standard')
-    @builder.insert_furniture(@model, definition, { 'widthMm' => 700 })
+    result = @builder.insert_furniture(@model, @provider.find_definition('kitchen-base-standard'),
+                                       { 'widthMm' => 700 })
     furniture = @model.active_entities.instances.first
+    add_opening_child(furniture, result['instance_id'], 'door-1', 'role' => 'door', 'placement' => 'puerta')
+    add_opening_child(furniture, result['instance_id'], 'front-1',
+                      'role' => 'frente_cajon', 'placement' => 'frente_cajon')
 
     payload = @resolver.resolve(furniture).to_payload
 
     assert payload.key?('doorActors')
-    assert_kind_of Array, payload['doorActors']
-    payload['doorActors'].each do |actor|
-      assert actor.key?('slotIndex')
-    end
+    assert_equal [{ 'slotIndex' => 0, 'kind' => 'door', 'isOpen' => false },
+                  { 'slotIndex' => 1, 'kind' => 'drawer', 'isOpen' => false, 'label' => 'Cajón' }],
+                 payload['doorActors']
   end
 
   # #1717: every published actor carries the pose it REALLY has — the record
@@ -128,10 +129,16 @@ class SelectionContextTest < Minitest::Test
     assert_equal [['door', false], ['drawer', false]], poses.call(@resolver.resolve(furniture).to_payload),
                  'sin registro todo se publica cerrado'
 
-    pose_store.write(drawer_front, 1.0, drawer_front.transformation)
+    PoseStore.write(drawer_front, 1.0, drawer_front.transformation)
 
     assert_equal [['door', false], ['drawer', true]], poses.call(@resolver.resolve(furniture).to_payload),
                  'sólo el actor con registro se publica abierto'
+
+    # A corrupt record reads closed and never hides the healthy actors.
+    drawer_front.set_attribute(PoseStore::DICTIONARY, PoseStore::KEY, '{"progress":true}')
+
+    assert_equal [['door', false], ['drawer', false]], poses.call(@resolver.resolve(furniture).to_payload),
+                 'un registro corrupto se publica cerrado, sin ocultar los demás actores'
   end
 
   def add_opening_child(furniture, furniture_ref, instance_ref, intent)

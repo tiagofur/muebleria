@@ -4,6 +4,7 @@ require 'json'
 require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/motion/presentation_pose_store'
 require_relative '../../src/granete_for_sketchup/motion/presentation_motion_adapter'
+require_relative '../../src/granete_for_sketchup/host/operation_journal'
 require_relative '../../src/granete_for_sketchup/ui/bridges/inspector_bridge'
 require_relative '../../src/granete_for_sketchup/ui/bridges/observer_bridge'
 
@@ -15,6 +16,7 @@ require_relative '../../src/granete_for_sketchup/ui/bridges/observer_bridge'
 # #1393 — the close-all sweep isolates adapter failures, evicts dead cache
 # entries, and a model rebind drops the whole map.
 class InspectorBridgeMotionCacheTest < Minitest::Test
+  PoseStore = Granete::SketchUpExtension::Motion::PresentationPoseStore
   LiveDoor = Struct.new(:persistent_id, :valid?, :transformation)
   FakeFurniture = Struct.new(:persistent_id)
 
@@ -37,8 +39,12 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
   end
 
   # #1393 — a door that records every closed-pose write so the close-all
-  # sweep is observable without a real Geom layer.
+  # sweep is observable without a real Geom layer. It carries the entity's
+  # attribute dictionaries: the sweep only closes a door left OPEN, i.e.
+  # one carrying its pose record (#1717).
   class TrackedDoor
+    include SketchupStub::AttributeContainer
+
     attr_reader :transform_writes
 
     def initialize(persistent_id, valid: true)
@@ -60,11 +66,11 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
     end
   end
 
-  # #1393 — entities report valid?, but reading the pose explodes mid
+  # #1393 — entities report valid?, but the transform write explodes mid
   # close_all (the real host can raise between the validity check and the
-  # transform write).
+  # write).
   class ExplodingDoor < TrackedDoor
-    def transformation
+    def transformation=(_transform)
       raise TypeError, 'reference to deleted Entity'
     end
   end
@@ -183,6 +189,11 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
     host
   end
 
+  # A door an earlier action left open: it carries its pose record (#1717).
+  def leave_open(door)
+    PoseStore.write(door, 1.0, Geom::Transformation.new)
+  end
+
   def test_entities_valid_is_true_over_living_entities
     door = LiveDoor.new(1, true, Object.new)
     adapter = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
@@ -267,6 +278,7 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
   def test_close_all_closes_only_the_live_adapter_and_evicts_the_dead_one
     dead_door = TrackedDoor.new(1, valid: false)
     live_door = TrackedDoor.new(2)
+    leave_open(live_door)
     host = MultiFurnitureHost.new(111 => [dead_door], 222 => [live_door])
     host.send(:presentation_motion_adapter_for, FakeFurniture.new(111), 110.0)
     host.send(:presentation_motion_adapter_for, FakeFurniture.new(222), 110.0)
@@ -289,6 +301,8 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
   def test_close_all_isolates_a_raising_adapter_and_notifies_the_dialog
     exploding_door = ExplodingDoor.new(3)
     live_door = TrackedDoor.new(4)
+    leave_open(exploding_door)
+    leave_open(live_door)
     host = MultiFurnitureHost.new(333 => [exploding_door], 444 => [live_door])
     host.send(:presentation_motion_adapter_for, FakeFurniture.new(333), 110.0)
     host.send(:presentation_motion_adapter_for, FakeFurniture.new(444), 110.0)
@@ -369,12 +383,15 @@ class InspectorBridgePersistedMotionStateTest < Minitest::Test
 
   # The host model as the bridge sees it for presentation motion: the root
   # entities (managed furniture) and the undo operations it is asked for.
+  # commit_result lets a test make the host refuse the commit.
   class FakeModel
     attr_reader :entities, :operations
+    attr_accessor :commit_result
 
     def initialize(entities)
       @entities = entities
       @operations = []
+      @commit_result = true
     end
 
     def selection
@@ -388,6 +405,7 @@ class InspectorBridgePersistedMotionStateTest < Minitest::Test
 
     def commit_operation
       @operations << [:commit]
+      @commit_result
     end
 
     def abort_operation
@@ -552,6 +570,21 @@ class InspectorBridgePersistedMotionStateTest < Minitest::Test
 
     assert_equal [[:start, TOGGLE_OPERATION, true], [:abort]], host.model.operations,
                  'un fallo a mitad de camino no deja la operación abierta ni la confirma'
+    assert_empty calls(host, 'onDoorMotionToggled')
+    assert_equal 1, calls(host, 'onDoorMotionFailed').length
+  end
+
+  def test_toggle_is_reported_as_failed_when_the_host_refuses_the_commit
+    saved_door = door(1)
+    host = PersistedHost.new(4_242 => [saved_door])
+    host.register('ref-1', PoseFurniture.new(4_242))
+    leave_saved_open(saved_door)
+    host.model.commit_result = false
+
+    toggle(host, 0)
+
+    assert_equal [[:start, TOGGLE_OPERATION, true], [:commit], [:abort]], host.model.operations,
+                 'una operación que el host no confirma se aborta'
     assert_empty calls(host, 'onDoorMotionToggled')
     assert_equal 1, calls(host, 'onDoorMotionFailed').length
   end

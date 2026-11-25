@@ -725,7 +725,9 @@ a abrirlo, la tarjeta sigue mostrando **Cerrar** en lo que quedó abierto y
 cierra los abiertos de todos los muebles del modelo, aunque no los haya
 tocado en esa sesión. Deshacer revierte una apertura o un cierre en un solo
 paso. Abrir o cerrar no cambia el diseño: **Aplicar** reconstruye el mueble
-con todo cerrado.
+con todo cerrado. Lo que hayas dejado abierto y guardado con una versión
+anterior a la 0.1.128 no trae ese registro: reconstruí ese mueble con
+**Aplicar** (nace cerrado) antes de volver a abrirlo.
 
 **Cómo saber que quedó bien:** al abrir y cerrar, el cajón sale entero (con
 su frente y su jaladera) y la puerta gira por sus bisagras — sin piezas

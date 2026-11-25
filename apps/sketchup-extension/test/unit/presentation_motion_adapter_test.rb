@@ -41,6 +41,20 @@ class PresentationMotionAdapterTest < Minitest::Test
     end
   end
 
+  class WriteCountingDoor < FakeComponentInstance
+    attr_reader :transform_writes
+
+    def initialize(*)
+      super
+      @transform_writes = []
+    end
+
+    def transformation=(transform)
+      @transform_writes << transform
+      super
+    end
+  end
+
   def setup
     SketchupStub.reset! if defined?(SketchupStub)
     # Door closed pose: panel x∈[10,25] (width 15), at the front y=1,
@@ -250,15 +264,62 @@ class PresentationMotionAdapterTest < Minitest::Test
     end
   end
 
+  # #1717 — a corrupt or half record is NO record: the actor reads closed,
+  # nothing raises, and a toggle over it is a plain open. A record with a
+  # progress but without its closed pose would read open with no way back.
   def test_a_corrupt_record_reads_closed
-    @door.set_attribute(PoseStore::DICTIONARY, PoseStore::KEY, '{not-json')
-    @handle.set_attribute(PoseStore::DICTIONARY, PoseStore::KEY, '{"progress":"abierto"}')
-    @hinge.set_attribute(PoseStore::DICTIONARY, PoseStore::KEY, '[1, 2]')
-
-    refute adapter.open?('slot-0')
-    [@door, @handle, @hinge].each do |entity|
-      assert_nil PoseStore.closed_transform(entity)
+    closed_pose = @door_closed.to_a
+    corrupt_records = [
+      '{not-json',
+      '[1, 2]',
+      '{"progress":"abierto"}',
+      '{"progress":true}',
+      '{"progress":[1]}',
+      '{"progress":null}',
+      '{"progress":1,"closedTransform":[1, 2, 3]}',
+      '{"progress":1,"closedTransform":"abierta"}',
+      '{"progress":1e400,"closedTransform":[]}',
+      '{"progress":1,"closedTransform":[1,1,1,Infinity,0,0,0,0,0,0,0,0,0,0,0,1]}',
+      '{"progress":1,"closedTransform":[1e400,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}'
+    ]
+    corrupt_records.each do |raw|
+      refute adapter.open?('slot-0'), raw
+      [@door, @handle, @hinge].each do |entity|
+        entity.set_attribute(PoseStore::DICTIONARY, PoseStore::KEY, raw)
+        assert_nil PoseStore.closed_transform(entity), raw
+        refute PoseStore.recorded?(entity), raw
+      end
     end
+
+    assert adapter.toggle_motion('slot-0', 'left'), 'sobre un registro corrupto el toggle abre, sin levantar'
+    refute_equal closed_pose, @door.transformation.to_a
+    assert adapter.open?('slot-0')
+  end
+
+  # #1717 — «Cerrar todas» sweeps the whole model: an actor without a record
+  # is already closed and must not be rewritten.
+  def test_close_all_touches_only_recorded_actors
+    untouched = WriteCountingDoor.new('door-2', Geom::Transformation.translation(Geom::Vector3d.new(10.0, 1.0, 300.0)))
+    opened = WriteCountingDoor.new('door-3', Geom::Transformation.translation(Geom::Vector3d.new(10.0, 1.0, 600.0)))
+    two_motions = [
+      { 'id' => 'slot-0', 'doorSlotIndex' => 0, 'componentInstanceIds' => ['door-2'],
+        'motion' => { 'kind' => 'rotate', 'openAngleDeg' => 90.0 } },
+      { 'id' => 'slot-1', 'doorSlotIndex' => 1, 'componentInstanceIds' => ['door-3'],
+        'motion' => { 'kind' => 'rotate', 'openAngleDeg' => 90.0 } }
+    ]
+    a = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+      two_motions, { 'door-2' => untouched, 'door-3' => opened }, {}
+    )
+    a.apply_motion('slot-1', 1.0, nil, side: 'left')
+    opened_pose = opened.transformation.to_a
+    assert_equal 1, opened.transform_writes.length, 'precondición: el actor abierto recibió su pose'
+
+    a.close_all
+
+    assert_empty untouched.transform_writes, 'un actor sin registro no se reescribe'
+    assert_equal 2, opened.transform_writes.length, 'el actor abierto recibe exactamente su pose cerrada'
+    refute_equal opened_pose, opened.transformation.to_a
+    refute a.open?('slot-1')
   end
 
   # #1717 — a drawer saved open is read open after reopen and closes to the

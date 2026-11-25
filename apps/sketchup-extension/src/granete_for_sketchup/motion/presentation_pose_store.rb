@@ -12,6 +12,8 @@ module Granete
       # partió; una entidad cerrada no tiene registro. Sólo presentación:
       # nunca decide fabricación ni identidad, y nunca toca la metadata
       # semántica (`bootstrap_intent.v1`).
+      # Un registro sólo cuenta entero: sin su pose cerrada no hay camino de
+      # vuelta, así que a medias es «sin registro» (cerrado) y nunca levanta.
       module PresentationPoseStore
         DICTIONARY = 'com.granete.sketchup_extension'
         KEY = 'presentation_motion_pose.v1'
@@ -40,17 +42,22 @@ module Granete
 
         def open?(entity)
           record = read(entity)
-          record ? record.fetch('progress', 0.0).to_f > OPEN_THRESHOLD : false
+          record ? record['progress'].to_f > OPEN_THRESHOLD : false
         end
 
         # Transform cerrado canónico guardado; nil cuando la entidad no tiene
-        # registro (cerrada) o el registro no sirve.
+        # registro utilizable (cerrada).
         def closed_transform(entity)
           record = read(entity)
-          values = record && record['closedTransform']
-          return nil unless valid_transform_values?(values)
+          return nil unless record
 
-          ::Geom::Transformation.new(values.map(&:to_f))
+          ::Geom::Transformation.new(record['closedTransform'].map(&:to_f))
+        end
+
+        # True cuando la entidad trae un registro utilizable, abierta o a
+        # medio cerrar. Lo que no trae registro está cerrado.
+        def recorded?(entity)
+          !read(entity).nil?
         end
 
         def read(entity)
@@ -60,16 +67,25 @@ module Granete
           return unless raw.is_a?(String) && !raw.empty?
 
           parsed = JSON.parse(raw)
-          parsed.is_a?(Hash) ? parsed : nil
+          valid_record?(parsed) ? parsed : nil
         rescue StandardError
           # A record that cannot be read (corrupt, or a dead entity) is no
           # record: the actor reads closed, never as a guessed pose.
           nil
         end
 
-        def valid_transform_values?(values)
-          values.is_a?(Array) && values.size == TRANSFORM_SIZE && values.all?(Numeric)
+        def valid_record?(record)
+          return false unless record.is_a?(Hash) && finite_number?(record['progress'])
+
+          values = record['closedTransform']
+          values.is_a?(Array) && values.size == TRANSFORM_SIZE && values.all? { |value| finite_number?(value) }
         end
+
+        def finite_number?(value)
+          value.is_a?(Numeric) && value.respond_to?(:finite?) && value.finite?
+        end
+
+        private_class_method :read, :valid_record?, :finite_number?
       end
     end
   end
