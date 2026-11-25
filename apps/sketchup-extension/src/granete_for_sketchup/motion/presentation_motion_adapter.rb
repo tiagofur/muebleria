@@ -68,7 +68,7 @@ module Granete
         def close_all(_furniture_transform = nil)
           @motions.each do |m|
             comp_ids = m['componentInstanceIds'] || []
-            next unless PresentationPoseStore.recorded?(@component_map[comp_ids.first])
+            next unless comp_ids.any? { |comp_id| recorded_actor?(@component_map[comp_id], comp_id) }
 
             comp_ids.each do |comp_id|
               door = @component_map[comp_id]
@@ -112,6 +112,14 @@ module Granete
         # and share one fate: both pose paths run over this same list.
         def actor_entities(door_instance, comp_id)
           [door_instance] + (@hardware_by_host[comp_id] || [])
+        end
+
+        # An actor still counts as open while ANY of its entities carries a
+        # record — its front, or a piece of its mounted hardware. A host
+        # failure isolated mid-actor leaves the not-yet-restored pieces
+        # behind: the next sweep must still bring them back.
+        def recorded_actor?(door_instance, comp_id)
+          actor_entities(door_instance, comp_id).any? { |entity| PresentationPoseStore.recorded?(entity) }
         end
 
         def restore_actor_closed_pose(door_instance, comp_id)

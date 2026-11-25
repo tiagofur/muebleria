@@ -283,12 +283,12 @@ class PresentationMotionAdapterTest < Minitest::Test
       '{"progress":1,"closedTransform":[1e400,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}'
     ]
     corrupt_records.each do |raw|
-      refute adapter.open?('slot-0'), raw
       [@door, @handle, @hinge].each do |entity|
         entity.set_attribute(PoseStore::DICTIONARY, PoseStore::KEY, raw)
         assert_nil PoseStore.closed_transform(entity), raw
         refute PoseStore.recorded?(entity), raw
       end
+      refute adapter.open?('slot-0'), raw
     end
 
     assert adapter.toggle_motion('slot-0', 'left'), 'sobre un registro corrupto el toggle abre, sin levantar'
@@ -320,6 +320,25 @@ class PresentationMotionAdapterTest < Minitest::Test
     assert_equal 2, opened.transform_writes.length, 'el actor abierto recibe exactamente su pose cerrada'
     refute_equal opened_pose, opened.transformation.to_a
     refute a.open?('slot-1')
+  end
+
+  # A host failure isolated mid-actor can leave mounted hardware behind with
+  # its record while the front already lost its own: the next sweep must
+  # still bring that hardware back.
+  def test_close_all_restores_hardware_left_behind_with_its_record
+    hinge = WriteCountingDoor.new('hinge-1', @hinge_closed)
+    front = WriteCountingDoor.new('door-1', @door_closed)
+    PoseStore.write(hinge, 1.0, @hinge_closed)
+    hinge.transformation = Geom::Transformation.translation(Geom::Vector3d.new(30.0, 5.0, 2.0))
+    a = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+      motions, { 'door-1' => front }, { 'door-1' => [hinge] }
+    )
+
+    a.close_all
+
+    assert_equal @hinge_closed.to_a, hinge.transformation.to_a, 'el herraje desplazado vuelve a su pose cerrada'
+    assert_equal 2, hinge.transform_writes.length, 'su pose abierta, y luego exactamente su pose cerrada'
+    refute PoseStore.recorded?(hinge)
   end
 
   # #1717 — a drawer saved open is read open after reopen and closes to the

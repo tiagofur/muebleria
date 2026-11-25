@@ -162,10 +162,10 @@ module Granete
         end
 
         # The pose AND its record change together (#1717): one undo step.
-        # A failure that escapes to here aborts the whole change, so the
-        # model never keeps a pose without its record or the other way
-        # around. (The close-all sweep isolates each door's failure inside
-        # the block: the doors that did close stay closed and it is reported.)
+        # A failure that escapes to here aborts the whole change, so pose
+        # and record stay consistent. The close-all sweep isolates each
+        # door's failure inside the block instead: a door that fails to
+        # close is reported and the doors that did close stay closed.
         def within_motion_operation(model, operation_name)
           return yield unless model.respond_to?(:start_operation)
 
