@@ -419,10 +419,26 @@
         doorSlotIndex: slot,
         doorLabel: a && a.label ? a.label : defaultLabel,
         swingSide: a && a.swingSide ? a.swingSide : side,
-        kind: a && a.kind ? a.kind : "door"
+        kind: a && a.kind ? a.kind : "door",
+        // #1717: pose real de sesión, decorada por Ruby al publicar la
+        // selección (bridge). El label nunca se adivina en el cliente.
+        isOpen: !!(a && a.isOpen)
       });
     }
     return doors;
+  }
+
+  // #1717: aplica la pose resultado de un toggle al contexto del mueble
+  // seleccionado — la misma fuente que renderOpeningAccessoriesCard pinta.
+  function applyDoorMotionStateToContext(slot, isOpen) {
+    if (!selectedContext || !Array.isArray(selectedContext.doorActors)) return;
+    for (var i = 0; i < selectedContext.doorActors.length; i++) {
+      var a = selectedContext.doorActors[i];
+      if (a && (a.slotIndex === slot || (a.slotIndex === undefined && i === slot))) {
+        a.isOpen = !!isOpen;
+        return;
+      }
+    }
   }
 
   function renderOpeningAccessoriesCard(context, overrideParams) {
@@ -488,7 +504,10 @@
       var slotIdx = d.doorSlotIndex !== undefined ? d.doorSlotIndex : i;
       var btnMotion = document.createElement("button");
       btnMotion.type = "button";
-      var isSlotOpen = !!(window.GraneteUI && window.GraneteUI.doorMotionStates && window.GraneteUI.doorMotionStates[slotIdx]);
+      // #1717: el estado viene del payload de la selección (pose real del
+      // adapter Ruby), no de una caché del dialog — la caché vieja era por
+      // slot y compartida entre muebles: el label desincronizaba del modelo.
+      var isSlotOpen = !!d.isOpen;
       btnMotion.className = isSlotOpen ? "btn btn-sm btn-secondary door-toggle-motion-btn" : "btn btn-sm btn-ghost door-toggle-motion-btn";
       btnMotion.setAttribute("data-door-slot", String(slotIdx));
       btnMotion.textContent = isSlotOpen ? "Cerrar" : "Abrir";
@@ -2151,8 +2170,11 @@
     onDoorMotionToggled: function (payload) {
       var p = typeof payload === "string" ? JSON.parse(payload) : (payload || {});
       var slot = p.doorSlotIndex !== undefined ? p.doorSlotIndex : 0;
-      if (!window.GraneteUI.doorMotionStates) window.GraneteUI.doorMotionStates = {};
-      window.GraneteUI.doorMotionStates[slot] = !!p.isOpen;
+      // #1717: la pose del toggle vive en el contexto del mueble seleccionado
+      // (re-render incluido) hasta que la próxima selección re-publique la
+      // verdad del bridge. Sin mapa global por slot: era compartido entre
+      // muebles y desincronizaba el label del modelo.
+      applyDoorMotionStateToContext(slot, p.isOpen);
       var btn = document.querySelector('.door-toggle-motion-btn[data-door-slot="' + slot + '"]');
       if (btn) {
         btn.textContent = p.isOpen ? "Cerrar" : "Abrir";
@@ -2161,11 +2183,14 @@
     },
     onDoorMotionFailed: function (payload) {
       var p = typeof payload === "string" ? JSON.parse(payload) : (payload || {});
-      window.GraneteUI.doorMotionStates = {};
       if (deps.showToast) deps.showToast("error", p.message || "La apertura no se aplicó. Probá de nuevo.");
     },
     onAllDoorsClosed: function () {
-      window.GraneteUI.doorMotionStates = {};
+      if (selectedContext && Array.isArray(selectedContext.doorActors)) {
+        for (var ai = 0; ai < selectedContext.doorActors.length; ai++) {
+          if (selectedContext.doorActors[ai]) selectedContext.doorActors[ai].isOpen = false;
+        }
+      }
       var btns = document.querySelectorAll('.door-toggle-motion-btn');
       for (var bi = 0; bi < btns.length; bi++) {
         btns[bi].textContent = "Abrir";

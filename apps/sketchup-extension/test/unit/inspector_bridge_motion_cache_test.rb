@@ -316,3 +316,240 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
     assert_empty host.instance_variable_get(:@motion_adapters)
   end
 end
+
+# #1717 — the Apertura card's button state rides the SelectionContext
+# payload: Ruby decorates every doorActors entry with the pose its
+# furniture REALLY has (cached adapter open states, keyed by the raw slot
+# string exactly as toggle_motion receives it). The dialog-side slot map
+# this replaces was shared across furniture and never reset on selection,
+# so a closed door inherited another furniture's "open" and the button
+# both labelled and acted inverted.
+class InspectorBridgeDoorMotionStateDecorationTest < Minitest::Test
+  # A real Geom::Transformation: the decoration roundtrip drives the REAL
+  # toggle path, which multiplies and writes transforms (the Object.new
+  # pose of the #1387 fixtures would explode there).
+  LiveDoor = Struct.new(:persistent_id, :valid?, :transformation)
+  FakeFurniture = Struct.new(:persistent_id)
+  DrawerStub = Struct.new(:components, :hardware, :distance_mm, :name)
+
+  class FakeLogger
+    attr_reader :events
+
+    def initialize
+      @events = []
+    end
+
+    %i[info warn error].each do |level|
+      define_method(level) { |event, context = {}| @events << [level, event, context] }
+    end
+  end
+
+  class FakeModel
+    def selection
+      []
+    end
+  end
+
+  # Host stubbing the furniture scan with the FULL 3-element shape
+  # (doors, hardware, drawers) so door+drawer adapters build for real.
+  class MotionScanHost
+    include Granete::SketchUpExtension::UserInterface::InspectorBridge
+
+    attr_reader :scan_count, :logger
+
+    def initialize(scanned_by_furniture)
+      @scanned_by_furniture = scanned_by_furniture
+      @entity_by_ref = {}
+      @logger = FakeLogger.new
+      @scan_count = 0
+    end
+
+    def inspect_furniture_door_actors(furniture_entity)
+      @scan_count += 1
+      @scanned_by_furniture.fetch(furniture_entity.persistent_id, [[], {}, []])
+    end
+
+    def search_entities_for_instance(instance_ref)
+      @entity_by_ref[instance_ref]
+    end
+
+    def register_entity(ref, entity)
+      @entity_by_ref[ref] = entity
+    end
+
+    def active_model
+      FakeModel.new
+    end
+
+    def furniture_metadata?(_model, _target)
+      true
+    end
+
+    def execute_bridge(_dialog, _function_name, _payload); end
+  end
+
+  # ObserverBridge host proving the selection publish runs the decoration
+  # and forwards its payload. The decoration CONTRACT is covered by
+  # MotionScanHost above; here the call is stubbed to keep the wiring
+  # test independent of the adapter machinery.
+  class SelectionPublishHost
+    include Granete::SketchUpExtension::UserInterface::ObserverBridge
+
+    attr_reader :bridge_calls, :decorated_with
+
+    def initialize(context)
+      @context = context
+      @dialog = VisibleDialog.new
+      @bridge_calls = []
+      @decorated_with = []
+    end
+
+    VisibleDialog = Struct.new(:id) do
+      def visible?
+        true
+      end
+
+      def execute_script(_script); end
+    end
+
+    def execute_bridge(_dialog, function_name, payload)
+      @bridge_calls << [function_name, payload]
+    end
+
+    def rescope_overlay_from_selection(_payload); end
+
+    def decorate_door_motion_state(payload)
+      @decorated_with << payload
+    end
+  end
+
+  def furniture
+    @furniture ||= FakeFurniture.new(4_242)
+  end
+
+  def live_door(persistent_id)
+    LiveDoor.new(persistent_id, true, ::Geom::Transformation.new)
+  end
+
+  def door_actor(slot)
+    { 'slotIndex' => slot, 'kind' => 'door' }
+  end
+
+  def toggle(host, slot)
+    host.handle_toggle_door_motion(
+      nil, JSON.generate({ 'doorSlotIndex' => slot, 'swingSide' => 'left', 'furnitureInstanceRef' => 'ref-1' })
+    )
+  end
+
+  def test_decoration_reports_the_real_pose_after_a_toggle
+    doors = [live_door(1), live_door(2)]
+    host = MotionScanHost.new(4_242 => [doors, {}, []])
+    host.register_entity('ref-1', furniture)
+    toggle(host, 0)
+    payload = {
+      'kind' => 'furniture',
+      'furnitureInstanceRef' => 'ref-1',
+      'doorActors' => [door_actor(0), door_actor(1)]
+    }
+
+    host.send(:decorate_door_motion_state, payload)
+
+    assert payload['doorActors'][0]['isOpen'],
+           'la puerta togglada debe publicar abierta (la clave de estado es el slot crudo)'
+    refute payload['doorActors'][1]['isOpen'], 'la puerta intacta debe publicar cerrada'
+  end
+
+  def test_decoration_covers_drawer_slots_with_the_same_slot_key
+    drawer = DrawerStub.new([live_door(9)], [], 400.0, 'Cajón 1')
+    host = MotionScanHost.new(4_242 => [[live_door(1)], {}, [drawer]])
+    host.register_entity('ref-1', furniture)
+    toggle(host, 1)
+    payload = {
+      'kind' => 'furniture',
+      'furnitureInstanceRef' => 'ref-1',
+      'doorActors' => [door_actor(0), { 'slotIndex' => 1, 'kind' => 'drawer', 'label' => 'Cajón 1' }]
+    }
+
+    host.send(:decorate_door_motion_state, payload)
+
+    refute payload['doorActors'][0]['isOpen']
+    assert payload['doorActors'][1]['isOpen'], 'el cajón togglado debe publicar abierto'
+  end
+
+  def test_decoration_defaults_to_closed_and_never_scans_without_cached_adapter
+    host = MotionScanHost.new({})
+    host.register_entity('ref-1', furniture)
+    payload = {
+      'kind' => 'furniture',
+      'furnitureInstanceRef' => 'ref-1',
+      'doorActors' => [door_actor(0), door_actor(1)]
+    }
+
+    host.send(:decorate_door_motion_state, payload)
+
+    refute payload['doorActors'][0]['isOpen'], 'un mueble recién seleccionado se construye cerrado'
+    refute payload['doorActors'][1]['isOpen']
+    assert_equal 0, host.scan_count, 'la decoración es read-only: una selección nunca construye adapter'
+    assert_empty host.instance_variable_get(:@motion_adapters) || {},
+                 'la decoración no debe sembrar la caché de adapters'
+  end
+
+  def test_decoration_evicts_a_dead_adapter_and_reports_closed
+    old_door = live_door(1)
+    host = MotionScanHost.new(4_242 => [[old_door], {}, []])
+    host.register_entity('ref-1', furniture)
+    toggle(host, 0)
+    refute_empty host.instance_variable_get(:@motion_adapters), 'precondición: el toggle cacheó el adapter'
+    old_door[:valid?] = false # the apply rebuild deleted the door (#1387)
+    payload = {
+      'kind' => 'furniture',
+      'furnitureInstanceRef' => 'ref-1',
+      'doorActors' => [door_actor(0)]
+    }
+
+    host.send(:decorate_door_motion_state, payload)
+
+    refute payload['doorActors'][0]['isOpen'], 'el mueble reconstruido está cerrado'
+    assert_empty host.instance_variable_get(:@motion_adapters), 'el adapter muerto se evicta'
+  end
+
+  def test_decoration_ignores_batch_and_actorless_payloads
+    host = MotionScanHost.new({})
+    batch = { 'kind' => 'batch', 'furniture' => [{ 'doorActors' => [door_actor(0)] }] }
+    host.send(:decorate_door_motion_state, batch)
+    actorless = { 'kind' => 'furniture', 'furnitureInstanceRef' => 'ref-1' }
+    host.send(:decorate_door_motion_state, actorless)
+
+    refute batch['furniture'][0].key?('isOpen')
+    refute actorless.key?('doorActors')
+    assert_empty host.instance_variable_get(:@motion_adapters) || {}
+  end
+
+  def test_decoration_survives_a_missing_entity_and_logs
+    host = MotionScanHost.new({})
+    payload = { 'kind' => 'furniture', 'furnitureInstanceRef' => 'ghost', 'doorActors' => [door_actor(0)] }
+
+    host.send(:decorate_door_motion_state, payload)
+
+    refute payload['doorActors'][0]['isOpen']
+    assert(host.logger.events.none? { |(level, _event, _)| level == :error },
+           'una referencia sin entidad no es error: es un mueble sin poses de sesión')
+  end
+
+  def test_selection_publish_runs_the_decoration_before_executing
+    context = Object.new
+    context.define_singleton_method(:to_payload) do
+      @to_payload ||= { 'kind' => 'furniture', 'furnitureInstanceRef' => 'ref-1',
+                        'doorActors' => [{ 'slotIndex' => 0, 'kind' => 'door' }] }
+    end
+    host = SelectionPublishHost.new(context)
+
+    host.handle_selection_change(context)
+
+    published = host.bridge_calls.select { |(name, _)| name == 'onSelectionChange' }
+    assert_equal 1, published.length
+    assert_same context.to_payload, host.decorated_with.first,
+                'el payload publicado es el mismo objeto que pasó por la decoración'
+    assert_same host.decorated_with.first, published.first[1]
+  end
+end
