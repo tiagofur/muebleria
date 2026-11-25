@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../test_helper'
+require_relative '../../src/granete_for_sketchup/motion/presentation_pose_store'
 require_relative '../../src/granete_for_sketchup/motion/presentation_motion_adapter'
 
 # PresentationMotionAdapter (#529). Geometry contract under test (#414
@@ -12,7 +13,11 @@ require_relative '../../src/granete_for_sketchup/motion/presentation_motion_adap
 # out. Plus the owner regressions: zero drift over many cycles, mounted
 # hardware moves solidary, closing restores the exact closed matrices,
 # and the swing side is per-call (never frozen by the first toggle).
+# #1717: the pose lives in the model — an adapter built over actors an
+# earlier session left open reads them open.
 class PresentationMotionAdapterTest < Minitest::Test
+  PoseStore = Granete::SketchUpExtension::Motion::PresentationPoseStore
+
   class FakeBounds
     attr_reader :width
 
@@ -21,7 +26,11 @@ class PresentationMotionAdapterTest < Minitest::Test
     end
   end
 
+  # Host-faithful: every SketchUp entity carries attribute dictionaries —
+  # that is where the pose record lives.
   class FakeComponentInstance
+    include SketchupStub::AttributeContainer
+
     attr_accessor :transformation, :persistent_id
     attr_reader :definition
 
@@ -29,6 +38,20 @@ class PresentationMotionAdapterTest < Minitest::Test
       @persistent_id = persistent_id
       @transformation = transformation
       @definition = Struct.new(:bounds).new(FakeBounds.new(width))
+    end
+  end
+
+  class WriteCountingDoor < FakeComponentInstance
+    attr_reader :transform_writes
+
+    def initialize(*)
+      super
+      @transform_writes = []
+    end
+
+    def transformation=(transform)
+      @transform_writes << transform
+      super
     end
   end
 
@@ -55,12 +78,14 @@ class PresentationMotionAdapterTest < Minitest::Test
     }]
   end
 
-  # One adapter per test: a fresh adapter would register whatever pose the
-  # door currently has as its canonical closed transform.
-  def adapter
-    @adapter ||= Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+  def build_adapter
+    Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
       motions, { 'door-1' => @door }, { 'door-1' => [@handle, @hinge] }
     )
+  end
+
+  def adapter
+    @adapter ||= build_adapter
   end
 
   def point_at(coord_x, coord_y, coord_z)
@@ -199,6 +224,149 @@ class PresentationMotionAdapterTest < Minitest::Test
     refute a.open?('slot-0')
     assert_equal @door_closed.to_a, @door.transformation.to_a
     assert_equal @handle_closed.to_a, @handle.transformation.to_a
+  end
+
+  # #1717 — the pose lives in the model: an adapter built over actors that an
+  # earlier session left open (the SKP was saved and reopened) reads them
+  # open, closes them to the exact canonical pose, and the next open starts
+  # from the closed pose — never a second turn on an already open door.
+  def test_a_fresh_adapter_reads_the_pose_saved_in_the_model
+    adapter.apply_motion('slot-0', 1.0, nil, side: 'left')
+    open_pose = @door.transformation.to_a
+
+    reopened = build_adapter
+    assert reopened.open?('slot-0'), 'una puerta guardada abierta se lee abierta tras reabrir'
+
+    reopened.toggle_motion('slot-0', 'left')
+    refute reopened.open?('slot-0')
+    assert_equal @door_closed.to_a, @door.transformation.to_a, 'cierra en la pose cerrada exacta'
+    assert_equal @handle_closed.to_a, @handle.transformation.to_a
+    assert_equal @hinge_closed.to_a, @hinge.transformation.to_a
+
+    reopened.toggle_motion('slot-0', 'left')
+    assert reopened.open?('slot-0')
+    assert_equal open_pose, @door.transformation.to_a, 'el Abrir siguiente parte de la pose cerrada'
+  end
+
+  def test_opening_records_every_moved_entity_and_closing_removes_the_record
+    adapter.apply_motion('slot-0', 1.0, nil, side: 'left')
+
+    [@door, @handle, @hinge].each { |entity| assert PoseStore.open?(entity) }
+    assert_equal @door_closed.to_a, PoseStore.closed_transform(@door).to_a,
+                 'el transform cerrado sobrevive el round-trip del registro sin pérdida'
+
+    adapter.apply_motion('slot-0', 0.0)
+
+    [@door, @handle, @hinge].each do |entity|
+      refute PoseStore.open?(entity)
+      assert_nil PoseStore.closed_transform(entity)
+      assert_nil entity.get_attribute(PoseStore::DICTIONARY, PoseStore::KEY)
+    end
+  end
+
+  # #1717 — a corrupt or half record is NO record: the actor reads closed,
+  # nothing raises, and a toggle over it is a plain open. A record with a
+  # progress but without its closed pose would read open with no way back.
+  def test_a_corrupt_record_reads_closed
+    closed_pose = @door_closed.to_a
+    corrupt_records = [
+      '{not-json',
+      '[1, 2]',
+      '{"progress":"abierto"}',
+      '{"progress":true}',
+      '{"progress":[1]}',
+      '{"progress":null}',
+      '{"progress":1,"closedTransform":[1, 2, 3]}',
+      '{"progress":1,"closedTransform":"abierta"}',
+      '{"progress":1e400,"closedTransform":[]}',
+      '{"progress":1,"closedTransform":[1,1,1,Infinity,0,0,0,0,0,0,0,0,0,0,0,1]}',
+      '{"progress":1,"closedTransform":[1e400,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}'
+    ]
+    corrupt_records.each do |raw|
+      [@door, @handle, @hinge].each do |entity|
+        entity.set_attribute(PoseStore::DICTIONARY, PoseStore::KEY, raw)
+        assert_nil PoseStore.closed_transform(entity), raw
+        refute PoseStore.recorded?(entity), raw
+      end
+      refute adapter.open?('slot-0'), raw
+    end
+
+    assert adapter.toggle_motion('slot-0', 'left'), 'sobre un registro corrupto el toggle abre, sin levantar'
+    refute_equal closed_pose, @door.transformation.to_a
+    assert adapter.open?('slot-0')
+  end
+
+  # #1717 — «Cerrar todas» sweeps the whole model: an actor without a record
+  # is already closed and must not be rewritten.
+  def test_close_all_touches_only_recorded_actors
+    untouched = WriteCountingDoor.new('door-2', Geom::Transformation.translation(Geom::Vector3d.new(10.0, 1.0, 300.0)))
+    opened = WriteCountingDoor.new('door-3', Geom::Transformation.translation(Geom::Vector3d.new(10.0, 1.0, 600.0)))
+    two_motions = [
+      { 'id' => 'slot-0', 'doorSlotIndex' => 0, 'componentInstanceIds' => ['door-2'],
+        'motion' => { 'kind' => 'rotate', 'openAngleDeg' => 90.0 } },
+      { 'id' => 'slot-1', 'doorSlotIndex' => 1, 'componentInstanceIds' => ['door-3'],
+        'motion' => { 'kind' => 'rotate', 'openAngleDeg' => 90.0 } }
+    ]
+    a = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+      two_motions, { 'door-2' => untouched, 'door-3' => opened }, {}
+    )
+    a.apply_motion('slot-1', 1.0, nil, side: 'left')
+    opened_pose = opened.transformation.to_a
+    assert_equal 1, opened.transform_writes.length, 'precondición: el actor abierto recibió su pose'
+
+    a.close_all
+
+    assert_empty untouched.transform_writes, 'un actor sin registro no se reescribe'
+    assert_equal 2, opened.transform_writes.length, 'el actor abierto recibe exactamente su pose cerrada'
+    refute_equal opened_pose, opened.transformation.to_a
+    refute a.open?('slot-1')
+  end
+
+  # A host failure isolated mid-actor can leave mounted hardware behind with
+  # its record while the front already lost its own: the next sweep must
+  # still bring that hardware back.
+  def test_close_all_restores_hardware_left_behind_with_its_record
+    hinge = WriteCountingDoor.new('hinge-1', @hinge_closed)
+    front = WriteCountingDoor.new('door-1', @door_closed)
+    PoseStore.write(hinge, 1.0, @hinge_closed)
+    hinge.transformation = Geom::Transformation.translation(Geom::Vector3d.new(30.0, 5.0, 2.0))
+    a = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+      motions, { 'door-1' => front }, { 'door-1' => [hinge] }
+    )
+
+    a.close_all
+
+    assert_equal @hinge_closed.to_a, hinge.transformation.to_a, 'el herraje desplazado vuelve a su pose cerrada'
+    assert_equal 2, hinge.transform_writes.length, 'su pose abierta, y luego exactamente su pose cerrada'
+    refute PoseStore.recorded?(hinge)
+  end
+
+  # #1717 — a drawer saved open is read open after reopen and closes to the
+  # exact pose, its handle included.
+  def test_a_fresh_adapter_reads_a_drawer_saved_open
+    front_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.0, 590.0 / 25.4, 2.0))
+    front = FakeComponentInstance.new('drawer-front-1', front_closed)
+    handle_closed = Geom::Transformation.translation(Geom::Vector3d.new(1.0, 605.0 / 25.4, 2.0))
+    handle = FakeComponentInstance.new('handle-drawer-1', handle_closed)
+    drawer_motion = [{
+      'id' => 'drawer-slot-0',
+      'doorSlotIndex' => 0,
+      'componentInstanceIds' => ['drawer-front-1'],
+      'motion' => { 'kind' => 'translate', 'distanceMm' => 400.0 }
+    }]
+    build = lambda do
+      Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
+        drawer_motion, { 'drawer-front-1' => front }, { 'drawer-front-1' => [handle] }
+      )
+    end
+    build.call.apply_motion('drawer-slot-0', 1.0)
+
+    reopened = build.call
+    assert reopened.open?('drawer-slot-0'), 'un cajón guardado abierto se lee abierto tras reabrir'
+
+    reopened.toggle_motion('drawer-slot-0')
+    assert_equal front_closed.to_a, front.transformation.to_a
+    assert_equal handle_closed.to_a, handle.transformation.to_a
   end
 
   # #1377 Slice 1 — Drawer translate motion moves the entire sub-assembly forward (+Y)

@@ -2,7 +2,9 @@
 
 require 'json'
 require_relative '../test_helper'
+require_relative '../../src/granete_for_sketchup/motion/presentation_pose_store'
 require_relative '../../src/granete_for_sketchup/motion/presentation_motion_adapter'
+require_relative '../../src/granete_for_sketchup/host/operation_journal'
 require_relative '../../src/granete_for_sketchup/ui/bridges/inspector_bridge'
 require_relative '../../src/granete_for_sketchup/ui/bridges/observer_bridge'
 
@@ -14,6 +16,7 @@ require_relative '../../src/granete_for_sketchup/ui/bridges/observer_bridge'
 # #1393 — the close-all sweep isolates adapter failures, evicts dead cache
 # entries, and a model rebind drops the whole map.
 class InspectorBridgeMotionCacheTest < Minitest::Test
+  PoseStore = Granete::SketchUpExtension::Motion::PresentationPoseStore
   LiveDoor = Struct.new(:persistent_id, :valid?, :transformation)
   FakeFurniture = Struct.new(:persistent_id)
 
@@ -36,8 +39,12 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
   end
 
   # #1393 — a door that records every closed-pose write so the close-all
-  # sweep is observable without a real Geom layer.
+  # sweep is observable without a real Geom layer. It carries the entity's
+  # attribute dictionaries: the sweep only closes a door left OPEN, i.e.
+  # one carrying its pose record (#1717).
   class TrackedDoor
+    include SketchupStub::AttributeContainer
+
     attr_reader :transform_writes
 
     def initialize(persistent_id, valid: true)
@@ -59,11 +66,11 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
     end
   end
 
-  # #1393 — entities report valid?, but reading the pose explodes mid
+  # #1393 — entities report valid?, but the transform write explodes mid
   # close_all (the real host can raise between the validity check and the
-  # transform write).
+  # write).
   class ExplodingDoor < TrackedDoor
-    def transformation
+    def transformation=(_transform)
       raise TypeError, 'reference to deleted Entity'
     end
   end
@@ -182,6 +189,11 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
     host
   end
 
+  # A door an earlier action left open: it carries its pose record (#1717).
+  def leave_open(door)
+    PoseStore.write(door, 1.0, Geom::Transformation.new)
+  end
+
   def test_entities_valid_is_true_over_living_entities
     door = LiveDoor.new(1, true, Object.new)
     adapter = Granete::SketchUpExtension::Motion::PresentationMotionAdapter.new(
@@ -266,6 +278,7 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
   def test_close_all_closes_only_the_live_adapter_and_evicts_the_dead_one
     dead_door = TrackedDoor.new(1, valid: false)
     live_door = TrackedDoor.new(2)
+    leave_open(live_door)
     host = MultiFurnitureHost.new(111 => [dead_door], 222 => [live_door])
     host.send(:presentation_motion_adapter_for, FakeFurniture.new(111), 110.0)
     host.send(:presentation_motion_adapter_for, FakeFurniture.new(222), 110.0)
@@ -288,6 +301,8 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
   def test_close_all_isolates_a_raising_adapter_and_notifies_the_dialog
     exploding_door = ExplodingDoor.new(3)
     live_door = TrackedDoor.new(4)
+    leave_open(exploding_door)
+    leave_open(live_door)
     host = MultiFurnitureHost.new(333 => [exploding_door], 444 => [live_door])
     host.send(:presentation_motion_adapter_for, FakeFurniture.new(333), 110.0)
     host.send(:presentation_motion_adapter_for, FakeFurniture.new(444), 110.0)
@@ -317,20 +332,42 @@ class InspectorBridgeMotionCacheTest < Minitest::Test
   end
 end
 
-# #1717 — the Apertura card's button state rides the SelectionContext
-# payload: Ruby decorates every doorActors entry with the pose its
-# furniture REALLY has (cached adapter open states, keyed by the raw slot
-# string exactly as toggle_motion receives it). The dialog-side slot map
-# this replaces was shared across furniture and never reset on selection,
-# so a closed door inherited another furniture's "open" and the button
-# both labelled and acted inverted.
-class InspectorBridgeDoorMotionStateDecorationTest < Minitest::Test
-  # A real Geom::Transformation: the decoration roundtrip drives the REAL
-  # toggle path, which multiplies and writes transforms (the Object.new
-  # pose of the #1387 fixtures would explode there).
-  LiveDoor = Struct.new(:persistent_id, :valid?, :transformation)
-  FakeFurniture = Struct.new(:persistent_id)
-  DrawerStub = Struct.new(:components, :hardware, :distance_mm, :name)
+# #1717 — the pose lives in the model. A reopened SKP carries open actors
+# whose furniture has NO adapter in this session: the bridge reads the pose
+# from the record on the entity, sweeps «Cerrar todas» over the WHOLE
+# document, and changes pose and record inside ONE undo operation.
+class InspectorBridgePersistedMotionStateTest < Minitest::Test
+  PoseStore = Granete::SketchUpExtension::Motion::PresentationPoseStore
+  TOGGLE_OPERATION = 'Abrir/Cerrar apertura (presentación)'
+  CLOSE_ALL_OPERATION = 'Cerrar todas las aperturas (presentación)'
+
+  # A real Geom::Transformation pose plus the entity's attribute
+  # dictionaries: the toggle path multiplies transforms and writes the
+  # record on the entity (the Object.new pose of the #1387 fixtures would
+  # explode there).
+  class PoseDoor
+    include SketchupStub::AttributeContainer
+
+    attr_accessor :transformation
+    attr_reader :persistent_id
+
+    def initialize(persistent_id, transformation)
+      @persistent_id = persistent_id
+      @transformation = transformation
+    end
+
+    def valid?
+      true
+    end
+  end
+
+  class ExplodingDoor < PoseDoor
+    def transformation=(_transform)
+      raise TypeError, 'reference to deleted Entity'
+    end
+  end
+
+  PoseFurniture = Struct.new(:persistent_id)
 
   class FakeLogger
     attr_reader :events
@@ -344,65 +381,85 @@ class InspectorBridgeDoorMotionStateDecorationTest < Minitest::Test
     end
   end
 
+  # The host model as the bridge sees it for presentation motion: the root
+  # entities (managed furniture) and the undo operations it is asked for.
+  # commit_result lets a test make the host refuse the commit.
   class FakeModel
+    attr_reader :entities, :operations
+    attr_accessor :commit_result
+
+    def initialize(entities)
+      @entities = entities
+      @operations = []
+      @commit_result = true
+    end
+
     def selection
       []
     end
+
+    # Same positional signature as Model#start_operation in the host.
+    def start_operation(name, disable_ui)
+      @operations << [:start, name, disable_ui]
+    end
+
+    def commit_operation
+      @operations << [:commit]
+      @commit_result
+    end
+
+    def abort_operation
+      @operations << [:abort]
+    end
   end
 
-  # Host stubbing the furniture scan with the FULL 3-element shape
-  # (doors, hardware, drawers) so door+drawer adapters build for real.
-  class MotionScanHost
+  # Host stubbing only the furniture scan: the toggle, the pose record and
+  # the close-all sweep run for real.
+  class PersistedHost
     include Granete::SketchUpExtension::UserInterface::InspectorBridge
 
-    attr_reader :scan_count, :logger
+    attr_reader :logger, :bridge_calls, :scan_count, :model
 
-    def initialize(scanned_by_furniture)
-      @scanned_by_furniture = scanned_by_furniture
-      @entity_by_ref = {}
+    def initialize(doors_by_furniture)
+      @doors_by_furniture = doors_by_furniture
+      @furniture_by_ref = {}
       @logger = FakeLogger.new
+      @bridge_calls = []
       @scan_count = 0
+      @model = FakeModel.new(doors_by_furniture.keys.map { |pid| PoseFurniture.new(pid) })
+    end
+
+    def register(ref, furniture)
+      @furniture_by_ref[ref] = furniture
     end
 
     def inspect_furniture_door_actors(furniture_entity)
       @scan_count += 1
-      @scanned_by_furniture.fetch(furniture_entity.persistent_id, [[], {}, []])
+      [@doors_by_furniture.fetch(furniture_entity.persistent_id, []), {}, []]
     end
 
     def search_entities_for_instance(instance_ref)
-      @entity_by_ref[instance_ref]
-    end
-
-    def register_entity(ref, entity)
-      @entity_by_ref[ref] = entity
+      @furniture_by_ref[instance_ref]
     end
 
     def active_model
-      FakeModel.new
+      @model
     end
 
-    def furniture_metadata?(_model, _target)
-      true
+    def furniture_metadata?(_model, target)
+      @doors_by_furniture.key?(target.persistent_id)
     end
 
-    def execute_bridge(_dialog, _function_name, _payload); end
+    def execute_bridge(_dialog, function_name, payload)
+      @bridge_calls << [function_name, payload]
+    end
   end
 
-  # ObserverBridge host proving the selection publish runs the decoration
-  # and forwards its payload. The decoration CONTRACT is covered by
-  # MotionScanHost above; here the call is stubbed to keep the wiring
-  # test independent of the adapter machinery.
+  # ObserverBridge host: the selection publish forwards the resolver payload.
   class SelectionPublishHost
     include Granete::SketchUpExtension::UserInterface::ObserverBridge
 
-    attr_reader :bridge_calls, :decorated_with
-
-    def initialize(context)
-      @context = context
-      @dialog = VisibleDialog.new
-      @bridge_calls = []
-      @decorated_with = []
-    end
+    attr_reader :bridge_calls
 
     VisibleDialog = Struct.new(:id) do
       def visible?
@@ -412,144 +469,152 @@ class InspectorBridgeDoorMotionStateDecorationTest < Minitest::Test
       def execute_script(_script); end
     end
 
+    def initialize
+      @dialog = VisibleDialog.new('d1')
+      @bridge_calls = []
+    end
+
     def execute_bridge(_dialog, function_name, payload)
       @bridge_calls << [function_name, payload]
     end
 
     def rescope_overlay_from_selection(_payload); end
-
-    def decorate_door_motion_state(payload)
-      @decorated_with << payload
-    end
   end
 
-  def furniture
-    @furniture ||= FakeFurniture.new(4_242)
+  def door(persistent_id, offset_x = 10.0)
+    PoseDoor.new(persistent_id, Geom::Transformation.translation(Geom::Vector3d.new(offset_x, 1.0, 0.0)))
   end
 
-  def live_door(persistent_id)
-    LiveDoor.new(persistent_id, true, ::Geom::Transformation.new)
-  end
-
-  def door_actor(slot)
-    { 'slotIndex' => slot, 'kind' => 'door' }
+  # An earlier session left this door open in the saved SKP: moved, and
+  # carrying the record of the pose it closes to.
+  def leave_saved_open(entity)
+    closed_transform = entity.transformation
+    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(12.0, 3.0, 0.0))
+    PoseStore.write(entity, 1.0, closed_transform)
+    closed_transform.to_a
   end
 
   def toggle(host, slot)
     host.handle_toggle_door_motion(
-      nil, JSON.generate({ 'doorSlotIndex' => slot, 'swingSide' => 'left', 'furnitureInstanceRef' => 'ref-1' })
+      nil,
+      JSON.generate({ 'doorSlotIndex' => slot, 'swingSide' => 'left', 'furnitureInstanceRef' => 'ref-1' })
     )
   end
 
-  def test_decoration_reports_the_real_pose_after_a_toggle
-    doors = [live_door(1), live_door(2)]
-    host = MotionScanHost.new(4_242 => [doors, {}, []])
-    host.register_entity('ref-1', furniture)
+  def calls(host, function_name)
+    host.bridge_calls.select { |(name, _)| name == function_name }
+  end
+
+  def cache(host)
+    host.instance_variable_get(:@motion_adapters)
+  end
+
+  def test_toggle_on_a_reopened_model_closes_the_actor_saved_open
+    saved_door = door(1)
+    host = PersistedHost.new(4_242 => [saved_door])
+    host.register('ref-1', PoseFurniture.new(4_242))
+    closed_pose = leave_saved_open(saved_door)
+    assert_nil cache(host), 'precondición: el SKP reabierto no trae adapters de sesión'
+
     toggle(host, 0)
-    payload = {
-      'kind' => 'furniture',
-      'furnitureInstanceRef' => 'ref-1',
-      'doorActors' => [door_actor(0), door_actor(1)]
-    }
 
-    host.send(:decorate_door_motion_state, payload)
-
-    assert payload['doorActors'][0]['isOpen'],
-           'la puerta togglada debe publicar abierta (la clave de estado es el slot crudo)'
-    refute payload['doorActors'][1]['isOpen'], 'la puerta intacta debe publicar cerrada'
+    payload = calls(host, 'onDoorMotionToggled').first.last
+    refute payload['isOpen'], 'sobre un actor guardado abierto el toggle cierra'
+    assert_equal closed_pose, saved_door.transformation.to_a, 'cierra en la pose cerrada exacta'
+    refute PoseStore.open?(saved_door)
+    assert_equal [[:start, TOGGLE_OPERATION, true], [:commit]], host.model.operations,
+                 'pose y registro cambian dentro de una sola operación'
   end
 
-  def test_decoration_covers_drawer_slots_with_the_same_slot_key
-    drawer = DrawerStub.new([live_door(9)], [], 400.0, 'Cajón 1')
-    host = MotionScanHost.new(4_242 => [[live_door(1)], {}, [drawer]])
-    host.register_entity('ref-1', furniture)
-    toggle(host, 1)
-    payload = {
-      'kind' => 'furniture',
-      'furnitureInstanceRef' => 'ref-1',
-      'doorActors' => [door_actor(0), { 'slotIndex' => 1, 'kind' => 'drawer', 'label' => 'Cajón 1' }]
-    }
-
-    host.send(:decorate_door_motion_state, payload)
-
-    refute payload['doorActors'][0]['isOpen']
-    assert payload['doorActors'][1]['isOpen'], 'el cajón togglado debe publicar abierto'
-  end
-
-  def test_decoration_defaults_to_closed_and_never_scans_without_cached_adapter
-    host = MotionScanHost.new({})
-    host.register_entity('ref-1', furniture)
-    payload = {
-      'kind' => 'furniture',
-      'furnitureInstanceRef' => 'ref-1',
-      'doorActors' => [door_actor(0), door_actor(1)]
-    }
-
-    host.send(:decorate_door_motion_state, payload)
-
-    refute payload['doorActors'][0]['isOpen'], 'un mueble recién seleccionado se construye cerrado'
-    refute payload['doorActors'][1]['isOpen']
-    assert_equal 0, host.scan_count, 'la decoración es read-only: una selección nunca construye adapter'
-    assert_empty host.instance_variable_get(:@motion_adapters) || {},
-                 'la decoración no debe sembrar la caché de adapters'
-  end
-
-  def test_decoration_evicts_a_dead_adapter_and_reports_closed
-    old_door = live_door(1)
-    host = MotionScanHost.new(4_242 => [[old_door], {}, []])
-    host.register_entity('ref-1', furniture)
+  def test_toggle_after_closing_reopens_from_the_closed_pose
+    saved_door = door(1)
+    host = PersistedHost.new(4_242 => [saved_door])
+    host.register('ref-1', PoseFurniture.new(4_242))
+    closed_pose = leave_saved_open(saved_door)
     toggle(host, 0)
-    refute_empty host.instance_variable_get(:@motion_adapters), 'precondición: el toggle cacheó el adapter'
-    old_door[:valid?] = false # the apply rebuild deleted the door (#1387)
-    payload = {
-      'kind' => 'furniture',
-      'furnitureInstanceRef' => 'ref-1',
-      'doorActors' => [door_actor(0)]
-    }
+    toggle(host, 0)
 
-    host.send(:decorate_door_motion_state, payload)
-
-    refute payload['doorActors'][0]['isOpen'], 'el mueble reconstruido está cerrado'
-    assert_empty host.instance_variable_get(:@motion_adapters), 'el adapter muerto se evicta'
+    assert calls(host, 'onDoorMotionToggled').last.last['isOpen']
+    refute_equal closed_pose, saved_door.transformation.to_a
+    assert PoseStore.open?(saved_door)
+    assert_equal 1, host.scan_count, 'both toggles reuse the one adapter of the furniture'
   end
 
-  def test_decoration_ignores_batch_and_actorless_payloads
-    host = MotionScanHost.new({})
-    batch = { 'kind' => 'batch', 'furniture' => [{ 'doorActors' => [door_actor(0)] }] }
-    host.send(:decorate_door_motion_state, batch)
-    actorless = { 'kind' => 'furniture', 'furnitureInstanceRef' => 'ref-1' }
-    host.send(:decorate_door_motion_state, actorless)
+  def test_close_all_sweeps_the_whole_document_not_only_this_session_adapters
+    session_door = door(1)
+    saved_door = door(2)
+    untouched_door = door(3)
+    host = PersistedHost.new(111 => [session_door], 222 => [saved_door], 333 => [untouched_door])
+    host.register('ref-1', PoseFurniture.new(111))
+    toggle(host, 0)
+    saved_closed_pose = leave_saved_open(saved_door)
+    untouched_closed_pose = untouched_door.transformation.to_a
+    assert_equal [111], cache(host).keys, 'precondición: sólo el mueble togglado tiene adapter'
+    assert PoseStore.open?(session_door)
 
-    refute batch['furniture'][0].key?('isOpen')
-    refute actorless.key?('doorActors')
-    assert_empty host.instance_variable_get(:@motion_adapters) || {}
+    host.handle_close_all_doors(nil)
+
+    [session_door, saved_door, untouched_door].each { |entity| refute PoseStore.open?(entity) }
+    assert_equal saved_closed_pose, saved_door.transformation.to_a
+    assert_equal untouched_closed_pose, untouched_door.transformation.to_a
+    assert_equal [111, 222, 333], cache(host).keys.sort
+    assert_equal 1, calls(host, 'onAllDoorsClosed').length
+    assert_equal [[:start, CLOSE_ALL_OPERATION, true], [:commit]], host.model.operations.last(2)
   end
 
-  def test_decoration_survives_a_missing_entity_and_logs
-    host = MotionScanHost.new({})
-    payload = { 'kind' => 'furniture', 'furnitureInstanceRef' => 'ghost', 'doorActors' => [door_actor(0)] }
+  def test_failed_toggle_aborts_the_operation_and_reaches_the_dialog
+    host = PersistedHost.new(4_242 => [ExplodingDoor.new(1, Geom::Transformation.new)])
+    host.register('ref-1', PoseFurniture.new(4_242))
 
-    host.send(:decorate_door_motion_state, payload)
+    toggle(host, 0)
 
-    refute payload['doorActors'][0]['isOpen']
-    assert(host.logger.events.none? { |(level, _event, _)| level == :error },
-           'una referencia sin entidad no es error: es un mueble sin poses de sesión')
+    assert_equal [[:start, TOGGLE_OPERATION, true], [:abort]], host.model.operations,
+                 'un fallo a mitad de camino no deja la operación abierta ni la confirma'
+    assert_empty calls(host, 'onDoorMotionToggled')
+    assert_equal 1, calls(host, 'onDoorMotionFailed').length
   end
 
-  def test_selection_publish_runs_the_decoration_before_executing
-    context = Object.new
-    context.define_singleton_method(:to_payload) do
-      @to_payload ||= { 'kind' => 'furniture', 'furnitureInstanceRef' => 'ref-1',
-                        'doorActors' => [{ 'slotIndex' => 0, 'kind' => 'door' }] }
+  def test_toggle_is_reported_as_failed_when_the_host_refuses_the_commit
+    saved_door = door(1)
+    host = PersistedHost.new(4_242 => [saved_door])
+    host.register('ref-1', PoseFurniture.new(4_242))
+    leave_saved_open(saved_door)
+    host.model.commit_result = false
+
+    toggle(host, 0)
+
+    assert_equal [[:start, TOGGLE_OPERATION, true], [:commit], [:abort]], host.model.operations,
+                 'una operación que el host no confirma se aborta'
+    assert_empty calls(host, 'onDoorMotionToggled')
+    assert_equal 1, calls(host, 'onDoorMotionFailed').length
+  end
+
+  def test_close_all_aborts_the_operation_when_the_sweep_itself_fails
+    host = PersistedHost.new(111 => [door(1)])
+    host.define_singleton_method(:furniture_metadata?) do |_model, _target|
+      raise TypeError, 'reference to deleted Entity'
     end
-    host = SelectionPublishHost.new(context)
+
+    host.handle_close_all_doors(nil)
+
+    assert_equal [[:start, CLOSE_ALL_OPERATION, true], [:abort]], host.model.operations
+    assert_empty calls(host, 'onAllDoorsClosed')
+    assert_equal 1, calls(host, 'onDoorMotionFailed').length
+  end
+
+  def test_selection_publish_forwards_the_resolver_payload_untouched
+    payload = {
+      'kind' => 'furniture', 'furnitureInstanceRef' => 'ref-1',
+      'doorActors' => [{ 'slotIndex' => 0, 'kind' => 'door', 'isOpen' => true }]
+    }
+    context = Object.new
+    context.define_singleton_method(:to_payload) { payload }
+    host = SelectionPublishHost.new
 
     host.handle_selection_change(context)
 
-    published = host.bridge_calls.select { |(name, _)| name == 'onSelectionChange' }
-    assert_equal 1, published.length
-    assert_same context.to_payload, host.decorated_with.first,
-                'el payload publicado es el mismo objeto que pasó por la decoración'
-    assert_same host.decorated_with.first, published.first[1]
+    assert_same payload, calls(host, 'onSelectionChange').first.last
+    refute host.respond_to?(:decorate_door_motion_state, true),
+           'la pose ya viaja en el payload del resolver: no hay segunda pasada de decoración'
   end
 end

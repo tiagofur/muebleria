@@ -420,8 +420,9 @@
         doorLabel: a && a.label ? a.label : defaultLabel,
         swingSide: a && a.swingSide ? a.swingSide : side,
         kind: a && a.kind ? a.kind : "door",
-        // #1717: pose real de sesión, decorada por Ruby al publicar la
-        // selección (bridge). El label nunca se adivina en el cliente.
+        // #1717: pose real del actor, publicada por Ruby con la selección
+        // (registro que la apertura guarda en la propia entidad). El label
+        // nunca se adivina en el cliente.
         isOpen: !!(a && a.isOpen)
       });
     }
@@ -504,9 +505,10 @@
       var slotIdx = d.doorSlotIndex !== undefined ? d.doorSlotIndex : i;
       var btnMotion = document.createElement("button");
       btnMotion.type = "button";
-      // #1717: el estado viene del payload de la selección (pose real del
-      // adapter Ruby), no de una caché del dialog — la caché vieja era por
-      // slot y compartida entre muebles: el label desincronizaba del modelo.
+      // #1717: el estado viene del payload de la selección (pose real que la
+      // apertura guarda en el modelo), no de una caché del dialog — la caché
+      // vieja era por slot y compartida entre muebles: el label
+      // desincronizaba del modelo.
       var isSlotOpen = !!d.isOpen;
       btnMotion.className = isSlotOpen ? "btn btn-sm btn-secondary door-toggle-motion-btn" : "btn btn-sm btn-ghost door-toggle-motion-btn";
       btnMotion.setAttribute("data-door-slot", String(slotIdx));
@@ -2172,7 +2174,7 @@
       var slot = p.doorSlotIndex !== undefined ? p.doorSlotIndex : 0;
       // #1717: la pose del toggle vive en el contexto del mueble seleccionado
       // (re-render incluido) hasta que la próxima selección re-publique la
-      // verdad del bridge. Sin mapa global por slot: era compartido entre
+      // verdad del modelo. Sin mapa global por slot: era compartido entre
       // muebles y desincronizaba el label del modelo.
       applyDoorMotionStateToContext(slot, p.isOpen);
       var btn = document.querySelector('.door-toggle-motion-btn[data-door-slot="' + slot + '"]');

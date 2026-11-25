@@ -174,11 +174,16 @@ module Geom
       t
     end
 
-    def initialize
-      @matrix = [1.0, 0.0, 0.0, 0.0,
-                 0.0, 1.0, 0.0, 0.0,
-                 0.0, 0.0, 1.0, 0.0,
-                 0.0, 0.0, 0.0, 1.0]
+    # Host-faithful: Transformation.new also accepts the 16 values of #to_a.
+    def initialize(values = nil)
+      @matrix = if values.is_a?(Array) && values.length == 16
+                  values.map(&:to_f)
+                else
+                  [1.0, 0.0, 0.0, 0.0,
+                   0.0, 1.0, 0.0, 0.0,
+                   0.0, 0.0, 1.0, 0.0,
+                   0.0, 0.0, 0.0, 1.0]
+                end
       yield self if block_given?
     end
 
@@ -517,6 +522,16 @@ module SketchupStub
 
     def get_attribute(dictionary, key)
       attributes[[dictionary, key]]
+    end
+
+    # Host-faithful for the (dictionary, key) form: removes that one key;
+    # the other keys of the dictionary stay.
+    def delete_attribute(dictionary, key)
+      attribute_key = [dictionary, key]
+      return unless attributes.key?(attribute_key)
+
+      previous = attributes.delete(attribute_key)
+      SketchupStub.record_undo { attributes[attribute_key] = previous }
     end
   end
 

@@ -9,6 +9,9 @@ module Granete
       # rubocop:disable-next Metrics/ModuleLength
       module InspectorBridge
         FURNITURE_KINDS = %w[furnitureInstance bootstrapIntent].freeze
+        DEFAULT_OPEN_ANGLE_DEG = 110.0
+        TOGGLE_MOTION_OPERATION = 'Abrir/Cerrar apertura (presentación)'
+        CLOSE_ALL_MOTION_OPERATION = 'Cerrar todas las aperturas (presentación)'
 
         def handle_select_furniture(dialog, raw_payload = nil)
           payload = parse_payload(raw_payload)
@@ -49,7 +52,7 @@ module Granete
           slot_index = (payload['doorSlotIndex'] || 0).to_i
           instance_ref = payload['furnitureInstanceRef'] || payload['instanceId']
           swing_side = payload['swingSide'] || 'left'
-          open_angle_deg = (payload['openAngleDeg'] || 110.0).to_f
+          open_angle_deg = (payload['openAngleDeg'] || DEFAULT_OPEN_ANGLE_DEG).to_f
 
           model = active_model
           target_furniture = (instance_ref && search_entities_for_instance(instance_ref)) ||
@@ -70,7 +73,9 @@ module Granete
             return
           end
           # Matches motion by doorSlotIndex (covering both door and drawer slots)
-          is_open = adapter.toggle_motion(slot_index.to_s, swing_side)
+          is_open = within_motion_operation(model, TOGGLE_MOTION_OPERATION) do
+            adapter.toggle_motion(slot_index.to_s, swing_side)
+          end
 
           execute_bridge(dialog, 'onDoorMotionToggled', {
                            'doorSlotIndex' => slot_index,
@@ -84,9 +89,16 @@ module Granete
         end
 
         def handle_close_all_doors(dialog, _raw_payload = nil)
+          model = active_model
           any_failed = false
-          (@motion_adapters || {}).each do |key, adapter|
-            any_failed = true if close_all_adapter_safely(key, adapter)
+          # Dead entries go first: a rebuild (#1387) deleted the entities
+          # they track, and a dead adapter must never be touched.
+          (@motion_adapters || {}).keep_if { |_key, adapter| adapter.entities_valid? }
+          within_motion_operation(model, CLOSE_ALL_MOTION_OPERATION) do
+            ensure_motion_adapters_for_model(model)
+            (@motion_adapters || {}).each_value do |adapter|
+              any_failed = true if close_all_adapter_safely(adapter)
+            end
           end
           if any_failed
             # Partial failure: the doors that did close stay closed, but the
@@ -109,16 +121,9 @@ module Granete
 
         # One adapter's exception must not abort the rest of the sweep:
         # the remaining adapters still close, and the caller hears back
-        # either way. A dead entry (tracked entities deleted by a rebuild,
-        # #1387) is EVICTED here so the session-long map stops growing —
-        # lazy invalidation in presentation_motion_adapter_for re-scans it
-        # on the next toggle as before. Returns true when the adapter failed.
-        def close_all_adapter_safely(key, adapter)
-          if adapter.entities_valid?
-            adapter.close_all
-          else
-            @motion_adapters.delete(key)
-          end
+        # either way. Returns true when the adapter failed.
+        def close_all_adapter_safely(adapter)
+          adapter.close_all
           false
         rescue StandardError => e
           @logger.error('close_all_doors_adapter_failed', error: e)
@@ -143,45 +148,35 @@ module Granete
           adapter
         end
 
-        # #1717: the Apertura card's button state is the pose the furniture
-        # REALLY has in this session — the cached adapter's open states, the
-        # same truth toggle_motion acts on. Decoration is read-only: a
-        # selection never builds an adapter. Absent/invalid adapter ⇒ closed,
-        # because a fresh or rebuilt furniture is built closed. The JS-side
-        # slot-keyed guess this replaces was shared across furniture and
-        # never reset on selection — the label desynced from the model.
-        def decorate_door_motion_state(payload)
-          return unless payload.is_a?(Hash) && payload['kind'] == 'furniture'
+        # «Cerrar todas» covers the WHOLE document, not only what this
+        # session touched: a reopened SKP carries open actors (#1717) whose
+        # furniture has no adapter yet. Managed furniture always lives at
+        # the model root (#476) — active_entities would be whatever context
+        # the user has open for editing.
+        def ensure_motion_adapters_for_model(model)
+          return unless model.respond_to?(:entities)
 
-          actors = payload['doorActors']
-          return unless Array(actors).any?
-
-          instance_ref = payload['furnitureInstanceRef']
-          entity = instance_ref && search_entities_for_instance(instance_ref)
-          adapter = entity && cached_motion_adapter_for(entity)
-          Array(actors).each_with_index do |actor, idx|
-            slot = actor['slotIndex'] || idx
-            # The open-states key is the raw slot string — toggle_motion is
-            # called with `slot_index.to_s` (handle_toggle_door_motion), not
-            # the motion id. Same key here, or the pose would read closed
-            # forever.
-            actor['isOpen'] = adapter&.open?(slot.to_s) || false
+          model.entities.each do |entity| # rubocop:disable SketchupSuggestions/ModelEntities
+            presentation_motion_adapter_for(entity, DEFAULT_OPEN_ANGLE_DEG) if furniture_metadata?(model, entity)
           end
-        rescue StandardError => e
-          # Presentation affordance only: decoration must never take the
-          # selection publish down.
-          @logger.error('door_motion_state_decoration_failed', error: e)
         end
 
-        # Read-only sibling of presentation_motion_adapter_for: reuse a
-        # living cached adapter, evict a dead one, never build.
-        def cached_motion_adapter_for(furniture_entity)
-          key = furniture_key(furniture_entity)
-          adapter = (@motion_adapters || {})[key]
-          return adapter if adapter&.entities_valid?
+        # The pose AND its record change together (#1717): one undo step.
+        # A failure that escapes to here aborts the whole change, so pose
+        # and record stay consistent. The close-all sweep isolates each
+        # door's failure inside the block instead: a door that fails to
+        # close is reported and the doors that did close stay closed.
+        def within_motion_operation(model, operation_name)
+          return yield unless model.respond_to?(:start_operation)
 
-          @motion_adapters&.delete(key)
-          nil
+          journal = Host::OperationJournal.new(model)
+          journal.start_operation(operation_name, true)
+          result = yield
+          journal.commit_operation
+          result
+        rescue StandardError
+          journal&.abort_if_open!
+          raise
         end
 
         def build_presentation_motions(doors, hw_scanned, drawers, open_angle_deg)
