@@ -540,7 +540,7 @@ class InspectorBridgeDoorMotionStateDecorationTest < Minitest::Test
     context = Object.new
     context.define_singleton_method(:to_payload) do
       @to_payload ||= { 'kind' => 'furniture', 'furnitureInstanceRef' => 'ref-1',
-                     'doorActors' => [{ 'slotIndex' => 0, 'kind' => 'door' }] }
+                        'doorActors' => [{ 'slotIndex' => 0, 'kind' => 'door' }] }
     end
     host = SelectionPublishHost.new(context)
 
