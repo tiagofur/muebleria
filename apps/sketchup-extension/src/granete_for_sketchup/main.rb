@@ -97,6 +97,7 @@ module Granete
         selection/capability_policy
         selection/resolver
         selection/batch_context
+        motion/presentation_pose_store
         motion/presentation_motion_adapter
         host/batch_items_contract
         observers/selection_observer

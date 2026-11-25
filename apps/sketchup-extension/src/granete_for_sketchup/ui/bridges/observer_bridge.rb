@@ -28,7 +28,6 @@ module Granete
           return unless @dialog&.visible?
 
           payload = context.respond_to?(:to_payload) ? context.to_payload : context
-          decorate_door_motion_state(payload)
           execute_bridge(@dialog, 'onSelectionChange', payload)
           # #470: a live inspection overlay follows the selection — a part
           # change re-scopes it, an unmanaged selection clears it honestly.
@@ -44,7 +43,6 @@ module Granete
           # observer would — never just the first entity.
           context = @selection_observer.resolve_selection(selection)
           payload = context&.to_payload
-          decorate_door_motion_state(payload)
           execute_bridge(dialog, 'onSelectionChange', payload)
         end
 

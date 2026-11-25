@@ -717,9 +717,20 @@ Los cajones y las puertas con bisagras traen su cinemática: la tarjeta
 que salen, puertas que giran con sus bisagras). Es la misma receta que
 cotiza — si el cajón abre en SketchUp, el despiece coincide.
 
+**El estado se guarda con el modelo:** cada mueble recuerda por su cuenta
+qué dejó abierto. Si guardás el SKP con puertas o cajones abiertos y volvés
+a abrirlo, la tarjeta sigue mostrando **Cerrar** en lo que quedó abierto y
+**Abrir** en lo que está cerrado; no hace falta volver a abrir nada, y
+**Cerrar** devuelve cada puerta o cajón a su lugar exacto. **Cerrar todas**
+cierra los abiertos de todos los muebles del modelo, aunque no los haya
+tocado en esa sesión. Deshacer revierte una apertura o un cierre en un solo
+paso. Abrir o cerrar no cambia el diseño: **Aplicar** reconstruye el mueble
+con todo cerrado.
+
 **Cómo saber que quedó bien:** al abrir y cerrar, el cajón sale entero (con
 su frente y su jaladera) y la puerta gira por sus bisagras — sin piezas
-sueltas ni restos.
+sueltas ni restos. Y después de guardar con una puerta abierta y reabrir el
+archivo, esa puerta sigue abierta y su botón dice **Cerrar**.
 
 ### 8d.3 Publicar una release y actualizar la biblioteca
 

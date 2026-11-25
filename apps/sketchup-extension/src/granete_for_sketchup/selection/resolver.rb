@@ -111,17 +111,24 @@ module Granete
         # #529 / #1377: opening actors (doors and drawers) discovered from
         # managed metadata ride the payload so the Inspector card can offer
         # Abrir/Cerrar per detected door or drawer.
+        # #1717: each actor carries the pose it REALLY has — the record the
+        # motion adapter keeps on the entity itself — so the button is right
+        # for every furniture and after saving and reopening the model.
         def publish_door_actors(context, entity)
           scanned = DoorActors.scan(entity, @metadata_store)
           actors = []
-          scanned.doors.each_with_index do |_door, slot_index|
-            actors << { 'slotIndex' => slot_index, 'kind' => 'door' }
+          scanned.doors.each_with_index do |door, slot_index|
+            actors << {
+              'slotIndex' => slot_index, 'kind' => 'door',
+              'isOpen' => Motion::PresentationPoseStore.open?(door)
+            }
           end
           scanned.drawers.each do |drawer|
             actors << {
               'slotIndex' => actors.size,
               'kind' => 'drawer',
-              'label' => drawer.name
+              'label' => drawer.name,
+              'isOpen' => Motion::PresentationPoseStore.open?(drawer.components.first)
             }
           end
           context.door_actors = actors

@@ -2,9 +2,11 @@
 
 # Adapts presentation opening/closing kinematics into SketchUp ComponentInstance
 # visual poses.
-# INVARIANT: Never modifies authoring truth or emits design intents. Only applies transient visual poses.
+# INVARIANT: Never modifies authoring truth or emits design intents. Only applies visual poses.
 # INVARIANT: Closing (progress=0) always restores exactly the canonical closed transform without drift.
 # INVARIANT: Hinges and handles attached to an opening door front rotate rigidly along with the door front.
+# INVARIANT: The open state lives in the model, on the moved entities (Motion::PresentationPoseStore).
+#   The adapter keeps none in memory, so it is right for every furniture and survives save/reopen.
 
 module Granete
   module SketchUpExtension
@@ -19,8 +21,6 @@ module Granete
           @motions = resolved_motions || []
           @component_map = component_map || {}
           @hardware_by_host = hardware_by_host || {}
-          @closed_transforms = {} # persistent_id/object_id -> canonical Geom::Transformation
-          @open_states = {} # motion_id / door_slot -> Float (current progress)
         end
 
         # True when every tracked host entity still exists in the model.
@@ -31,21 +31,6 @@ module Granete
         def entities_valid?
           tracked = @component_map.values + @hardware_by_host.values.flatten
           tracked.all? { |entity| entity.nil? || (entity.respond_to?(:valid?) && entity.valid?) }
-        end
-
-        def register_closed_transform(entity)
-          return unless entity.respond_to?(:transformation)
-
-          k = entity_key(entity)
-          @closed_transforms[k] ||= entity.transformation.clone
-        end
-
-        def canonical_closed_transform(entity)
-          return nil unless entity.respond_to?(:transformation)
-
-          k = entity_key(entity)
-          @closed_transforms[k] ||= entity.transformation.clone
-          @closed_transforms[k]
         end
 
         # Applies motion to an agregado/door actor and all its mounted hardware.
@@ -60,7 +45,6 @@ module Granete
           return unless motion_def
 
           progress = progress.to_f.clamp(0.0, 1.0)
-          @open_states[motion_id_or_agregado_id] = progress
 
           comp_ids = motion_def['componentInstanceIds'] || []
           motion = motion_def['motion'] || motion_def
@@ -80,25 +64,21 @@ module Granete
         # Closes all open doors/actors and restores canonical transforms.
         def close_all(_furniture_transform = nil)
           @motions.each do |m|
-            comp_ids = m['componentInstanceIds'] || []
-            comp_ids.each do |comp_id|
+            (m['componentInstanceIds'] || []).each do |comp_id|
               door = @component_map[comp_id]
-              if door
-                closed_t = canonical_closed_transform(door)
-                set_transform(door, closed_t) if closed_t
-              end
-              mounted_hw = @hardware_by_host[comp_id] || []
-              mounted_hw.each do |hw|
-                hw_closed = canonical_closed_transform(hw)
-                set_transform(hw, hw_closed) if hw_closed
-              end
+              restore_actor_closed_pose(door, comp_id) if door
             end
           end
-          @open_states.clear
         end
 
+        # True when the actor is open — read from the record kept on the
+        # entity itself, so a furniture saved open reads open after reopen.
         def open?(motion_id)
-          (@open_states[motion_id] || 0.0) > 0.01
+          motion = find_motion(motion_id)
+          return false unless motion
+
+          primary = @component_map[(motion['componentInstanceIds'] || []).first]
+          primary ? PresentationPoseStore.open?(primary) : false
         end
 
         # rubocop:disable-next Naming/PredicateMethod
@@ -122,12 +102,17 @@ module Granete
           end
         end
 
+        # The actor and every piece of hardware mounted on it move together
+        # and share one fate: both pose paths run over this same list.
+        def actor_entities(door_instance, comp_id)
+          [door_instance] + (@hardware_by_host[comp_id] || [])
+        end
+
         def restore_actor_closed_pose(door_instance, comp_id)
-          closed_t = canonical_closed_transform(door_instance)
-          set_transform(door_instance, closed_t) if closed_t
-          (@hardware_by_host[comp_id] || []).each do |hw|
-            hw_closed = canonical_closed_transform(hw)
-            set_transform(hw, hw_closed) if hw_closed
+          actor_entities(door_instance, comp_id).each do |entity|
+            closed_t = canonical_closed_transform(entity)
+            set_transform(entity, closed_t) if closed_t
+            PresentationPoseStore.clear(entity)
           end
         end
 
@@ -139,19 +124,22 @@ module Granete
                                              furniture_transform, side)
           return unless rel_t
 
-          set_transform(door_instance, rel_t * closed_t)
-          (@hardware_by_host[comp_id] || []).each do |hw|
-            hw_closed = canonical_closed_transform(hw)
-            set_transform(hw, rel_t * hw_closed) if hw_closed
+          actor_entities(door_instance, comp_id).each do |entity|
+            entity_closed_t = entity.equal?(door_instance) ? closed_t : canonical_closed_transform(entity)
+            next unless entity_closed_t
+
+            set_transform(entity, rel_t * entity_closed_t)
+            PresentationPoseStore.write(entity, progress, entity_closed_t)
           end
         end
 
-        def entity_key(entity)
-          if entity.respond_to?(:persistent_id) && entity.persistent_id && entity.persistent_id != 0
-            entity.persistent_id
-          else
-            entity.object_id
-          end
+        # The canonical closed pose: the one recorded when the entity was
+        # opened (it survives save/reopen), else the pose it has now — an
+        # entity without a record is closed, so it already sits at it.
+        def canonical_closed_transform(entity)
+          return unless entity.respond_to?(:transformation)
+
+          PresentationPoseStore.closed_transform(entity) || entity.transformation.clone
         end
 
         def set_transform(entity, transform)
