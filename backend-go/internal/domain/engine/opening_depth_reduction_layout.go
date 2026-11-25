@@ -23,7 +23,12 @@ import (
 //   - any OTHER addressed-role board inside the band is unclassifiable wood
 //     and fails the resolve — interference is never ignored silently;
 //   - a board outside the band is untouched (the manguete amarre, the piso
-//     at a top boundary).
+//     at a top boundary);
+//   - NO addressed-role wood inside the band at all is a NO-OP (#1723):
+//     the alacena closes its top with the gola strip itself and carries no
+//     techo — there is nothing to correct and the strip mounts on the
+//     carcass edge. The reduction never invents a correction; an empty band
+//     is simply an empty band.
 //
 // The band geometry is basis-aware (the same published-transform reading
 // the notch pass uses), so a mirrored or flipped panel never moves the
@@ -34,7 +39,9 @@ import (
 // v1 materializes the canonical horizontal placements: `superior` at a top
 // boundary, `base` at a bottom one (rebase). An addressed-role board inside
 // the band on any other placement is the unclassifiable case above — it
-// stops the resolve instead of receiving an invented correction.
+// stops the resolve instead of receiving an invented correction. Furniture
+// without addressed-role wood in the band (the alacena, #1723) resolves
+// untouched.
 
 // openingDepthReductionToleranceMm is the classification slack for
 // flush/full-depth edges: formulas evaluate in integer millimetres, the
@@ -85,7 +92,6 @@ func applyOpeningDepthReductionToBoards(
 		} else {
 			bandZ0, bandZ1 = 0, modifier.ProfileHeightMm
 		}
-		matched := false
 		for i := range boards {
 			board := &boards[i]
 			if board.constructiveRole != modifier.Role {
@@ -168,13 +174,10 @@ func applyOpeningDepthReductionToBoards(
 					board.id, z0, z1, vz0, vz1)
 			}
 			affected[i] = true
-			matched = true
 		}
-		if !matched {
-			return nil, fmt.Errorf(
-				"la reducción de profundidad del perfil %s no encontró tableros del rol %q dentro de la banda del perfil",
-				modifier.ProfileID, modifier.Role)
-		}
+		// #1723: an empty band (no addressed-role wood at all) is a NO-OP —
+		// the alacena case. Nothing is corrected and nothing is invented;
+		// the interference paths above still fail closed.
 	}
 	return affected, nil
 }
