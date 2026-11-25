@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -63,11 +64,74 @@ func applyOpeningA3ToBoards(boards []layoutBoard, front OpeningResolvedFront, gr
 		board.z = pose[0]
 		board.lengthMm = pose[1]
 		constrained[index] = true
+		// #1721: the pose above is the door's FINAL geometry — a count-rule
+		// hinge pattern frozen before the grip re-distributes over the
+		// trimmed length now (extremes keep their offsets from the REAL
+		// edges, intermediates spread evenly; the count stays the bought
+		// demand).
+		reexpandHingePatternOnBoard(board)
 		if !grips.empty() {
 			pruneOpeningHandleHardware(board, front)
 		}
 	}
 	return constrained, nil
+}
+
+// reexpandHingePatternOnBoard (#1721): the count-rule pattern hinges were
+// frozen in mm against the door board's UNTRIMMED length; the A3 pose just
+// wrote the door's final one. Re-distribute the pattern over that length —
+// the owner's rule: with 90/90 and a 40 gola discount the top cup drops the
+// same 40, because the offsets measure from the door's REAL edges. Boards
+// without an expanded pattern (fixed placements, no pattern, suppressed
+// pattern, body boards) pass through untouched.
+func reexpandHingePatternOnBoard(board *layoutBoard) {
+	if board.hingePattern == nil || len(board.hardware) == 0 {
+		return
+	}
+	ys := hingeCountRuleYs(
+		board.hingePattern.bottomMm,
+		board.hingePattern.topMm,
+		board.lengthMm,
+		board.hingePattern.count,
+	)
+	if len(ys) == 0 {
+		return
+	}
+	// The expansion emitted one copy per frozen Y of EVERY distinct pattern
+	// placement (the 2P recipe carries two, one per door half) — all copies
+	// of one pattern are identical except the frozen Y. Deduplicate back to
+	// the distinct patterns first, or each copy would re-expand to N more.
+	kept := make([]domain.HardwarePlacement, 0, len(board.hardware))
+	var patterns []domain.HardwarePlacement
+	for _, hp := range board.hardware {
+		if hp.CountRule == nil {
+			kept = append(kept, hp)
+			continue
+		}
+		normalized := hp
+		normalized.RelativePosition.YMm = 0
+		normalized.RelativePosition.YFormula = ""
+		duplicate := false
+		for _, seen := range patterns {
+			if reflect.DeepEqual(normalized, seen) {
+				duplicate = true
+				break
+			}
+		}
+		if duplicate {
+			continue
+		}
+		patterns = append(patterns, normalized)
+	}
+	for _, p := range patterns {
+		for _, y := range ys {
+			expanded := p
+			expanded.RelativePosition.YMm = y
+			expanded.RelativePosition.YFormula = ""
+			kept = append(kept, expanded)
+		}
+	}
+	board.hardware = kept
 }
 
 // pruneOpeningHandleHardware: gola / integrated grips are handle-free, so
