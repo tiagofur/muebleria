@@ -358,6 +358,12 @@ type layoutBoard struct {
 	// derivedHardware holds engine-generated placements (#1274 opening
 	// members): projected with HardwarePlacementKindDerived provenance.
 	derivedHardware []domain.HardwarePlacement
+	// hingePattern (#1721): the count-rule pattern this board's door carries
+	// after expansion — EndOffsets + bought count. The opening front pass
+	// (A3) shortens front boards AFTER the pattern froze mm positions; the
+	// marker lets that pass re-distribute the pattern over the final length.
+	// nil = the board carries no expanded pattern.
+	hingePattern *hingePatternExpansion
 	// catalogComponentID is the catalog Component.ID behind the template
 	// (#477: occurrence↔template mapping and the normalized snapshot echo).
 	catalogComponentID string
@@ -1964,12 +1970,22 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 		// #1579 PR2: el patrón countRule se expande a N posiciones con las
 		// medidas reales de ESTA bahía antes del armado de tableros — el
 		// dibujo (hosts) muestra exactamente lo que la cotización compra.
-		unitComponents := expandHingeCountRuleComponentsForUnit(agr, agrInst, catalog, optionChoices, unit)
+		unitComponents, hingePattern := expandHingeCountRuleComponentsForUnit(agr, agrInst, catalog, optionChoices, unit)
 		unitBoards, err := expandLayoutInstances(
 			filterInstancesForBaseMode(unitComponents, catalog, baseMode),
 			catalog, unitDims, fmt.Sprintf("agr-%s-%su%d-", effectiveID, instanceTag, unit.index), baseClearance, optionChoices, opts, ruleCtx)
 		if err != nil {
 			return nil, err
+		}
+		// #1721: los tableros de la puerta del patrón recuerdan la expansión
+		// para que el pase de agarres la reparta sobre el largo FINAL del
+		// frente (la gola acorta la puerta después de esta expansión).
+		if hingePattern != nil {
+			for i := range unitBoards {
+				if unitBoards[i].catalogComponentID == hingePattern.componentID {
+					unitBoards[i].hingePattern = hingePattern
+				}
+			}
 		}
 		for i := range unitBoards {
 			unitBoards[i].x += unit.x

@@ -24,6 +24,25 @@ import (
 // and engine/bom.ts (context + module-band exclusion). The shared
 // hingeDemandBands fixture pins the ladder; the position distribution is
 // mirrored arithmetic (extremes at the offsets, intermediates even).
+//
+// #1721: under an opening grip (gola/rebase) the front pass A3 shortens the
+// door board AFTER this expansion froze mm positions — the pattern carries
+// a hingePatternExpansion marker on the board (layout.go) and the pass
+// re-distributes it over the final length (opening_layout_pass.go). The
+// COUNT stays the bought demand: la compra no cambia.
+
+// hingePatternExpansion (#1721) is the pattern a unit's door carries after
+// expansion: the pattern's EndOffsets plus the bought count — enough to
+// re-distribute it over the door board's FINAL length when the opening
+// front pass (A3) shortens the board after this expansion froze mm
+// positions. componentID selects the boards that carry it. nil = the unit's
+// door carries no surviving pattern.
+type hingePatternExpansion struct {
+	componentID string
+	bottomMm    float64
+	topMm       float64
+	count       int
+}
 
 // hingeCountRuleYs returns the door-local Y positions (mm from the door
 // bottom) of the pattern: first at the bottom offset, last at height minus
@@ -168,20 +187,23 @@ func hingeCountRuleFixedSameHardware(catalog domain.Catalog, agr domain.Agregado
 // the unit's components into concrete positions (drawing layout for hosts).
 // Components without a count rule pass through untouched; when the pattern
 // is suppressed (fixed wins, no choice, no usable dims) the pattern
-// placement is dropped from the drawing — drilled equals bought.
-func expandHingeCountRuleComponentsForUnit(agr domain.Agregado, inst domain.ModuleAgregadoInstance, catalog domain.Catalog, optionChoices map[string]string, unit agregadoUnit) []domain.ComponentInstance {
+// placement is dropped from the drawing — drilled equals bought. The
+// expansion happens BEFORE the opening front pass, so the positions are
+// frozen against the UNTRIMMED door: the returned expansion (#1721) lets
+// that pass re-distribute the pattern over the door's final length.
+func expandHingeCountRuleComponentsForUnit(agr domain.Agregado, inst domain.ModuleAgregadoInstance, catalog domain.Catalog, optionChoices map[string]string, unit agregadoUnit) ([]domain.ComponentInstance, *hingePatternExpansion) {
 	doorComp, pattern := countRuleDoorOf(agr)
 	if doorComp == nil || pattern == nil {
-		return agr.Components
+		return agr.Components, nil
 	}
 	doorHeight, doorWidth := hingeCountRuleDoorDims(catalog, doorComp, unit)
 	preHingePolicy := catalog.ConstructionPolicy.HingeDemandForComponent(doorComp.ComponentID)
 	hardwareID := hingeCountRuleResolvedHardware(pattern, inst, optionChoices, preHingePolicy)
 	if hardwareID == "" {
-		return dropHingeCountRulePlacements(agr.Components)
+		return dropHingeCountRulePlacements(agr.Components), nil
 	}
 	if hingeCountRuleFixedSameHardware(catalog, agr, inst, optionChoices, hardwareID) {
-		return dropHingeCountRulePlacements(agr.Components)
+		return dropHingeCountRulePlacements(agr.Components), nil
 	}
 	hinge, hasHinge := findHardwareByID(catalog, hardwareID)
 	var hingeForDraw *domain.Hardware
@@ -192,7 +214,13 @@ func expandHingeCountRuleComponentsForUnit(agr domain.Agregado, inst domain.Modu
 	count := domain.ResolveHingeCount(doorHeight, int(math.Round(doorWidth)), policy)
 	ys := hingeCountRuleYs(pattern.CountRule.EndOffsetBottomMm, pattern.CountRule.EndOffsetTopMm, doorHeight, count.Hinges)
 	if len(ys) == 0 {
-		return dropHingeCountRulePlacements(agr.Components)
+		return dropHingeCountRulePlacements(agr.Components), nil
+	}
+	expansion := &hingePatternExpansion{
+		componentID: doorComp.ComponentID,
+		bottomMm:    pattern.CountRule.EndOffsetBottomMm,
+		topMm:       pattern.CountRule.EndOffsetTopMm,
+		count:       count.Hinges,
 	}
 
 	out := make([]domain.ComponentInstance, len(agr.Components))
@@ -214,13 +242,17 @@ func expandHingeCountRuleComponentsForUnit(agr domain.Agregado, inst domain.Modu
 				expanded := p
 				expanded.RelativePosition.YMm = y
 				expanded.RelativePosition.YFormula = ""
-				expanded.CountRule = nil
+				// #1721: the CountRule stays on the expanded placement — it is
+				// the marker the opening front pass pairs with the board's
+				// hingePatternExpansion to re-distribute over the trimmed
+				// length. This is the per-resolution view (#1710 clone); the
+				// catalog recipe is untouched.
 				placements = append(placements, expanded)
 			}
 		}
 		out[i].Overrides = cloneOverridesWithPlacements(out[i].Overrides, placements)
 	}
-	return out
+	return out, expansion
 }
 
 // cloneOverridesWithPlacements returns a NEW ComponentOverrides carrying the
