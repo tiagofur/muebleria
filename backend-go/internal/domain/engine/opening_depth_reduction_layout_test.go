@@ -251,12 +251,15 @@ func TestDepthReductionFailsClosedOnUnclassifiablePanel(t *testing.T) {
 	}
 }
 
-func TestDepthReductionFailsClosedWithoutAddressedBoards(t *testing.T) {
-	// The declared role finds no board: a reduction that materializes
-	// nowhere is a blocked resolve, never a silent no-op.
+func TestDepthReductionWithoutAddressedBoardsIsANoOp(t *testing.T) {
+	// #1723 (the alacena shape): the furniture carries NO addressed-role
+	// wood inside the profile's band — the strip mounts on the bare carcass
+	// edge and there is nothing to correct. The resolve proceeds and the
+	// front still receives its opening discount; interference (role wood
+	// inside the band) keeps failing closed in the tests above.
 	module, catalog := oneDoorCabinetCatalog()
 	dims := &LayoutDims{WidthMm: 600, HeightMm: 720, DepthMm: 560}
-	_, _, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
+	layout, boards, err := resolveFurnitureLayoutOpts(module, catalog, dims, nil, resolveOptions{
 		fronts: openingPassFront("top", 40),
 		openingBodyModifiers: []ResolvedOpeningBodyModifier{{
 			Effect: OpeningModifierEffectDepthReduction, Role: "horizontal",
@@ -264,8 +267,18 @@ func TestDepthReductionFailsClosedWithoutAddressedBoards(t *testing.T) {
 			DepthReductionMm: 27.2, ProfileHeightMm: 56.5,
 		}},
 	})
-	if err == nil || !strings.Contains(err.Error(), "no encontró tableros") {
-		t.Fatalf("a reduction with no addressed boards must fail closed, got %v", err)
+	if err != nil {
+		t.Fatalf("a clear band must be a no-op, got %v", err)
+	}
+	door := findComponentByID(layout.Components, "puerta")
+	if door == nil || door.LengthMm != 680 {
+		t.Fatalf("no-op door = L %v, want 680 (the discount still applies)", door.LengthMm)
+	}
+	// No horizontal-role board exists: nothing was corrected.
+	for i := range boards {
+		if boards[i].constructiveRole == "horizontal" {
+			t.Fatalf("fixture unexpectedly grew a horizontal board: %+v", boards[i])
+		}
 	}
 }
 
