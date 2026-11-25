@@ -234,3 +234,67 @@ func TestOpeningGripKeepsSuppressedPatternAndFixedPlacement(t *testing.T) {
 		t.Fatalf("fixed hinge ys = %v, want [300] (pattern suppressed, fixed untouched)", ys)
 	}
 }
+
+func TestOpeningGripReexpandsTwoDistinctPatterns(t *testing.T) {
+	// The 2P recipe shape: ONE door board carrying TWO distinct count-rule
+	// patterns (one per leaf half, distinct X). Each pattern re-expands to N
+	// positions over the trimmed length — the dedup must not collapse them
+	// into one, nor multiply the already-expanded copies.
+	mod, catalog := countRuleDoorCatalog(720, domain.HingeDemandRole)
+	agr := &catalog.Agregados[0]
+	comp := &agr.Components[0]
+	comp.Overrides.HardwarePlacements[0].RelativePosition = domain.HardwareRelPosition{XMm: 20.5, YMm: 90}
+	comp.Overrides.HardwarePlacements[0].CountRule = &domain.HingeCountRule{Kind: "hingeDemand", EndOffsetBottomMm: 90, EndOffsetTopMm: 90}
+	patternB := domain.HardwarePlacement{
+		OptionRole: domain.HingeDemandRole, AnchorFace: "back",
+		CountRule:        &domain.HingeCountRule{Kind: "hingeDemand", EndOffsetBottomMm: 90, EndOffsetTopMm: 90},
+		RelativePosition: domain.HardwareRelPosition{XMm: 100, YMm: 90, XFormula: "PW-20.5"},
+	}
+	comp.Overrides.HardwarePlacements = append(comp.Overrides.HardwarePlacements, patternB)
+	choices := map[string]string{
+		"INTERIOR": "mat-1", "FRENTES": "mat-1",
+		domain.HingeDemandRole: "hw-standard",
+	}
+	res, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module:        mod,
+		Catalog:       catalog,
+		Dims:          &LayoutDims{WidthMm: 600, HeightMm: 720, DepthMm: 560},
+		OptionChoices: choices,
+		Fronts:        openingPassFront("top", 70),
+	})
+	if err != nil {
+		t.Fatalf("two-pattern resolve: %v", err)
+	}
+	// 2 distinct patterns × 2 hinges over the trimmed 650: four placements,
+	// each pattern's pair at 90 from the REAL edges. Group by the observed
+	// mount X (the two patterns differ in X; the B formula evaluates with the
+	// engine's integer semantics) — each group must carry the full Y set.
+	door := findComponentByID(res.Layout.Components, "puerta")
+	if door == nil || door.LengthMm != 650 {
+		t.Fatalf("two-pattern door = L %v, want 650", door.LengthMm)
+	}
+	type row struct{ x, y float64 }
+	var rows []row
+	for _, hw := range res.Layout.Hardware {
+		if hw.HardwareID != "hw-standard" || len(hw.OffsetMm) != 2 {
+			continue
+		}
+		rows = append(rows, row{hw.OffsetMm[0], hw.OffsetMm[1]})
+	}
+	if len(rows) != 4 {
+		t.Fatalf("two-pattern hinge count = %d, want 4 (2 patterns × 2 ys)", len(rows))
+	}
+	xs := map[float64][]float64{}
+	for _, r := range rows {
+		xs[r.x] = append(xs[r.x], r.y)
+	}
+	if len(xs) != 2 {
+		t.Fatalf("two-pattern mount Xs = %v, want 2 distinct columns", xs)
+	}
+	for x, ys := range xs {
+		sort.Float64s(ys)
+		if !ysEqual(ys, 90, 560) {
+			t.Fatalf("pattern at x=%v hinge ys = %v, want [90 560]", x, ys)
+		}
+	}
+}
