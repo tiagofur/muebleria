@@ -203,7 +203,10 @@ func ProjectGripMembers(top *domain.FrozenGripProfile) *OpeningMembers {
 // the between profile at "between". ONE effect definition feeds the layout
 // pass (visible notch/bevel), the BOM annotations and the future machining
 // slice. A declared effect without a consumer at its boundary fails closed —
-// never a silently dropped declaration (A6).
+// never a silently dropped declaration (A6). The one exception (#1726): a
+// depth_reduction on the between copy of a dual-position profile is the
+// shared set's top-scoped effect and is skipped — the same profile mounted
+// at top applies it there.
 func ResolveProjectGripModifiers(recipe *domain.GripSnapshotRecipe) ([]ResolvedOpeningBodyModifier, *OpeningResolutionError) {
 	if recipe == nil || recipe.Mode != domain.GripModeGola {
 		return nil, nil
@@ -228,6 +231,18 @@ func ResolveProjectGripModifiers(recipe *domain.GripSnapshotRecipe) ([]ResolvedO
 				fmt.Sprintf("el perfil %s no declara compatible la frontera between", betweenData.ProfileID))
 		}
 		for _, modifier := range betweenData.BodyModifiers {
+			// #1726: the v2 profile declares ONE modifier set for every
+			// position it serves (#1530). A depth_reduction on the between
+			// copy is that shared set's top-scoped body effect (§14.6: the
+			// gola-L body effect exists only at the top; between fronts the
+			// strip is board + notch + bevel) — a between boundary has no
+			// horizontal panel for it to shorten, so it has no consumer here
+			// by definition. Skipping is truthful absence, never a degraded
+			// effect: when the recipe mounts the same profile at top, that
+			// copy still resolves and applies the reduction there.
+			if modifier.DepthReductionMm != nil || modifier.Effect == OpeningModifierEffectDepthReduction {
+				continue
+			}
 			effect, resErr := resolveOpeningBodyModifierEffect(modifier, "between", 0, nil, "between", betweenData)
 			if resErr != nil {
 				return nil, resErr
