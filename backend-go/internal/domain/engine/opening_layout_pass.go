@@ -208,9 +208,12 @@ func appendOpeningBetweenProfileHardware(layout *FurnitureLayout, catalog domain
 		if !placement.BetweenGripped[k-1] {
 			continue
 		}
-		// Run k hangs below row k−1 (the upper row of the pair): its top
-		// edge = the upper row's bottom edge.
-		z := rows[k-1][0] - members.BetweenProfileHeightMm
+		// Run k is CENTERED on the gripped edge's gap (#1729, owner vivo:
+		// «la gola C quedó muy abajo» with the hang-below rule): its center
+		// = the center of the space between the two fronts of the pair —
+		// the same centered rule the between strips follow.
+		gapCenter := (rows[k-1][0] + rows[k][1]) / 2
+		z := gapCenter - members.BetweenProfileHeightMm/2
 		layout.Hardware = append(layout.Hardware, buildDerivedHardware(
 			hw,
 			fmt.Sprintf("opening-profile-between-%s-%d", hw.ID, k),

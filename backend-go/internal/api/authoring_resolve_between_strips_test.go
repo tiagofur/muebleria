@@ -313,7 +313,8 @@ func TestAuthoringResolveDesignOpeningBetweenProfileHardware(t *testing.T) {
 		Resolved *struct {
 			Layout struct {
 				Components []struct {
-					ComponentInstanceID string `json:"componentInstanceId"`
+					ComponentInstanceID string     `json:"componentInstanceId"`
+					DimensionsMm        [3]float64 `json:"dimensionsMm"`
 					Transform           struct {
 						TranslationMm [3]float64 `json:"translationMm"`
 					} `json:"transform"`
@@ -335,10 +336,16 @@ func TestAuthoringResolveDesignOpeningBetweenProfileHardware(t *testing.T) {
 	if full.Resolved == nil {
 		t.Fatalf("no resolved payload")
 	}
-	doors := []float64{}
+	doors := []struct {
+		z      float64
+		height float64
+	}{}
 	for _, comp := range full.Resolved.Layout.Components {
 		if strings.Contains(comp.ComponentInstanceID, "comp-dfront-1536") {
-			doors = append(doors, comp.Transform.TranslationMm[2])
+			doors = append(doors, struct {
+				z      float64
+				height float64
+			}{comp.Transform.TranslationMm[2], comp.DimensionsMm[2]})
 		}
 	}
 	if len(doors) != 3 {
@@ -355,17 +362,28 @@ func TestAuthoringResolveDesignOpeningBetweenProfileHardware(t *testing.T) {
 		t.Fatalf("3 frentes → 1 corrida del C entre frentes, got %d", len(runs))
 	}
 	for _, runZ := range runs {
-		// r2: the run hangs below the upper ROW's bottom edge (#1300 the
-		// host is the carcass) — the row bottoms are the doors' min z.
-		found := false
-		for _, z := range doors {
-			if fmt.Sprintf("%.4f", z) == fmt.Sprintf("%.4f", runZ+13) {
-				found = true
-				break
+		// #1729 centered rule (order-independent): the run's CENTER sits at
+		// the center of the gripped pair's gap — the closest front above and
+		// the closest front below bracket it symmetrically. Works whether
+		// the run is taller than the gap (it laps behind both fronts) or
+		// shorter (it floats centered inside the gap).
+		runCenter := runZ + 6.5
+		upperBottom, lowerTop := 1e9, -1.0
+		for _, d := range doors {
+			if d.z >= runCenter && d.z < upperBottom {
+				upperBottom = d.z
+			}
+			if d.z+d.height <= runCenter && d.z+d.height > lowerTop {
+				lowerTop = d.z + d.height
 			}
 		}
-		if !found {
-			t.Fatalf("corrida C (%.2f): ningún borde de fila superior en %.2f", runZ, runZ+13)
+		if upperBottom >= 1e9 || lowerTop <= 0 {
+			t.Fatalf("corrida C (%.2f–%.2f): sin frentes arriba/abajo del centro %.2f", runZ, runZ+13, runCenter)
+		}
+		gapCenter := (upperBottom + lowerTop) / 2
+		if fmt.Sprintf("%.4f", runCenter) != fmt.Sprintf("%.4f", gapCenter) {
+			t.Fatalf("corrida C centrada en %.2f, want %.2f (centro del hueco %.2f–%.2f)",
+				runCenter, gapCenter, lowerTop, upperBottom)
 		}
 	}
 	// #1300: the runs are HOSTED ON THE CARCASS — never on a drawer front.
