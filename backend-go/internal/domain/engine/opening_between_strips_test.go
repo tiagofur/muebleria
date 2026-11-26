@@ -87,10 +87,21 @@ func TestOpeningBetweenStripBoardsOnePerBetweenEdge(t *testing.T) {
 		t.Fatalf("the gripped edge is row 1's: strip id = %s, want suffix -2", strip.id)
 	}
 	{
-		upper := frontsPose[1]
-		wantZ := upper.z - 70.0
+		// #1729: the strip is CENTERED on the gripped edge's gap — equal lap
+		// behind both fronts of the pair (the italian V-groove), not the
+		// whole strip hanging below the upper front.
+		gapCenter := (rows[1].bottomMm + rows[2].topMm) / 2
+		wantZ := gapCenter - 35.0
 		if strip.z != wantZ {
-			t.Fatalf("between strip: z = %.2f, want %.2f (middle front bottom %.2f − 70)", strip.z, wantZ, upper.z)
+			t.Fatalf("between strip: z = %.2f, want centered %.2f (gap center %.2f − 35)", strip.z, wantZ, gapCenter)
+		}
+		// Equal lap behind both fronts: the strip's top overlaps the upper
+		// front's bottom band exactly as much as its bottom overlaps the
+		// lower front's top band.
+		lapUpper := strip.z + 70.0 - rows[1].bottomMm
+		lapLower := rows[2].topMm - strip.z
+		if lapUpper != lapLower {
+			t.Fatalf("between strip must lap equally behind both fronts: upper %.2f vs lower %.2f", lapUpper, lapLower)
 		}
 		if strip.widthMm != 16 || strip.thicknessMm != 70 {
 			t.Fatalf("between strip: declared dims drift (depth 16, height 70): %.2f × %.2f", strip.widthMm, strip.thicknessMm)

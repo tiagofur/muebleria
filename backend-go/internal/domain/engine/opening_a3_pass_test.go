@@ -5,6 +5,7 @@ package engine
 // front of a real composed 3-drawer column.
 
 import (
+	"math"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -201,8 +202,46 @@ func TestOpeningA3BetweenEdgesBevelAndNotch(t *testing.T) {
 		}
 		edgesByRow = append(edgesByRow, edges)
 	}
-	if edgesByRow[0] != "top;" || edgesByRow[1] != "" || edgesByRow[2] != "between:column;" {
+	// #1729: the between bevel is the V-groove's ONE cut on BOTH fronts of
+	// the gripped pair — row 1 (the pair's upper front) at its bottom edge,
+	// row 2 (the lower front) at its top edge. Row 0 keeps only the top
+	// profile's top bevel.
+	if edgesByRow[0] != "top;" || edgesByRow[1] != "between:column;" || edgesByRow[2] != "between:column;" {
 		t.Fatalf("bevels by row (top → bottom) = %v", edgesByRow)
+	}
+	if boards[rows[1].boards[0]].bevels[0].Edge != "bottom_front" {
+		t.Fatalf("the pair's upper front must carry the bottom-edge wedge, got %q",
+			boards[rows[1].boards[0]].bevels[0].Edge)
+	}
+	if boards[rows[2].boards[0]].bevels[0].Edge != "top_front" {
+		t.Fatalf("the pair's lower front must carry the top-edge wedge, got %q",
+			boards[rows[2].boards[0]].bevels[0].Edge)
+	}
+	// The lower front's wedge hugs the front's TOP end: its furniture-Z range
+	// is [rowTop − size, rowTop] — pins the local start against a wedge that
+	// silently lands on the wrong end of the board.
+	{
+		board := boards[rows[2].boards[0]]
+		lt, err := boardLocalTransform(&board)
+		if err != nil {
+			t.Fatalf("local transform: %v", err)
+		}
+		axis, sign, err := localAxisForFurnitureAxis(lt.Basis, 2, "vertical")
+		if err != nil {
+			t.Fatalf("vertical axis: %v", err)
+		}
+		bevel := board.bevels[0]
+		var wedgeBottom float64
+		if sign > 0 {
+			wedgeBottom = board.z + bevel.StartMm[axis]
+		} else {
+			sizes := [3]float64{board.widthMm, board.thicknessMm, board.lengthMm}
+			wedgeBottom = board.z + sizes[axis] - bevel.StartMm[axis] - bevel.SizeMm[axis]
+		}
+		wantBottom := rows[2].topMm - bevel.SizeMm[axis]
+		if math.Abs(wedgeBottom-wantBottom) > 0.01 {
+			t.Fatalf("lower front wedge bottom = %.2f, want %.2f (hugging the front's top edge)", wedgeBottom, wantBottom)
+		}
 	}
 	sides := 0
 	for _, board := range boards {
@@ -217,6 +256,29 @@ func TestOpeningA3BetweenEdgesBevelAndNotch(t *testing.T) {
 			if notch.SizeMm[1] != 17 && notch.SizeMm[0] != 17 && notch.SizeMm[2] != 17 {
 				t.Fatalf("%s notch %d: depth 17 expected in %v", board.id, n, notch.SizeMm)
 			}
+		}
+		// #1729: the notch is centered on the gripped edge's gap — its
+		// furniture-Z range matches the centered strip's (height 71 →
+		// ±35.5 around the gap's center).
+		lt, err := boardLocalTransform(&board)
+		if err != nil {
+			t.Fatalf("%s local transform: %v", board.id, err)
+		}
+		axis, sign, err := localAxisForFurnitureAxis(lt.Basis, 2, "vertical")
+		if err != nil {
+			t.Fatalf("%s vertical axis: %v", board.id, err)
+		}
+		gapCenter := (rows[1].bottomMm + rows[2].topMm) / 2
+		notchBottom := gapCenter - 35.5
+		var notchStartFurniture float64
+		if sign > 0 {
+			notchStartFurniture = board.z + board.notches[0].StartMm[axis]
+		} else {
+			sizes := [3]float64{board.widthMm, board.thicknessMm, board.lengthMm}
+			notchStartFurniture = board.z + sizes[axis] - board.notches[0].StartMm[axis] - board.notches[0].SizeMm[axis]
+		}
+		if math.Abs(notchStartFurniture-notchBottom) > 0.01 {
+			t.Fatalf("%s: notch bottom = %.2f, want the centered %.2f", board.id, notchStartFurniture, notchBottom)
 		}
 	}
 	if sides == 0 {

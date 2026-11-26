@@ -1287,9 +1287,10 @@ func boardPlacementLabel(comp domain.Component, inst domain.ComponentInstance) s
 // EDGE of the resolved A3 stack — the edges are the ROW boundaries
 // (openingFrontRows: fronts whose vertical extents overlap share ONE row),
 // never front-board pairs: two side-by-side doors are one row with ZERO
-// between edges and fabricate no strip. Strip k hangs below row k−1's
-// bottom edge — the top-strip rule mirrored — full furniture width, the
-// FRENTE material role: real boards in the cut list, never a placeholder.
+// between edges and fabricate no strip. Strip k is CENTERED on row k−1's
+// bottom gap (#1729) — equal lap behind both fronts of the pair, the italian
+// V-groove — full furniture width, the FRENTE material role: real boards in
+// the cut list, never a placeholder.
 // Fail-closed: a declared component missing or inactive rejects the
 // resolve, like the top strip.
 func appendOpeningBetweenStripBoards(boards *[]layoutBoard, catalog domain.Catalog, dims LayoutDims,
@@ -1318,9 +1319,12 @@ func appendOpeningBetweenStripBoards(boards *[]layoutBoard, catalog domain.Catal
 			if !placement.BetweenGripped[k-1] {
 				continue
 			}
-			// Strip k hangs below row k−1 (the upper row of the pair): its
-			// top edge = the upper row's bottom edge.
-			z := rows[k-1].bottomMm - strip.HeightMm
+			// Strip k is CENTERED on the gripped edge's gap (#1729): its
+			// center = the center of the space between the two fronts of the
+			// pair — equal lap behind both beveled edges (the italian
+			// V-groove), never the whole strip hanging below the upper front.
+			gapCenter := (rows[k-1].bottomMm + rows[k].topMm) / 2
+			z := gapCenter - strip.HeightMm/2
 			*boards = append(*boards, layoutBoard{
 				id:                 "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k),
 				defID:              "opening-strip-between-" + strip.Key + "-" + strconv.Itoa(k),

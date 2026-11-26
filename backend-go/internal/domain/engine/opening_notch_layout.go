@@ -53,11 +53,12 @@ func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeni
 				"la muesca del perfil %s con offset %d mm no tiene consumidor de geometría en v1 (sólo la esquina)",
 				modifier.ProfileID, modifier.NotchOffsetMm)
 		}
-		// #1529 + #1706: a between notch hangs from the bottom edge of the
-		// front above each GRIPT between edge of the stack (the resolved
-		// distribution, not every boundary), and a top notch only exists
-		// when the top profile mounts. The strip runs behind the gap, as it
-		// does under the top at a top boundary.
+		// #1529 + #1706: a between notch serves each GRIPT between edge of
+		// the stack (the resolved distribution, not every boundary), and a
+		// top notch only exists when the top profile mounts. #1729: the
+		// notch is CENTERED on the edge's gap — its Z range matches the
+		// centered strip's range, the housing of the italian V-groove —
+		// no longer hanging from the front above.
 		var hangFromZ []float64
 		if kind == "between" {
 			rows, err := openingFrontRows(boards)
@@ -67,7 +68,8 @@ func applyOpeningNotchesToBoards(boards []layoutBoard, modifiers []ResolvedOpeni
 			placement := OpeningGripPlacementFor(len(rows))
 			for r, gripped := range placement.BetweenGripped {
 				if gripped {
-					hangFromZ = append(hangFromZ, rows[r].bottomMm)
+					gapCenter := (rows[r].bottomMm + rows[r+1].topMm) / 2
+					hangFromZ = append(hangFromZ, gapCenter+modifier.NotchHeightMm/2)
 				}
 			}
 			if len(hangFromZ) == 0 {

@@ -29976,7 +29976,7 @@
                     "startMm": [
                       0,
                       0,
-                      183
+                      200
                     ],
                     "sizeMm": [
                       16,
@@ -30055,7 +30055,7 @@
                     "startMm": [
                       0,
                       0,
-                      183
+                      200
                     ],
                     "sizeMm": [
                       16,
@@ -30183,7 +30183,25 @@
                 "thicknessMm": 18,
                 "assemblyInstanceId": "asm-agr-inst-1536-u1",
                 "optionRole": "FRENTE",
-                "materialColorHex": "#c4a574"
+                "materialColorHex": "#c4a574",
+                "bevels": [
+                  {
+                    "startMm": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "sizeMm": [
+                      596,
+                      14,
+                      14
+                    ],
+                    "angleDeg": 45,
+                    "edge": "bottom_front",
+                    "profileId": "profile.italiana.70",
+                    "boundary": "between"
+                  }
+                ]
               },
               {
                 "componentInstanceId": "agr-agr-cajon-1536-u2-comp-dfront-1536-copy-0",
@@ -30264,7 +30282,7 @@
                   "translationMm": [
                     0,
                     544,
-                    183
+                    200
                   ]
                 },
                 "dimensionsMm": [
@@ -30276,7 +30294,7 @@
                   "translationMm": [
                     0,
                     544,
-                    183
+                    200
                   ],
                   "basis": {
                     "x": [
@@ -30394,7 +30412,7 @@
                     "startMm": [
                       0,
                       0,
-                      183
+                      200
                     ],
                     "sizeMm": [
                       16,
@@ -30442,7 +30460,7 @@
                     "startMm": [
                       0,
                       0,
-                      183
+                      200
                     ],
                     "sizeMm": [
                       16,
@@ -30477,6 +30495,30 @@
                 }
               },
               {
+                "operationId": "agr-agr-cajon-1536-u1-comp-dfront-1536-copy-0:bevel-0",
+                "hostComponentInstanceId": "agr-agr-cajon-1536-u1-comp-dfront-1536-copy-0",
+                "provenance": {
+                  "sourceKind": "openingProfile",
+                  "openingProfileId": "profile.italiana.70",
+                  "boundary": "between"
+                },
+                "holes": [],
+                "bevel": {
+                  "startMm": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "sizeMm": [
+                    596,
+                    14,
+                    14
+                  ],
+                  "angleDeg": 45,
+                  "edge": "bottom_front"
+                }
+              },
+              {
                 "operationId": "agr-agr-cajon-1536-u2-comp-dfront-1536-copy-0:bevel-0",
                 "hostComponentInstanceId": "agr-agr-cajon-1536-u2-comp-dfront-1536-copy-0",
                 "provenance": {
@@ -30502,7 +30544,7 @@
               }
             ],
             "derivedHardwarePlacements": [],
-            "manufacturingFingerprint": "sha256-abe03bca8f4642928a87f08a8163af1d234c1008655deaebf731ebb82cb0da77"
+            "manufacturingFingerprint": "sha256-d011a358b5c7d81dd5af59a6087cd787593d8414b2d3f8de829b9cd3427cdbf1"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
