@@ -16,7 +16,10 @@ import (
 // the profile declares — the engine never carries bevel constants. The door
 // is the effect's only consumer (role "door"); any other role or a bevel
 // that does not fit the board fails closed. #1529: a between boundary bevels
-// the top edge of every front just below a between edge.
+// the top edge of every front just below a between edge. #1729: the between
+// cut is the V-groove's single definition materialized on BOTH fronts of
+// each gripped pair — top edge below, bottom edge above — so the centered
+// strip laps into both.
 
 // applyOpeningBevelsToBoards materializes every resolved bevel modifier onto
 // the front boards the opening constrains. It runs right after the notch
@@ -40,27 +43,71 @@ func applyOpeningBevelsToBoards(boards []layoutBoard, modifiers []ResolvedOpenin
 				modifier.ProfileID, kind)
 		}
 		// #1529: the bevel cuts the fronts AT its edge, read from the stack:
-		// top → the top row, bottom → the lowest row, between → the top edge
-		// of every front just below a between edge.
-		targets, err := openingFrontsAtEdge(boards, kind)
-		if err != nil {
-			return err
-		}
-		if len(targets) == 0 && (kind == "between" || kind == "top") {
-			// #1685/#1706: no stacked fronts, a distribution that grips no
-			// edge, or a top edge the distribution leaves to the between
-			// profile — the boundary does not exist in this furniture.
-			// Truthful absence (nothing to bevel), mirroring the notch pass
-			// and the between runs/BOM.
-			continue
-		}
+		// top → the top row, bottom → the lowest row. #1729: at between the
+		// declared bevel is the italian V-groove's ONE cut, materialized on
+		// BOTH fronts of each gripped pair — the lower front at its top
+		// edge (#1532) and the upper front at its bottom edge — so the
+		// centered strip laps into both beveled edges equally.
+		var targets []int
+		var upperTargets []int
 		edgeKind := kind
 		if kind == "between" {
+			rows, err := openingFrontRows(boards)
+			if err != nil {
+				return err
+			}
+			placement := OpeningGripPlacementFor(len(rows))
+			for r, gripped := range placement.BetweenGripped {
+				if !gripped {
+					continue
+				}
+				// The pair's lower front loses its top edge (edgeKind "top");
+				// the upper front loses its bottom edge. The distribution
+				// never grips two adjacent edges, so every row is hit at
+				// most once.
+				targets = append(targets, rows[r+1].boards...)
+				for _, i := range rows[r].boards {
+					upperTargets = append(upperTargets, i)
+				}
+			}
+			if len(targets) == 0 {
+				// #1685/#1706: no stacked fronts, a distribution that grips
+				// no edge, or a top edge the distribution leaves to the
+				// between profile — the boundary does not exist in this
+				// furniture. Truthful absence (nothing to bevel), mirroring
+				// the notch pass and the between runs/BOM.
+				continue
+			}
 			edgeKind = "top"
+		}
+		if kind != "between" {
+			var err error
+			targets, err = openingFrontsAtEdge(boards, kind)
+			if err != nil {
+				return err
+			}
+			if len(targets) == 0 && kind == "top" {
+				// #1685/#1706: no stacked fronts, or a top edge the
+				// distribution leaves to the between profile — the boundary
+				// does not exist in this furniture. Truthful absence
+				// (nothing to bevel), mirroring the notch pass and the
+				// between runs/BOM.
+				continue
+			}
 		}
 		placed := false
 		for _, i := range targets {
 			bevel, err := localBevelPrism(&boards[i], modifier, edgeKind)
+			if err != nil {
+				return err
+			}
+			boards[i].bevels = append(boards[i].bevels, bevel)
+			placed = true
+		}
+		// #1729: the upper fronts of the gripped pairs take the same wedge
+		// at their furniture-bottom edge.
+		for _, i := range upperTargets {
+			bevel, err := localBevelPrism(&boards[i], modifier, "bottom")
 			if err != nil {
 				return err
 			}
@@ -153,9 +200,10 @@ func localBevelPrism(board *layoutBoard, modifier ResolvedOpeningBodyModifier, k
 	}, nil
 }
 
-// openingFrontsAtEdge returns the front boards at one edge of the stack
-// (#1529): the top row (only when the distribution mounts the top profile,
-// #1706), the lowest row, or every row below a GRIPT between edge.
+// openingFrontsAtEdge returns the front boards at one top/bottom edge of the
+// stack (#1529): the top row (only when the distribution mounts the top
+// profile, #1706) or the lowest row. The between targeting lives in the
+// bevel pass itself (#1729: both fronts of each gripped pair).
 func openingFrontsAtEdge(boards []layoutBoard, kind string) ([]int, error) {
 	rows, err := openingFrontRows(boards)
 	if err != nil || len(rows) == 0 {
@@ -171,12 +219,6 @@ func openingFrontsAtEdge(boards []layoutBoard, kind string) ([]int, error) {
 	case "bottom":
 		return rows[len(rows)-1].boards, nil
 	default:
-		var targets []int
-		for r, row := range rows[1:] {
-			if placement.BetweenGripped[r] {
-				targets = append(targets, row.boards...)
-			}
-		}
-		return targets, nil
+		return nil, fmt.Errorf("la frontera %q no tiene objetivo de bisel", kind)
 	}
 }

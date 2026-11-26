@@ -195,8 +195,9 @@ func TestAuthoringResolveDesignOpeningBetweenStrips(t *testing.T) {
 		Resolved *struct {
 			Layout struct {
 				Components []struct {
-					ComponentInstanceID string `json:"componentInstanceId"`
-					Role                string `json:"role"`
+					ComponentInstanceID string     `json:"componentInstanceId"`
+					Role                string     `json:"role"`
+					DimensionsMm        [3]float64 `json:"dimensionsMm"`
 					Transform           struct {
 						TranslationMm [3]float64 `json:"translationMm"`
 					} `json:"transform"`
@@ -241,33 +242,45 @@ func TestAuthoringResolveDesignOpeningBetweenStrips(t *testing.T) {
 			t.Fatalf("%s: rol FRENTE esperado, got %q", strip.id, strip.role)
 		}
 	}
-	// The resolved drawer fronts (bottom edges, top → bottom) drive both
-	// mirror-rule assertions.
-	doors := []float64{}
+	// The resolved drawer fronts drive the #1729 centered-rule assertion.
+	doors := []struct {
+		z      float64
+		height float64
+	}{}
 	for _, comp := range full.Resolved.Layout.Components {
 		if strings.Contains(comp.ComponentInstanceID, "comp-dfront-1536") {
-			doors = append(doors, comp.Transform.TranslationMm[2])
+			doors = append(doors, struct {
+				z      float64
+				height float64
+			}{comp.Transform.TranslationMm[2], comp.DimensionsMm[2]})
 		}
 	}
 	if len(doors) != 3 {
 		t.Fatalf("3 drawer fronts expected, got %v", doors)
 	}
 
-	// Mirror rule: each strip's top edge = the upper front's bottom edge —
-	// asserted via the resolved doors (top → bottom the strip's z equals the
-	// front above it minus its own declared height).
-	// The assertion compares STRIPS to fronts by position: for each strip,
-	// there must exist a door whose bottom edge is exactly strip.z + 70.
+	// #1729 centered rule (order-independent): each strip's Z range overlaps
+	// EXACTLY the two fronts of its gripped pair, with EQUAL laps — the
+	// italian V-groove: the centered strip laps the same behind the upper
+	// front's bottom edge and the lower front's top edge.
 	for _, strip := range strips {
-		found := false
-		for _, z := range doors {
-			if fmt.Sprintf("%.4f", z) == fmt.Sprintf("%.4f", strip.z+70) {
-				found = true
-				break
+		upperLap, lowerLap := -1.0, -1.0
+		for _, d := range doors {
+			top := d.z + d.height
+			if d.z >= strip.z && d.z < strip.z+70 {
+				upperLap = strip.z + 70 - d.z
+			}
+			if top > strip.z && top <= strip.z+70 {
+				lowerLap = top - strip.z
 			}
 		}
-		if !found {
-			t.Fatalf("tira %s (%.2f): ningún frente con su borde superior en %.2f", strip.id, strip.z, strip.z+70)
+		if upperLap < 0 || lowerLap < 0 {
+			t.Fatalf("tira %s (%.2f–%.2f): no solapa con los dos frentes del par (arriba %.2f, abajo %.2f)",
+				strip.id, strip.z, strip.z+70, upperLap, lowerLap)
+		}
+		if fmt.Sprintf("%.4f", upperLap) != fmt.Sprintf("%.4f", lowerLap) {
+			t.Fatalf("tira %s: solapa desigual detrás de los frentes del par: arriba %.2f vs abajo %.2f",
+				strip.id, upperLap, lowerLap)
 		}
 	}
 }
