@@ -203,7 +203,10 @@ func ProjectGripMembers(top *domain.FrozenGripProfile) *OpeningMembers {
 // the between profile at "between". ONE effect definition feeds the layout
 // pass (visible notch/bevel), the BOM annotations and the future machining
 // slice. A declared effect without a consumer at its boundary fails closed —
-// never a silently dropped declaration (A6).
+// never a silently dropped declaration (A6). The one exception (#1726): a
+// clean depth_reduction declaration on the between copy is the shared set's
+// top-scoped effect and is skipped — the same profile mounted at top applies
+// it there.
 func ResolveProjectGripModifiers(recipe *domain.GripSnapshotRecipe) ([]ResolvedOpeningBodyModifier, *OpeningResolutionError) {
 	if recipe == nil || recipe.Mode != domain.GripModeGola {
 		return nil, nil
@@ -228,6 +231,21 @@ func ResolveProjectGripModifiers(recipe *domain.GripSnapshotRecipe) ([]ResolvedO
 				fmt.Sprintf("el perfil %s no declara compatible la frontera between", betweenData.ProfileID))
 		}
 		for _, modifier := range betweenData.BodyModifiers {
+			// #1726: the v2 profile declares ONE modifier set for every
+			// position it serves (#1530). A depth_reduction on the between
+			// copy is that shared set's top-scoped body effect (§14.6: the
+			// gola-L body effect exists only at the top; between fronts the
+			// strip is board + notch + bevel) — a between boundary has no
+			// horizontal panel for it to shorten, so it has no consumer here
+			// by definition. Skipping is truthful absence, never a degraded
+			// effect: when the recipe mounts the same profile at top, that
+			// copy still resolves and applies the reduction there.
+			// Only the CLEAN depth_reduction shape skips; a declaration that
+			// mixes depth-reduction with notch/bevel fields is a
+			// contradiction the resolver rejects (fail-closed), skipped never.
+			if isCleanDepthReductionDeclaration(modifier) {
+				continue
+			}
 			effect, resErr := resolveOpeningBodyModifierEffect(modifier, "between", 0, nil, "between", betweenData)
 			if resErr != nil {
 				return nil, resErr
@@ -238,6 +256,24 @@ func ResolveProjectGripModifiers(recipe *domain.GripSnapshotRecipe) ([]ResolvedO
 		}
 	}
 	return resolved, nil
+}
+
+// isCleanDepthReductionDeclaration reports whether the modifier is exactly a
+// depth_reduction declaration — the effect channel (explicit or the #1317
+// valueless form) with no notch or bevel fields mixed in. A mixed declaration
+// is a contradiction: the shared set (#1726) must not swallow it; it falls
+// through to the resolver, which rejects it fail-closed.
+func isCleanDepthReductionDeclaration(modifier OpeningContractBodyModifier) bool {
+	if modifier.Effect != "" && modifier.Effect != OpeningModifierEffectDepthReduction {
+		return false
+	}
+	if modifier.NotchHeightMm != nil || modifier.NotchDepthMm != nil || modifier.NotchAt != "" {
+		return false
+	}
+	if modifier.BevelAngleDeg != nil || modifier.BevelSizeMm != nil || modifier.BevelAt != "" {
+		return false
+	}
+	return true
 }
 
 // frozenProfileBodyData adapts a frozen profile onto the shared body-effect
