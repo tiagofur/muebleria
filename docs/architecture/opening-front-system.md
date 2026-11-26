@@ -534,7 +534,7 @@ Datasheet fixtures (SCILM pp. 8–9, `r = 1.5`, `H = 720`):
   - top → the top row;
   - bottom → the lowest row;
   - between → the bevel is the V-groove's ONE cut materialized on BOTH fronts of each gripped pair — the lower front at its top edge, the upper front at its bottom edge (#1729) — and the side notch is centered on the edge's gap, matching the centered strip's Z range. One notch and one wedge per front, per gripped edge.
-- **The between strip is centered (#1729):** the strip's center sits at the center of the gripped edge's gap, lapping equally behind both fronts of the pair — the same space behind the upper and the lower front — so its housing notch and the two 45° wedges meet it in one V.
+- **The between strip is centered (#1729):** the strip's center sits at the center of the gripped edge's gap, lapping equally behind both fronts of the pair — the same space behind the upper and the lower front — so its housing notch and the two 45° wedges meet it in one V. The between profile's own hardware run (the C between fronts) follows the same centered rule (#1729 vivo: it no longer hangs below the upper front).
 - **Not in #1529:**
   - the design-level report (`ResolveDesignOpening` still reports the v1 single zone);
   - the hardware BOM of between edges;
