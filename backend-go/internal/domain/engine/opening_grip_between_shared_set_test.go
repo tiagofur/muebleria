@@ -119,3 +119,55 @@ func TestProjectGripSharedSetItalianResolvesEndToEnd(t *testing.T) {
 		t.Fatalf("top strip ×1 + between strip ×1 expected, got top=%d between=%d (layout %+v)", topStrips, betweenStrips, layout.DimensionsMm)
 	}
 }
+
+// #1726 review: the exception skips ONLY the clean depth_reduction shape.
+// A between copy declaring depth_reduction MIXED with bevel fields is a
+// contradiction — the shared set must not swallow it; the resolver rejects
+// it fail-closed, exactly like the pin path does.
+func TestProjectGripBetweenCopyMixedDeclarationStillFailsClosed(t *testing.T) {
+	recipe := sharedSetItalianRecipe()
+	recipe.BetweenProfile = &domain.FrozenGripProfile{
+		ProfileID: "profile.gola-mixta", Code: "GOLA-MIXTA", Name: "Perfil contradictorio",
+		ProfileHeightMm: floatPtr60(70), ProfileDepthMm: floatPtr60(15),
+		FrontDiscountBetweenMm: intPtr60(36),
+		CompatiblePlacements:   []string{"between"},
+		BodyModifiers: []domain.OpeningBodyModifier{
+			// depth-reduction channel (the value) + bevel fields: the
+			// resolver's depth-reduction branch answers a contradiction.
+			{Role: "horizontal", DepthReductionMm: intPtr60(10),
+				BevelAt: "front_boundary", BevelSizeMm: floatPtr60(13), BevelAngleDeg: floatPtr60(45)},
+		},
+	}
+	_, modErr := ResolveProjectGripModifiers(recipe)
+	if modErr == nil {
+		t.Fatalf("a mixed depth_reduction+bevel declaration must keep failing closed at between")
+	}
+	if modErr.Code != OpeningErrBodyModifierInvalid {
+		t.Fatalf("expected %s, got %s (%s)", OpeningErrBodyModifierInvalid, modErr.Code, modErr.Message)
+	}
+}
+
+// The clean valueless depth_reduction (#1317) on a between-ONLY profile
+// (no top mount to consume it) still skips: the effect has no consumer at
+// between by definition, whatever serves the top boundary.
+func TestProjectGripBetweenOnlyCleanDepthReductionSkips(t *testing.T) {
+	recipe := sharedSetItalianRecipe()
+	recipe.BetweenProfile = &domain.FrozenGripProfile{
+		ProfileID: "profile.gola-solo-between", Code: "GOLA-SOLO", Name: "Sólo between",
+		ProfileHeightMm: floatPtr60(70), ProfileDepthMm: floatPtr60(15),
+		FrontDiscountBetweenMm: intPtr60(36),
+		CompatiblePlacements:   []string{"between"},
+		BodyModifiers: []domain.OpeningBodyModifier{
+			{Role: "horizontal", Effect: "depth_reduction"},
+		},
+	}
+	modifiers, modErr := ResolveProjectGripModifiers(recipe)
+	if modErr != nil {
+		t.Fatalf("clean valueless depth_reduction on the between copy must skip, got %s (%s)", modErr.Code, modErr.Message)
+	}
+	for _, m := range modifiers {
+		if m.Boundary == "between" && m.Effect == "depth_reduction" {
+			t.Fatalf("between must never carry depth_reduction")
+		}
+	}
+}

@@ -204,9 +204,9 @@ func ProjectGripMembers(top *domain.FrozenGripProfile) *OpeningMembers {
 // pass (visible notch/bevel), the BOM annotations and the future machining
 // slice. A declared effect without a consumer at its boundary fails closed —
 // never a silently dropped declaration (A6). The one exception (#1726): a
-// depth_reduction on the between copy of a dual-position profile is the
-// shared set's top-scoped effect and is skipped — the same profile mounted
-// at top applies it there.
+// clean depth_reduction declaration on the between copy is the shared set's
+// top-scoped effect and is skipped — the same profile mounted at top applies
+// it there.
 func ResolveProjectGripModifiers(recipe *domain.GripSnapshotRecipe) ([]ResolvedOpeningBodyModifier, *OpeningResolutionError) {
 	if recipe == nil || recipe.Mode != domain.GripModeGola {
 		return nil, nil
@@ -240,7 +240,10 @@ func ResolveProjectGripModifiers(recipe *domain.GripSnapshotRecipe) ([]ResolvedO
 			// by definition. Skipping is truthful absence, never a degraded
 			// effect: when the recipe mounts the same profile at top, that
 			// copy still resolves and applies the reduction there.
-			if modifier.DepthReductionMm != nil || modifier.Effect == OpeningModifierEffectDepthReduction {
+			// Only the CLEAN depth_reduction shape skips; a declaration that
+			// mixes depth-reduction with notch/bevel fields is a
+			// contradiction the resolver rejects (fail-closed), skipped never.
+			if isCleanDepthReductionDeclaration(modifier) {
 				continue
 			}
 			effect, resErr := resolveOpeningBodyModifierEffect(modifier, "between", 0, nil, "between", betweenData)
@@ -253,6 +256,24 @@ func ResolveProjectGripModifiers(recipe *domain.GripSnapshotRecipe) ([]ResolvedO
 		}
 	}
 	return resolved, nil
+}
+
+// isCleanDepthReductionDeclaration reports whether the modifier is exactly a
+// depth_reduction declaration — the effect channel (explicit or the #1317
+// valueless form) with no notch or bevel fields mixed in. A mixed declaration
+// is a contradiction: the shared set (#1726) must not swallow it; it falls
+// through to the resolver, which rejects it fail-closed.
+func isCleanDepthReductionDeclaration(modifier OpeningContractBodyModifier) bool {
+	if modifier.Effect != "" && modifier.Effect != OpeningModifierEffectDepthReduction {
+		return false
+	}
+	if modifier.NotchHeightMm != nil || modifier.NotchDepthMm != nil || modifier.NotchAt != "" {
+		return false
+	}
+	if modifier.BevelAngleDeg != nil || modifier.BevelSizeMm != nil || modifier.BevelAt != "" {
+		return false
+	}
+	return true
 }
 
 // frozenProfileBodyData adapts a frozen profile onto the shared body-effect
